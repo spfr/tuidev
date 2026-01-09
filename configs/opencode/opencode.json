@@ -1,0 +1,122 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+  "small_model": "anthropic/claude-haiku-4-5",
+  "theme": "opencode",
+  "autoupdate": true,
+
+  "tui": {
+    "scroll_speed": 3,
+    "diff_style": "auto"
+  },
+
+  "tools": {
+    "write": true,
+    "bash": true,
+    "edit": true
+  },
+
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  },
+
+  "compaction": {
+    "auto": true,
+    "prune": true
+  },
+
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "dist/**",
+      "build/**",
+      ".git/**",
+      "*.log",
+      "coverage/**",
+      ".next/**",
+      "__pycache__/**",
+      "*.pyc",
+      ".venv/**",
+      "target/**"
+    ]
+  },
+
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/"],
+      "enabled": true,
+      "environment": {}
+    },
+    "git": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-git"],
+      "enabled": true,
+      "environment": {}
+    },
+    "github": {
+      "type": "local",
+      "command": ["docker", "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"],
+      "enabled": false,
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true,
+      "environment": {
+        "MEMORY_FILE_PATH": "{env:HOME}/.local/share/opencode/memory.jsonl"
+      }
+    },
+    "fetch": {
+      "type": "local",
+      "command": ["uvx", "mcp-server-fetch"],
+      "enabled": true,
+      "environment": {}
+    },
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "enabled": false,
+      "environment": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
+      }
+    },
+    "postgres": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres"],
+      "enabled": false,
+      "environment": {
+        "POSTGRES_CONNECTION_STRING": "{env:POSTGRES_CONNECTION_STRING}"
+      }
+    },
+    "sqlite": {
+      "type": "local",
+      "command": ["uvx", "mcp-server-sqlite", "--db-path", "{env:SQLITE_DB_PATH}"],
+      "enabled": false,
+      "environment": {}
+    },
+    "figma": {
+      "type": "local",
+      "command": ["npx", "-y", "@anthropic-ai/mcp-server-figma"],
+      "enabled": false,
+      "environment": {
+        "FIGMA_PERSONAL_ACCESS_TOKEN": "{env:FIGMA_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@anthropic-ai/mcp-server-playwright"],
+      "enabled": false,
+      "environment": {}
+    }
+  },
+
+  "instructions": [
+    "CLAUDE.md",
+    "README.md"
+  ]
+}

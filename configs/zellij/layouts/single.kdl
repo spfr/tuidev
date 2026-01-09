@@ -1,0 +1,20 @@
+// Single Agent Layout - nvim + 1 AI agent terminal
+layout {
+    tab name="Dev" {
+        pane split_direction="vertical" {
+            pane size="65%" {
+                name "Editor"
+                command "nvim"
+                focus true
+            }
+            pane size="35%" {
+                name "Agent"
+            }
+        }
+    }
+    tab name="Terminal" {
+        pane {
+            name "Shell"
+        }
+    }
+}

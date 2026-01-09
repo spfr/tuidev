@@ -1,0 +1,28 @@
+// Triple Agent Layout - nvim + 3 AI agent terminals
+layout {
+    tab name="Dev" {
+        pane split_direction="vertical" {
+            pane size="55%" {
+                name "Editor"
+                command "nvim"
+                focus true
+            }
+            pane split_direction="horizontal" size="45%" {
+                pane {
+                    name "Agent-1"
+                }
+                pane {
+                    name "Agent-2"
+                }
+                pane {
+                    name "Agent-3"
+                }
+            }
+        }
+    }
+    tab name="Terminal" {
+        pane {
+            name "Shell"
+        }
+    }
+}

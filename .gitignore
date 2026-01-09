@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Logs
+*.log
+npm-debug.log*
+firebase-debug.log
+
+# Environment
+.env
+.env.local
+*.local
+
+# Backup files
+*.backup
+*.bak
+
+# Temporary files
+*.tmp
+*.temp
+
+# Claude Code
+.claude/
+
+# Test results (generated locally)
+test_results/
+
+# Personal tools (not part of repo)
+dhcp/

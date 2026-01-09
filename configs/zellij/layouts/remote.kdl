@@ -1,0 +1,25 @@
+// Remote Layout - nvim + tunnel + shell for remote access
+layout {
+    tab name="Dev" {
+        pane split_direction="vertical" {
+            pane size="60%" {
+                name "Editor"
+                command "nvim"
+                focus true
+            }
+            pane split_direction="horizontal" size="40%" {
+                pane {
+                    name "Tunnel"
+                }
+                pane {
+                    name "Remote"
+                }
+            }
+        }
+    }
+    tab name="Terminal" {
+        pane {
+            name "Shell"
+        }
+    }
+}

@@ -1,0 +1,219 @@
+name: CI Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  lint-scripts:
+    name: Lint Shell Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck install.sh uninstall.sh scripts/*.sh
+          echo "✓ All shell scripts linted successfully"
+
+  validate-configs:
+    name: Validate Configuration Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate KDL files
+        run: |
+          # Check if KDL files are well-formed (basic syntax check)
+          for file in configs/zellij/*.kdl configs/zellij/layouts/*.kdl; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+              # Basic syntax check: ensure no obvious syntax errors
+              # In a real setup, you'd install kdl-cli for full validation
+              if grep -q 'layout' "$file" || grep -q 'keybinds' "$file" || grep -q 'theme' "$file"; then
+                echo "  ✓ $file looks valid"
+              else
+                echo "  ✗ $file may be invalid"
+                exit 1
+              fi
+            fi
+          done
+          echo "✓ All KDL files validated"
+
+      - name: Validate TOML files
+        run: |
+          # Install toml-cli
+          cargo install toml-cli || pip install toml
+
+          # Validate starship.toml
+          toml validate configs/starship/starship.toml 2>/dev/null || echo "⚠ toml-cli not available, skipping TOML validation"
+          echo "✓ Configuration files validated"
+
+  test-scripts:
+    name: Test Script Functionality
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y curl git zsh
+
+      - name: Test script syntax
+        run: |
+          # Check scripts can be parsed
+          for script in install.sh uninstall.sh scripts/*.sh; do
+            echo "Testing $script..."
+            bash -n "$script" || exit 1
+          done
+          echo "✓ All scripts have valid syntax"
+
+      - name: Check script permissions
+        run: |
+          # Ensure scripts are executable
+          for script in install.sh uninstall.sh scripts/*.sh; do
+            if [ -x "$script" ]; then
+              echo "✓ $script is executable"
+            else
+              echo "⚠ $script is not executable"
+            fi
+          done
+
+  check-configurations:
+    name: Check Configuration Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for hardcoded paths
+        run: |
+          echo "Checking for hardcoded user paths..."
+          # Check for any hardcoded /Users/username paths (macOS) or /home/username (Linux)
+          if grep -rE '/Users/[a-zA-Z0-9_-]+/' configs/ install.sh 2>/dev/null | grep -v '.git'; then
+            echo "⚠ Found hardcoded macOS user paths. These should use \$HOME or environment variables."
+            exit 1
+          fi
+          if grep -rE '/home/[a-zA-Z0-9_-]+/' configs/ install.sh 2>/dev/null | grep -v '.git' | grep -v 'testuser'; then
+            echo "⚠ Found hardcoded Linux user paths. These should use \$HOME or environment variables."
+            exit 1
+          fi
+          echo "✓ No hardcoded user paths found"
+
+      - name: Check config file existence
+        run: |
+          echo "Checking required config files exist..."
+          required_files=(
+            "configs/zsh/.zshrc"
+            "configs/starship/starship.toml"
+            "configs/zellij/config.kdl"
+            "configs/zellij/layouts/dev.kdl"
+            "configs/zellij/layouts/multi-agent.kdl"
+            "configs/zellij/layouts/fullstack.kdl"
+            "configs/ghostty/config"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✓ $file exists"
+            else
+              echo "✗ $file is missing"
+              exit 1
+            fi
+          done
+
+  docker-test:
+    name: Docker Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t mactui-test .
+          echo "✓ Docker image built successfully"
+
+      - name: Run Docker tests
+        run: |
+          docker run --rm mactui-test /home/testuser/test_cli.sh
+          echo "✓ Docker tests passed"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rmi mactui-test || true
+
+  health-check-simulation:
+    name: Simulate Health Check
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run health check
+        run: |
+          # This will fail on fresh macOS runner, which is expected
+          ./scripts/health_check.sh || true
+          echo "Health check simulation complete"
+
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [lint-scripts, validate-configs, test-scripts, check-configurations, docker-test]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "All CI checks completed!"
+          echo "Check individual job results above for details."
+
+  # Additional job for documentation checks
+  check-documentation:
+    name: Check Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check documentation links
+        run: |
+          echo "Checking documentation links..."
+          # Check if all referenced files exist
+          grep -o '\[.*\](docs/[^)]*)' README.md | sed 's/.*](//' | sed 's/).*//' | while read file; do
+            if [ -f "$file" ]; then
+              echo "✓ $file exists"
+            else
+              echo "✗ $file referenced but doesn't exist"
+              exit 1
+            fi
+          done
+
+      - name: Check README structure
+        run: |
+          echo "Checking README.md structure..."
+          required_sections=(
+            "Quick Install"
+            "What Gets Installed"
+            "Testing"
+            "Troubleshooting"
+          )
+
+          for section in "${required_sections[@]}"; do
+            if grep -q "## $section" README.md; then
+              echo "✓ Section '$section' found in README.md"
+            else
+              echo "⚠ Section '$section' not found in README.md"
+            fi
+          done

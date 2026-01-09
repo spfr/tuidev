@@ -1,0 +1,51 @@
+// ============================================================================
+// Fullstack Development Layout
+// Frontend, Backend, Database, and Testing terminals
+// ============================================================================
+
+layout {
+    tab name="Editor" {
+        pane {
+            name "Nvim"
+            command "nvim"
+        }
+    }
+
+    tab name="Servers" {
+        pane split_direction="horizontal" {
+            pane size="50%" {
+                name "Frontend"
+                // e.g., npm run dev
+            }
+            pane size="50%" {
+                name "Backend"
+                // e.g., npm run server
+            }
+        }
+    }
+
+    tab name="Database" {
+        pane split_direction="vertical" {
+            pane size="70%" {
+                name "DB-Client"
+            }
+            pane size="30%" {
+                name "Logs"
+            }
+        }
+    }
+
+    tab name="Testing" {
+        pane {
+            name "Tests"
+            // e.g., npm run test:watch
+        }
+    }
+
+    tab name="Git" {
+        pane {
+            name "Git"
+            command "lazygit"
+        }
+    }
+}

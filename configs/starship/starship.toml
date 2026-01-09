@@ -1,0 +1,219 @@
+# ============================================================================
+# Starship Prompt Configuration
+# Optimized for AI development workflows
+# ============================================================================
+
+format = """
+[╭─](bold green)$username\
+$hostname\
+$directory\
+$git_branch\
+$git_status\
+$git_state\
+$python\
+$nodejs\
+$rust\
+$golang\
+$java\
+$docker_context\
+$cmd_duration
+[╰─](bold green)$character"""
+
+# Timeout for starship to scan files
+scan_timeout = 30
+command_timeout = 500
+
+# ============================================================================
+# Prompt Components
+# ============================================================================
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold green)"
+
+[username]
+style_user = "bold yellow"
+style_root = "bold red"
+format = "[$user]($style) "
+disabled = false
+show_always = false
+
+[hostname]
+ssh_only = true
+format = "[@$hostname](bold blue) "
+disabled = false
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+format = "[$path]($style)[$read_only]($read_only_style) "
+style = "bold cyan"
+read_only = " 🔒"
+read_only_style = "red"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+"workspace" = " "
+"projects" = " "
+
+# ============================================================================
+# Git Integration
+# ============================================================================
+
+[git_branch]
+symbol = " "
+format = "on [$symbol$branch]($style) "
+style = "bold purple"
+truncation_length = 20
+truncation_symbol = "…"
+
+[git_status]
+format = '([\[$all_status$ahead_behind\]]($style) )'
+style = "bold yellow"
+conflicted = ""
+ahead = "⇡"
+behind = "⇣"
+diverged = "⇕"
+up_to_date = ""
+untracked = "?"
+stashed = ""
+modified = "!"
+staged = "+"
+renamed = ""
+deleted = ""
+
+[git_state]
+format = '\([$state( $progress_current/$progress_total)]($style)\) '
+style = "bright-black"
+
+# ============================================================================
+# Language & Runtime Indicators
+# ============================================================================
+
+[python]
+symbol = " "
+format = 'via [$symbol$pyenv_prefix($version )(\($virtualenv\) )]($style)'
+style = "yellow bold"
+pyenv_version_name = false
+detect_extensions = []
+detect_files = []
+detect_folders = []
+
+[nodejs]
+symbol = " "
+format = "via [$symbol($version )]($style)"
+style = "bold green"
+detect_extensions = ["js", "mjs", "cjs", "ts"]
+detect_files = ["package.json", ".node-version"]
+
+[rust]
+symbol = " "
+format = "via [$symbol($version )]($style)"
+style = "bold red"
+
+[golang]
+symbol = " "
+format = "via [$symbol($version )]($style)"
+style = "bold cyan"
+
+[java]
+symbol = " "
+format = "via [$symbol($version )]($style)"
+style = "red dimmed"
+
+[ruby]
+symbol = " "
+format = "via [$symbol($version )]($style)"
+style = "bold red"
+
+# ============================================================================
+# Cloud & Container Integration
+# ============================================================================
+
+[docker_context]
+symbol = " "
+format = "via [$symbol$context]($style) "
+style = "blue bold"
+only_with_files = true
+detect_extensions = ["dockerfile"]
+detect_files = ["docker-compose.yml", "Dockerfile"]
+
+[aws]
+symbol = "  "
+format = 'on [$symbol($profile )(\($region\) )(\[$duration\] )]($style)'
+style = "bold yellow"
+disabled = false
+
+[gcloud]
+symbol = "☁️ "
+format = 'on [$symbol$account(@$domain)(\($region\))]($style) '
+style = "bold blue"
+disabled = false
+
+# ============================================================================
+# Command Execution
+# ============================================================================
+
+[cmd_duration]
+min_time = 500
+format = "took [$duration]($style) "
+style = "bold yellow"
+show_milliseconds = false
+
+[time]
+disabled = true
+format = '🕙[\[ $time \]]($style) '
+time_format = "%T"
+style = "bold white"
+
+# ============================================================================
+# Package Managers
+# ============================================================================
+
+[package]
+symbol = "📦 "
+format = "via [$symbol$version]($style) "
+style = "208 bold"
+display_private = false
+disabled = false
+
+# ============================================================================
+# Additional Tools
+# ============================================================================
+
+[kubernetes]
+symbol = "☸ "
+format = 'on [$symbol$context( \($namespace\))]($style) '
+style = "cyan bold"
+disabled = false
+
+[terraform]
+symbol = "💠 "
+format = "via [$symbol$workspace]($style) "
+style = "bold 105"
+disabled = false
+
+[battery]
+full_symbol = "🔋"
+charging_symbol = "⚡"
+discharging_symbol = "💀"
+disabled = false
+
+[[battery.display]]
+threshold = 20
+style = "bold red"
+
+[[battery.display]]
+threshold = 50
+style = "bold yellow"
+
+[memory_usage]
+disabled = true
+threshold = -1
+symbol = " "
+style = "bold dimmed white"
+format = "via $symbol[$ram( | $swap)]($style) "

@@ -1,0 +1,26 @@
+// Development Layout - Editor + Terminal side by side
+layout {
+    tab name="Code" {
+        pane split_direction="vertical" {
+            pane size="65%" {
+                name "Editor"
+                command "nvim"
+            }
+            pane size="35%" {
+                name "Terminal"
+            }
+        }
+    }
+    tab name="Git" {
+        pane {
+            name "Git"
+            command "lazygit"
+        }
+    }
+    tab name="Monitor" {
+        pane {
+            name "System"
+            command "btm"
+        }
+    }
+}

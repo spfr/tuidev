@@ -1,0 +1,51 @@
+// ============================================================================
+// Multi-Agent Development Layout
+// Perfect for running multiple AI agents, monitoring, and development
+// ============================================================================
+
+layout {
+    // Main Development Tab
+    tab name="Development" {
+        pane split_direction="vertical" {
+            // Left side: Editor
+            pane size="60%" {
+                name "Editor"
+                command "nvim"
+            }
+            // Right side: Split into multiple agent panes
+            pane split_direction="horizontal" size="40%" {
+                // Agent 1
+                pane size="50%" {
+                    name "Agent-1"
+                }
+                // Agent 2
+                pane size="50%" {
+                    name "Agent-2"
+                }
+            }
+        }
+    }
+
+    // Monitoring Tab
+    tab name="Monitoring" {
+        pane split_direction="vertical" {
+            // System monitor
+            pane size="50%" {
+                name "System"
+                command "btm"
+            }
+            // Logs/Output
+            pane size="50%" {
+                name "Logs"
+            }
+        }
+    }
+
+    // Git Tab
+    tab name="Git" {
+        pane {
+            name "Git"
+            command "lazygit"
+        }
+    }
+}

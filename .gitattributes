@@ -1,0 +1,48 @@
+# Git attributes for consistent behavior across platforms
+# https://git-scm.com/docs/gitattributes
+
+# Default behavior - auto-detect text files and normalize line endings
+* text=auto
+
+# Force Unix line endings for all text files
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.py text eol=lf
+*.lua text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.kdl text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.xml text eol=lf
+
+# Config files
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+
+# Diff settings for common file types
+*.md diff=markdown
+*.lua diff=lua
+*.py diff=python
+*.sh diff=bash

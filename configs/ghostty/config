@@ -1,0 +1,161 @@
+# ============================================================================
+# Ghostty Terminal Configuration
+# Optimized for AI development and multi-agent workflows
+# ============================================================================
+
+# Terminal Type
+term = ghostty
+
+# ============================================================================
+# Font Configuration
+# ============================================================================
+
+# Use a programming font with ligatures
+font-family = "JetBrains Mono"
+font-size = 14
+
+# Font features
+font-feature = -calt  # Disable ligatures if preferred
+# font-feature = +calt  # Enable ligatures
+
+# ============================================================================
+# Theme & Colors (Tokyo Night)
+# ============================================================================
+
+background = 1a1b26
+foreground = c0caf5
+
+# Cursor
+cursor-color = c0caf5
+cursor-style = block
+cursor-style-blink = true
+
+# Selection
+selection-background = 33467c
+selection-foreground = c0caf5
+
+# Normal colors
+palette = 0=#15161e
+palette = 1=#f7768e
+palette = 2=#9ece6a
+palette = 3=#e0af68
+palette = 4=#7aa2f7
+palette = 5=#bb9af7
+palette = 6=#7dcfff
+palette = 7=#a9b1d6
+
+# Bright colors
+palette = 8=#414868
+palette = 9=#f7768e
+palette = 10=#9ece6a
+palette = 11=#e0af68
+palette = 12=#7aa2f7
+palette = 13=#bb9af7
+palette = 14=#7dcfff
+palette = 15=#c0caf5
+
+# ============================================================================
+# Window Configuration
+# ============================================================================
+
+window-padding-x = 8
+window-padding-y = 8
+window-padding-balance = true
+
+# Window decorations
+window-decoration = true
+window-theme = dark
+
+# Window title
+title = "Ghostty"
+
+# ============================================================================
+# Shell Integration
+# ============================================================================
+
+shell-integration = detect
+shell-integration-features = cursor,sudo,title,ssh-env,ssh-terminfo
+
+# ============================================================================
+# Performance
+# ============================================================================
+
+# Improve rendering performance
+resize-overlay = never
+mouse-hide-while-typing = true
+
+# ============================================================================
+# Keybindings
+# ============================================================================
+
+# Tab management
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_surface
+keybind = ctrl+tab=next_tab
+keybind = ctrl+shift+tab=previous_tab
+
+# Split management (for future use if Ghostty adds splits)
+keybind = ctrl+shift+d=new_split:right
+keybind = ctrl+alt+d=new_split:down
+
+# Window management
+keybind = ctrl+shift+n=new_window
+keybind = ctrl+shift+enter=toggle_fullscreen
+
+# Font size
+keybind = ctrl+plus=increase_font_size:1
+keybind = ctrl+minus=decrease_font_size:1
+keybind = ctrl+zero=reset_font_size
+
+# Copy/Paste
+keybind = ctrl+shift+c=copy_to_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+
+# Scrollback
+keybind = ctrl+shift+up=scroll_page_up
+keybind = ctrl+shift+down=scroll_page_down
+
+# Special keybindings
+keybind = shift+enter=text:\x1b\r
+
+# Quick edit (open scrollback in editor)
+keybind = ctrl+shift+e=write_scrollback_file:open
+
+# Home/End keys
+keybind = home=text:\x1b[1~
+keybind = end=text:\x1b[4~
+
+# Ctrl+p pass-through (for Zellij)
+keybind = ctrl+p=text:\x10
+
+# ============================================================================
+# Clipboard
+# ============================================================================
+
+clipboard-read = allow
+clipboard-write = allow
+clipboard-trim-trailing-spaces = true
+
+# ============================================================================
+# Miscellaneous
+# ============================================================================
+
+# Confirm before closing window with running programs
+confirm-close-surface = true
+
+# Mouse
+mouse-scroll-multiplier = 3
+
+# Bell behavior (no audio, visual attention via dock badge/title)
+# Options: audio, attention, title, border, no-audio, no-attention, no-title, no-border
+bell-features = no-audio
+
+# ============================================================================
+# macOS Specific
+# ============================================================================
+
+# Option key behavior (useful for macOS)
+macos-option-as-alt = true
+
+# Window control
+macos-titlebar-style = tabs
