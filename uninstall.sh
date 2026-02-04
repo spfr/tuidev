@@ -35,12 +35,15 @@ echo -e "${YELLOW}Backing up configurations to $BACKUP_DIR${NC}"
 [[ -d "$HOME/.config/zellij" ]] && cp -r "$HOME/.config/zellij" "$BACKUP_DIR/"
 [[ -f "$HOME/.config/starship.toml" ]] && cp "$HOME/.config/starship.toml" "$BACKUP_DIR/"
 [[ -f "$HOME/.config/ghostty/config" ]] && cp "$HOME/.config/ghostty/config" "$BACKUP_DIR/"
+[[ -f "$HOME/.ssh/config" ]] && cp "$HOME/.ssh/config" "$BACKUP_DIR/ssh_config"
+[[ -f "$HOME/.local/bin/notify.sh" ]] && cp "$HOME/.local/bin/notify.sh" "$BACKUP_DIR/"
 
 # Remove configs
 echo "Removing configuration files..."
 
 rm -f "$HOME/.config/starship.toml"
 rm -rf "$HOME/.config/zellij"
+rm -f "$HOME/.local/bin/notify.sh"
 # Don't remove .zshrc, just offer to restore backup
 
 echo ""
@@ -65,6 +68,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         "httpie"
         "jq"
         "yq"
+        "mosh"
         "zsh-autosuggestions"
         "zsh-syntax-highlighting"
         "zsh-completions"
@@ -74,6 +78,23 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         if brew list "$pkg" &>/dev/null; then
             echo "Uninstalling $pkg..."
             brew uninstall "$pkg" || echo "Failed to uninstall $pkg"
+        fi
+    done
+
+    # Uninstall cask applications
+    CASK_PACKAGES=(
+        "tailscale"
+        "rectangle"
+        "stats"
+        "maccy"
+        "hiddenbar"
+        "hammerspoon"
+    )
+
+    for cask in "${CASK_PACKAGES[@]}"; do
+        if brew list --cask "$cask" &>/dev/null; then
+            echo "Uninstalling $cask..."
+            brew uninstall --cask "$cask" || echo "Failed to uninstall $cask"
         fi
     done
 fi

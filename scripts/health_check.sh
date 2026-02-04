@@ -240,6 +240,51 @@ if [[ -f "$HOME/.config/mcp-env.template" ]]; then
 fi
 
 # ============================================================================
+# Remote Access Tools
+# ============================================================================
+
+print_header "Remote Access Tools"
+
+# Check Tailscale
+if app_installed "Tailscale"; then
+    print_success "Tailscale is installed"
+    if command -v tailscale > /dev/null 2>&1; then
+        ts_status=$(tailscale status --json 2>/dev/null | jq -r '.Self.Online // "unknown"' 2>/dev/null || echo "unknown")
+        if [[ "$ts_status" == "true" ]]; then
+            ts_ip=$(tailscale ip -4 2>/dev/null || echo "unknown")
+            print_success "Tailscale connected (IP: $ts_ip)"
+        else
+            print_warning "Tailscale installed but not connected"
+        fi
+    else
+        print_warning "Tailscale app installed but CLI not in PATH"
+    fi
+else
+    print_warning "Tailscale is not installed (optional - brew install --cask tailscale)"
+fi
+
+# Check mosh
+if command -v mosh > /dev/null 2>&1; then
+    print_success "mosh is installed (version: $(mosh --version 2>&1 | head -1 || echo "unknown"))"
+else
+    print_warning "mosh is not installed (optional - brew install mosh)"
+fi
+
+# Check notify.sh
+if [[ -x "$HOME/.local/bin/notify.sh" ]]; then
+    print_success "notify.sh is installed"
+else
+    print_warning "notify.sh is not installed (~/.local/bin/notify.sh)"
+fi
+
+# Check SSH config
+if [[ -f "$HOME/.ssh/config" ]]; then
+    print_success "SSH client config exists"
+else
+    print_warning "SSH client config not found (~/.ssh/config)"
+fi
+
+# ============================================================================
 # GUI Applications
 # ============================================================================
 

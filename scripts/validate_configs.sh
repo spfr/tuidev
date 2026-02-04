@@ -229,6 +229,9 @@ required_files=(
     "configs/ghostty/config"
     "configs/hammerspoon/init.lua"
     "scripts/health_check.sh"
+    "scripts/notify.sh"
+    "configs/ssh/config"
+    "configs/zellij/layouts/remote.kdl"
 )
 
 for file in "${required_files[@]}"; do

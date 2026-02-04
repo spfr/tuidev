@@ -8,15 +8,81 @@ Ultimate remote access for AI agentic development - work from your phone, tablet
 # Start remote session
 remote
 
-# In tunnel pane, run:
-tunnel
+# Check remote access status
+remote-status
 ```
-
-Your SSH session is now accessible from anywhere!
 
 ## Remote Access Methods
 
-### 1. Cloudflare Tunnel (Recommended) - FREE & Secure
+### 1. Tailscale (Recommended) - Secure Mesh VPN
+
+**Why Tailscale?**
+- Zero configuration networking - no port forwarding, no firewall rules
+- End-to-end encrypted WireGuard tunnels
+- Works from behind any NAT/firewall
+- Free for personal use (up to 100 devices)
+- Stable IPs that don't change (100.x.x.x)
+- Works with mosh for resilient mobile connections
+
+**Setup:**
+```bash
+# 1. Tailscale is installed via install.sh
+# 2. Open Tailscale from Applications and sign in
+# 3. Enable SSH on your Mac:
+sudo systemsetup -setremotelogin on
+
+# 4. Check your Tailscale IP:
+ts-ip
+
+# 5. From any other Tailscale device:
+ssh your-username@100.x.x.x
+
+# 6. For mobile connections (handles network switches):
+mosh your-username@100.x.x.x
+```
+
+**Shell Functions:**
+```bash
+ts-status       # Show Tailscale network status
+ts-ip           # Show your Tailscale IPv4 address
+remote-status   # Dashboard: SSH, Tailscale, Zellij sessions
+tunnel          # Start public tunnel (shows Tailscale info first)
+```
+
+**Using mosh for Mobile:**
+
+Mosh (mobile shell) handles intermittent connectivity, IP changes, and high latency. It's installed automatically.
+
+```bash
+# From another machine with mosh installed:
+mosh your-username@100.x.x.x
+
+# Then attach to your Zellij session:
+zellij attach
+```
+
+### 2. Claude Code Notification Hooks
+
+When working remotely, get notified on your Mac when Claude Code needs attention:
+
+```bash
+# Notifications are configured automatically via settings.json hooks:
+# - "Approval Required" notification when Claude needs input
+# - "Done" notification when a task completes
+
+# Test notifications manually:
+notify.sh "Test" "Hello from remote session"
+```
+
+The hooks are defined in `configs/claude/settings.json` and use `notify.sh` which must be in your PATH (`~/.local/bin/`).
+
+---
+
+## Public Access Alternatives
+
+For accessing your Mac from outside your Tailscale network (or without Tailscale):
+
+### 3. Cloudflare Tunnel - FREE & Secure
 
 **Pros:**
 - No port forwarding needed
@@ -48,7 +114,7 @@ Or configure in SSH client:
 - User: `your-mac-user`
 - Use jump host enabled
 
-### 2. ngrok (Free Alternative)
+### 4. ngrok (Free Alternative)
 
 ```bash
 # Install via Homebrew
@@ -60,7 +126,7 @@ ngrok tcp 22
 
 ngrok gives you a forwarding URL to use in SSH client.
 
-### 3. Bore (Open Source)
+### 5. Bore (Open Source)
 
 ```bash
 brew install bore-cli
@@ -72,7 +138,7 @@ bore local 22 --to bore.pub
 ssh -p [port] user@bore.pub
 ```
 
-### 4. localhost.run (Quickest, No Install)
+### 6. localhost.run (Quickest, No Install)
 
 ```bash
 ssh -R 80:localhost:22 nohup@localhost.run
@@ -111,6 +177,18 @@ Gives you a URL immediately. Great for quick sessions.
 ### Setup Your Mac
 
 ```bash
+# Option A: Tailscale (recommended - always-on, no tunnel needed)
+# 1. Ensure Tailscale is running and connected
+ts-status
+
+# 2. Start zellij remote session
+remote
+
+# 3. From your phone/other device (on Tailscale network):
+#    ssh your-username@100.x.x.x
+#    zellij attach
+
+# Option B: Public tunnel (for access outside Tailscale network)
 # 1. Start zellij remote session
 remote
 

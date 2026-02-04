@@ -79,5 +79,29 @@
     "allow": [],
     "deny": []
   },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify.sh 'Claude Code' 'Needs your input' 'Approval Required'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify.sh 'Claude Code' 'Task completed' 'Done'"
+          }
+        ]
+      }
+    ]
+  },
   "projects": {}
 }

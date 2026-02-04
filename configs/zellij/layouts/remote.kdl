@@ -1,5 +1,14 @@
-// Remote Layout - nvim + tunnel + shell for remote access
+// Remote Layout - Enhanced for Tailscale + mosh remote development
 layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        children
+        pane size=2 borderless=true {
+            plugin location="zellij:status-bar"
+        }
+    }
     tab name="Dev" {
         pane split_direction="vertical" {
             pane size="60%" {
@@ -8,12 +17,23 @@ layout {
                 focus true
             }
             pane split_direction="horizontal" size="40%" {
-                pane {
+                pane size="50%" {
+                    name "Agent"
+                }
+                pane size="50%" {
                     name "Tunnel"
                 }
-                pane {
-                    name "Remote"
-                }
+            }
+        }
+    }
+    tab name="Status" {
+        pane split_direction="vertical" {
+            pane size="50%" {
+                name "Remote Status"
+            }
+            pane size="50%" {
+                name "System"
+                command "btm"
             }
         }
     }

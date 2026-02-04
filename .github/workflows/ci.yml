@@ -121,7 +121,10 @@ jobs:
             "configs/zellij/layouts/dev.kdl"
             "configs/zellij/layouts/multi-agent.kdl"
             "configs/zellij/layouts/fullstack.kdl"
+            "configs/zellij/layouts/remote.kdl"
             "configs/ghostty/config"
+            "configs/ssh/config"
+            "scripts/notify.sh"
           )
 
           for file in "${required_files[@]}"; do

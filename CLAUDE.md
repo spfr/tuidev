@@ -88,7 +88,7 @@ Located in `configs/zellij/layouts/`:
 - `triple.kdl` - Nvim + 3 AI agents
 - `multi-agent.kdl` - Editor + Monitoring tab + Git tab
 - `fullstack.kdl` - 5-tab full-stack setup
-- `remote.kdl` - SSH tunnel setup
+- `remote.kdl` - Tailscale + mosh remote development (editor, agent, status monitor)
 
 ## Shell Aliases (from .zshrc)
 

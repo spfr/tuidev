@@ -326,6 +326,21 @@ bench() {
 # Start tunnel for remote access
 tunnel() {
   local port=${1:-22}
+
+  # Show Tailscale info if available
+  if command -v tailscale &>/dev/null; then
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null)
+    if [[ -n "$ts_ip" ]]; then
+      echo "Tailscale IP: $ts_ip (direct access via: ssh $(whoami)@$ts_ip)"
+      echo "For mobile: use mosh $(whoami)@$ts_ip"
+      echo ""
+      echo "If Tailscale access is sufficient, no tunnel needed."
+      echo "Starting public tunnel anyway..."
+      echo ""
+    fi
+  fi
+
   if command -v cloudflared &>/dev/null; then
     echo "Starting Cloudflare tunnel on port $port..."
     cloudflared tunnel --url tcp://localhost:$port
@@ -334,6 +349,7 @@ tunnel() {
     ngrok tcp $port
   else
     echo "No tunnel tool found. Install cloudflared or ngrok."
+    echo "Or use Tailscale for direct access (recommended)."
   fi
 }
 
@@ -407,6 +423,78 @@ fullstack() {
 # Multi-agent development session (with monitoring)
 multi() {
   zellij --layout multi-agent
+}
+
+# ============================================================================
+# Remote Access Functions
+# ============================================================================
+
+# Show Tailscale connection status
+ts-status() {
+  if command -v tailscale &>/dev/null; then
+    tailscale status
+  else
+    echo "Tailscale is not installed. Install with: brew install --cask tailscale"
+  fi
+}
+
+# Show Tailscale IPv4 address
+ts-ip() {
+  if command -v tailscale &>/dev/null; then
+    tailscale ip -4
+  else
+    echo "Tailscale is not installed. Install with: brew install --cask tailscale"
+  fi
+}
+
+# Remote access dashboard - SSH, Tailscale, and Zellij status
+remote-status() {
+  echo "Remote Access Status"
+  echo "===================="
+  echo ""
+
+  # SSH status
+  echo "SSH Server:"
+  if [[ "$(uname)" == "Darwin" ]]; then
+    local ssh_status
+    ssh_status=$(sudo systemsetup -getremotelogin 2>/dev/null || echo "unknown")
+    echo "  $ssh_status"
+  else
+    if systemctl is-active sshd &>/dev/null; then
+      echo "  SSH: running"
+    else
+      echo "  SSH: not running"
+    fi
+  fi
+  echo ""
+
+  # Tailscale status
+  echo "Tailscale:"
+  if command -v tailscale &>/dev/null; then
+    local ts_ip
+    ts_ip=$(tailscale ip -4 2>/dev/null)
+    local ts_state
+    ts_state=$(tailscale status --json 2>/dev/null | jq -r '.Self.Online // "unknown"' 2>/dev/null || echo "unknown")
+    echo "  IP: ${ts_ip:-not connected}"
+    echo "  Online: $ts_state"
+  else
+    echo "  Not installed"
+  fi
+  echo ""
+
+  # Zellij sessions
+  echo "Zellij Sessions:"
+  if command -v zellij &>/dev/null; then
+    local sessions
+    sessions=$(zellij list-sessions 2>/dev/null)
+    if [[ -n "$sessions" ]]; then
+      echo "$sessions" | sed 's/^/  /'
+    else
+      echo "  No active sessions"
+    fi
+  else
+    echo "  Zellij not installed"
+  fi
 }
 
 # ============================================================================

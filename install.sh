@@ -127,6 +127,10 @@ SYSTEM PRODUCTIVITY (All Open Source)
   • Maccy          - Clipboard manager
   • Hidden Bar     - Hide menu bar icons
 
+REMOTE ACCESS
+  • Tailscale      - Mesh VPN for secure remote access
+  • Mosh           - Mobile shell (resilient SSH)
+
 DEVELOPMENT
   • Neovim         - Modern text editor
   • GitHub CLI     - GitHub from the command line
@@ -208,6 +212,7 @@ CLI_TOOLS=(
     "broot"            # Directory navigator for large codebases
     "yazi"             # Modern terminal file manager (async, fast)
     "cloudflared"      # Cloudflare tunnel for remote access
+    "mosh"             # Mobile shell for resilient remote connections
     "shellcheck"       # Shell script linter (for make lint)
     "tmux"             # Alternative terminal multiplexer
     "procs"            # Better ps
@@ -274,6 +279,14 @@ if app_installed "Hammerspoon"; then
 else
     print_step "Installing Hammerspoon..."
     run_cmd brew install --cask hammerspoon || print_warning "Failed to install Hammerspoon"
+fi
+
+# Tailscale - Mesh VPN for secure remote access
+if app_installed "Tailscale"; then
+    print_success "Tailscale already installed"
+else
+    print_step "Installing Tailscale..."
+    run_cmd brew install --cask tailscale || print_warning "Failed to install Tailscale"
 fi
 
 # ============================================================================
@@ -710,6 +723,14 @@ if [[ -f "$SCRIPT_DIR/scripts/ai-workflow.sh" ]]; then
     print_success "AI workflow script installed"
 fi
 
+# --- Copy Notification Script ---
+if [[ -f "$SCRIPT_DIR/scripts/notify.sh" ]]; then
+    mkdir -p "$HOME/.local/bin"
+    run_cmd cp "$SCRIPT_DIR/scripts/notify.sh" "$HOME/.local/bin/notify.sh"
+    run_cmd chmod +x "$HOME/.local/bin/notify.sh"
+    print_success "Notification script installed"
+fi
+
 # ============================================================================
 # AI CLI Tool Configurations
 # ============================================================================
@@ -762,6 +783,20 @@ if [[ -f "$SCRIPT_DIR/configs/mcp/env.template" ]]; then
     run_cmd cp "$SCRIPT_DIR/configs/mcp/env.template" "$HOME/.config/mcp-env.template"
     print_success "MCP environment template installed to ~/.config/mcp-env.template"
     print_warning "Edit and source this file to enable MCP servers requiring API keys"
+fi
+
+# --- SSH Client Configuration ---
+if [[ -f "$SCRIPT_DIR/configs/ssh/config" ]]; then
+    print_step "Installing SSH client configuration..."
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+    if [[ ! -f "$HOME/.ssh/config" ]]; then
+        run_cmd cp "$SCRIPT_DIR/configs/ssh/config" "$HOME/.ssh/config"
+        run_cmd chmod 600 "$HOME/.ssh/config"
+        print_success "SSH client config installed"
+    else
+        print_warning "Existing ~/.ssh/config found - skipping (see configs/ssh/config for reference)"
+    fi
 fi
 
 # --- Ralph Wiggum Orchestration ---
@@ -846,6 +881,11 @@ ${CYAN}ZELLIJ KEYBINDINGS${NC}
   Ctrl+p      Pane mode
   Ctrl+t      Tab mode
   Ctrl+q      Quit
+
+${CYAN}REMOTE ACCESS${NC}
+  tailscale    - Mesh VPN for secure access  Open from Applications
+  mosh         - Resilient mobile shell       ${YELLOW}mosh user@100.x.x.x${NC}
+  notify.sh    - macOS notifications          ${YELLOW}notify.sh "Title" "Message"${NC}
 
 ${CYAN}NEW ELITE TOOLS${NC}
   nnn         - Fastest TUI file manager, vim-like

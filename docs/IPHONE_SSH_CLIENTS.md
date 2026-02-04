@@ -17,18 +17,31 @@ Top recommendations for connecting to your Mac from iPhone:
 
 **Pricing:** Free tier available, Pro for advanced features
 
-**Setup:**
+**Setup with Tailscale (recommended):**
+1. Download Termius from App Store
+2. Install Tailscale on your iPhone and sign in with the same account as your Mac
+3. Tap "+" to add new host
+4. Fill in:
+   - **Alias:** My Mac
+   - **Hostname:** Your Tailscale IP (`100.x.x.x` - run `ts-ip` on Mac to find it)
+   - **Port:** 22
+   - **Username:** your-username
+5. Under "Advanced", set Protocol to **Mosh** for resilient mobile connections
+6. Tap "Key" and generate or import SSH key (ED25519 recommended)
+7. Copy public key to your Mac: add to `~/.ssh/authorized_keys`
+8. Connect and run: `zellij attach`
+
+**Setup without Tailscale:**
 1. Download Termius from App Store
 2. Tap "+" to add new host
 3. Fill in:
    - **Alias:** My Mac
-   - **Hostname:** your-mac-ip (or 100.x.x.x if using Tailscale)
+   - **Hostname:** your-mac-ip (local network) or tunnel URL
    - **Port:** 22
    - **Username:** your-username
 4. Tap "Key" and generate or import SSH key
-5. Copy public key to your Mac: `cat ~/.ssh/id_ed25519.pub`
-6. On Mac: `cat >> ~/.ssh/authorized_keys` (paste your key)
-7. Connect and run: `zellij attach ai-dev`
+5. Copy public key to your Mac: add to `~/.ssh/authorized_keys`
+6. Connect and run: `zellij attach`
 
 ---
 
@@ -39,7 +52,7 @@ Top recommendations for connecting to your Mac from iPhone:
 **Pros:**
 - ✅ Full zsh shell
 - ✅ Supports tmux/zellij perfectly
-- ✅ Mosh integration for mobile
+- ✅ Native mosh support (great with Tailscale)
 - ✅ iCloud sync
 - ✅ Customizable keyboard
 - ✅ AWS/GCP/Azure integrations
@@ -48,6 +61,15 @@ Top recommendations for connecting to your Mac from iPhone:
 **Cons:**
 - Higher learning curve
 - More expensive ($29.99/year)
+
+**Setup with Tailscale + Mosh:**
+```bash
+# In Blink Shell, connect with mosh for best mobile experience:
+mosh your-username@100.x.x.x
+
+# Then attach to your Zellij session:
+zellij attach
+```
 
 **Best for:** Power users who need full shell control
 
@@ -164,9 +186,10 @@ zellij attach ai-dev
 1. Tap "+" (New Host)
 2. Fill in the details:
    - **Label:** My Mac
-   - **Hostname:** `192.168.1.x` (local) or `100.x.x.x` (Tailscale)
+   - **Hostname:** `100.x.x.x` (Tailscale IP - run `ts-ip` on Mac) or `192.168.1.x` (local network)
    - **Port:** 22
    - **Username:** `your-mac-username`
+3. Under "Advanced", set **Protocol: Mosh** for resilient connections over cellular
 
 ### Step 3: Set Up SSH Keys
 
