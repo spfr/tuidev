@@ -186,7 +186,7 @@ command -v sd &>/dev/null && alias sed='sd'
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
-alias cd='z'  # Use zoxide
+[[ -o interactive ]] && alias cd='z'  # Use zoxide (only in interactive shells)
 
 # System
 alias top='btm'     # bottom system monitor
@@ -353,18 +353,13 @@ tunnel() {
   fi
 }
 
-# Quick dev session starter
+# Quick dev session starter (3-column: nvim | agent | runner)
 dev() {
   local session_name=${1:-dev}
-  local layout=${2:-dev}
-
-  # Check if session exists (grep exact match at start of line)
   if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    echo "Attaching to existing session: $session_name"
     zellij attach "$session_name"
   else
-    echo "Creating new session: $session_name with layout: $layout"
-    zellij --new-session-with-layout "$layout"
+    zellij --session "$session_name" --layout dev
   fi
 }
 
@@ -372,6 +367,16 @@ dev() {
 zk() {
   echo "Killing all zellij sessions..."
   zellij kill-all-sessions 2>/dev/null || true
+}
+
+# Named session for remote attachment (Tailscale/Termius/mosh)
+work() {
+  local session_name=${1:-$(basename "$PWD")}
+  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
+    zellij attach "$session_name"
+  else
+    zellij --session "$session_name"
+  fi
 }
 
 # TUI environment update (pulls latest from repo)
@@ -397,32 +402,62 @@ tui-check() {
 
 # AI single agent session (nvim + 1 terminal)
 ai-single() {
-  zellij --layout single
+  local session_name=${1:-ai-single}
+  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
+    zellij attach "$session_name"
+  else
+    zellij --session "$session_name" --layout single
+  fi
 }
 
-# AI dual agent session (nvim + 2 agents) - DEFAULT
+# AI dual agent session (nvim + 2 agents)
 ai() {
-  zellij --layout dual
+  local session_name=${1:-ai}
+  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
+    zellij attach "$session_name"
+  else
+    zellij --session "$session_name" --layout dual
+  fi
 }
 
 # AI triple agent session (nvim + 3 agents)
 ai-triple() {
-  zellij --layout triple
+  local session_name=${1:-ai-triple}
+  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
+    zellij attach "$session_name"
+  else
+    zellij --session "$session_name" --layout triple
+  fi
 }
 
-# Remote session (nvim + tunnel)
+# Remote session (minimal for Tailscale/mosh)
 remote() {
-  zellij --layout remote
+  local session_name=${1:-remote}
+  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
+    zellij attach "$session_name"
+  else
+    zellij --session "$session_name" --layout remote
+  fi
 }
 
 # Full-stack development session
 fullstack() {
-  zellij --layout fullstack
+  local session_name=${1:-fullstack}
+  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
+    zellij attach "$session_name"
+  else
+    zellij --session "$session_name" --layout fullstack
+  fi
 }
 
 # Multi-agent development session (with monitoring)
 multi() {
-  zellij --layout multi-agent
+  local session_name=${1:-multi}
+  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
+    zellij attach "$session_name"
+  else
+    zellij --session "$session_name" --layout multi-agent
+  fi
 }
 
 # ============================================================================

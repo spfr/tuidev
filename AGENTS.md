@@ -72,7 +72,7 @@ bottom          # btm
 sys             # fastfetch
 
 # Navigation
-cd              # z (zoxide)
+cd              # z (zoxide) in interactive shells; builtin cd in scripts
 ..              # cd ..
 ...             # cd ../..
 ....            # cd ../../..
@@ -174,16 +174,24 @@ When creating or modifying projects with this setup:
 
 ### Session Commands
 
+All functions create **named sessions** with re-attachment support. Pass an optional name argument.
+
 ```bash
-# Start default AI workflow (nvim + 2 agent terminals)
-ai
+# Development (3 columns: nvim | agent | runner)
+dev [name]        # Default session name: "dev"
+
+# Bare named session (for remote attachment via Tailscale/Termius/mosh)
+work [name]       # Default session name: current directory basename
+
+# AI workflow layouts
+ai [name]         # nvim + 2 agent terminals
+ai-single [name]  # nvim + 1 agent
+ai-triple [name]  # nvim + 3 agents
 
 # Other layouts
-ai-single     # nvim + 1 agent
-ai-triple     # nvim + 3 agents
-fullstack     # 5-tab full-stack setup
-multi         # Dev + Monitor + Git tabs
-remote        # SSH tunnel setup
+fullstack [name]  # 5-tab full-stack setup
+multi [name]      # Dev + Monitor + Git tabs
+remote [name]     # Minimal for Tailscale/mosh
 
 # Kill all sessions
 zk
@@ -316,8 +324,10 @@ ld                        # Docker TUI
 # Edit
 v file                    # Open in nvim
 
-# Sessions
-ai                        # Start AI workflow
+# Sessions (all support named sessions)
+dev [name]                # 3-column dev layout
+work [name]               # Bare named session
+ai [name]                 # AI workflow (nvim + 2 agents)
 zk                        # Kill all sessions
 ```
 

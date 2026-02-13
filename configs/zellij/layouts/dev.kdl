@@ -1,26 +1,24 @@
-// Development Layout - Editor + Terminal side by side
+// Development Layout - 3 vertical columns
+// nvim (55%) | agent (25%) | runner (20%)
 layout {
-    tab name="Code" {
+    tab name="Dev" focus=true {
         pane split_direction="vertical" {
-            pane size="65%" {
+            pane size="55%" {
                 name "Editor"
                 command "nvim"
+                focus true
             }
-            pane size="35%" {
-                name "Terminal"
+            pane size="25%" {
+                name "Agent"
+            }
+            pane size="20%" {
+                name "Runner"
             }
         }
     }
-    tab name="Git" {
+    tab name="Terminal" {
         pane {
-            name "Git"
-            command "lazygit"
-        }
-    }
-    tab name="Monitor" {
-        pane {
-            name "System"
-            command "btm"
+            name "Shell"
         }
     }
 }

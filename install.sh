@@ -427,7 +427,7 @@ command -v bat &>/dev/null && alias cat='bat'
 command -v eza &>/dev/null && alias ls='eza --icons' ll='eza -l --icons --git' la='eza -la --icons --git' lt='eza --tree --level=2 --icons' tree='eza --tree --icons'
 alias lg='lazygit' gs='git status' ga='git add' gc='git commit' gp='git push' gl='git pull' gd='git diff'
 alias ..='cd ..' ...='cd ../..' ....='cd ../../..'
-command -v zoxide &>/dev/null && alias cd='z'
+command -v zoxide &>/dev/null && [[ -o interactive ]] && alias cd='z'
 command -v btm &>/dev/null && alias top='btm'
 alias reload='source ~/.zshrc' zshconfig='${EDITOR:-nvim} ~/.zshrc'
 

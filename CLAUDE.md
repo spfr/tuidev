@@ -83,18 +83,28 @@ scripts/                    # Automation (~2000 LOC)
 
 ## Zellij Layouts
 
+Bare `zellij` opens a single terminal (no default layout). Use shell functions for multi-pane layouts:
+
 Located in `configs/zellij/layouts/`:
-- `dual.kdl` - **DEFAULT**: Nvim (60%) + 2 AI agent terminals (40%)
+- `dev.kdl` - 3 vertical columns: Nvim (55%) | Agent (25%) | Runner (20%)
+- `dual.kdl` - Nvim (60%) + 2 AI agent terminals (40%)
 - `triple.kdl` - Nvim + 3 AI agents
 - `multi-agent.kdl` - Editor + Monitoring tab + Git tab
 - `fullstack.kdl` - 5-tab full-stack setup
-- `remote.kdl` - Tailscale + mosh remote development (editor, agent, status monitor)
+- `remote.kdl` - Minimal for Tailscale/mosh (Nvim + terminal)
 
-## Shell Aliases (from .zshrc)
+## Shell Functions (from .zshrc)
 
-AI workflow shortcuts: `ai`, `ai-single`, `ai-triple`, `fullstack`, `multi`, `remote`, `dev`
+All functions create **named sessions** with re-attachment support. Pass an optional name: `dev myproject`.
 
-These launch Zellij with the corresponding layout.
+- `dev [name]` - 3-column dev layout (nvim | agent | runner)
+- `work [name]` - Bare named session (defaults to directory basename)
+- `ai [name]` - Nvim + 2 AI agent terminals
+- `ai-single [name]` - Nvim + 1 terminal
+- `ai-triple [name]` - Nvim + 3 AI agents
+- `fullstack [name]` - 5-tab full-stack setup
+- `multi [name]` - Dev + Monitor + Git tabs
+- `remote [name]` - Minimal remote layout
 
 ## AI CLI Tool Configuration
 

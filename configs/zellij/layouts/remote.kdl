@@ -1,43 +1,18 @@
-// Remote Layout - Enhanced for Tailscale + mosh remote development
+// Remote Layout - Minimal for Tailscale/mosh sessions
 layout {
-    default_tab_template {
-        pane size=1 borderless=true {
-            plugin location="zellij:tab-bar"
-        }
-        children
-        pane size=2 borderless=true {
-            plugin location="zellij:status-bar"
-        }
-    }
-    tab name="Dev" {
+    tab name="Dev" focus=true {
         pane split_direction="vertical" {
-            pane size="60%" {
+            pane size="65%" {
                 name "Editor"
                 command "nvim"
                 focus true
             }
-            pane split_direction="horizontal" size="40%" {
-                pane size="50%" {
-                    name "Agent"
-                }
-                pane size="50%" {
-                    name "Tunnel"
-                }
+            pane size="35%" {
+                name "Terminal"
             }
         }
     }
-    tab name="Status" {
-        pane split_direction="vertical" {
-            pane size="50%" {
-                name "Remote Status"
-            }
-            pane size="50%" {
-                name "System"
-                command "btm"
-            }
-        }
-    }
-    tab name="Terminal" {
+    tab name="Shell" {
         pane {
             name "Shell"
         }

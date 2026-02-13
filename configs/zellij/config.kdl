@@ -196,8 +196,8 @@ themes {
 // Layouts
 // ============================================================================
 
-// Default layout for multi-agent development
-default_layout "dual"
+// No default_layout - bare `zellij` opens a single terminal.
+// Use shell functions (dev, ai, work, etc.) for multi-pane layouts.
 
 // ============================================================================
 // Behavior
