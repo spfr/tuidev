@@ -52,16 +52,9 @@ Claude Code's experimental agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_
 - **broot** - Directory navigator for large codebases
 - **tealdeer** - Fast tldr pages in Rust
 
-#### AI Tools
-- **Ralph Wiggum** - Autonomous AI agent orchestration script
-
-#### Documentation
-- **AI_ORCHESTRATION.md** - Complete guide for autonomous agent workflows
-
 ### Changed
-- Updated README with new tools and orchestration section
-- Enhanced .zshrc with aliases for new tools (y, br, ralph, tldr, sd)
-- Added Ralph Wiggum orchestration to install.sh
+- Updated README with new tools
+- Enhanced .zshrc with aliases for new tools (y, br, tldr, sd)
 
 ---
 

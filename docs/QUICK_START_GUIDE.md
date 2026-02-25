@@ -14,7 +14,7 @@ ai
 
 This opens:
 - **Left (60%)**: Neovim editor
-- **Right (40%)**: Two terminal panes for AI tools (opencode, claude, codex)
+- **Right (40%)**: Two terminal panes for AI tools (opencode, claude)
 
 ### Available Sessions
 
@@ -237,28 +237,6 @@ tka           # Kill all sessions
 
 ---
 
-## 10. Autonomous AI (Ralph Wiggum)
-
-Let AI agents work autonomously until tasks complete:
-
-```bash
-# Simple task
-ralph "Fix all TypeScript errors in src/"
-
-# Use OpenCode instead of Claude
-ralph --agent opencode "Build REST API endpoints"
-
-# Complex task with logging
-ralph --max-iterations 15 -l session.log "Refactor auth module"
-
-# PRD-driven development
-ralph --file tasks.md --max-iterations 30
-```
-
-See [AI_ORCHESTRATION.md](AI_ORCHESTRATION.md) for the full guide.
-
----
-
 ## Getting Help
 
 ```bash
@@ -276,8 +254,7 @@ tldr <command>        # Quick examples
 
 1. [CHEATSHEET.md](CHEATSHEET.md) - All keybindings (print this!)
 2. [NEOVIM_QUICKSTART.md](NEOVIM_QUICKSTART.md) - Full nvim guide
-3. [AI_ORCHESTRATION.md](AI_ORCHESTRATION.md) - Autonomous agent workflows
-4. [REMOTE_SESSIONS.md](REMOTE_SESSIONS.md) - Work from phone/tablet
+3. [REMOTE_SESSIONS.md](REMOTE_SESSIONS.md) - Work from phone/tablet
 
 ---
 

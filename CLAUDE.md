@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-macOS TUI Development Setup - an opinionated, terminal-first developer environment for AI-powered workflows. The philosophy: Nvim stays lightweight (no in-editor AI plugins); AI tools (opencode, claude, codex) run in parallel Zellij panes for maximum speed and multi-agent collaboration.
+macOS TUI Development Setup - an opinionated, terminal-first developer environment for AI-powered workflows. The philosophy: Nvim stays lightweight (no in-editor AI plugins); AI tools (opencode, claude) run in parallel Zellij panes for maximum speed and multi-agent collaboration.
 
 ## Common Commands
 
@@ -47,7 +47,7 @@ configs/                    # User configuration files (copied to ~/.config)
 │   ├── init.lua            # Plugin bootstrap, LazyVim extras
 │   └── lua/
 │       ├── config/         # keymaps.lua, options.lua, autocmds.lua
-│       └── plugins/        # ai.lua (intentionally empty), coding.lua, editor.lua
+│       └── plugins/        # ai.lua (intentionally empty), coding.lua, editor.lua, init.lua
 ├── zellij/                 # Terminal multiplexer (primary, manual layouts)
 │   ├── config.kdl          # Main config with Tokyo Night theme
 │   └── layouts/            # 7 workspace layouts (dual, triple, multi-agent, etc.)
@@ -58,14 +58,12 @@ configs/                    # User configuration files (copied to ~/.config)
 ├── ghostty/config          # Terminal emulator
 ├── hammerspoon/init.lua    # macOS window automation
 ├── opencode/               # OpenCode CLI configuration
-│   └── opencode.json       # Full config with MCP servers
+│   └── opencode.json       # Model, TUI, and tool settings
 ├── claude/                 # Claude Code configuration
-│   ├── settings.json       # Global settings with MCP servers
-│   └── mcp.json            # Project-level MCP template
-├── gemini/                 # Gemini CLI configuration
-│   └── settings.json       # Settings with MCP servers
-└── mcp/                    # MCP shared configuration
-    └── env.template        # Environment variables template
+│   └── settings.json       # Hooks and permissions
+└── ssh/                    # SSH configuration
+    ├── config              # SSH client config (Tailscale hosts)
+    └── sshd_config.d/      # SSHD config snippets
 
 scripts/                    # Automation (~2000 LOC)
 ├── health_check.sh         # Verify all tools installed
@@ -123,44 +121,12 @@ All functions create **named sessions** with re-attachment support. Pass an opti
 
 ## AI CLI Tool Configuration
 
-The setup includes configurations for three AI CLI tools with MCP (Model Context Protocol) server support:
-
-### Configured Tools
+The setup includes configurations for two AI CLI tools:
 
 | Tool | Config Location | Purpose |
 |------|-----------------|---------|
 | OpenCode | `~/.config/opencode/opencode.json` | Open-source AI coding CLI |
 | Claude Code | `~/.claude.json` | Anthropic's official CLI |
-| Gemini CLI | `~/.gemini/settings.json` | Google's Gemini AI CLI |
-
-### MCP Servers
-
-Pre-configured MCP servers (enable as needed):
-
-**Core Development (enabled by default):**
-- `filesystem` - File system access
-- `git` - Git operations
-- `fetch` - HTTP requests
-- `memory` - Persistent memory across sessions
-
-**Requires API Keys (disabled by default):**
-- `github` - GitHub API (`GITHUB_PERSONAL_ACCESS_TOKEN`)
-- `brave-search` - Web search (`BRAVE_API_KEY`)
-- `figma` - Design-to-code workflows (`FIGMA_PERSONAL_ACCESS_TOKEN`)
-- `postgres` - PostgreSQL (`POSTGRES_CONNECTION_STRING`)
-- `sqlite` - SQLite (path argument)
-- `playwright` - Browser automation
-
-### Environment Variables Setup
-
-```bash
-# Copy the template and configure your API keys:
-cp ~/.config/mcp-env.template ~/.config/mcp-env
-nvim ~/.config/mcp-env
-source ~/.config/mcp-env
-```
-
-Or add exports to `~/.zshrc.local` for persistence.
 
 ### Quick Commands
 
@@ -172,16 +138,7 @@ opencode              # Direct command
 # Claude Code
 cc                    # Launch Claude Code (alias)
 claude                # Direct command
-claude mcp list       # List MCP servers
-
-# Gemini CLI
-gem                   # Launch Gemini (alias)
-gemini                # Direct command
 ```
-
-### Project-Level MCP Config
-
-Copy `configs/claude/mcp.json` to `.mcp.json` in any project root for project-specific MCP servers.
 
 ## CI Pipeline
 

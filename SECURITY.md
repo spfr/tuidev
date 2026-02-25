@@ -22,34 +22,18 @@ If you discover a security vulnerability in this project, please report it respo
 This project uses environment variables for sensitive data:
 
 - API keys are **never** stored in configuration files
-- Use `~/.config/mcp-env` for local API key storage
+- Use `~/.zshrc.local` for local API key storage
 - The `.gitignore` excludes common secret file patterns
-
-### MCP Server Security
-
-MCP servers that require authentication are **disabled by default**:
-
-- `github` - Requires `GITHUB_PERSONAL_ACCESS_TOKEN`
-- `brave-search` - Requires `BRAVE_API_KEY`
-- `figma` - Requires `FIGMA_PERSONAL_ACCESS_TOKEN`
-- `postgres` - Requires connection string
-
-Only enable these after configuring appropriate credentials.
 
 ### File Permissions
 
-The installer creates configuration files with appropriate permissions. Sensitive files should have restricted access:
-
-```bash
-chmod 600 ~/.config/mcp-env
-```
+The installer creates configuration files with appropriate permissions.
 
 ### Best Practices
 
 1. **Review scripts before running** - Especially when piping from curl
 2. **Use dry-run mode** - Preview changes with `./install.sh --dry-run`
 3. **Keep tools updated** - Run `make update-packages` regularly
-4. **Audit MCP servers** - Only enable servers you need
 
 ## Acknowledgments
 

@@ -2,7 +2,7 @@
 
 > Universal AI Agent Instructions for TUI Development Environment
 
-This file provides guidance to AI coding agents (Claude Code, OpenCode, Gemini CLI, Cursor, Windsurf, Codex, etc.) when working with this setup or projects that use it.
+This file provides guidance to AI coding agents (Claude Code, OpenCode, Cursor, Windsurf, etc.) when working with this setup or projects that use it.
 
 ---
 
@@ -164,8 +164,6 @@ When creating or modifying projects with this setup:
 ```
 ~/.config/opencode/opencode.json    # OpenCode CLI
 ~/.claude.json                       # Claude Code
-~/.gemini/settings.json             # Gemini CLI
-~/.config/mcp-env                   # MCP environment variables
 ```
 
 ---
@@ -279,36 +277,6 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
 
 ---
 
-## MCP Servers Available
-
-Model Context Protocol servers pre-configured. See [docs/MCP_SERVERS.md](docs/MCP_SERVERS.md) for full details.
-
-**Enabled by default:**
-- `filesystem` - File system access
-- `git` - Git operations
-- `memory` - Persistent memory across sessions
-- `fetch` - HTTP requests
-
-**Browser Automation (Playwright):**
-- Control Chrome/Firefox/Safari programmatically
-- Take screenshots, fill forms, click buttons
-- No API key needed, just: `npx playwright install`
-- Example: "Open example.com and screenshot the homepage"
-
-**Design-to-Code (Figma):**
-- Read Figma designs and extract specs
-- Generate code from design components
-- Requires: `FIGMA_PERSONAL_ACCESS_TOKEN` in `~/.config/mcp-env`
-- Example: "Generate React component from this Figma frame"
-
-**Other Available (require API keys):**
-- `github` - GitHub API (issues, PRs, repos) - requires Docker
-- `brave-search` - Web search capability
-- `postgres` - PostgreSQL database queries
-- `sqlite` - SQLite database queries
-
----
-
 ## Best Practices for AI Agents
 
 ### 1. Use Modern Tools
@@ -411,8 +379,7 @@ If building AI agents that integrate with this environment:
 1. **Check for modern tools first** - Most users will have `rg`, `fd`, `bat`
 2. **Use the shell aliases** - They're faster and more user-friendly
 3. **Respect Zellij context** - Users may be in multiplexed sessions
-4. **MCP servers available** - Use them for file/git/memory operations
-5. **Tokyo Night theme** - If generating TUI output, match the color scheme
+4. **Tokyo Night theme** - If generating TUI output, match the color scheme
 
 ---
 

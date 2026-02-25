@@ -35,20 +35,20 @@ log() {
 }
 
 start_test() {
-    ((TESTS_RUN++))
+    ((TESTS_RUN++)) || true
     echo ""
     log "${CYAN}[TEST $TESTS_RUN]${NC} $1"
     echo "Test: $1" >> "$LOG_FILE"
 }
 
 pass_test() {
-    ((TESTS_PASSED++))
+    ((TESTS_PASSED++)) || true
     log "${GREEN}  ✓ PASS${NC} $1"
     echo "PASS: $1" >> "$LOG_FILE"
 }
 
 fail_test() {
-    ((TESTS_FAILED++))
+    ((TESTS_FAILED++)) || true
     log "${RED}  ✗ FAIL${NC} $1"
     echo "FAIL: $1" >> "$LOG_FILE"
 }
@@ -420,7 +420,11 @@ log "${CYAN}Tests Run:${NC}    $TESTS_RUN"
 log "${GREEN}Tests Passed:${NC}  $TESTS_PASSED"
 log "${RED}Tests Failed:${NC}  $TESTS_FAILED"
 
-PASS_RATE=$(( TESTS_PASSED * 100 / TESTS_RUN ))
+if [[ $TESTS_RUN -gt 0 ]]; then
+    PASS_RATE=$(( TESTS_PASSED * 100 / TESTS_RUN ))
+else
+    PASS_RATE=0
+fi
 log "${CYAN}Pass Rate:${NC}    ${PASS_RATE}%"
 
 log ""

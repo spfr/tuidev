@@ -108,6 +108,7 @@ echo ""
 # ============================================================================
 echo "--- Neovim Lua Configs ---"
 
+shopt -s globstar nullglob
 for lua_file in "$REPO_DIR"/configs/nvim/*.lua "$REPO_DIR"/configs/nvim/**/*.lua; do
     if [[ -f "$lua_file" ]]; then
         name=$(basename "$lua_file")
@@ -124,6 +125,33 @@ for lua_file in "$REPO_DIR"/configs/nvim/*.lua "$REPO_DIR"/configs/nvim/**/*.lua
             else
                 log_warn "$name - could not verify (install luac)"
             fi
+        fi
+    fi
+done
+shopt -u globstar nullglob
+echo ""
+
+# ============================================================================
+# 4b. Validate JSON Configs (AI tools)
+# ============================================================================
+echo "--- JSON Configs (AI Tools) ---"
+
+json_files=(
+    "configs/opencode/opencode.json"
+    "configs/claude/settings.json"
+)
+
+for json_file in "${json_files[@]}"; do
+    if [[ -f "$REPO_DIR/$json_file" ]]; then
+        name=$(basename "$json_file")
+        if command -v jq &>/dev/null; then
+            if jq empty "$REPO_DIR/$json_file" 2>/dev/null; then
+                log_pass "$name - valid JSON"
+            else
+                log_fail "$name - invalid JSON"
+            fi
+        else
+            log_warn "$name - jq not available for validation"
         fi
     fi
 done

@@ -60,17 +60,6 @@ export NVM_DIR="$HOME/.nvm"
 # Example: [[ -d "$HOME/.antigravity/antigravity/bin" ]] && export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
 
 # ============================================================================
-# AI CLI Tool Environment
-# ============================================================================
-
-# MCP Server data directories
-export MCP_MEMORY_DIR="$HOME/.local/share/mcp"
-mkdir -p "$MCP_MEMORY_DIR" 2>/dev/null
-
-# Load MCP environment variables if configured
-[[ -f "$HOME/.config/mcp-env" ]] && source "$HOME/.config/mcp-env"
-
-# ============================================================================
 # Completions
 if type brew &>/dev/null; then
   FPATH=$(brew --prefix)/share/zsh-completions:$FPATH
@@ -87,7 +76,7 @@ fi
 # ============================================================================
 
 # Starship Prompt (replaces oh-my-zsh themes)
-eval "$(starship init zsh)"
+command -v starship &>/dev/null && eval "$(starship init zsh)"
 
 # fzf - Fuzzy Finder
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
@@ -112,7 +101,7 @@ export FZF_DEFAULT_OPTS='
 eval "$(zoxide init zsh)"
 
 # atuin - Better shell history
-eval "$(atuin init zsh)"
+command -v atuin &>/dev/null && eval "$(atuin init zsh)"
 
 # GitHub CLI completion
 if command -v gh &> /dev/null; then
@@ -147,8 +136,8 @@ alias v='nvim'
 # Modern replacements
 alias cat='bat'
 alias ls='eza --icons'
-alias ll='eza -l --icons'
-alias la='eza -la --icons'
+alias ll='eza -l --icons --git'
+alias la='eza -la --icons --git'
 alias lt='eza --tree --level=2 --icons'
 alias tree='eza --tree --icons'
 
@@ -219,12 +208,6 @@ command -v opencode &>/dev/null && alias oc='opencode'
 
 # Claude Code (Anthropic official)
 command -v claude &>/dev/null && alias cc='claude'
-
-# Gemini CLI (Google)
-command -v gemini &>/dev/null && alias gem='gemini'
-
-# Ralph Wiggum (autonomous AI agent orchestration)
-[[ -x "$HOME/.local/bin/ralph" ]] && alias ralph='$HOME/.local/bin/ralph'
 
 # ============================================================================
 # Functions

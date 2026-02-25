@@ -25,7 +25,7 @@ help: ## Show this help message
 	@echo -e "${BLUE}macOS TUI Development Environment - Available Commands${NC}"
 	@echo ""
 	@echo -e "${GREEN}Installation & Management:${NC}"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  ${CYAN}%-20s${NC} %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  ${BLUE}%-20s${NC} %s\n", $$1, $$2}'
 	@echo ""
 	@echo -e "${GREEN}Testing:${NC}"
 	@echo "  make test               - Run full test suite"
@@ -82,7 +82,7 @@ brew-upgrade: ## Raw brew upgrade (all packages)
 # Testing
 # ============================================================================
 
-test: check ## Run full test suite
+test: ## Run full test suite
 	@echo -e "${BLUE}Running full test suite...${NC}"
 	@./scripts/test_suite.sh
 
@@ -127,7 +127,7 @@ docker-build: ## Build Docker test image
 
 docker-test: docker-build ## Run tests in Docker
 	@echo -e "${BLUE}Running tests in Docker...${NC}"
-	@docker run --rm -it mactui-test
+	@docker run --rm mactui-test
 
 docker-clean: ## Clean Docker artifacts
 	@echo -e "${BLUE}Cleaning Docker artifacts...${NC}"

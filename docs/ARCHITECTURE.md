@@ -14,17 +14,13 @@
 │  │  ┌─────────────────────────┬──────────────────────────────────────┐  │  │
 │  │  │                         │           AI AGENT PANES             │  │  │
 │  │  │       NEOVIM            │  ┌────────────────────────────────┐  │  │  │
-│  │  │     (LazyVim)           │  │  Claude Code / OpenCode /      │  │  │  │
-│  │  │                         │  │  Gemini CLI                    │  │  │  │
-│  │  │  - LSP                  │  │                                │  │  │  │
-│  │  │  - Treesitter           │  │  Connected via MCP to:         │  │  │  │
-│  │  │  - Telescope            │  │  - filesystem                  │  │  │  │
-│  │  │  - nvim-tree            │  │  - git                         │  │  │  │
-│  │  │  - (no AI plugins)      │  │  - memory                      │  │  │  │
-│  │  │                         │  │  - fetch                       │  │  │  │
-│  │  │                         │  │  - playwright (browser)        │  │  │  │
-│  │  │                         │  │  - figma (design)              │  │  │  │
-│  │  │                         │  │  - github, brave-search...     │  │  │  │
+│  │  │     (LazyVim)           │  │  Claude Code / OpenCode         │  │  │  │
+│  │  │                         │  │                                │  │  │  │
+│  │  │  - LSP                  │  │  AI coding agents run here     │  │  │  │
+│  │  │  - Treesitter           │  │  in separate terminal panes    │  │  │  │
+│  │  │  - Telescope            │  │                                │  │  │  │
+│  │  │  - nvim-tree            │  │                                │  │  │  │
+│  │  │  - (no AI plugins)      │  │                                │  │  │  │
 │  │  │                         │  └────────────────────────────────┘  │  │  │
 │  │  │                         ├──────────────────────────────────────┤  │  │
 │  │  │                         │  ┌────────────────────────────────┐  │  │  │
@@ -85,42 +81,14 @@
 │   (LazyVim)      │     │                  │
 │                  │     │  Claude Code     │
 │  • LSP           │     │  OpenCode        │
-│  • Completion    │     │  Gemini CLI      │
+│  • Completion    │     │                  │
 │  • Git signs     │     │                  │
-│  • Formatting    │     │  ┌────────────┐  │
-│  • Debugging     │     │  │ MCP Servers│  │
-│  • Testing       │     │  └────────────┘  │
+│  • Formatting    │     │                  │
+│  • Debugging     │     │                  │
+│  • Testing       │     │                  │
 │                  │     │                  │
 │  (No AI plugins) │     │  (All AI here)   │
 └──────────────────┘     └──────────────────┘
-```
-
----
-
-## MCP Server Architecture
-
-```
-                    ┌─────────────────────────────────┐
-                    │       AI CLI TOOL               │
-                    │  (Claude/OpenCode/Gemini)       │
-                    └───────────────┬─────────────────┘
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │      MCP Protocol Layer       │
-                    └───────────────┬───────────────┘
-                                    │
-        ┌───────────┬───────────┬───┴───┬───────────┬───────────┐
-        ▼           ▼           ▼       ▼           ▼           ▼
-   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-   │filesystm│ │   git   │ │ memory  │ │  fetch  │ │playwrigt│ │  figma  │
-   │ (npx)   │ │ (npx)   │ │ (npx)   │ │ (uvx)   │ │ (npx)   │ │ (npx)   │
-   └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘
-        │           │           │           │           │           │
-        ▼           ▼           ▼           ▼           ▼           ▼
-   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-   │  Local  │ │  Git    │ │ JSONL   │ │  HTTP   │ │ Browser │ │ Figma   │
-   │  Files  │ │  Repos  │ │  File   │ │  APIs   │ │(Chromium│ │  API    │
-   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘
 ```
 
 ---
@@ -166,9 +134,7 @@
 │   │   ├── ghostty/      ─────────────────>│ ~/.config/ghostty/  │
 │   │   ├── hammerspoon/  ─────────────────>│ ~/.hammerspoon/     │
 │   │   ├── opencode/     ─────────────────>│ ~/.config/opencode/ │
-│   │   ├── claude/       ─────────────────>│ ~/.claude.json      │
-│   │   ├── gemini/       ─────────────────>│ ~/.gemini/          │
-│   │   └── mcp/          ─────────────────>│ ~/.config/mcp-env   │
+│   │   └── claude/       ─────────────────>│ ~/.claude.json      │
 │   │                                       │                     │
 │   └── install.sh        ──────────────────┘ (copies configs)    │
 └─────────────────────────────────────────────────────────────────┘
@@ -184,29 +150,13 @@
                               ▼
                     ┌─────────────────────┐
                     │  AI CLI Tool        │
-                    │  (Claude Code)      │
+                    │  (Claude/OpenCode)  │
                     └──────────┬──────────┘
-                               │
-           ┌───────────────────┼───────────────────┐
-           │                   │                   │
-           ▼                   ▼                   ▼
-    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-    │ filesystem  │    │    git      │    │  memory     │
-    │    MCP      │    │    MCP      │    │    MCP      │
-    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
-           │                   │                   │
-           ▼                   ▼                   ▼
-    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-    │ Read/Write  │    │ git status  │    │  Recall     │
-    │   Files     │    │ git diff    │    │  Context    │
-    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
-           │                   │                   │
-           └───────────────────┼───────────────────┘
                                │
                                ▼
                     ┌─────────────────────┐
-                    │  AI Response        │
-                    │  (code changes)     │
+                    │  Reads/writes code  │
+                    │  Runs commands      │
                     └──────────┬──────────┘
                                │
                                ▼
@@ -293,15 +243,8 @@
 │   └── tmux.conf                 # Tmux config (agent teams companion)
 ├── starship.toml                 # Prompt
 ├── ghostty/config                # Terminal
-├── opencode/opencode.json        # OpenCode + MCP
-└── mcp-env                       # MCP environment vars
+└── opencode/opencode.json        # OpenCode config
 
-~/.claude.json                    # Claude Code + MCP
-~/.gemini/settings.json           # Gemini CLI + MCP
+~/.claude.json                    # Claude Code config
 ~/.hammerspoon/init.lua           # macOS automation
-~/.local/share/
-├── nvim/                         # Neovim data
-├── claude/memory.jsonl           # Claude memory
-├── opencode/memory.jsonl         # OpenCode memory
-└── mcp/                          # Shared MCP data
 ```

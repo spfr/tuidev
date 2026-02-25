@@ -2,7 +2,7 @@
 
 This setup uses **[LazyVim](https://www.lazyvim.org/)** - the most popular Neovim distribution. It provides a full IDE experience out of the box.
 
-> **Note**: This setup uses terminal-based AI tools (opencode, claude, codex) in separate Zellij panes rather than in-editor AI plugins. This keeps nvim fast and focused on editing.
+> **Note**: This setup uses terminal-based AI tools (opencode, claude) in separate Zellij panes rather than in-editor AI plugins. This keeps nvim fast and focused on editing.
 
 ## First Launch
 

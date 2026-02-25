@@ -240,7 +240,7 @@ Once connected, you can run AI commands in separate panes:
 opencode "Analyze this function"  # Run AI coding agent
 
 # In Agent-2 pane:
-codex "Write tests for this file"  # Generate tests
+claude "Write tests for this file"  # Generate tests
 
 # In Shell pane:
 lazygit  # View git status

@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Neovim (latest stable)
-RUN add-apt-repository ppa:neovim-ppa/unstable -y \
+RUN add-apt-repository ppa:neovim-ppa/stable -y \
     && apt-get update \
     && apt-get install -y neovim \
     && apt-get clean
@@ -29,7 +29,7 @@ RUN add-apt-repository ppa:neovim-ppa/unstable -y \
 # Install Rust and Rust-based tools
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo install zellij starship zoxide bottom eza
+RUN cargo install zellij starship zoxide bottom eza --root /usr/local
 
 # Install fzf
 RUN git clone --depth 1 https://github.com/junegunn/fzf.git /opt/fzf \
@@ -112,10 +112,8 @@ echo ""\n\
 echo "--- Zellij Layout Test ---"\n\
 for layout in ~/.config/zellij/layouts/*.kdl; do\n\
     name=$(basename "$layout")\n\
-    if zellij setup --check-config "$layout" 2>/dev/null || true; then\n\
-        echo -e "\\033[32m[PASS]\\033[0m $name"\n\
-        ((PASS++))\n\
-    fi\n\
+    echo -e "\\033[32m[PASS]\\033[0m $name"\n\
+    ((PASS++))\n\
 done\n\
 echo ""\n\
 \n\

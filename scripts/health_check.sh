@@ -181,14 +181,7 @@ fi
 if command -v claude > /dev/null 2>&1; then
     print_success "Claude Code is installed (version: $(claude --version 2> /dev/null | head -1 || echo "unknown"))"
 else
-    print_warning "Claude Code is not installed (optional - npm install -g @anthropic-ai/claude-code)"
-fi
-
-# Check Gemini CLI
-if command -v gemini > /dev/null 2>&1; then
-    print_success "Gemini CLI is installed (version: $(gemini --version 2> /dev/null | head -1 || echo "unknown"))"
-else
-    print_warning "Gemini CLI is not installed (optional - npm install -g @anthropic-ai/gemini-cli)"
+    print_warning "Claude Code is not installed (optional - curl -fsSL https://claude.ai/install.sh | bash)"
 fi
 
 # ============================================================================
@@ -211,29 +204,6 @@ else
     print_warning "Claude Code config not found (~/.claude.json)"
 fi
 
-# Check Gemini CLI config
-if [[ -f "$HOME/.gemini/settings.json" ]]; then
-    print_success "Gemini CLI config exists"
-else
-    print_warning "Gemini CLI config not found (~/.gemini/settings.json)"
-fi
-
-# Check MCP data directories
-if [[ -d "$HOME/.local/share/mcp" ]]; then
-    print_success "MCP data directory exists"
-else
-    print_warning "MCP data directory missing (~/.local/share/mcp)"
-fi
-
-# Check MCP environment template
-if [[ -f "$HOME/.config/mcp-env.template" ]]; then
-    print_success "MCP environment template exists"
-    if [[ -f "$HOME/.config/mcp-env" ]]; then
-        print_success "MCP environment configured"
-    else
-        print_warning "MCP environment not configured (copy mcp-env.template to mcp-env)"
-    fi
-fi
 
 # ============================================================================
 # Remote Access Tools
@@ -242,7 +212,7 @@ fi
 print_header "Remote Access Tools"
 
 # Check Tailscale
-if app_installed "Tailscale"; then
+if check_app "Tailscale"; then
     print_success "Tailscale is installed"
     if command -v tailscale > /dev/null 2>&1; then
         ts_status=$(tailscale status --json 2>/dev/null | jq -r '.Self.Online // "unknown"' 2>/dev/null || echo "unknown")
@@ -316,6 +286,7 @@ GUI_APPS=(
     "Stats"
     "Maccy"
     "Hidden Bar"
+    "Hammerspoon"
 )
 
 for app in "${GUI_APPS[@]}"; do
@@ -342,7 +313,7 @@ check_config "$HOME/.config/zellij/config.kdl"
 # Check layouts
 if [[ -d "$HOME/.config/zellij/layouts" ]]; then
     print_success "Zellij layouts directory exists"
-    for layout in dev.kdl multi-agent.kdl fullstack.kdl; do
+    for layout in dev.kdl dual.kdl triple.kdl single.kdl multi-agent.kdl fullstack.kdl remote.kdl; do
         if [[ -f "$HOME/.config/zellij/layouts/$layout" ]]; then
             print_success "Zellij layout: $layout"
         else

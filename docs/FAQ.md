@@ -38,7 +38,6 @@ brew update && brew upgrade
 # Update Neovim plugins
 nvim -c 'Lazy update' -c 'quit'
 
-# Update MCP servers (they auto-update via npx -y)
 ```
 
 ---
@@ -217,50 +216,8 @@ zellij --layout dual
 |------|----------|
 | **Claude Code** | Complex coding tasks, large context |
 | **OpenCode** | Open-source, customizable |
-| **Gemini CLI** | Google ecosystem, long context |
 
 You can run multiple in different Zellij panes!
-
-### Q: MCP servers aren't working
-
-```bash
-# Check Claude Code MCP status
-claude mcp list
-
-# Verify environment variables
-source ~/.config/mcp-env
-echo $GITHUB_PERSONAL_ACCESS_TOKEN
-
-# Test a server manually
-npx -y @modelcontextprotocol/server-filesystem /
-```
-
-### Q: How do I enable Figma integration?
-
-1. Get token: https://www.figma.com/developers/api#access-tokens
-2. Add to `~/.config/mcp-env`:
-   ```bash
-   export FIGMA_PERSONAL_ACCESS_TOKEN="your-token"
-   ```
-3. Source and restart:
-   ```bash
-   source ~/.config/mcp-env
-   ```
-
-See [MCP_SERVERS.md](MCP_SERVERS.md) for detailed instructions.
-
-### Q: How do I use browser automation (Playwright)?
-
-1. Install browsers (one-time):
-   ```bash
-   npx playwright install
-   ```
-
-2. Playwright MCP is already configured - just ask your AI:
-   ```
-   "Open https://example.com and take a screenshot"
-   "Fill out the login form and click submit"
-   ```
 
 ---
 

@@ -155,7 +155,7 @@ fi
 # Install Homebrew
 # ============================================================================
 
-print_header "Step 1/7: Installing Homebrew"
+print_header "Step 1/8: Installing Homebrew"
 
 if command_exists brew; then
     print_success "Homebrew already installed"
@@ -179,7 +179,7 @@ fi
 # Install Terminal & CLI Tools
 # ============================================================================
 
-print_header "Step 2/7: Installing Terminal & CLI Tools"
+print_header "Step 2/8: Installing Terminal & CLI Tools"
 
 CLI_TOOLS=(
     "zellij"           # Terminal multiplexer
@@ -237,7 +237,7 @@ done
 # Install Window Manager
 # ============================================================================
 
-print_header "Step 3/7: Installing Window Manager"
+print_header "Step 3/8: Installing Window Manager"
 
 # Rectangle - Free, simple, excellent
 if app_installed "Rectangle"; then
@@ -292,7 +292,7 @@ fi
 # Backup Existing Configs
 # ============================================================================
 
-print_header "Step 4/7: Backing Up Existing Configurations"
+print_header "Step 4/8: Backing Up Existing Configurations"
 
 BACKUP_DIR="$HOME/.config-backup-$(date +%Y%m%d_%H%M%S)"
 
@@ -323,7 +323,7 @@ fi
 # Create Configuration Files
 # ============================================================================
 
-print_header "Step 5/7: Creating Configuration Files"
+print_header "Step 5/8: Creating Configuration Files"
 
 mkdir -p "$HOME/.config/zellij/layouts"
 mkdir -p "$HOME/.config/ghostty"
@@ -747,21 +747,23 @@ fi
 # AI CLI Tool Configurations
 # ============================================================================
 
-print_header "Step 5b/7: Configuring AI CLI Tools"
+print_header "Step 6/8: Configuring AI CLI Tools"
 
 # --- Create directories ---
 mkdir -p "$HOME/.config/opencode"
-mkdir -p "$HOME/.gemini"
 mkdir -p "$HOME/.local/share/opencode"
 mkdir -p "$HOME/.local/share/claude"
-mkdir -p "$HOME/.local/share/gemini"
-mkdir -p "$HOME/.local/share/mcp"
 
 # --- OpenCode Configuration ---
 if [[ -f "$SCRIPT_DIR/configs/opencode/opencode.json" ]]; then
     print_step "Installing OpenCode configuration..."
-    run_cmd cp "$SCRIPT_DIR/configs/opencode/opencode.json" "$HOME/.config/opencode/opencode.json"
-    print_success "OpenCode configuration installed"
+    # Only copy if no existing config (preserve user customizations)
+    if [[ ! -f "$HOME/.config/opencode/opencode.json" ]]; then
+        run_cmd cp "$SCRIPT_DIR/configs/opencode/opencode.json" "$HOME/.config/opencode/opencode.json"
+        print_success "OpenCode configuration installed"
+    else
+        print_warning "Existing ~/.config/opencode/opencode.json found - skipping (backup if needed)"
+    fi
 else
     print_warning "OpenCode config not found in configs/opencode/"
 fi
@@ -780,23 +782,6 @@ else
     print_warning "Claude Code config not found in configs/claude/"
 fi
 
-# --- Gemini CLI Configuration ---
-if [[ -f "$SCRIPT_DIR/configs/gemini/settings.json" ]]; then
-    print_step "Installing Gemini CLI configuration..."
-    run_cmd cp "$SCRIPT_DIR/configs/gemini/settings.json" "$HOME/.gemini/settings.json"
-    print_success "Gemini CLI configuration installed"
-else
-    print_warning "Gemini CLI config not found in configs/gemini/"
-fi
-
-# --- MCP Environment Template ---
-if [[ -f "$SCRIPT_DIR/configs/mcp/env.template" ]]; then
-    print_step "Installing MCP environment template..."
-    run_cmd cp "$SCRIPT_DIR/configs/mcp/env.template" "$HOME/.config/mcp-env.template"
-    print_success "MCP environment template installed to ~/.config/mcp-env.template"
-    print_warning "Edit and source this file to enable MCP servers requiring API keys"
-fi
-
 # --- SSH Client Configuration ---
 if [[ -f "$SCRIPT_DIR/configs/ssh/config" ]]; then
     print_step "Installing SSH client configuration..."
@@ -811,19 +796,11 @@ if [[ -f "$SCRIPT_DIR/configs/ssh/config" ]]; then
     fi
 fi
 
-# --- Ralph Wiggum Orchestration ---
-if [[ -f "$SCRIPT_DIR/scripts/ralph.sh" ]]; then
-    print_step "Installing Ralph Wiggum orchestration script..."
-    run_cmd cp "$SCRIPT_DIR/scripts/ralph.sh" "$HOME/.local/bin/ralph"
-    run_cmd chmod +x "$HOME/.local/bin/ralph"
-    print_success "Ralph orchestration installed (run 'ralph --help' for usage)"
-fi
-
 # ============================================================================
 # Configure Git
 # ============================================================================
 
-print_header "Step 6/7: Configuring Git"
+print_header "Step 7/8: Configuring Git"
 
 if command_exists delta; then
     run_cmd git config --global core.pager "delta"
@@ -841,7 +818,7 @@ fi
 # Final Setup
 # ============================================================================
 
-print_header "Step 7/7: Final Setup"
+print_header "Step 8/8: Final Setup"
 
 if [[ "$SHELL" != *"zsh"* ]]; then
     print_step "Setting zsh as default shell..."

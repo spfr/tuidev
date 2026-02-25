@@ -1,7 +1,7 @@
 # AI Agent Instructions
 
 > Copy this file to your project and customize for your specific needs.
-> Compatible with: Claude Code, OpenCode, Gemini CLI, Cursor, Windsurf, Aider, etc.
+> Compatible with: Claude Code, OpenCode, Cursor, Windsurf, Aider, etc.
 
 ---
 

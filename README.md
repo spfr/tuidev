@@ -159,46 +159,15 @@ The killer feature: **nvim + AI agent terminals side by side**
 
 ### AI CLI Tools
 
-Pre-configured with MCP (Model Context Protocol) servers:
-
 | Tool | Config | Purpose |
 |------|--------|---------|
 | Claude Code | `~/.claude.json` | Anthropic's official CLI |
 | OpenCode | `~/.config/opencode/opencode.json` | Open-source, multi-model support |
-| Gemini CLI | `~/.gemini/settings.json` | Google's Gemini CLI |
-
-**MCP Servers (enabled by default):** `filesystem`, `git`, `fetch`, `memory`
-
-**Optional (requires API keys):** `github`, `brave-search`, `figma`, `postgres`, `sqlite`, `playwright`
-
-```bash
-# Configure API keys
-cp ~/.config/mcp-env.template ~/.config/mcp-env
-nvim ~/.config/mcp-env
-source ~/.config/mcp-env
-```
-
-### AI Agent Orchestration (Ralph Wiggum)
-
-Run AI agents autonomously until tasks complete:
-
-```bash
-# Simple task
-ralph "Fix all TypeScript errors in src/"
-
-# With specific agent and limits
-ralph --agent opencode --max-iterations 10 "Add unit tests"
-
-# From task file (PRD-driven development)
-ralph --file tasks.md --max-iterations 30
-```
-
-See [AI_ORCHESTRATION.md](docs/AI_ORCHESTRATION.md) for the full guide.
 
 ### AI Agent Instructions (AGENTS.md)
 
 Universal instructions for AI coding assistants. Works with:
-- Claude Code, OpenCode, Gemini CLI
+- Claude Code, OpenCode
 - Cursor, Windsurf, Aider, Cline
 - GitHub Copilot, Roo Code, Codex
 
@@ -260,14 +229,14 @@ gs              # git status
 | Guide | Description |
 |-------|-------------|
 | [**QUICK_START_GUIDE**](docs/QUICK_START_GUIDE.md) | 5-minute crash course |
-| [**AI_ORCHESTRATION**](docs/AI_ORCHESTRATION.md) | Ralph Wiggum autonomous agents |
 | [**ARCHITECTURE**](docs/ARCHITECTURE.md) | How all pieces fit together |
-| [**MCP_SERVERS**](docs/MCP_SERVERS.md) | Figma, Playwright, GitHub, etc. |
 | [**NEOVIM_QUICKSTART**](docs/NEOVIM_QUICKSTART.md) | Full nvim/vim guide |
 | [**CHEATSHEET**](docs/CHEATSHEET.md) | All keybindings |
 | [**TERMINAL_NAVIGATION**](docs/TERMINAL_NAVIGATION.md) | Fix keyboard issues |
 | [**REMOTE_SESSIONS**](docs/REMOTE_SESSIONS.md) | Work from phone |
 | [**FAQ**](docs/FAQ.md) | Common questions answered |
+| [**ZELLIJ_TROUBLESHOOTING**](docs/ZELLIJ_TROUBLESHOOTING.md) | Zellij session fixes |
+| [**IPHONE_SSH_CLIENTS**](docs/IPHONE_SSH_CLIENTS.md) | SSH from iOS devices |
 | [**AGENTS.md**](AGENTS.md) | AI agent instructions |
 
 ---
@@ -393,10 +362,9 @@ tuidev/
 │   ├── zsh/.zshrc          # Shell config
 │   ├── starship/           # Prompt
 │   ├── ghostty/            # Terminal
-│   ├── opencode/           # OpenCode CLI + MCP
-│   ├── claude/             # Claude Code + MCP
-│   ├── gemini/             # Gemini CLI + MCP
-│   └── mcp/                # Shared MCP env template
+│   ├── opencode/           # OpenCode CLI config
+│   ├── claude/             # Claude Code config
+│   └── ssh/                # SSH config (Tailscale)
 ├── docs/                   # Guides
 ├── templates/
 │   └── AGENTS_TEMPLATE.md  # Template for your projects

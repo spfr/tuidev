@@ -713,16 +713,6 @@ tka               # Kill all sessions
 ```bash
 cc               # Claude Code (Anthropic)
 oc               # OpenCode (open-source, multi-model)
-gem              # Gemini CLI (Google)
-```
-
-### Ralph Wiggum (Autonomous Orchestration)
-```bash
-ralph "Fix TypeScript errors"              # Simple task
-ralph --agent opencode "Build API"         # Use specific agent
-ralph --max-iterations 10 "Add tests"      # Limit iterations
-ralph --file tasks.md                      # PRD-driven development
-ralph -v -l session.log "Complex task"     # Verbose with logging
 ```
 
 ### zk - Kill all sessions
@@ -767,7 +757,7 @@ man COMMAND       # Full manual
 COMMAND --help    # Built-in help
 ```
 
- In zellij: `Alt+p` then `?`
+In zellij: `Alt+p` then `?`
 In lazygit: `?`
 
 ---
