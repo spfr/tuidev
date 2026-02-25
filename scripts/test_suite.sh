@@ -69,9 +69,9 @@ print_header "Configuration Tests"
 # Test .zshrc exists and is valid
 start_test "Shell configuration file exists"
 if [[ -f ~/.zshrc ]]; then
-    pass_test "~/.zshrc exists"
+    pass_test "$HOME/.zshrc exists"
 else
-    fail_test "~/.zshrc missing"
+    fail_test "$HOME/.zshrc missing"
 fi
 
 # Test .zshrc is sourced correctly
@@ -121,7 +121,7 @@ fi
 # Test zellij layouts
 start_test "Zellij layouts"
 if [[ -d ~/.config/zellij/layouts ]]; then
-    LAYOUT_COUNT=$(ls ~/.config/zellij/layouts/*.kdl 2>/dev/null | wc -l)
+    LAYOUT_COUNT=$(find ~/.config/zellij/layouts/ -name '*.kdl' 2>/dev/null | wc -l)
     if [[ $LAYOUT_COUNT -ge 2 ]]; then
         pass_test "Zellij has $LAYOUT_COUNT layouts"
     else

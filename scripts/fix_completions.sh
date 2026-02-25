@@ -7,7 +7,6 @@
 
 set -e
 
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
@@ -27,7 +26,7 @@ if command -v brew &>/dev/null; then
     for dir in "$BREW_PREFIX/share/zsh-completions" "$BREW_PREFIX/share/zsh/site-functions"; do
         if [[ -d "$dir" ]]; then
             echo "Fixing: $dir"
-            sudo chown -R $(whoami):admin "$dir" 2>/dev/null || chown -R $(whoami):staff "$dir" 2>/dev/null || true
+            sudo chown -R "$(whoami)":admin "$dir" 2>/dev/null || chown -R "$(whoami)":staff "$dir" 2>/dev/null || true
             chmod -R go-w "$dir" 2>/dev/null || true
             echo -e "${GREEN}✓ Fixed permissions for $dir${NC}"
         fi
@@ -39,7 +38,7 @@ if [[ -d "$HOME/.docker/completions" ]]; then
     echo ""
     echo -e "${YELLOW}Fixing Docker completion directory...${NC}"
     chmod -R 755 "$HOME/.docker/completions"
-    chown -R $(whoami):staff "$HOME/.docker/completions"
+    chown -R "$(whoami)":staff "$HOME/.docker/completions"
     echo -e "${GREEN}✓ Fixed permissions for $HOME/.docker/completions${NC}"
 fi
 
@@ -48,7 +47,7 @@ if [[ -f "$HOME/.zcompdump" ]]; then
     echo ""
     echo -e "${YELLOW}Fixing zcompdump file...${NC}"
     chmod 644 "$HOME/.zcompdump"
-    chown $(whoami):staff "$HOME/.zcompdump"
+    chown "$(whoami)":staff "$HOME/.zcompdump"
     echo -e "${GREEN}✓ Fixed permissions for .zcompdump${NC}"
 fi
 

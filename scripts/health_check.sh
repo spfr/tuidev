@@ -28,10 +28,6 @@ print_header() {
     echo ""
 }
 
-print_test() {
-    echo -e "${CYAN}[TEST]${NC} $1"
-}
-
 print_success() {
     echo -e "${GREEN}✓ ${NC}$1"
     ((PASSED++)) || true

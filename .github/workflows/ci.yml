@@ -150,7 +150,7 @@ jobs:
 
       - name: Run Docker tests
         run: |
-          docker run --rm mactui-test /home/testuser/test_cli.sh
+          docker run --rm mactui-test /home/testuser/run_tests.sh
           echo "✓ Docker tests passed"
 
       - name: Cleanup

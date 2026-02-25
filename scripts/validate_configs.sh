@@ -21,7 +21,6 @@ WARNINGS=0
 log_pass() { echo -e "${GREEN}[PASS]${NC} $1"; }
 log_fail() { echo -e "${RED}[FAIL]${NC} $1"; ((ERRORS++)); }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; ((WARNINGS++)); }
-log_info() { echo -e "[INFO] $1"; }
 
 echo "============================================"
 echo "Configuration Validator"
