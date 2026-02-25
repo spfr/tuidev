@@ -461,6 +461,85 @@ multi() {
 }
 
 # ============================================================================
+# Tmux Session Functions
+# ============================================================================
+# tmux is the companion multiplexer for Claude agent teams split-pane mode.
+# (Zellij is primary for manual workspace layouts.)
+
+# Attach to existing session or create a bare named one
+ta() {
+  local session_name=${1:-$(basename "$PWD")}
+  if tmux has-session -t "$session_name" 2>/dev/null; then
+    tmux attach-session -t "$session_name"
+  else
+    tmux new-session -s "$session_name"
+  fi
+}
+
+# Dev layout: 3 vertical columns — nvim (55%) | agent (25%) | runner (20%)
+tdev() {
+  local session_name=${1:-dev}
+  if tmux has-session -t "$session_name" 2>/dev/null; then
+    tmux attach-session -t "$session_name"
+  else
+    tmux new-session -d -s "$session_name" -x 220 -y 50
+    tmux send-keys -t "$session_name" "nvim" Enter
+    tmux split-window -t "$session_name" -h -p 45
+    tmux split-window -t "$session_name" -h -p 44
+    tmux select-pane -t "$session_name":1.1
+    tmux attach-session -t "$session_name"
+  fi
+}
+
+# AI layout: nvim (60%) + 2 agent panes stacked (40%)
+tai() {
+  local session_name=${1:-ai}
+  if tmux has-session -t "$session_name" 2>/dev/null; then
+    tmux attach-session -t "$session_name"
+  else
+    tmux new-session -d -s "$session_name" -x 220 -y 50
+    tmux send-keys -t "$session_name" "nvim" Enter
+    tmux split-window -t "$session_name" -h -p 40
+    tmux split-window -t "$session_name" -v -p 50
+    tmux select-pane -t "$session_name":1.1
+    tmux attach-session -t "$session_name"
+  fi
+}
+
+# AI triple layout: nvim (55%) + 3 agent panes stacked (45%)
+tai-triple() {
+  local session_name=${1:-ai-triple}
+  if tmux has-session -t "$session_name" 2>/dev/null; then
+    tmux attach-session -t "$session_name"
+  else
+    tmux new-session -d -s "$session_name" -x 220 -y 50
+    tmux send-keys -t "$session_name" "nvim" Enter
+    tmux split-window -t "$session_name" -h -p 45
+    tmux split-window -t "$session_name" -v -p 67
+    tmux split-window -t "$session_name" -v -p 50
+    tmux select-pane -t "$session_name":1.1
+    tmux attach-session -t "$session_name"
+  fi
+}
+
+# Kill named session
+tk() {
+  local session_name=${1:-$(basename "$PWD")}
+  tmux kill-session -t "$session_name" 2>/dev/null && echo "Killed session: $session_name" || echo "Session not found: $session_name"
+}
+
+# Kill all sessions (tmux kill-server)
+tka() {
+  echo "Killing all tmux sessions..."
+  tmux kill-server 2>/dev/null || true
+}
+
+# List all sessions
+tls() {
+  tmux list-sessions 2>/dev/null || echo "No tmux sessions running"
+}
+
+# ============================================================================
 # Remote Access Functions
 # ============================================================================
 

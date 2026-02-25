@@ -197,11 +197,47 @@ gs          # git status
 ..          # cd ..
 reload      # source ~/.zshrc
 zk          # kill all zellij sessions
+tls         # list tmux sessions
+tka         # kill all tmux sessions
 ```
 
 ---
 
-## 9. Autonomous AI (Ralph Wiggum)
+## 9. Tmux for Claude Agent Teams
+
+tmux is required for Claude Code's experimental **agent teams split-pane mode**, where each teammate gets its own visible pane. Zellij is unsupported for this feature.
+
+```bash
+# Start an AI layout in tmux
+tai myproject
+
+# Inside the session, enable agent teams
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
+# Claude automatically splits tmux panes for each agent
+```
+
+**Key bindings** (prefix = `Ctrl+a`):
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+a \|` | Split pane right |
+| `Ctrl+a -` | Split pane down |
+| `Ctrl+a h/j/k/l` | Navigate panes |
+| `Ctrl+a d` | Detach session |
+| `Ctrl+a r` | Reload config |
+
+**Session commands:**
+```bash
+ta [name]     # Attach or create session
+tdev          # 3-column: nvim | agent | runner
+tai           # nvim + 2 stacked agents (default for agent teams)
+tls           # List sessions
+tka           # Kill all sessions
+```
+
+---
+
+## 10. Autonomous AI (Ralph Wiggum)
 
 Let AI agents work autonomously until tasks complete:
 

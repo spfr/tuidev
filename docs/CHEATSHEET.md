@@ -99,7 +99,7 @@ zellij kill-session NAME     # Kill
 ### Quick Session Functions (Custom)
 
 ```bash
-# AI Development Sessions
+# AI Development Sessions (Zellij)
 ai                # Dual agents (nvim + 2 terminals) - DEFAULT
 ai-single         # Single agent (nvim + 1 terminal)
 ai-triple         # Triple agents (nvim + 3 terminals)
@@ -107,9 +107,69 @@ multi             # Multi-agent with monitoring tabs
 fullstack         # Full-stack dev (5 tabs)
 remote            # Remote access session
 
-# General Development
+# General Development (Zellij)
 dev               # Classic dev session (nvim + terminal)
 zk                # Kill all zellij sessions
+```
+
+---
+
+## Tmux (Agent Teams Companion)
+
+Zellij is primary for manual layouts. Use tmux when you need **Claude agent teams split-pane mode** — Zellij is unsupported by that feature.
+
+### Prefix Key: `Ctrl+a`
+
+### Pane Management
+| Key | Action |
+|-----|--------|
+| `Ctrl+a \|` | Split vertically (new pane right) |
+| `Ctrl+a -` | Split horizontally (new pane below) |
+| `Ctrl+a h/j/k/l` | Navigate between panes (vi-style) |
+| `Ctrl+a H/J/K/L` | Resize pane |
+| `Ctrl+a x` | Kill current pane |
+| `Ctrl+a z` | Toggle pane zoom (fullscreen) |
+
+### Windows & Sessions
+| Key | Action |
+|-----|--------|
+| `Ctrl+a c` | New window |
+| `Ctrl+a 1-9` | Switch to window |
+| `Ctrl+a ,` | Rename window |
+| `Ctrl+a $` | Rename session |
+| `Ctrl+a d` | Detach from session |
+| `Ctrl+a r` | Reload config |
+
+### Copy Mode (vi)
+| Key | Action |
+|-----|--------|
+| `Ctrl+a [` | Enter copy mode |
+| `v` | Begin selection |
+| `y` | Copy to clipboard (pbcopy) |
+| `Ctrl+v` | Rectangle selection |
+| `q` / `Esc` | Exit copy mode |
+
+### Session Functions (Custom)
+```bash
+# Start/attach
+ta [name]         # Attach or create bare session (default: $PWD basename)
+
+# Layout sessions
+tdev [name]       # 3-column: nvim (55%) | agent (25%) | runner (20%)
+tai [name]        # AI layout: nvim (60%) + 2 stacked agents (40%)
+tai-triple [name] # AI triple: nvim (55%) + 3 stacked agents (45%)
+
+# Management
+tls               # List all sessions
+tk [name]         # Kill named session
+tka               # Kill all sessions
+```
+
+### Claude Agent Teams
+```bash
+# Start tmux session, then run Claude with split-pane mode
+tai myproject
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
 ```
 
 ---
@@ -628,7 +688,7 @@ bench "command"  # Benchmark with hyperfine
 dev              # Start dev session with dev layout
 ```
 
-### AI Sessions
+### Zellij Sessions
 ```bash
 ai               # Dual agent session (default)
 ai-single        # Single agent session
@@ -636,6 +696,17 @@ ai-triple        # Triple agent session
 multi            # Multi-agent with monitoring
 fullstack        # Full-stack 5-tab session
 remote           # Remote access session
+```
+
+### Tmux Sessions (for Claude agent teams)
+```bash
+ta [name]         # Attach or create bare session
+tdev [name]       # 3-column: nvim | agent | runner
+tai [name]        # nvim (60%) + 2 stacked agents
+tai-triple [name] # nvim (55%) + 3 stacked agents
+tls               # List sessions
+tk [name]         # Kill session
+tka               # Kill all sessions
 ```
 
 ### AI CLI Tools
@@ -681,23 +752,9 @@ tunnel 3000      # Tunnel specific port
 ~/.config/zellij/
 ├── config.kdl               # Zellij config
 └── layouts/                 # 7 workspace layouts
+~/.config/tmux/tmux.conf     # Tmux config (agent teams companion)
 ~/.config/ghostty/config     # Ghostty terminal
 ~/.hammerspoon/init.lua      # Hammerspoon automation
-```
-
-```
-~/.zshrc                     # Shell config
-~/.zshrc.local               # Personal customizations (not overwritten)
-~/.config/nvim/
-├── init.lua                 # LazyVim bootstrap
-└── lua/
-    ├── config/              # Neovim settings
-    └── plugins/             # Plugin configs (ai, coding, editor)
-~/.config/starship.toml      # Prompt
-~/.config/zellij/
-├── config.kdl               # Zellij config
-└── layouts/                 # 7 workspace layouts
-~/.config/ghostty/config     # Ghostty terminal
 ```
 
 ---
@@ -724,58 +781,40 @@ In lazygit: `?`
  │ Alt+p       Pane mode                     │
  │ Ctrl+t      Tab mode                      │
  │ Ctrl+q      Quit                          │
+ ├─ TMUX (prefix = Ctrl+a) ──────────────────┤
+ │ Ctrl+a |    Split right                   │
+ │ Ctrl+a -    Split down                    │
+ │ Ctrl+a h/j/k/l Navigate panes            │
+ │ Ctrl+a d    Detach session                │
+ │ tai [name]  nvim + 2 agents (agent teams) │
  ├─ FZF ─────────────────────────────────────┤
  │ Ctrl+T      Find files                    │
  │ Ctrl+R      Search history                │
  │ Alt+C       Find directories              │
  ├─ ELITE TOOLS ─────────────────────────────┤
  │ nnn         TUI file manager              │
- │ ld          lazydocker                   │
- │ sys         fastfetch                    │
- │ ncdu        Disk usage                   │
+ │ ld          lazydocker                    │
+ │ sys         fastfetch                     │
+ │ ncdu        Disk usage                    │
  │ sudo bandwhich  Network monitor           │
- │ k9s         Kubernetes                   │
- ├─ HAMMERSPOON ────────────────────────────┤
- │ ⌃⌥ ←/→      Left/right half           │
- │ ⌃⌥ ↑/↓      Top/bottom half           │
- │ ⌃⌥ M        Maximize                   │
- │ ⌃⌥ C        Center                     │
+ │ k9s         Kubernetes                    │
+ ├─ HAMMERSPOON ─────────────────────────────┤
+ │ ⌃⌥ ←/→      Left/right half              │
+ │ ⌃⌥ ↑/↓      Top/bottom half              │
+ │ ⌃⌥ M        Maximize                     │
+ │ ⌃⌥ C        Center                       │
  ├─ RECTANGLE ───────────────────────────────┤
- │ ⌃⌥ ←/→      Left/right half           │
- │ ⌃⌥ ↑/↓      Top/bottom half           │
- │ ⌃⌥ Enter    Maximize                   │
+ │ ⌃⌥ ←/→      Left/right half              │
+ │ ⌃⌥ ↑/↓      Top/bottom half              │
+ │ ⌃⌥ Enter    Maximize                     │
  ├─ ALIASES ─────────────────────────────────┤
  │ ls/ll/la    eza                           │
  │ cat         bat                           │
  │ lg          lazygit                       │
  │ ld          lazydocker                    │
  │ sys         fastfetch                     │
- │ nnn         nnn                           │
  │ z name      zoxide                        │
  └───────────────────────────────────────────┘
-```
-
-```
- ┌─ ZELLIJ ──────────────────────────────────┐
- │ Alt+n       New pane                      │
- │ Alt+h/j/k/l Navigate                      │
- │ Alt+p       Pane mode                     │
- │ Ctrl+t      Tab mode                      │
- │ Ctrl+q      Quit                          │
-├─ FZF ─────────────────────────────────────┤
-│ Ctrl+T      Find files                    │
-│ Ctrl+R      Search history                │
-│ Alt+C       Find directories              │
-├─ RECTANGLE ───────────────────────────────┤
-│ ⌃⌥ ←/→      Left/right half               │
-│ ⌃⌥ ↑/↓      Top/bottom half               │
-│ ⌃⌥ Enter    Maximize                      │
-├─ ALIASES ─────────────────────────────────┤
-│ ls/ll/la    eza                           │
-│ cat         bat                           │
-│ lg          lazygit                       │
-│ z name      zoxide                        │
-└───────────────────────────────────────────┘
 ```
 
 ---

@@ -183,6 +183,7 @@ check_config_updates() {
         "configs/starship/starship.toml"
         "configs/zsh/.zshrc"
         "configs/hammerspoon/init.lua"
+        "configs/tmux/tmux.conf"
     )
     local config_dests=(
         "$HOME/.config/ghostty/config"
@@ -190,6 +191,7 @@ check_config_updates() {
         "$HOME/.config/starship.toml"
         "$HOME/.zshrc"
         "$HOME/.hammerspoon/init.lua"
+        "$HOME/.config/tmux/tmux.conf"
     )
 
     for i in "${!config_sources[@]}"; do
@@ -327,6 +329,7 @@ update_configs() {
         cp "$HOME/.config/starship.toml" "$BACKUP_DIR/" 2>/dev/null || true
         cp "$HOME/.zshrc" "$BACKUP_DIR/" 2>/dev/null || true
         cp -r "$HOME/.hammerspoon" "$BACKUP_DIR/" 2>/dev/null || true
+        cp -r "$HOME/.config/tmux" "$BACKUP_DIR/" 2>/dev/null || true
 
         print_info "Backup created at $BACKUP_DIR"
 
@@ -354,6 +357,10 @@ update_configs() {
                 configs/hammerspoon/init.lua)
                     mkdir -p "$HOME/.hammerspoon"
                     cp "$src" "$HOME/.hammerspoon/init.lua"
+                    ;;
+                configs/tmux/tmux.conf)
+                    mkdir -p "$HOME/.config/tmux"
+                    cp "$src" "$HOME/.config/tmux/tmux.conf"
                     ;;
                 configs/zellij/layouts/*)
                     mkdir -p "$HOME/.config/zellij/layouts"

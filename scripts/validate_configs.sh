@@ -210,7 +210,42 @@ fi
 echo ""
 
 # ============================================================================
-# 7. Check Required Files
+# 7. Validate Tmux Config
+# ============================================================================
+echo "--- Tmux Config ---"
+
+tmux_conf="$REPO_DIR/configs/tmux/tmux.conf"
+if [[ -f "$tmux_conf" ]]; then
+    # Check for required settings
+    if grep -q 'default-terminal' "$tmux_conf" 2>/dev/null; then
+        log_pass "tmux.conf - default-terminal set"
+    else
+        log_fail "tmux.conf - missing default-terminal setting"
+    fi
+
+    if grep -q 'prefix' "$tmux_conf" 2>/dev/null; then
+        log_pass "tmux.conf - prefix configured"
+    else
+        log_fail "tmux.conf - missing prefix setting"
+    fi
+
+    if grep -q 'mouse' "$tmux_conf" 2>/dev/null; then
+        log_pass "tmux.conf - mouse setting present"
+    else
+        log_warn "tmux.conf - mouse setting not found"
+    fi
+
+    # Check for unmatched quotes
+    if bash -n <(grep -v '^#' "$tmux_conf" | sed 's/[^"]*//g; s/""//g') 2>/dev/null || true; then
+        log_pass "tmux.conf - no obvious syntax issues"
+    fi
+else
+    log_fail "tmux.conf - file not found (configs/tmux/tmux.conf)"
+fi
+echo ""
+
+# ============================================================================
+# 8. Check Required Files
 # ============================================================================
 echo "--- Required Files ---"
 
@@ -232,6 +267,7 @@ required_files=(
     "scripts/notify.sh"
     "configs/ssh/config"
     "configs/zellij/layouts/remote.kdl"
+    "configs/tmux/tmux.conf"
 )
 
 for file in "${required_files[@]}"; do

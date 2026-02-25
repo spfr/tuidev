@@ -285,6 +285,31 @@ else
 fi
 
 # ============================================================================
+# Tmux Check
+# ============================================================================
+
+print_header "Tmux (Agent Teams)"
+
+if command -v tmux > /dev/null 2>&1; then
+    print_success "tmux is installed (version: $(tmux -V 2>/dev/null || echo "unknown"))"
+else
+    print_warning "tmux is not installed (optional - brew install tmux; needed for Claude agent teams split-pane mode)"
+fi
+
+if [[ -f "$HOME/.config/tmux/tmux.conf" ]]; then
+    print_success "tmux config exists (~/.config/tmux/tmux.conf)"
+else
+    print_warning "tmux config not found (~/.config/tmux/tmux.conf)"
+fi
+
+# True color hint
+if [[ "$TERM" == *"256color"* ]] || [[ "$COLORTERM" == "truecolor" ]] || [[ "$COLORTERM" == "24bit" ]]; then
+    print_success "True color terminal detected ($TERM)"
+else
+    print_warning "True color may not be active (TERM=$TERM, COLORTERM=${COLORTERM:-unset})"
+fi
+
+# ============================================================================
 # GUI Applications
 # ============================================================================
 

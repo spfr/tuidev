@@ -35,6 +35,7 @@ echo -e "${YELLOW}Backing up configurations to $BACKUP_DIR${NC}"
 [[ -d "$HOME/.config/zellij" ]] && cp -r "$HOME/.config/zellij" "$BACKUP_DIR/"
 [[ -f "$HOME/.config/starship.toml" ]] && cp "$HOME/.config/starship.toml" "$BACKUP_DIR/"
 [[ -f "$HOME/.config/ghostty/config" ]] && cp "$HOME/.config/ghostty/config" "$BACKUP_DIR/"
+[[ -d "$HOME/.config/tmux" ]] && cp -r "$HOME/.config/tmux" "$BACKUP_DIR/"
 [[ -f "$HOME/.ssh/config" ]] && cp "$HOME/.ssh/config" "$BACKUP_DIR/ssh_config"
 [[ -f "$HOME/.local/bin/notify.sh" ]] && cp "$HOME/.local/bin/notify.sh" "$BACKUP_DIR/"
 
@@ -43,6 +44,7 @@ echo "Removing configuration files..."
 
 rm -f "$HOME/.config/starship.toml"
 rm -rf "$HOME/.config/zellij"
+rm -rf "$HOME/.config/tmux"
 rm -f "$HOME/.local/bin/notify.sh"
 # Don't remove .zshrc, just offer to restore backup
 

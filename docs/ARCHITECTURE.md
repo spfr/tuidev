@@ -56,23 +56,25 @@
                     ▼
 ```
 
-### Layer 2: Terminal Multiplexer (Zellij)
+### Layer 2: Terminal Multiplexers
 
 ```
-┌─────────────────────────────────────────┐
-│              ZELLIJ                      │
-│  - Session management                   │
-│  - Pane/tab organization                │
-│  - Pre-defined layouts:                 │
-│    • dual (nvim + 2 agents)             │
-│    • triple (nvim + 3 agents)           │
-│    • fullstack (5-tab setup)            │
-│    • multi-agent (dev + monitor + git)  │
-│    • remote (SSH tunnel)                │
-└─────────────────────────────────────────┘
-                    │
-        ┌───────────┴───────────┐
-        ▼                       ▼
+┌─────────────────────────────────────────┐  ┌─────────────────────────────────────────┐
+│              ZELLIJ                      │  │              TMUX                        │
+│  (primary — workspace layouts)          │  │  (companion — agent teams split-pane)   │
+│                                         │  │                                         │
+│  - Session management                   │  │  - Claude agent teams split-pane mode   │
+│  - Pane/tab organization                │  │  - Ctrl+a prefix, vi pane nav           │
+│  - Pre-defined layouts:                 │  │  - Sessions: tai, tdev, tai-triple      │
+│    • dual (nvim + 2 agents)             │  │  - Tokyo Night status bar               │
+│    • triple (nvim + 3 agents)           │  │  - Config: ~/.config/tmux/tmux.conf     │
+│    • fullstack (5-tab setup)            │  │                                         │
+│    • multi-agent (dev + monitor + git)  │  │  Note: Zellij unsupported by Claude     │
+│    • remote (SSH tunnel)                │  │  agent teams split-pane mode            │
+└─────────────────────────────────────────┘  └─────────────────────────────────────────┘
+                    │                                           │
+        ┌───────────┴───────────────────────────────────────────┘
+        ▼
 ```
 
 ### Layer 3: Applications
@@ -158,6 +160,7 @@
 │   ├── configs/          ──────────────────┐                     │
 │   │   ├── nvim/         ─────────────────>│ ~/.config/nvim/     │
 │   │   ├── zellij/       ─────────────────>│ ~/.config/zellij/   │
+│   │   ├── tmux/         ─────────────────>│ ~/.config/tmux/     │
 │   │   ├── zsh/.zshrc    ─────────────────>│ ~/.zshrc            │
 │   │   ├── starship/     ─────────────────>│ ~/.config/starship/ │
 │   │   ├── ghostty/      ─────────────────>│ ~/.config/ghostty/  │
@@ -260,12 +263,13 @@
 │              └──────────┬───────────────────┘                    │
 │                         │                                        │
 │                         ▼                                        │
-│              ┌───────────────────┐                               │
-│              │      ZELLIJ       │                               │
-│              │  (orchestrator)   │                               │
-│              │                   │                               │
-│              │  "I organize"     │                               │
-│              └───────────────────┘                               │
+│    ┌───────────────────┐  ┌──────────────────┐                    │
+│    │      ZELLIJ       │  │      TMUX        │                    │
+│    │  (orchestrator)   │  │  (agent teams)   │                    │
+│    │                   │  │                  │                    │
+│    │  "I organize      │  │  "I split panes  │                    │
+│    │   workspaces"     │  │   for AI agents" │                    │
+│    └───────────────────┘  └──────────────────┘                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -285,6 +289,8 @@
 ├── zellij/
 │   ├── config.kdl                # Zellij settings
 │   └── layouts/                  # Workspace layouts
+├── tmux/
+│   └── tmux.conf                 # Tmux config (agent teams companion)
 ├── starship.toml                 # Prompt
 ├── ghostty/config                # Terminal
 ├── opencode/opencode.json        # OpenCode + MCP

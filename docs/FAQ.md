@@ -124,6 +124,61 @@ return {
 
 ---
 
+## Tmux & Claude Agent Teams
+
+### Q: Why is there a tmux config if Zellij is the primary multiplexer?
+
+Claude Code's experimental **agent teams** feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) uses split-pane mode where each teammate gets its own visible pane. This requires **tmux or iTerm2** — Zellij is explicitly unsupported by that feature. So:
+- **Zellij** → manual workspace layouts (`ai`, `dev`, `multi`, etc.)
+- **tmux** → Claude agent teams split-pane mode (`tai`, `tdev`, etc.)
+
+### Q: How do I use Claude agent teams split-pane mode?
+
+```bash
+# 1. Start a tmux session
+tai myproject        # nvim + 2 stacked agent panes
+
+# 2. Run Claude with agent teams enabled
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
+
+# Claude automatically splits tmux panes for each agent
+```
+
+### Q: How do I kill all tmux sessions?
+
+```bash
+tka              # kill-server (all sessions)
+tk [name]        # kill named session
+tls              # list sessions
+```
+
+### Q: The tmux config isn't loading / colors look wrong
+
+tmux 3.2+ reads from `~/.config/tmux/tmux.conf` via XDG automatically. Older versions need `~/.tmux.conf`. Check your version:
+
+```bash
+tmux -V          # should be 3.2+
+```
+
+If you're on an older version, symlink the config:
+```bash
+ln -s ~/.config/tmux/tmux.conf ~/.tmux.conf
+```
+
+### Q: tmux functions (`ta`, `tdev`, `tai`) aren't found
+
+The functions live in `~/.zshrc`. If you just installed, source it:
+
+```bash
+source ~/.zshrc
+
+# Or sync from repo first:
+make update-configs
+source ~/.zshrc
+```
+
+---
+
 ## Zellij
 
 ### Q: How do I kill all sessions?

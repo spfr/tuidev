@@ -83,6 +83,8 @@ The killer feature: **nvim + AI agent terminals side by side**
 
 ### Session Commands
 
+**Zellij sessions** (manual workspace layouts):
+
 | Command | Layout | Use Case |
 |---------|--------|----------|
 | `ai` | nvim + 2 agents | **Default** - daily work |
@@ -91,6 +93,15 @@ The killer feature: **nvim + AI agent terminals side by side**
 | `fullstack` | 5 tabs | Full-stack development |
 | `multi` | Dev + Monitor + Git | Complete workflow |
 | `remote` | nvim + tunnel | Remote access |
+
+**Tmux sessions** (Claude agent teams split-pane mode):
+
+| Command | Layout | Use Case |
+|---------|--------|----------|
+| `tai` | nvim + 2 agents | Agent teams (split-pane) |
+| `tdev` | nvim + agent + runner | 3-column dev layout |
+| `tai-triple` | nvim + 3 agents | Heavy agent work |
+| `ta [name]` | bare session | Quick attach/create |
 
 ---
 
@@ -101,7 +112,8 @@ The killer feature: **nvim + AI agent terminals side by side**
 | Tool | Purpose |
 |------|---------|
 | **[Neovim](https://neovim.io/)** + LazyVim | Full IDE with LSP |
-| **[Zellij](https://zellij.dev/)** | Terminal multiplexer |
+| **[Zellij](https://zellij.dev/)** | Terminal multiplexer (primary, workspace layouts) |
+| **[tmux](https://github.com/tmux/tmux)** | Multiplexer companion (Claude agent teams split-pane) |
 | **[Ghostty](https://ghostty.org/)** | Fast terminal emulator |
 | **[Starship](https://starship.rs/)** | Shell prompt |
 | **[nnn](https://github.com/jarun/nnn)** | TUI file manager (fastest) |
@@ -283,6 +295,7 @@ Connect from your phone with SSH. See [REMOTE_SESSIONS.md](docs/REMOTE_SESSIONS.
 Everything uses **Tokyo Night** theme consistently:
 - Neovim
 - Zellij
+- tmux
 - Ghostty
 - Starship
 - fzf
@@ -293,6 +306,7 @@ Everything uses **Tokyo Night** theme consistently:
 ~/.zshrc                     # Shell config
 ~/.config/nvim/              # Neovim (LazyVim)
 ~/.config/zellij/            # Zellij + layouts
+~/.config/tmux/tmux.conf     # Tmux (agent teams companion)
 ~/.config/starship.toml      # Prompt
 ~/.config/ghostty/config     # Terminal
 ```
@@ -375,6 +389,7 @@ tuidev/
 ├── configs/
 │   ├── nvim/               # LazyVim config
 │   ├── zellij/layouts/     # 7 workspace layouts
+│   ├── tmux/tmux.conf      # Tmux config (agent teams)
 │   ├── zsh/.zshrc          # Shell config
 │   ├── starship/           # Prompt
 │   ├── ghostty/            # Terminal

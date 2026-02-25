@@ -311,6 +311,8 @@ backup_if_exists "$HOME/.config/zellij"
 backup_if_exists "$HOME/.config/ghostty"
 backup_if_exists "$HOME/.config/nvim"
 backup_if_exists "$HOME/.hammerspoon"
+backup_if_exists "$HOME/.config/tmux"
+backup_if_exists "$HOME/.tmux.conf"
 
 if [[ -d "$BACKUP_DIR" ]]; then
     print_success "Backups saved to: $BACKUP_DIR"
@@ -326,6 +328,7 @@ print_header "Step 5/7: Creating Configuration Files"
 
 mkdir -p "$HOME/.config/zellij/layouts"
 mkdir -p "$HOME/.config/ghostty"
+mkdir -p "$HOME/.config/tmux"
 
 # --- ZSH Configuration ---
 print_step "Creating shell configuration..."
@@ -619,6 +622,16 @@ layout {
 LAYOUT_EOF
 fi
 print_success "Terminal multiplexer configuration created"
+
+# --- Tmux Configuration ---
+print_step "Creating tmux configuration..."
+
+if [[ -f "$SCRIPT_DIR/configs/tmux/tmux.conf" ]]; then
+    run_cmd cp "$SCRIPT_DIR/configs/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
+    print_success "Tmux configuration created"
+else
+    print_warning "Tmux config not found in repo (skipping)"
+fi
 
 # --- Ghostty Configuration (if installed) ---
 if [[ -d "/Applications/Ghostty.app" ]] || command_exists ghostty; then

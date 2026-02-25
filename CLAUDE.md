@@ -48,9 +48,11 @@ configs/                    # User configuration files (copied to ~/.config)
 │   └── lua/
 │       ├── config/         # keymaps.lua, options.lua, autocmds.lua
 │       └── plugins/        # ai.lua (intentionally empty), coding.lua, editor.lua
-├── zellij/                 # Terminal multiplexer
+├── zellij/                 # Terminal multiplexer (primary, manual layouts)
 │   ├── config.kdl          # Main config with Tokyo Night theme
 │   └── layouts/            # 7 workspace layouts (dual, triple, multi-agent, etc.)
+├── tmux/
+│   └── tmux.conf           # Tokyo Night config (companion for Claude agent teams)
 ├── zsh/.zshrc              # Shell config with modern CLI aliases
 ├── starship/starship.toml  # Shell prompt (Tokyo Night)
 ├── ghostty/config          # Terminal emulator
@@ -80,6 +82,7 @@ scripts/                    # Automation (~2000 LOC)
 3. **Tokyo Night theme**: Consistent across terminal, editor, multiplexer, prompt
 4. **User-agnostic paths**: All configs use `$HOME` variables, never hardcoded paths
 5. **Self-contained**: Configs copied to `~/.config` on install; repo is reference only
+6. **Dual multiplexer**: Zellij is primary for manual workspace layouts; tmux is the companion for Claude agent teams split-pane mode (Zellij is explicitly unsupported by that feature)
 
 ## Zellij Layouts
 
@@ -97,6 +100,8 @@ Located in `configs/zellij/layouts/`:
 
 All functions create **named sessions** with re-attachment support. Pass an optional name: `dev myproject`.
 
+### Zellij Functions (manual workspace layouts)
+
 - `dev [name]` - 3-column dev layout (nvim | agent | runner)
 - `work [name]` - Bare named session (defaults to directory basename)
 - `ai [name]` - Nvim + 2 AI agent terminals
@@ -105,6 +110,16 @@ All functions create **named sessions** with re-attachment support. Pass an opti
 - `fullstack [name]` - 5-tab full-stack setup
 - `multi [name]` - Dev + Monitor + Git tabs
 - `remote [name]` - Minimal remote layout
+
+### Tmux Functions (Claude agent teams split-pane mode)
+
+- `ta [name]` - Attach to existing session or create bare one (default: `$PWD` basename)
+- `tdev [name]` - Dev layout: nvim (55%) | agent (25%) | runner (20%)
+- `tai [name]` - AI layout: nvim (60%) + 2 agent panes stacked (40%)
+- `tai-triple [name]` - AI triple: nvim (55%) + 3 agent panes stacked (45%)
+- `tls` - List all sessions
+- `tk [name]` - Kill named session
+- `tka` - Kill all sessions (`tmux kill-server`)
 
 ## AI CLI Tool Configuration
 

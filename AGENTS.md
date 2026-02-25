@@ -208,6 +208,77 @@ Ctrl+g        # Locked mode (pass keys to terminal)
 
 ---
 
+## Working with Tmux Sessions
+
+tmux is the companion multiplexer for **Claude agent teams split-pane mode**. Claude Code's experimental agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) requires tmux or iTerm2 for the `split-pane` display mode where each agent gets its own visible pane. Zellij is explicitly unsupported for this feature.
+
+### Why tmux
+
+- **Claude agent teams**: start any tmux session → run `claude` → agent teams auto-splits panes
+- Zellij handles manual workspace layouts; tmux handles AI agent coordination
+- Config lives at `~/.config/tmux/tmux.conf` (Tokyo Night themed)
+
+### Key Bindings
+
+```
+Prefix: Ctrl+a
+
+Pane splits:
+  Ctrl+a |       Split vertically (new pane right)
+  Ctrl+a -       Split horizontally (new pane below)
+
+Pane navigation:
+  Ctrl+a h/j/k/l Move between panes (vi-style)
+  Ctrl+a H/J/K/L Resize pane
+
+Copy mode (vi):
+  Ctrl+a [       Enter copy mode
+  v              Begin selection
+  y              Copy to clipboard (pbcopy)
+
+Sessions:
+  Ctrl+a $       Rename session
+  Ctrl+a d       Detach from session
+  Ctrl+a r       Reload config
+```
+
+### Session Commands
+
+All functions create **named sessions** with re-attachment support. Pass an optional name argument.
+
+```bash
+# Attach to existing session or create bare one
+ta [name]         # Default: current directory basename
+
+# Dev layout: 3 columns (nvim 55% | agent 25% | runner 20%)
+tdev [name]       # Default session name: "dev"
+
+# AI layout: nvim (60%) + 2 agent panes stacked (40%)
+tai [name]        # Default session name: "ai"
+
+# AI triple layout: nvim (55%) + 3 agent panes stacked (45%)
+tai-triple [name] # Default session name: "ai-triple"
+
+# Session management
+tls               # List all sessions
+tk [name]         # Kill named session
+tka               # Kill all sessions (tmux kill-server)
+```
+
+### Agent Teams Integration
+
+```bash
+# Start a tmux session for agent work
+tai myproject
+
+# Inside the session, enable agent teams split-pane mode
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
+
+# Claude will automatically split the tmux panes for each agent
+```
+
+---
+
 ## MCP Servers Available
 
 Model Context Protocol servers pre-configured. See [docs/MCP_SERVERS.md](docs/MCP_SERVERS.md) for full details.
