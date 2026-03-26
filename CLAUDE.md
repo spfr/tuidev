@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-macOS TUI Development Setup - an opinionated, terminal-first developer environment for AI-powered workflows. The philosophy: Nvim stays lightweight (no in-editor AI plugins); AI tools (opencode, claude) run in parallel Zellij panes for maximum speed and multi-agent collaboration.
+macOS TUI Development Setup - an opinionated, terminal-first developer environment for AI-powered workflows. The philosophy: Nvim stays lightweight (no in-editor AI plugins); AI tools (claude, codex, gemini, opencode) run in parallel Zellij/tmux panes for maximum speed and multi-agent collaboration.
 
 ## Common Commands
 
@@ -57,10 +57,10 @@ configs/                    # User configuration files (copied to ~/.config)
 ├── starship/starship.toml  # Shell prompt (Tokyo Night)
 ├── ghostty/config          # Terminal emulator
 ├── hammerspoon/init.lua    # macOS window automation
-├── opencode/               # OpenCode CLI configuration
-│   └── opencode.json       # Model, TUI, and tool settings
 ├── claude/                 # Claude Code configuration
 │   └── settings.json       # Hooks and permissions
+├── opencode/               # OpenCode CLI configuration
+│   └── opencode.json       # Model, TUI, and tool settings
 └── ssh/                    # SSH configuration
     ├── config              # SSH client config (Tailscale hosts)
     └── sshd_config.d/      # SSHD config snippets
@@ -80,7 +80,7 @@ scripts/                    # Automation (~2000 LOC)
 3. **Tokyo Night theme**: Consistent across terminal, editor, multiplexer, prompt
 4. **User-agnostic paths**: All configs use `$HOME` variables, never hardcoded paths
 5. **Self-contained**: Configs copied to `~/.config` on install; repo is reference only
-6. **Dual multiplexer**: Zellij is primary for manual workspace layouts; tmux is the companion for Claude agent teams split-pane mode (Zellij is explicitly unsupported by that feature)
+6. **Dual multiplexer**: Zellij is primary for manual workspace layouts; tmux is the companion for Claude agent teams split-pane mode. Agent teams also support in-process mode (default) which works in any terminal including Ghostty.
 
 ## Zellij Layouts
 
@@ -115,29 +115,30 @@ All functions create **named sessions** with re-attachment support. Pass an opti
 - `tdev [name]` - Dev layout: nvim (55%) | agent (25%) | runner (20%)
 - `tai [name]` - AI layout: nvim (60%) + 2 agent panes stacked (40%)
 - `tai-triple [name]` - AI triple: nvim (55%) + 3 agent panes stacked (45%)
+- `agents [name]` - Multi-agent: claude + codex + gemini in 3 tmux panes
 - `tls` - List all sessions
 - `tk [name]` - Kill named session
 - `tka` - Kill all sessions (`tmux kill-server`)
 
-## AI CLI Tool Configuration
+## AI CLI Tools
 
-The setup includes configurations for two AI CLI tools:
+Four AI CLI tools are supported. All are self-updating — no custom configs shipped except Claude Code hooks and OpenCode settings.
 
-| Tool | Config Location | Purpose |
-|------|-----------------|---------|
-| OpenCode | `~/.config/opencode/opencode.json` | Open-source AI coding CLI |
-| Claude Code | `~/.claude.json` | Anthropic's official CLI |
+| Tool | Alias | Purpose |
+|------|-------|---------|
+| Claude Code | `cc` | Anthropic's official CLI (primary) |
+| Codex CLI | `cx` | OpenAI's coding CLI |
+| Gemini CLI | `gem` | Google's AI CLI (optional) |
+| OpenCode | `oc` | Open-source AI coding CLI |
 
 ### Quick Commands
 
 ```bash
-# OpenCode
-oc                    # Launch OpenCode (alias)
-opencode              # Direct command
-
-# Claude Code
-cc                    # Launch Claude Code (alias)
-claude                # Direct command
+cc                    # Claude Code
+cx                    # Codex CLI
+gem                   # Gemini CLI
+oc                    # OpenCode
+agents                # Launch claude + codex + gemini in tmux panes
 ```
 
 ## CI Pipeline

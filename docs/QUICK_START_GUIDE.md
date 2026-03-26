@@ -14,7 +14,7 @@ ai
 
 This opens:
 - **Left (60%)**: Neovim editor
-- **Right (40%)**: Two terminal panes for AI tools (opencode, claude)
+- **Right (40%)**: Terminal panes for AI tools (claude, codex, gemini, opencode)
 
 ### Available Sessions
 
@@ -171,7 +171,7 @@ z myproject           # Jump to project
 
 ### During Work
 - Edit in nvim (left pane)
-- Ask AI questions in right panes (opencode, claude)
+- Ask AI questions in right panes (claude, codex, gemini, opencode)
 - `Ctrl+T` to find any file
 - `Alt+h/l` to switch panes
 - `lg` for git operations
@@ -203,17 +203,24 @@ tka         # kill all tmux sessions
 
 ---
 
-## 9. Tmux for Claude Agent Teams
+## 9. Claude Agent Teams
 
-tmux is required for Claude Code's experimental **agent teams split-pane mode**, where each teammate gets its own visible pane. Zellij is unsupported for this feature.
+Claude Code's **agent teams** let you coordinate multiple Claude instances working together. Two display modes:
+
+- **In-process** (default): works in any terminal including Ghostty. Use `Shift+Down` to cycle teammates.
+- **Split-pane**: requires tmux. Each teammate gets its own visible pane.
+
+Agent teams are enabled by default in the included Claude Code config.
 
 ```bash
-# Start an AI layout in tmux
-tai myproject
+# In-process mode (works anywhere)
+claude
+# Ask Claude to create an agent team — Shift+Down to cycle teammates
 
-# Inside the session, enable agent teams
-CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
-# Claude automatically splits tmux panes for each agent
+# Split-pane mode (requires tmux)
+tai myproject
+claude --teammate-mode tmux
+# Claude automatically splits tmux panes for each teammate
 ```
 
 **Key bindings** (prefix = `Ctrl+a`):
@@ -231,8 +238,17 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
 ta [name]     # Attach or create session
 tdev          # 3-column: nvim | agent | runner
 tai           # nvim + 2 stacked agents (default for agent teams)
+agents        # Launch claude + codex + gemini in 3 panes
 tls           # List sessions
 tka           # Kill all sessions
+```
+
+**AI CLI aliases:**
+```bash
+cc            # Claude Code (primary)
+cx            # Codex CLI (OpenAI)
+gem           # Gemini CLI (optional)
+oc            # OpenCode (open-source)
 ```
 
 ---

@@ -134,13 +134,14 @@ Claude Code's experimental **agent teams** feature (`CLAUDE_CODE_EXPERIMENTAL_AG
 ### Q: How do I use Claude agent teams split-pane mode?
 
 ```bash
-# 1. Start a tmux session
-tai myproject        # nvim + 2 stacked agent panes
+# In-process mode (default, works in any terminal including Ghostty)
+claude
+# Ask Claude to create a team — Shift+Down to cycle teammates
 
-# 2. Run Claude with agent teams enabled
-CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
-
-# Claude automatically splits tmux panes for each agent
+# Split-pane mode (requires tmux)
+tai myproject
+claude --teammate-mode tmux
+# Claude automatically splits tmux panes for each teammate
 ```
 
 ### Q: How do I kill all tmux sessions?

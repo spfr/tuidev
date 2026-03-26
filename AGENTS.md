@@ -76,6 +76,13 @@ cd              # z (zoxide) in interactive shells; builtin cd in scripts
 ..              # cd ..
 ...             # cd ../..
 ....            # cd ../../..
+
+# AI CLI Tools
+cc              # claude (primary)
+cx              # codex (OpenAI)
+gem             # gemini (optional)
+oc              # opencode
+agents          # Launch all 3 AI CLIs in tmux panes
 ```
 
 ---
@@ -161,9 +168,13 @@ When creating or modifying projects with this setup:
 
 ### AI Tool Configurations
 
+All AI CLIs are self-updating and manage their own configs:
+
 ```
-~/.config/opencode/opencode.json    # OpenCode CLI
-~/.claude.json                       # Claude Code
+~/.claude.json                       # Claude Code (primary)
+~/.codex/config.toml                 # Codex CLI (OpenAI)
+~/.gemini/settings.json              # Gemini CLI (optional)
+~/.config/opencode/opencode.json     # OpenCode CLI
 ```
 
 ---
@@ -208,12 +219,21 @@ Ctrl+g        # Locked mode (pass keys to terminal)
 
 ## Working with Tmux Sessions
 
-tmux is the companion multiplexer for **Claude agent teams split-pane mode**. Claude Code's experimental agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) requires tmux or iTerm2 for the `split-pane` display mode where each agent gets its own visible pane. Zellij is explicitly unsupported for this feature.
+tmux is the companion multiplexer for **Claude agent teams split-pane mode**. Agent teams now support two display modes:
+
+- **In-process** (default): teammates run inside your terminal. Use `Shift+Down` to cycle through them. Works in any terminal including Ghostty.
+- **Split-pane**: each teammate gets its own tmux/iTerm2 pane. Requires tmux or iTerm2. **Not supported in Ghostty, VS Code terminal, or Windows Terminal.**
+
+Enable agent teams via settings.json or env var:
+```json
+{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+```
 
 ### Why tmux
 
-- **Claude agent teams**: start any tmux session → run `claude` → agent teams auto-splits panes
-- Zellij handles manual workspace layouts; tmux handles AI agent coordination
+- **Split-pane agent teams**: start any tmux session → run `claude` → agent teams auto-splits panes
+- **In-process mode** works without tmux (just run `claude` in any terminal)
+- Zellij handles manual workspace layouts; tmux handles split-pane agent coordination
 - Config lives at `~/.config/tmux/tmux.conf` (Tokyo Night themed)
 
 ### Key Bindings
@@ -266,13 +286,17 @@ tka               # Kill all sessions (tmux kill-server)
 ### Agent Teams Integration
 
 ```bash
-# Start a tmux session for agent work
+# In-process mode (default, works in any terminal including Ghostty)
+claude
+# Then ask Claude to create an agent team — use Shift+Down to cycle teammates
+
+# Split-pane mode (requires tmux)
 tai myproject
+claude --teammate-mode tmux
+# Claude auto-splits tmux panes for each teammate
 
-# Inside the session, enable agent teams split-pane mode
-CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
-
-# Claude will automatically split the tmux panes for each agent
+# Force in-process mode explicitly
+claude --teammate-mode in-process
 ```
 
 ---

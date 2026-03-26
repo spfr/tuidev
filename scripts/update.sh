@@ -133,6 +133,8 @@ check_package_updates() {
         "bottom" "nnn" "glow" "ncdu" "fastfetch" "k9s" "jq" "yq"
         "httpie" "bandwhich" "procs" "dust" "duf" "tokei" "hyperfine"
         "cloudflared" "shellcheck" "tmux"
+        "sd" "broot" "yazi" "tealdeer"
+        "zsh-autosuggestions" "zsh-syntax-highlighting" "zsh-completions"
     )
 
     OUTDATED=()

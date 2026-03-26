@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-26
+
+### Added
+
+#### Multi-Agent CLI Support
+- Shell aliases for all AI CLIs: `cc` (Claude), `cx` (Codex), `gem` (Gemini), `oc` (OpenCode)
+- **`agents` function** — launches Claude, Codex, and Gemini in 3 tmux panes with one command
+- Health checks for Codex CLI and Gemini CLI presence
+- No custom configs shipped — all CLIs are self-updating and manage their own configuration
+
+#### Ghostty Modernization
+- Enabled font ligatures (`+calt`) for operator readability (`=>`, `!=`, `>=`)
+- Added `scrollback-limit = 100000` for AI agent output
+- Added `link-url = true` for clickable URLs
+- Added `auto-update = check`
+- Added quick terminal keybinding (`Ctrl+\``) for system-wide dropdown terminal
+
+### Changed
+- AI CLI tool ordering: Claude Code primary, Codex secondary, Gemini optional, OpenCode community
+- Updated README, CLAUDE.md, AGENTS.md with 4-CLI architecture and `agents` function
+- Updated ASCII diagrams to show 3 agent panes (Claude/Codex/Gemini)
+- Documentation across all guides updated for multi-agent workflow
+
+### Fixed
+- Cleaned stale permission entries in `.claude/settings.local.json` (removed refs to deleted mcp.json, gemini, ralph)
+
+---
+
 ## [1.2.0] - 2026-02-25
 
 ### Added
@@ -102,7 +130,9 @@ Claude Code's experimental agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_
 - **Claude Code** configuration with MCP servers
 - **Gemini CLI** configuration with MCP servers
 
-#### MCP Servers (Pre-configured)
+> Note: Gemini CLI and MCP server configs were removed in the v1.2.0 cleanup. Gemini CLI re-added minimally in v1.3.0. MCP configs are managed separately per-project.
+
+#### MCP Servers (Pre-configured, removed in v1.2.0)
 - `filesystem` - File system access
 - `git` - Git operations
 - `fetch` - HTTP requests

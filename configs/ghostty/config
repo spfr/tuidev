@@ -1,5 +1,5 @@
 # ============================================================================
-# Ghostty Terminal Configuration
+# Ghostty Terminal Configuration (v1.3+)
 # Optimized for AI development and multi-agent workflows
 # ============================================================================
 
@@ -14,9 +14,8 @@ term = ghostty
 font-family = "JetBrains Mono"
 font-size = 14
 
-# Font features
-font-feature = -calt  # Disable ligatures if preferred
-# font-feature = +calt  # Enable ligatures
+# Font features (ligatures enabled for operator readability: =>, !=, >=)
+font-feature = +calt
 
 # ============================================================================
 # Theme & Colors (Tokyo Night)
@@ -84,6 +83,9 @@ shell-integration-features = cursor,sudo,title,ssh-env,ssh-terminfo
 resize-overlay = never
 mouse-hide-while-typing = true
 
+# Large scrollback for AI agent output
+scrollback-limit = 100000
+
 # ============================================================================
 # Keybindings
 # ============================================================================
@@ -94,7 +96,7 @@ keybind = ctrl+shift+w=close_surface
 keybind = ctrl+tab=next_tab
 keybind = ctrl+shift+tab=previous_tab
 
-# Split management (for future use if Ghostty adds splits)
+# Split management
 keybind = ctrl+shift+d=new_split:right
 keybind = ctrl+alt+d=new_split:down
 
@@ -121,6 +123,9 @@ keybind = shift+enter=text:\x1b\r
 # Quick edit (open scrollback in editor)
 keybind = ctrl+shift+e=write_scrollback_file:open
 
+# Quick terminal (system-wide dropdown terminal)
+keybind = global:ctrl+grave_accent=toggle_quick_terminal
+
 # Home/End keys
 keybind = home=text:\x1b[1~
 keybind = end=text:\x1b[4~
@@ -143,12 +148,37 @@ clipboard-trim-trailing-spaces = true
 # Confirm before closing window with running programs
 confirm-close-surface = true
 
+# Clickable URLs (Cmd+click on macOS)
+link-url = true
+
 # Mouse
 mouse-scroll-multiplier = 3
+focus-follows-mouse = true
 
 # Bell behavior (no audio, visual attention via dock badge/title)
 # Options: audio, attention, title, border, no-audio, no-attention, no-title, no-border
 bell-features = no-audio
+
+# ============================================================================
+# Split Pane Settings (v1.3+)
+# ============================================================================
+
+# Dim unfocused splits so active pane is obvious
+unfocused-split-opacity = 0.85
+
+# New splits inherit working directory
+split-inherit-working-directory = true
+
+# Native scrollbar
+scrollbar = system
+
+# ============================================================================
+# Notifications (v1.3+)
+# ============================================================================
+
+# Notify when long-running commands finish (useful for AI agent tasks)
+notify-on-command-finish = unfocused
+notify-on-command-finish-after = 10
 
 # ============================================================================
 # macOS Specific
@@ -159,3 +189,6 @@ macos-option-as-alt = true
 
 # Window control
 macos-titlebar-style = tabs
+
+# Auto-update
+auto-update = check

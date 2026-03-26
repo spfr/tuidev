@@ -164,6 +164,36 @@ else
     print_warning "jq is not installed (optional)"
 fi
 
+# Extended tools (v1.1+)
+EXTENDED_TOOLS=(
+    "yazi"
+    "sd"
+    "broot"
+    "procs"
+    "dust"
+    "duf"
+    "tokei"
+    "hyperfine"
+    "yq"
+    "tldr"
+    "glow"
+    "nnn"
+    "k9s"
+    "bandwhich"
+    "ncdu"
+    "fastfetch"
+    "httpie"
+)
+
+extended_found=0
+extended_total=${#EXTENDED_TOOLS[@]}
+for tool in "${EXTENDED_TOOLS[@]}"; do
+    if command -v "$tool" > /dev/null 2>&1; then
+        ((extended_found++)) || true
+    fi
+done
+print_success "Extended tools: ${extended_found}/${extended_total} installed"
+
 # ============================================================================
 # AI CLI Tools
 # ============================================================================
@@ -182,6 +212,20 @@ if command -v claude > /dev/null 2>&1; then
     print_success "Claude Code is installed (version: $(claude --version 2> /dev/null | head -1 || echo "unknown"))"
 else
     print_warning "Claude Code is not installed (optional - curl -fsSL https://claude.ai/install.sh | bash)"
+fi
+
+# Check Codex CLI
+if command -v codex > /dev/null 2>&1; then
+    print_success "Codex CLI is installed (version: $(codex --version 2> /dev/null | head -1 || echo "unknown"))"
+else
+    print_warning "Codex CLI is not installed (optional - npm install -g @openai/codex)"
+fi
+
+# Check Gemini CLI
+if command -v gemini > /dev/null 2>&1; then
+    print_success "Gemini CLI is installed (version: $(gemini --version 2> /dev/null | head -1 || echo "unknown"))"
+else
+    print_warning "Gemini CLI is not installed (optional - npm install -g @google/gemini-cli)"
 fi
 
 # ============================================================================
@@ -203,6 +247,7 @@ if [[ -f "$HOME/.claude.json" ]]; then
 else
     print_warning "Claude Code config not found (~/.claude.json)"
 fi
+
 
 
 # ============================================================================

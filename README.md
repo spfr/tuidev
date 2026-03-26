@@ -73,11 +73,11 @@ The killer feature: **nvim + AI agent terminals side by side**
 
 ```
 ┌─────────────────────┬──────────────────┐
-│                     │     Agent-1      │
-│       Neovim        │   (opencode)     │
-│      (editor)       ├──────────────────┤
-│                     │     Agent-2      │
-│                     │    (claude)      │
+│                     │  Agent-1 (claude)│
+│       Neovim        ├──────────────────┤
+│      (editor)       │  Agent-2 (codex) │
+│                     ├──────────────────┤
+│                     │  Agent-3 (gemini)│
 └─────────────────────┴──────────────────┘
 ```
 
@@ -94,13 +94,14 @@ The killer feature: **nvim + AI agent terminals side by side**
 | `multi` | Dev + Monitor + Git | Complete workflow |
 | `remote` | nvim + tunnel | Remote access |
 
-**Tmux sessions** (Claude agent teams split-pane mode):
+**Tmux sessions** (Claude agent teams + multi-agent workflows):
 
 | Command | Layout | Use Case |
 |---------|--------|----------|
 | `tai` | nvim + 2 agents | Agent teams (split-pane) |
 | `tdev` | nvim + agent + runner | 3-column dev layout |
 | `tai-triple` | nvim + 3 agents | Heavy agent work |
+| `agents` | claude + codex + gemini | All 3 AI CLIs side by side |
 | `ta [name]` | bare session | Quick attach/create |
 
 ---
@@ -159,17 +160,21 @@ The killer feature: **nvim + AI agent terminals side by side**
 
 ### AI CLI Tools
 
-| Tool | Config | Purpose |
-|------|--------|---------|
-| Claude Code | `~/.claude.json` | Anthropic's official CLI |
-| OpenCode | `~/.config/opencode/opencode.json` | Open-source, multi-model support |
+| Tool | Alias | Purpose |
+|------|-------|---------|
+| [Claude Code](https://claude.ai/code) | `cc` | Anthropic's official CLI (primary) |
+| [Codex CLI](https://github.com/openai/codex) | `cx` | OpenAI's coding CLI |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gem` | Google's AI CLI (optional) |
+| [OpenCode](https://opencode.ai) | `oc` | Open-source, multi-model support |
+
+All CLIs are self-updating. No custom configs shipped — each tool manages its own configuration.
 
 ### AI Agent Instructions (AGENTS.md)
 
 Universal instructions for AI coding assistants. Works with:
-- Claude Code, OpenCode
+- Claude Code, Codex CLI, Gemini CLI, OpenCode
 - Cursor, Windsurf, Aider, Cline
-- GitHub Copilot, Roo Code, Codex
+- GitHub Copilot, Roo Code
 
 **For your own projects:**
 
@@ -362,8 +367,8 @@ tuidev/
 │   ├── zsh/.zshrc          # Shell config
 │   ├── starship/           # Prompt
 │   ├── ghostty/            # Terminal
+│   ├── claude/             # Claude Code hooks config
 │   ├── opencode/           # OpenCode CLI config
-│   ├── claude/             # Claude Code config
 │   └── ssh/                # SSH config (Tailscale)
 ├── docs/                   # Guides
 ├── templates/

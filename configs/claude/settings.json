@@ -3,6 +3,9 @@
     "allow": [],
     "deny": []
   },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "hooks": {
     "Notification": [
       {
@@ -22,6 +25,17 @@
           {
             "type": "command",
             "command": "notify.sh 'Claude Code' 'Task completed' 'Done'"
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify.sh 'Claude Code' 'Teammate idle' 'Agent Teams'"
           }
         ]
       }

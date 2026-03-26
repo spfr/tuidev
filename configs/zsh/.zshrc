@@ -35,10 +35,8 @@ command -v jenv &>/dev/null && eval "$(jenv init -)"
 # Python (pyenv) - if installed
 [[ -d "$HOME/.pyenv" ]] && export PATH="${HOME}/.pyenv/shims:${PATH}"
 
-# Node.js (nvm) - if installed
+# Node.js (nvm) - if installed (lazy loaded at bottom for fast shell startup)
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
 # Yarn - if installed
 [[ -d "$HOME/.yarn" ]] && export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
@@ -203,11 +201,17 @@ command -v tokei &>/dev/null && alias loc='tokei'
 # AI CLI Tool Aliases
 # ============================================================================
 
+# Claude Code (Anthropic official — primary)
+command -v claude &>/dev/null && alias cc='claude'
+
+# Codex CLI (OpenAI)
+command -v codex &>/dev/null && alias cx='codex'
+
+# Gemini CLI (Google — optional)
+command -v gemini &>/dev/null && alias gem='gemini'
+
 # OpenCode CLI (open-source, multi-model)
 command -v opencode &>/dev/null && alias oc='opencode'
-
-# Claude Code (Anthropic official)
-command -v claude &>/dev/null && alias cc='claude'
 
 # ============================================================================
 # Functions
@@ -520,6 +524,23 @@ tka() {
 # List all sessions
 tls() {
   tmux list-sessions 2>/dev/null || echo "No tmux sessions running"
+}
+
+# Multi-agent session: 3 panes with Claude, Codex, and Gemini
+agents() {
+  local session_name=${1:-agents}
+  if tmux has-session -t "$session_name" 2>/dev/null; then
+    tmux attach-session -t "$session_name"
+  else
+    tmux new-session -d -s "$session_name" -x 220 -y 50
+    tmux send-keys -t "$session_name" "claude" Enter
+    tmux split-window -t "$session_name" -v -p 67
+    tmux send-keys -t "$session_name" "codex" Enter
+    tmux split-window -t "$session_name" -v -p 50
+    tmux send-keys -t "$session_name" "gemini" Enter
+    tmux select-pane -t "$session_name":1.1
+    tmux attach-session -t "$session_name"
+  fi
 }
 
 # ============================================================================

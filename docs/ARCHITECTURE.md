@@ -14,18 +14,18 @@
 │  │  ┌─────────────────────────┬──────────────────────────────────────┐  │  │
 │  │  │                         │           AI AGENT PANES             │  │  │
 │  │  │       NEOVIM            │  ┌────────────────────────────────┐  │  │  │
-│  │  │     (LazyVim)           │  │  Claude Code / OpenCode         │  │  │  │
-│  │  │                         │  │                                │  │  │  │
-│  │  │  - LSP                  │  │  AI coding agents run here     │  │  │  │
-│  │  │  - Treesitter           │  │  in separate terminal panes    │  │  │  │
-│  │  │  - Telescope            │  │                                │  │  │  │
-│  │  │  - nvim-tree            │  │                                │  │  │  │
-│  │  │  - (no AI plugins)      │  │                                │  │  │  │
+│  │  │     (LazyVim)           │  │  Claude Code (cc)               │  │  │  │
+│  │  │                         │  │  Primary AI agent               │  │  │  │
+│  │  │  - LSP                  │  └────────────────────────────────┘  │  │  │
+│  │  │  - Treesitter           ├──────────────────────────────────────┤  │  │
+│  │  │  - Telescope            │  ┌────────────────────────────────┐  │  │  │
+│  │  │  - nvim-tree            │  │  Codex CLI (cx) / Gemini (gem) │  │  │  │
+│  │  │  - (no AI plugins)      │  │  Secondary AI agents            │  │  │  │
 │  │  │                         │  └────────────────────────────────┘  │  │  │
 │  │  │                         ├──────────────────────────────────────┤  │  │
 │  │  │                         │  ┌────────────────────────────────┐  │  │  │
-│  │  │                         │  │  Second AI Agent / Terminal    │  │  │  │
-│  │  │                         │  │  (for parallel workflows)      │  │  │  │
+│  │  │                         │  │  Terminal / Runner              │  │  │  │
+│  │  │                         │  │  (tests, builds, monitoring)    │  │  │  │
 │  │  │                         │  └────────────────────────────────┘  │  │  │
 │  │  └─────────────────────────┴──────────────────────────────────────┘  │  │
 │  │                                                                       │  │
@@ -57,7 +57,7 @@
 ```
 ┌─────────────────────────────────────────┐  ┌─────────────────────────────────────────┐
 │              ZELLIJ                      │  │              TMUX                        │
-│  (primary — workspace layouts)          │  │  (companion — agent teams split-pane)   │
+│  (primary — workspace layouts)          │  │  (companion — agent teams + multi-agent)   │
 │                                         │  │                                         │
 │  - Session management                   │  │  - Claude agent teams split-pane mode   │
 │  - Pane/tab organization                │  │  - Ctrl+a prefix, vi pane nav           │

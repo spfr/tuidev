@@ -1,7 +1,7 @@
 # AI Agent Instructions
 
 > Copy this file to your project and customize for your specific needs.
-> Compatible with: Claude Code, OpenCode, Cursor, Windsurf, Aider, etc.
+> Compatible with: Claude Code, Codex CLI, Gemini CLI, OpenCode, Cursor, Windsurf, Aider, etc.
 
 ---
 
@@ -40,6 +40,12 @@ z partial # smart directory jump (zoxide)
 
 # Editor
 v file    # nvim
+
+# AI CLI tools
+cc        # claude code
+cx        # codex cli
+gem       # gemini cli
+oc        # opencode
 ```
 
 

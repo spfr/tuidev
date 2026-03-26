@@ -1,7 +1,7 @@
 -- ============================================================================
 -- AI Integrations
--- Note: This setup uses TERMINAL-BASED AI tools (opencode, claude)
--- in separate Zellij panes rather than in-editor AI plugins.
+-- Note: This setup uses TERMINAL-BASED AI tools (claude, codex, gemini)
+-- in separate Zellij/tmux panes rather than in-editor AI plugins.
 -- This keeps nvim fast and focused on editing.
 -- ============================================================================
 

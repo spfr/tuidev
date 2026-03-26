@@ -158,6 +158,7 @@ ta [name]         # Attach or create bare session (default: $PWD basename)
 tdev [name]       # 3-column: nvim (55%) | agent (25%) | runner (20%)
 tai [name]        # AI layout: nvim (60%) + 2 stacked agents (40%)
 tai-triple [name] # AI triple: nvim (55%) + 3 stacked agents (45%)
+agents [name]     # Multi-agent: claude + codex + gemini in 3 panes
 
 # Management
 tls               # List all sessions
@@ -167,9 +168,13 @@ tka               # Kill all sessions
 
 ### Claude Agent Teams
 ```bash
-# Start tmux session, then run Claude with split-pane mode
+# In-process mode (default, works in any terminal)
+claude
+# Ask Claude to create a team — Shift+Down to cycle teammates
+
+# Split-pane mode (requires tmux)
 tai myproject
-CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
+claude --teammate-mode tmux
 ```
 
 ---
@@ -704,6 +709,7 @@ ta [name]         # Attach or create bare session
 tdev [name]       # 3-column: nvim | agent | runner
 tai [name]        # nvim (60%) + 2 stacked agents
 tai-triple [name] # nvim (55%) + 3 stacked agents
+agents [name]     # claude + codex + gemini in 3 panes
 tls               # List sessions
 tk [name]         # Kill session
 tka               # Kill all sessions
@@ -711,8 +717,11 @@ tka               # Kill all sessions
 
 ### AI CLI Tools
 ```bash
-cc               # Claude Code (Anthropic)
+cc               # Claude Code (primary)
+cx               # Codex CLI (OpenAI)
+gem              # Gemini CLI (optional)
 oc               # OpenCode (open-source, multi-model)
+agents           # Launch claude + codex + gemini in tmux panes
 ```
 
 ### zk - Kill all sessions
