@@ -97,13 +97,23 @@ write_managed_block() {
     tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-cfgw.XXXXXX")"
 
     if grep -qF "$begin" "$file" 2>/dev/null; then
-        # Replace existing block in place (awk is more portable than sed -i
-        # for multi-line matches across BSD/GNU).
-        awk -v begin="$begin" -v end="$end" -v content="$content" '
-            $0 == begin { print; print content; in_block=1; next }
+        # Replace existing block in place. Pass content via a sidecar file
+        # because BSD awk on macOS rejects literal newlines in -v values.
+        local content_file
+        content_file="$(mktemp "${TMPDIR:-/tmp}/tuidev-cfgw-content.XXXXXX")"
+        printf '%s' "$content" > "$content_file"
+        awk -v begin="$begin" -v end="$end" -v content_file="$content_file" '
+            $0 == begin {
+                print
+                while ((getline line < content_file) > 0) print line
+                close(content_file)
+                in_block=1
+                next
+            }
             $0 == end   { in_block=0; print; next }
             !in_block   { print }
         ' "$file" > "$tmp"
+        rm -f "$content_file"
         mv "$tmp" "$file"
     else
         # Append (add leading blank line if file is non-empty and does not

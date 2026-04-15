@@ -224,6 +224,12 @@ _tuidev_run_ai() {
   fi
 }
 
+# Drop any pre-existing aliases of these names (zsh refuses to define a
+# function whose name collides with an existing alias). Safe no-op when
+# they are absent — protects upgrades from legacy installs that shipped
+# `alias cc='claude'` et al. before the sbx-wrapped function form.
+unalias cc cx gem oc 2>/dev/null
+
 command -v claude   >/dev/null 2>&1 && cc()  { _tuidev_run_ai claude   "$@"; }
 command -v codex    >/dev/null 2>&1 && cx()  { _tuidev_run_ai codex    "$@"; }
 command -v gemini   >/dev/null 2>&1 && gem() { _tuidev_run_ai gemini   "$@"; }

@@ -335,15 +335,102 @@ extract_source_block() {
     fi
 }
 
+# Detect source-content duplication in the region of FILE that lies OUTSIDE
+# the managed block ID. This catches the "upgrade from pre-managed-block era"
+# foot-gun where an older installer wrote the whole source into the file
+# directly, and a newer installer then appended the same content again inside
+# markers — producing TOML duplicate-key errors (starship), stale tmux
+# directives, alias/function collisions in zshrc, etc.
+#
+# Prints:
+#   "exact-pre"    — source content appears verbatim before the block
+#   "exact-post"   — source content appears verbatim after the block
+#   "partial-pre"  — 5+ consecutive non-blank source lines appear before the block
+#   "partial-post" — same, after the block
+# (Empty output means no duplication detected.) Checks pre-block first, then
+# post-block — reports whichever it sees first.
+detect_outside_duplication() {
+    local dest="$1" id="$2" src="$3"
+    local begin="# >>> tuidev managed (${id}) >>>"
+    local end="# <<< tuidev managed (${id}) <<<"
+
+    [[ -f "$dest" && -f "$src" ]] || return 0
+    grep -qF "$begin" "$dest" 2>/dev/null || return 0
+
+    local source_content signature pre post
+    source_content="$(cat "$src")"
+    [[ -z "$source_content" ]] && return 0
+
+    pre="$(awk -v begin="$begin" '$0 == begin {exit} {print}' "$dest")"
+    post="$(awk -v end="$end" 'p; $0 == end {p=1}' "$dest")"
+
+    # First 5 consecutive non-blank lines of source — a fingerprint that's
+    # extremely unlikely to appear in genuine user content by coincidence.
+    signature="$(printf '%s\n' "$source_content" | awk 'NF {print; if (++n == 5) exit}')"
+
+    if [[ -n "$pre" && "$pre" == *"$source_content"* ]]; then
+        echo "exact-pre"; return 0
+    fi
+    if [[ -n "$post" && "$post" == *"$source_content"* ]]; then
+        echo "exact-post"; return 0
+    fi
+    if [[ -n "$signature" ]]; then
+        if [[ -n "$pre" && "$pre" == *"$signature"* ]]; then
+            echo "partial-pre"; return 0
+        fi
+        if [[ -n "$post" && "$post" == *"$signature"* ]]; then
+            echo "partial-post"; return 0
+        fi
+    fi
+}
+
+# Rewrites DEST in place so everything before the managed block is discarded
+# (for "exact-pre") or everything after the end marker is discarded (for
+# "exact-post"). Creates a timestamped backup via tuidev_backup. Only called
+# after detect_outside_duplication returns an "exact-*" verdict.
+clean_outside_duplication() {
+    local dest="$1" id="$2" where="$3"
+    local begin="# >>> tuidev managed (${id}) >>>"
+    local end="# <<< tuidev managed (${id}) <<<"
+
+    tuidev_backup "$dest" "$(basename "$dest")" >/dev/null || true
+    local tmp; tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-cleanup.XXXXXX")"
+
+    case "$where" in
+        exact-pre)
+            awk -v begin="$begin" '
+                !seen && $0 == begin { seen=1 }
+                seen { print }
+            ' "$dest" > "$tmp"
+            ;;
+        exact-post)
+            awk -v end="$end" '
+                { print }
+                $0 == end { exit }
+            ' "$dest" > "$tmp"
+            ;;
+        *)
+            print_error "clean_outside_duplication: unsupported mode: $where"
+            rm -f "$tmp"; return 2
+            ;;
+    esac
+    mv "$tmp" "$dest"
+    print_success "cleaned $where duplicate from $dest"
+}
+
 # Prints drift report for each entry in MANAGED_BLOCKS. Populates DRIFT_ITEMS
 # with entries that need re-applying and DRIFT_LEGACY with files that exist
-# but have no block (→ need `make adopt`).
+# but have no block (→ need `make adopt`). DRIFT_DUPLICATE catches the
+# harder case: block is present but source content is also duplicated outside
+# it (from a pre-managed-block install that was later upgraded).
 DRIFT_ITEMS=()
 DRIFT_LEGACY=()
+DRIFT_DUPLICATE=()
 
 detect_drift() {
     DRIFT_ITEMS=()
     DRIFT_LEGACY=()
+    DRIFT_DUPLICATE=()
 
     local entry dest src id current desired diff_out
     for entry in "${MANAGED_BLOCKS[@]}"; do
@@ -379,6 +466,27 @@ detect_drift() {
             printf '%s\n' "$diff_out" | sed 's/^/      /'
             DRIFT_ITEMS+=("$entry")
         fi
+
+        # Orthogonal to in-block drift: pre-/post-block content may duplicate
+        # the source (legacy-install artifact). An in-sync block that still
+        # has this duplication will pass the previous check but break TOML
+        # parsing or trigger alias/function collisions, so report separately.
+        local dup_kind
+        dup_kind="$(detect_outside_duplication "$dest" "$id" "$src")"
+        case "$dup_kind" in
+            exact-*)
+                print_warning "$dest — source content duplicated OUTSIDE managed block ($dup_kind)"
+                print_info   "  this breaks parsers that reject duplicate keys (TOML) and"
+                print_info   "  causes alias/function collisions in zsh. Safe to auto-clean."
+                DRIFT_DUPLICATE+=("${entry}|${dup_kind}")
+                ;;
+            partial-*)
+                print_warning "$dest — partial source duplication OUTSIDE block ($dup_kind)"
+                print_info   "  5+ contiguous source lines appear outside the managed block."
+                print_info   "  Review $dest manually — auto-clean skipped (may contain user edits)."
+                DRIFT_DUPLICATE+=("${entry}|${dup_kind}")
+                ;;
+        esac
     done
 }
 
@@ -635,6 +743,16 @@ run_configs_mode() {
     print_section "Checking managed-block drift"
     detect_drift
 
+    # Summary of exact vs partial duplicates — used both for --check preview
+    # and to gate the auto-clean prompt below.
+    local exact_dupes=0 partial_dupes=0 item
+    for item in "${DRIFT_DUPLICATE[@]}"; do
+        case "${item##*|}" in
+            exact-*)   exact_dupes=$((exact_dupes+1));;
+            partial-*) partial_dupes=$((partial_dupes+1));;
+        esac
+    done
+
     if [[ "$MODE" == "check" ]]; then
         if [[ ${#DRIFT_LEGACY[@]} -gt 0 ]]; then
             print_warning "${#DRIFT_LEGACY[@]} file(s) need adoption (run 'make adopt')"
@@ -642,7 +760,27 @@ run_configs_mode() {
         if [[ ${#DRIFT_ITEMS[@]} -gt 0 ]]; then
             print_info "${#DRIFT_ITEMS[@]} managed block(s) drifted — run without --check to re-apply"
         fi
+        if [[ $exact_dupes -gt 0 ]]; then
+            print_warning "${exact_dupes} file(s) have source content duplicated outside the managed block — run without --check to clean"
+        fi
+        if [[ $partial_dupes -gt 0 ]]; then
+            print_warning "${partial_dupes} file(s) have partial source duplication — manual review required"
+        fi
         return 0
+    fi
+
+    if [[ $exact_dupes -gt 0 ]]; then
+        if confirm "Clean ${exact_dupes} file(s) with exact duplicate content outside managed block? (backups saved)"; then
+            for item in "${DRIFT_DUPLICATE[@]}"; do
+                local entry_part="${item%|*}" dup_kind="${item##*|}"
+                case "$dup_kind" in
+                    exact-*)
+                        IFS='|' read -r dest src id <<<"$entry_part"
+                        clean_outside_duplication "$dest" "$id" "$dup_kind"
+                        ;;
+                esac
+            done
+        fi
     fi
 
     if [[ ${#DRIFT_ITEMS[@]} -gt 0 ]]; then
