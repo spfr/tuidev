@@ -4,6 +4,11 @@
 # Created: 2026-01-05
 # ============================================================================
 
+# tuidev env: written by install.sh, exports TUIDEV_REPO and TUIDEV_PROFILE.
+# Kept at the top so every downstream block (session wrappers, sandbox
+# integration, update helpers) can rely on these.
+[[ -f "$HOME/.config/tuidev/env" ]] && . "$HOME/.config/tuidev/env"
+
 # ============================================================================
 # Environment Variables
 # ============================================================================
@@ -198,20 +203,31 @@ alias cleanup='brew cleanup && brew autoremove'
 command -v tokei &>/dev/null && alias loc='tokei'
 
 # ============================================================================
-# AI CLI Tool Aliases
+# AI CLI Tool Wrappers
 # ============================================================================
+# Invocations auto-route through the Seatbelt sandbox (sbx) when both are
+# installed. Escape hatches:
+#   CC_NO_SANDBOX=1 cc ...          one-shot, per invocation
+#   sbx --profile off -- claude     explicit, documented profile bypass
+#   unalias cc                      nuclear option
+#
+# Claude Code and Codex also ship their own native sandboxing; sbx is a
+# uniform-UX layer on top. See docs/sandboxing.md.
 
-# Claude Code (Anthropic official — primary)
-command -v claude &>/dev/null && alias cc='claude'
+_tuidev_run_ai() {
+  # Dispatch CLI through sbx unless the escape hatch is active.
+  local cli="$1"; shift
+  if [[ -n "${CC_NO_SANDBOX:-}" ]] || ! command -v sbx >/dev/null 2>&1; then
+    command "$cli" "$@"
+  else
+    command sbx -- "$cli" "$@"
+  fi
+}
 
-# Codex CLI (OpenAI)
-command -v codex &>/dev/null && alias cx='codex'
-
-# Gemini CLI (Google — optional)
-command -v gemini &>/dev/null && alias gem='gemini'
-
-# OpenCode CLI (open-source, multi-model)
-command -v opencode &>/dev/null && alias oc='opencode'
+command -v claude   >/dev/null 2>&1 && cc()  { _tuidev_run_ai claude   "$@"; }
+command -v codex    >/dev/null 2>&1 && cx()  { _tuidev_run_ai codex    "$@"; }
+command -v gemini   >/dev/null 2>&1 && gem() { _tuidev_run_ai gemini   "$@"; }
+command -v opencode >/dev/null 2>&1 && oc()  { _tuidev_run_ai opencode "$@"; }
 
 # ============================================================================
 # Functions
@@ -340,208 +356,98 @@ tunnel() {
   fi
 }
 
-# Quick dev session starter (3-column: nvim | agent | runner)
-dev() {
-  local session_name=${1:-dev}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
+# ============================================================================
+# Session Wrappers — tmux-first
+# ============================================================================
+# The default ergonomic commands (work/dev/ai/...) launch tmux via the
+# reproducible layout helpers under $TUIDEV_REPO/scripts/tmux/. Zellij is
+# opt-in: install `--pack zellij` to activate the z* variants below.
+#
+# Every wrapper accepts an optional session name; default is the layout's
+# name or the current directory's basename. All are attach-or-create.
+
+_tuidev_layout() {
+  local name="$1"; shift
+  local repo="${TUIDEV_REPO:-$HOME/.local/share/tuidev}"
+  local script="$repo/scripts/tmux/layout-$name.sh"
+  if [[ -x "$script" ]]; then
+    "$script" "$@"
   else
-    zellij --session "$session_name" --layout dev
+    echo "layout '$name' not found at $script" >&2
+    echo "set TUIDEV_REPO to the repo root or run: ./install.sh --profile minimal" >&2
+    return 127
   fi
 }
 
-# Kill all zellij sessions
-zk() {
-  echo "Killing all zellij sessions..."
-  zellij kill-all-sessions 2>/dev/null || true
-}
+work()        { _tuidev_layout work "$@"; }
+dev()         { _tuidev_layout dev "$@"; }
+ai()          { _tuidev_layout ai "$@"; }
+ai-single()   { _tuidev_layout ai-single "$@"; }
+ai-triple()   { _tuidev_layout ai-triple "$@"; }
+fullstack()   { _tuidev_layout fullstack "$@"; }
+multi()       { _tuidev_layout multi "$@"; }
+remote()      { _tuidev_layout remote "$@"; }
+agents()      { _tuidev_layout agents "$@"; }
 
-# Named session for remote attachment (Tailscale/Termius/mosh)
-work() {
-  local session_name=${1:-$(basename "$PWD")}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
-  else
-    zellij --session "$session_name"
+# One-time deprecation warning for old t* aliases. Writes a stamped file so
+# the warning prints only once per machine per rename.
+_tuidev_deprecated() {
+  local flag_dir="$HOME/.config/tuidev"
+  local flag_file="$flag_dir/deprecations"
+  local key="$1"
+  mkdir -p "$flag_dir" 2>/dev/null
+  if ! grep -qFx "$key" "$flag_file" 2>/dev/null; then
+    echo "tuidev: '$key' — the t* aliases are deprecated and will be removed in the next release." >&2
+    echo "$key" >> "$flag_file"
   fi
 }
 
-# TUI environment update (pulls latest from repo)
+ta()         { _tuidev_deprecated "ta → work"; work "$@"; }
+tdev()       { _tuidev_deprecated "tdev → dev"; dev "$@"; }
+tai()        { _tuidev_deprecated "tai → ai"; ai "$@"; }
+tai-triple() { _tuidev_deprecated "tai-triple → ai-triple"; ai-triple "$@"; }
+
+# Session management (tmux-native).
+tls() { tmux list-sessions 2>/dev/null || echo "no tmux sessions"; }
+tk()  {
+  local name=${1:-$(basename "$PWD")}
+  tmux kill-session -t "$name" 2>/dev/null && echo "killed: $name" || echo "no session: $name"
+}
+tka() { tmux kill-server 2>/dev/null && echo "killed all tmux sessions"; }
+
+# ============================================================================
+# Zellij wrappers (opt-in, activated when zellij is on PATH)
+# ============================================================================
+# Installed via `./install.sh --pack zellij`. Namespaced under z* to avoid
+# colliding with the tmux-first defaults above.
+
+if command -v zellij >/dev/null 2>&1; then
+  zdev()       { zellij --session "${1:-zdev}"       --layout dev; }
+  zwork()      { zellij --session "${1:-$(basename "$PWD")}"; }
+  zai()        { zellij --session "${1:-zai}"        --layout dual; }
+  zai-single() { zellij --session "${1:-zai-single}" --layout single; }
+  zai-triple() { zellij --session "${1:-zai-triple}" --layout triple; }
+  zfullstack() { zellij --session "${1:-zfullstack}" --layout fullstack; }
+  zmulti()     { zellij --session "${1:-zmulti}"     --layout multi-agent; }
+  zremote()    { zellij --session "${1:-zremote}"    --layout remote; }
+  zk()         { zellij kill-all-sessions 2>/dev/null; }
+fi
+
+# ============================================================================
+# Update helpers
+# ============================================================================
+
 tui-update() {
   local repo_dir="${TUIDEV_REPO:-$HOME/tuidev}"
   if [[ -d "$repo_dir" ]]; then
     "$repo_dir/scripts/update.sh" "$@"
   else
-    echo "TUI setup repo not found at $repo_dir"
-    echo "Set TUIDEV_REPO to your repo location or clone:"
-    echo "  git clone https://github.com/spfr/tuidev.git $repo_dir"
+    echo "tuidev repo not found at $repo_dir"
+    echo "set TUIDEV_REPO or re-run the installer from your checkout."
   fi
 }
 
-# Quick check for updates
-tui-check() {
-  tui-update --check
-}
-
-# ============================================================================
-# AI Agentic Workflow Functions
-# ============================================================================
-
-# AI single agent session (nvim + 1 terminal)
-ai-single() {
-  local session_name=${1:-ai-single}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
-  else
-    zellij --session "$session_name" --layout single
-  fi
-}
-
-# AI dual agent session (nvim + 2 agents)
-ai() {
-  local session_name=${1:-ai}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
-  else
-    zellij --session "$session_name" --layout dual
-  fi
-}
-
-# AI triple agent session (nvim + 3 agents)
-ai-triple() {
-  local session_name=${1:-ai-triple}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
-  else
-    zellij --session "$session_name" --layout triple
-  fi
-}
-
-# Remote session (minimal for Tailscale/mosh)
-remote() {
-  local session_name=${1:-remote}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
-  else
-    zellij --session "$session_name" --layout remote
-  fi
-}
-
-# Full-stack development session
-fullstack() {
-  local session_name=${1:-fullstack}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
-  else
-    zellij --session "$session_name" --layout fullstack
-  fi
-}
-
-# Multi-agent development session (with monitoring)
-multi() {
-  local session_name=${1:-multi}
-  if zellij list-sessions 2>/dev/null | grep -q "^${session_name} "; then
-    zellij attach "$session_name"
-  else
-    zellij --session "$session_name" --layout multi-agent
-  fi
-}
-
-# ============================================================================
-# Tmux Session Functions
-# ============================================================================
-# tmux is the companion multiplexer for Claude agent teams split-pane mode.
-# (Zellij is primary for manual workspace layouts.)
-
-# Attach to existing session or create a bare named one
-ta() {
-  local session_name=${1:-$(basename "$PWD")}
-  if tmux has-session -t "$session_name" 2>/dev/null; then
-    tmux attach-session -t "$session_name"
-  else
-    tmux new-session -s "$session_name"
-  fi
-}
-
-# Dev layout: 3 vertical columns — nvim (55%) | agent (25%) | runner (20%)
-tdev() {
-  local session_name=${1:-dev}
-  if tmux has-session -t "$session_name" 2>/dev/null; then
-    tmux attach-session -t "$session_name"
-  else
-    tmux new-session -d -s "$session_name" -x 220 -y 50
-    tmux send-keys -t "$session_name" "nvim" Enter
-    tmux split-window -t "$session_name" -h -p 45
-    tmux split-window -t "$session_name" -h -p 44
-    tmux select-pane -t "$session_name":1.1
-    tmux attach-session -t "$session_name"
-  fi
-}
-
-# AI layout: nvim (60%) + 2 agent panes stacked (40%)
-tai() {
-  local session_name=${1:-ai}
-  if tmux has-session -t "$session_name" 2>/dev/null; then
-    tmux attach-session -t "$session_name"
-  else
-    tmux new-session -d -s "$session_name" -x 220 -y 50
-    tmux send-keys -t "$session_name" "nvim" Enter
-    tmux split-window -t "$session_name" -h -p 40
-    tmux split-window -t "$session_name" -v -p 50
-    tmux select-pane -t "$session_name":1.1
-    tmux attach-session -t "$session_name"
-  fi
-}
-
-# AI triple layout: nvim (55%) + 3 agent panes stacked (45%)
-tai-triple() {
-  local session_name=${1:-ai-triple}
-  if tmux has-session -t "$session_name" 2>/dev/null; then
-    tmux attach-session -t "$session_name"
-  else
-    tmux new-session -d -s "$session_name" -x 220 -y 50
-    tmux send-keys -t "$session_name" "nvim" Enter
-    tmux split-window -t "$session_name" -h -p 45
-    tmux split-window -t "$session_name" -v -p 67
-    tmux split-window -t "$session_name" -v -p 50
-    tmux select-pane -t "$session_name":1.1
-    tmux attach-session -t "$session_name"
-  fi
-}
-
-# Kill named session
-tk() {
-  local session_name=${1:-$(basename "$PWD")}
-  tmux kill-session -t "$session_name" 2>/dev/null && echo "Killed session: $session_name" || echo "Session not found: $session_name"
-}
-
-# Kill all sessions (tmux kill-server)
-tka() {
-  echo "Killing all tmux sessions..."
-  tmux kill-server 2>/dev/null || true
-}
-
-# List all sessions
-tls() {
-  tmux list-sessions 2>/dev/null || echo "No tmux sessions running"
-}
-
-# Multi-agent session: 3 panes with Claude, Codex, and Gemini
-agents() {
-  local session_name=${1:-agents}
-  if tmux has-session -t "$session_name" 2>/dev/null; then
-    tmux attach-session -t "$session_name"
-  else
-    tmux new-session -d -s "$session_name" -x 220 -y 50
-    tmux send-keys -t "$session_name" "claude" Enter
-    tmux split-window -t "$session_name" -v -p 67
-    tmux send-keys -t "$session_name" "codex" Enter
-    tmux split-window -t "$session_name" -v -p 50
-    tmux send-keys -t "$session_name" "gemini" Enter
-    tmux select-pane -t "$session_name":1.1
-    tmux attach-session -t "$session_name"
-  fi
-}
+tui-check() { tui-update --check; }
 
 # ============================================================================
 # Remote Access Functions
@@ -600,18 +506,31 @@ remote-status() {
   fi
   echo ""
 
-  # Zellij sessions
-  echo "Zellij Sessions:"
-  if command -v zellij &>/dev/null; then
+  # tmux sessions (primary multiplexer)
+  echo "tmux Sessions:"
+  if command -v tmux &>/dev/null; then
     local sessions
-    sessions=$(zellij list-sessions 2>/dev/null)
+    sessions=$(tmux list-sessions 2>/dev/null)
     if [[ -n "$sessions" ]]; then
       echo "$sessions" | sed 's/^/  /'
     else
-      echo "  No active sessions"
+      echo "  no active sessions"
     fi
   else
-    echo "  Zellij not installed"
+    echo "  tmux not installed"
+  fi
+  echo ""
+
+  # Zellij sessions (opt-in via --pack zellij)
+  if command -v zellij &>/dev/null; then
+    echo "Zellij Sessions:"
+    local zsessions
+    zsessions=$(zellij list-sessions 2>/dev/null)
+    if [[ -n "$zsessions" ]]; then
+      echo "$zsessions" | sed 's/^/  /'
+    else
+      echo "  no active sessions"
+    fi
   fi
 }
 

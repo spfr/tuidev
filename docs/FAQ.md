@@ -1,6 +1,6 @@
 # Frequently Asked Questions
 
-> Common questions and solutions for the TUI Development Setup
+> Common questions and fixes for the TUI Development Setup.
 
 ---
 
@@ -8,74 +8,182 @@
 
 ### Q: Does this work on Intel Macs?
 
-**Yes.** The setup detects whether you're on Apple Silicon (`/opt/homebrew`) or Intel (`/usr/local`) and configures paths automatically.
+**Yes.** The setup detects Apple Silicon (`/opt/homebrew`) vs Intel (`/usr/local`) and configures paths automatically.
 
 ### Q: Can I use this on Linux?
 
-**Partially.** The CLI tools work on Linux, but:
-- macOS apps (Rectangle, Hammerspoon, Stats) won't install
-- Ghostty config is macOS-specific
-- Install script needs modification for Linux package managers
+**Yes, for the remote/server profile.** CLI tools, tmux, Nvim, and the sandbox Tier 2 (Podman) all work on Linux. Skip macOS-only packs:
+
+```bash
+./install.sh --profile remote
+```
+
+Seatbelt (Tier 1 sandbox), Ghostty, Hammerspoon, and Rectangle are macOS-only and ship in the `ui` pack.
+
+### Q: How do I install a minimal profile?
+
+```bash
+./install.sh --profile minimal
+```
+
+Just the core: Nvim, tmux, zsh, Starship, and the modern CLI tools. Add packs one at a time with `--pack NAME`. See [profiles.md](profiles.md) for the matrix.
+
+### Q: How do I add a specific pack to an existing install?
+
+```bash
+./install.sh --pack zellij       # add Zellij on top of whatever you have
+./install.sh --pack sandbox      # add the Podman-based Tier 2 sandbox
+```
+
+Packs are idempotent.
 
 ### Q: The installer failed. How do I retry?
 
 ```bash
-# Run with dry-run first to see what would happen
-./install.sh --dry-run
-
-# Then run for real
-./install.sh
+./install.sh --dry-run --profile desktop   # see what it would do
+./install.sh --profile desktop             # run for real
 ```
 
-Backups are created at `~/.config-backup-TIMESTAMP/` before overwriting.
+Backups land at `~/.config-backup-TIMESTAMP/`.
 
 ### Q: How do I update everything?
 
 ```bash
-# Update all Homebrew packages
-brew update && brew upgrade
-
-# Update Neovim plugins
-nvim -c 'Lazy update' -c 'quit'
-
+make update            # interactive
+make update-all        # non-interactive
+make update-check      # preview only
 ```
 
 ---
 
 ## Shell & Terminal
 
-### Q: My arrow keys navigate Zellij panes instead of the command line
-
-Press `Ctrl+g` to enter **Locked Mode** - this passes all keys directly to the terminal. Press `Ctrl+g` again to exit.
-
 ### Q: Why is my shell slow to start?
 
-Common causes:
-1. **nvm** - We lazy-load it, but if you have manual nvm config it may double-load
-2. **Too many plugins** - Check what's sourced in `.zshrc`
-3. **Slow completions** - Try `compinit -C` for cached completions
+1. **nvm** — we lazy-load it; remove any manual `nvm.sh` source in `~/.zshrc.local`.
+2. **Too many plugins** — audit what's sourced.
+3. **Slow completions** — `compinit -C` caches.
 
-Check startup time:
+Measure:
+
 ```bash
 time zsh -i -c exit
 ```
 
 ### Q: How do I add my own aliases?
 
-Add them to `~/.zshrc.local` - this file is sourced at the end and never overwritten by updates.
+Edit `~/.zshrc.local`. Sourced last, never overwritten.
 
 ### Q: The `z` command doesn't work
 
-`z` is an alias for `zoxide`. It learns from your navigation:
-```bash
-# First, navigate normally
-cd ~/projects/myapp
-cd ~/documents/notes
+`z` is zoxide. It learns from your `cd` history:
 
-# Then use z
-z myapp    # Jumps to ~/projects/myapp
-z notes    # Jumps to ~/documents/notes
+```bash
+cd ~/projects/myapp       # teach it once
+z myapp                   # jump there forever
 ```
+
+---
+
+## Sessions & tmux
+
+### Q: Why tmux (not Zellij)?
+
+- **Durability**: tmux sessions survive SSH disconnects and terminal crashes. Critical for remote work over flaky connections (iOS hotspot, mosh, long-running agents).
+- **Remote parity**: every VPS, Linux server, and SSH host already has tmux; no extra install for remote sessions.
+- **Agent integration**: Claude Code's agent teams split-pane mode targets tmux. iTerm2 is supported too, but tmux works in any terminal.
+- **Ubiquity**: if you already know tmux, your muscle memory carries over to any other machine.
+
+Zellij is still shipped as an opt-in pack (`./install.sh --pack zellij`) for users who prefer its workspace model.
+
+### Q: How do I launch a session?
+
+All launchers create a **named** session; calling them again reattaches.
+
+```bash
+work myproject        # bare session
+dev                   # nvim | agent | runner (3 columns)
+ai                    # nvim + 2 agent panes
+ai-triple             # nvim + 3 agent panes
+agents                # claude + codex + gemini, one per pane
+remote                # minimal layout for mosh/SSH
+```
+
+Management: `tls` (list), `tk NAME` (kill one), `tka` (kill server).
+
+### Q: Where did the old `ai` command go?
+
+It still works — it just runs tmux now instead of Zellij. Same for `dev`, `ai-triple`, `fullstack` (where applicable), `remote`. The `t*` aliases (`ta`, `tdev`, `tai`, ...) remain available as the explicit tmux-named counterparts.
+
+Coming from the pre-pivot setup? See [migration.md](migration.md).
+
+### Q: tmux colors look wrong / config not loading
+
+tmux 3.2+ auto-reads `~/.config/tmux/tmux.conf`. Older versions:
+
+```bash
+tmux -V                                              # check version
+ln -s ~/.config/tmux/tmux.conf ~/.tmux.conf          # fallback for <3.2
+```
+
+### Q: Claude agent teams split-pane mode?
+
+```bash
+ai myproject
+claude --teammate-mode tmux
+```
+
+In-process mode (default `claude`) works in any terminal — use `Shift+Down` to cycle teammates.
+
+---
+
+## Sandboxing
+
+### Q: How do I turn off the sandbox?
+
+Just call the CLI directly without `sbx`:
+
+```bash
+cc                    # raw, no sandbox
+sbx -- cc             # Seatbelt (Tier 1)
+```
+
+There's no global on/off — sandboxing is per-invocation.
+
+### Q: Seatbelt vs Podman — which tier?
+
+| Tier | Tool | OS | Good for |
+|------|------|----|----|
+| 1 | Seatbelt (`sandbox-exec`) | macOS | default; scoped FS, network allowed |
+| 2 | Podman (rootless) | macOS + Linux | stricter; network off, read-only host |
+
+Full details and the policy file layout: [sandboxing.md](sandboxing.md).
+
+### Q: The sandbox blocked something I need
+
+Either switch tiers (`sbx --tier 1 -- ...`) or edit the policy at `~/.config/sandbox/<profile>.sb` (Seatbelt) or the `Containerfile` (Podman). Don't run agents unsandboxed as a workaround — scope the policy instead.
+
+---
+
+## Zellij (opt-in pack)
+
+### Q: I want Zellij back
+
+```bash
+./install.sh --pack zellij
+source ~/.zshrc
+```
+
+Launchers: `zdev`, `zai`, `zai-triple`, `zfullstack`, `zmulti`, `zremote`, `zwork`. Keybindings, prefix-mode conflicts, and layout files: [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md).
+
+### Q: My old Zellij layout isn't loading
+
+```bash
+ls ~/.config/zellij/layouts/
+zellij --layout dual
+```
+
+If the `zellij/` dir is missing, you're on a profile without the pack — install it: `./install.sh --pack zellij`.
 
 ---
 
@@ -83,129 +191,31 @@ z notes    # Jumps to ~/documents/notes
 
 ### Q: Why is there no AI plugin in Neovim?
 
-**By design.** This setup's philosophy is:
-- Neovim stays fast and lightweight
-- AI tools run in adjacent Zellij panes
-- Multiple AI agents can work in parallel
+**By design.** Nvim stays fast; AI agents run in adjacent tmux panes (ideally sandboxed via `sbx`). Multiple agents in parallel with no editor overhead.
 
-This avoids the overhead of in-editor AI and lets you use multiple AI tools simultaneously.
-
-### Q: Neovim plugins aren't loading
+### Q: Neovim plugins broken
 
 ```bash
-# Clear and reinstall
 rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim
-nvim
-```
-
-LazyVim will reinstall all plugins on next launch.
-
-### Q: How do I add custom plugins?
-
-Create `~/.config/nvim/lua/plugins/custom.lua`:
-```lua
-return {
-  -- Your plugins here
-  { "tpope/vim-surround" },
-}
+nvim       # LazyVim reinstalls everything
 ```
 
 ### Q: LSP isn't working for my language
 
-```bash
-# In Neovim, check LSP status
+```vim
 :LspInfo
-
-# Install language server
-:Mason
-# Search for your language and press i to install
+:Mason         " search language, press i to install
 ```
 
----
+### Q: How do I add custom plugins?
 
-## Tmux & Claude Agent Teams
+Create `~/.config/nvim/lua/plugins/custom.lua`:
 
-### Q: Why is there a tmux config if Zellij is the primary multiplexer?
-
-Claude Code's experimental **agent teams** feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) uses split-pane mode where each teammate gets its own visible pane. This requires **tmux or iTerm2** — Zellij is explicitly unsupported by that feature. So:
-- **Zellij** → manual workspace layouts (`ai`, `dev`, `multi`, etc.)
-- **tmux** → Claude agent teams split-pane mode (`tai`, `tdev`, etc.)
-
-### Q: How do I use Claude agent teams split-pane mode?
-
-```bash
-# In-process mode (default, works in any terminal including Ghostty)
-claude
-# Ask Claude to create a team — Shift+Down to cycle teammates
-
-# Split-pane mode (requires tmux)
-tai myproject
-claude --teammate-mode tmux
-# Claude automatically splits tmux panes for each teammate
+```lua
+return {
+  { "tpope/vim-surround" },
+}
 ```
-
-### Q: How do I kill all tmux sessions?
-
-```bash
-tka              # kill-server (all sessions)
-tk [name]        # kill named session
-tls              # list sessions
-```
-
-### Q: The tmux config isn't loading / colors look wrong
-
-tmux 3.2+ reads from `~/.config/tmux/tmux.conf` via XDG automatically. Older versions need `~/.tmux.conf`. Check your version:
-
-```bash
-tmux -V          # should be 3.2+
-```
-
-If you're on an older version, symlink the config:
-```bash
-ln -s ~/.config/tmux/tmux.conf ~/.tmux.conf
-```
-
-### Q: tmux functions (`ta`, `tdev`, `tai`) aren't found
-
-The functions live in `~/.zshrc`. If you just installed, source it:
-
-```bash
-source ~/.zshrc
-
-# Or sync from repo first:
-make update-configs
-source ~/.zshrc
-```
-
----
-
-## Zellij
-
-### Q: How do I kill all sessions?
-
-```bash
-zk  # Alias for zellij kill-all-sessions
-```
-
-### Q: My layout isn't loading
-
-```bash
-# Check layout exists
-ls ~/.config/zellij/layouts/
-
-# Try loading explicitly
-zellij --layout dual
-```
-
-### Q: How do I create a custom layout?
-
-1. Copy an existing layout:
-   ```bash
-   cp ~/.config/zellij/layouts/dual.kdl ~/.config/zellij/layouts/custom.kdl
-   ```
-
-2. Edit the KDL file
-3. Use it: `zellij --layout custom`
 
 ---
 
@@ -213,122 +223,70 @@ zellij --layout dual
 
 ### Q: Which AI tool should I use?
 
-| Tool | Best For |
-|------|----------|
-| **Claude Code** | Complex coding tasks, large context |
-| **OpenCode** | Open-source, customizable |
+| Tool | Alias | Best for |
+|------|-------|----------|
+| Claude Code | `cc` | complex tasks, large context, agent teams |
+| Codex | `cx` | OpenAI-flavored workflows |
+| Gemini | `gem` | long-context Google workflows |
+| OpenCode | `oc` | open-source, multi-model |
 
-You can run multiple in different Zellij panes!
-
----
-
-## Window Management
-
-### Q: Rectangle vs Hammerspoon - which should I use?
-
-- **Rectangle**: Simple, GUI-based, great defaults
-- **Hammerspoon**: Programmable, Lua scripting, unlimited customization
-
-We include both - use Rectangle for basics, Hammerspoon for advanced automation.
-
-### Q: How do I customize Hammerspoon?
-
-Edit `~/.hammerspoon/init.lua`, then reload with `Cmd+Option+Ctrl+R`.
+Run multiple in parallel via `ai` or `agents`. Prefer `sbx -- <alias>` over raw invocation.
 
 ---
 
-## Git & GitHub
+## Git
 
 ### Q: Delta diff colors look wrong
 
-Delta uses the terminal theme. Ensure your terminal (Ghostty) is using Tokyo Night theme.
+Delta picks up the terminal theme. Ensure Ghostty (or your terminal) is on Tokyo Night.
 
-### Q: lazygit keybindings
+### Q: lazygit keybindings?
 
-Press `?` in lazygit to see all keybindings. Key ones:
-- `Space` - Stage/unstage
-- `c` - Commit
-- `P` - Push
-- `p` - Pull
+Press `?` inside lazygit. Main ones: `Space` stage, `c` commit, `P` push, `p` pull.
 
 ---
 
 ## Troubleshooting
 
-### Q: Command not found: <tool>
+### Q: Command not found
 
 ```bash
-# Refresh shell
 source ~/.zshrc
-
-# Check if installed
 brew list | grep <tool>
-
-# Install if missing
 brew install <tool>
+```
+
+### Q: Something broke after an update
+
+```bash
+make check
+make test
+make validate-configs
 ```
 
 ### Q: How do I reset everything?
 
 ```bash
-# Restore backups (if you have them)
-cp -r ~/.config-backup-TIMESTAMP/* ~/
-
-# Or reinstall
-./install.sh
-```
-
-### Q: Something is broken after an update
-
-```bash
-# Check health
-make check
-
-# Run full tests
-make test
-
-# Validate configs
-make validate-configs
+cp -r ~/.config-backup-TIMESTAMP/* ~/       # restore
+./install.sh --profile desktop              # or reinstall
 ```
 
 ---
 
-## Performance
+## Remote Access
 
-### Q: How do I benchmark tool performance?
+### Q: How do I work from my phone / iPad?
+
+See [remote.md](remote.md) — Tailscale, mosh, iOS SSH clients, and named tmux sessions for iffy connections.
 
 ```bash
-# Benchmark any command
-hyperfine 'rg pattern' 'grep pattern'
-
-# Shell startup time
-hyperfine 'zsh -i -c exit'
+remote myproject      # minimal layout, optimized for mobile
 ```
-
-### Q: Which tools are fastest?
-
-| Task | Tool | Speed vs Traditional |
-|------|------|---------------------|
-| Search | `rg` | 10-100x faster than grep |
-| Find | `fd` | 5-10x faster than find |
-| List | `eza` | Similar, but prettier |
-| View | `bat` | Slightly slower (highlighting) |
 
 ---
 
 ## Getting Help
 
-### Q: Where can I get more help?
-
-1. **Check docs:** `ls docs/`
-2. **Read cheatsheet:** `glow docs/CHEATSHEET.md`
-3. **Tool help:** `<tool> --help`
-4. **Man pages:** `man <tool>`
-5. **TLDR:** `tldr <tool>` (if installed)
-
-### Q: How do I report issues?
-
-Open an issue on GitHub with:
-1. Your macOS version (`sw_vers`)
-2. Output of `make check`
-3. Relevant error messages
+- Full docs: `ls docs/`
+- Tool-specific: `<tool> --help`, `tldr <tool>`
+- Report issues on GitHub with: `sw_vers`, `make check` output, relevant logs.

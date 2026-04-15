@@ -1,5 +1,10 @@
 # Zellij Session Troubleshooting
 
+> Zellij is an optional pack in tuidev. Install it with
+> `./install.sh --pack zellij`. The default multiplexer is tmux — see
+> `docs/CHEATSHEET.md` and `configs/tmux/tmux.conf` for tmux-specific
+> guidance.
+
 ## Problem: Old Orphaned Sessions
 
 If you see sessions like:

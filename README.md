@@ -1,403 +1,154 @@
-# macOS TUI Development Setup
+# tuidev — macOS terminal dev setup
 
-> Terminal-first, AI-powered engineering productivity setup
-
-> **Sponsored by [SpiceFactory](https://spfr.co)** — Building AI-powered developer tools
+> Opinionated, terminal-first developer environment built around **tmux durability**, **sandboxed AI agents**, and **layered installation**.
 
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-[![GitHub stars](https://img.shields.io/github/stars/spfr/tuidev?style=social)](https://github.com/spfr/tuidev)
 
-## Philosophy
+## What this is
 
-- **Terminal-First** - No GUI IDEs, maximum speed
-- **AI in Side Terminals** - Keep editor fast, use AI tools in parallel panes
-- **Remote-Ready** - Work from phone/tablet anywhere
-- **Opinionated** - Pre-configured, just works
+A small, opinionated set of configs + install scripts for an AI-assisted coding workflow. Three ideas shape it:
 
----
+1. **One session, one pane, one task.** Your work has to survive disconnects, narrow terminals, and mobile reattaches. tmux is the durability layer; splits are a local bonus, not the story.
+2. **Sandbox by default.** AI agents run inside macOS Seatbelt by default. Credentials (`~/.ssh`, `~/.aws`, keychain) are locked out even if the agent is compromised.
+3. **Layered install.** Pick a profile (`minimal`, `desktop`, `remote`) or compose packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack zellij`, ...). Your `~/.zshrc` is never overwritten — edits outside the tuidev-managed block survive forever.
 
-## Preview
-
-### AI Workflow — Editor + Agents Side by Side
-![AI Workflow](docs/screenshots/ai.webp)
-*Nvim (60%) with two AI agent terminals (40%) — run `ai` to launch*
-
-### Multi-Agent Layout with Tabs
-![Multi-Agent Layout](docs/screenshots/multi.webp)
-*Development + Monitoring + Git tabs — run `multi` to launch*
-
-<details>
-<summary><strong>More Screenshots</strong></summary>
-
-### Triple Agent Layout
-![Triple Layout](docs/screenshots/triple.webp)
-*For heavy AI workloads — run `ai-triple`*
-
-### Neovim with LazyVim
-![Neovim](docs/screenshots/nvim.webp)
-*Full IDE experience with LSP, file tree, and Tokyo Night theme*
-
-### Lazygit
-![Lazygit](docs/screenshots/lazygit.webp)
-*Visual git interface — run `lg`*
-
-### Starship Prompt
-![Prompt](docs/screenshots/prompt.webp)
-*Rich prompt with git status, icons, and Tokyo Night colors*
-
-</details>
-
----
-
-## Quick Start
+## Quick start
 
 ```bash
 git clone https://github.com/spfr/tuidev.git
 cd tuidev
-./install.sh
-source ~/.zshrc
+./install.sh --profile desktop    # or: minimal | remote
+exec zsh -l
 
-# Start your first AI session
-ai
+work myproject                    # bare tmux session, attach-or-create
+dev                               # nvim | agent | runner
+ai                                # nvim + 2 agent panes
+sbx -- cc                         # Claude Code under Seatbelt
 ```
 
-**That's it.** You now have nvim on the left, two AI terminals on the right.
+## The three profiles
 
----
+| Profile   | Packs                          | For                                       |
+|-----------|--------------------------------|-------------------------------------------|
+| `minimal` | core                           | Remote servers, VMs, CI runners           |
+| `desktop` | core + ui + sandbox            | **Default** — local macOS laptop/desktop  |
+| `remote`  | core + remote + sandbox        | Headless machines, Tailscale nodes        |
 
-## The AI Workflow
+Compose your own: `./install.sh --core --sandbox --pack zellij`. Full matrix in [docs/profiles.md](docs/profiles.md).
 
-The killer feature: **nvim + AI agent terminals side by side**
+## Session commands (tmux-first)
 
+All commands are attach-or-create and accept an optional session name:
+
+| Command          | Layout                                          |
+|------------------|-------------------------------------------------|
+| `work [name]`    | bare named session (default: `$(basename $PWD)`) |
+| `dev [name]`     | nvim 55% ∣ agent 25% ∣ runner 20%               |
+| `ai [name]`      | nvim 60% + two agent panes                       |
+| `ai-single`      | nvim + one shell                                |
+| `ai-triple`      | nvim + three agent panes                         |
+| `agents [name]`  | three columns: claude ∣ codex ∣ gemini          |
+| `fullstack`      | five windows: code / web / api / db / logs      |
+| `multi`          | three windows: dev / monitor / git              |
+| `remote [name]`  | minimal nvim + shell for narrow terminals        |
+| `tls` / `tk` / `tka` | list / kill named / kill all tmux sessions |
+
+**Coming from the old Zellij-first setup?** See [docs/migration.md](docs/migration.md). The `z*` namespace (zdev, zwork, zai, ...) activates automatically once you install `--pack zellij`.
+
+## Sandboxed agents
+
+Claude Code, Codex, Gemini, and OpenCode are routed through a Seatbelt wrapper:
+
+```bash
+cc                          # = sbx -- claude (strict profile by default)
+CC_NO_SANDBOX=1 cc          # one-shot escape hatch
+sbx --profile standard -- npm ci   # wider network for package installs
+sbx --profile off -- some-tool     # documented pass-through
 ```
-┌─────────────────────┬──────────────────┐
-│                     │  Agent-1 (claude)│
-│       Neovim        ├──────────────────┤
-│      (editor)       │  Agent-2 (codex) │
-│                     ├──────────────────┤
-│                     │  Agent-3 (gemini)│
-└─────────────────────┴──────────────────┘
-```
 
-### Session Commands
+Three profiles are shipped: **strict** (agent runs, LLM APIs work, package installs don't), **standard** (adds GitHub, npm, PyPI, crates, registries), **off** (escape hatch). The agent can read most of `$HOME` but **cannot** read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc` — ever.
 
-**Zellij sessions** (manual workspace layouts):
+Full details, including customization and troubleshooting: [docs/sandboxing.md](docs/sandboxing.md).
 
-| Command | Layout | Use Case |
-|---------|--------|----------|
-| `ai` | nvim + 2 agents | **Default** - daily work |
-| `ai-single` | nvim + 1 agent | Light workload |
-| `ai-triple` | nvim + 3 agents | Heavy AI work |
-| `fullstack` | 5 tabs | Full-stack development |
-| `multi` | Dev + Monitor + Git | Complete workflow |
-| `remote` | nvim + tunnel | Remote access |
+Tier 2 — Podman-backed microVMs — is available behind `./install.sh --pack sandbox-container` when you need kernel-namespace isolation. Docker Desktop / OrbStack are deliberately **not** used (not FOSS).
 
-**Tmux sessions** (Claude agent teams + multi-agent workflows):
-
-| Command | Layout | Use Case |
-|---------|--------|----------|
-| `tai` | nvim + 2 agents | Agent teams (split-pane) |
-| `tdev` | nvim + agent + runner | 3-column dev layout |
-| `tai-triple` | nvim + 3 agents | Heavy agent work |
-| `agents` | claude + codex + gemini | All 3 AI CLIs side by side |
-| `ta [name]` | bare session | Quick attach/create |
-
----
-
-## What's Included
-
-### Core Tools
+## Core tools
 
 | Tool | Purpose |
 |------|---------|
-| **[Neovim](https://neovim.io/)** + LazyVim | Full IDE with LSP |
-| **[Zellij](https://zellij.dev/)** | Terminal multiplexer (primary, workspace layouts) |
-| **[tmux](https://github.com/tmux/tmux)** | Multiplexer companion (Claude agent teams split-pane) |
-| **[Ghostty](https://ghostty.org/)** | Fast terminal emulator |
-| **[Starship](https://starship.rs/)** | Shell prompt |
-| **[nnn](https://github.com/jarun/nnn)** | TUI file manager (fastest) |
-| **[yazi](https://github.com/sxyazi/yazi)** | Modern file manager (async) |
-| **[lazydocker](https://github.com/jesseduffield/lazydocker)** | Docker TUI |
+| [tmux](https://github.com/tmux/tmux) | Primary multiplexer — durable sessions |
+| [Neovim](https://neovim.io/) + LazyVim | Editor (AI stays external by design) |
+| [Ghostty](https://ghostty.org/) | Native macOS tabs/splits (desktop profile) |
+| [Starship](https://starship.rs/) | Prompt |
+| [ripgrep](https://github.com/BurntSushi/ripgrep) / [fd](https://github.com/sharkdp/fd) / [fzf](https://github.com/junegunn/fzf) | Search + find + fuzzy |
+| [zoxide](https://github.com/ajeetdsouza/zoxide) | Smarter `cd` |
+| [git-delta](https://github.com/dandavison/delta) | Git diffs |
+| [lazygit](https://github.com/jesseduffield/lazygit) | Git TUI |
+| [jq](https://stedolan.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | JSON / YAML |
+| [eza](https://github.com/eza-community/eza) / [bat](https://github.com/sharkdp/bat) | `ls` / `cat` replacements |
 
-### Modern CLI Replacements
+Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s), `--pack sandbox-container` (Podman), `--pack extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
 
-| Old | New | Improvement |
-|-----|-----|-------------|
-| `ls` | `eza` | Icons, git status |
-| `cat` | `bat` | Syntax highlighting |
-| `grep` | `ripgrep` | 10x faster |
-| `find` | `fd` | Simpler syntax |
-| `cd` | `zoxide` | Smart history |
-| `sed` | `sd` | Intuitive syntax |
+## AI CLIs
 
-### Productivity
+| Tool | Shell function | Notes |
+|------|----------------|-------|
+| [Claude Code](https://claude.ai/code) | `cc` | Primary; hooks in `configs/claude/settings.json` |
+| [Codex CLI](https://github.com/openai/codex) | `cx` | Defaults in `configs/codex/config.toml` (workspace-write, on-request) |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gem` | Optional |
+| [OpenCode](https://opencode.ai) | `oc` | Multi-model |
 
-| Tool | What It Does |
-|------|--------------|
-| `fzf` | Fuzzy find anything |
-| `lazygit` | Visual git |
-| `lazydocker` | Docker TUI |
-| `btm` / `bottom` | System monitor |
-| `glow` | Render markdown |
-| `delta` | Better git diffs |
-| `broot` | Directory navigator |
-| `tldr` | Command examples |
-| `fastfetch` | System info |
-| `ncdu` | Disk usage analyzer |
-| `bandwhich` | Network monitor |
-| `k9s` | Kubernetes TUI |
+All four auto-route through `sbx` when installed. Philosophy: **AI stays in external panes**. `configs/nvim/lua/plugins/ai.lua` is intentionally empty. (ACP-driven in-editor agents are a conscious non-goal; see VISION.md.)
 
-### macOS Apps
+## Remote workflow
 
-| App | Purpose |
-|-----|---------|
-| Rectangle | Window snapping |
-| Hammerspoon | macOS automation |
-| Stats | Menu bar monitor |
-| Maccy | Clipboard history |
-
-### AI CLI Tools
-
-| Tool | Alias | Purpose |
-|------|-------|---------|
-| [Claude Code](https://claude.ai/code) | `cc` | Anthropic's official CLI (primary) |
-| [Codex CLI](https://github.com/openai/codex) | `cx` | OpenAI's coding CLI |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gem` | Google's AI CLI (optional) |
-| [OpenCode](https://opencode.ai) | `oc` | Open-source, multi-model support |
-
-All CLIs are self-updating. No custom configs shipped — each tool manages its own configuration.
-
-### AI Agent Instructions (AGENTS.md)
-
-Universal instructions for AI coding assistants. Works with:
-- Claude Code, Codex CLI, Gemini CLI, OpenCode
-- Cursor, Windsurf, Aider, Cline
-- GitHub Copilot, Roo Code
-
-**For your own projects:**
+Tailscale SSH + tmux is the durable path:
 
 ```bash
-# Copy the template to your project
-cp templates/AGENTS_TEMPLATE.md ~/myproject/AGENTS.md
-
-# Create symlinks for all AI agents
-./scripts/setup_agent_configs.sh ~/myproject
+ssh my-dev-box      # Tailscale handles ACLs, SSO, no key sprawl
+tmux attach -t main # your session survived the disconnect
 ```
 
-This creates symlinks so all AI agents read the same instructions:
-`CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `.aider.md`, etc.
+mosh is an optional upgrade for flaky networks (`--pack mosh`). Full setup in [docs/remote.md](docs/remote.md). iOS clients: Blink, Moshi.
 
----
-
-## Essential Commands
-
-### Navigation
+## Day-to-day
 
 ```bash
-z project       # Jump to directory (zoxide)
-Ctrl+T          # Find files (fzf)
-Ctrl+R          # Search history (fzf)
+make check            # health check against installed profile
+make test             # run core tests + any tags the active profile enables
+make update           # profile-aware, drift-detecting update
+make sbx-test         # prove the sandbox blocks creds and allows project writes
+make help             # every available target
 ```
-
-### Zellij
-
-```bash
-Alt+h/j/k/l     # Move between panes
-Alt+n           # New pane
-Ctrl+t, n       # New tab
-Ctrl+o, d       # Detach session
-```
-
-### Neovim
-
-```bash
-Space f f       # Find files
-Space f g       # Search in files
-Space e         # File explorer
-g d             # Go to definition
-K               # Hover docs
-```
-
-### Git
-
-```bash
-lg              # Launch lazygit
-gs              # git status
-```
-
----
 
 ## Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [**QUICK_START_GUIDE**](docs/QUICK_START_GUIDE.md) | 5-minute crash course |
-| [**ARCHITECTURE**](docs/ARCHITECTURE.md) | How all pieces fit together |
-| [**NEOVIM_QUICKSTART**](docs/NEOVIM_QUICKSTART.md) | Full nvim/vim guide |
-| [**CHEATSHEET**](docs/CHEATSHEET.md) | All keybindings |
-| [**TERMINAL_NAVIGATION**](docs/TERMINAL_NAVIGATION.md) | Fix keyboard issues |
-| [**REMOTE_SESSIONS**](docs/REMOTE_SESSIONS.md) | Work from phone |
-| [**FAQ**](docs/FAQ.md) | Common questions answered |
-| [**ZELLIJ_TROUBLESHOOTING**](docs/ZELLIJ_TROUBLESHOOTING.md) | Zellij session fixes |
-| [**IPHONE_SSH_CLIENTS**](docs/IPHONE_SSH_CLIENTS.md) | SSH from iOS devices |
-| [**AGENTS.md**](AGENTS.md) | AI agent instructions |
+| Doc | What it covers |
+|-----|----------------|
+| [docs/profiles.md](docs/profiles.md) | Every profile and pack, tool matrix |
+| [docs/sandboxing.md](docs/sandboxing.md) | Seatbelt profiles, escape hatches, Tier 2 pointer |
+| [docs/remote.md](docs/remote.md) | Tailscale + tmux + mosh workflow |
+| [docs/migration.md](docs/migration.md) | Upgrading from the old Zellij-first setup |
+| [VISION.md](VISION.md) | Product direction + 2026 amendments |
+| [AGENTS.md](AGENTS.md) | Universal instructions for AI coding agents |
+| [CLAUDE.md](CLAUDE.md) | Claude Code–specific guidance for this repo |
 
----
+Additional references live in `docs/`: CHEATSHEET, ARCHITECTURE, NEOVIM_QUICKSTART, TERMINAL_NAVIGATION, FAQ, IPHONE_SSH_CLIENTS, ZELLIJ_TROUBLESHOOTING.
 
-## Remote Access
+## Safety and non-destructiveness
 
-Work from anywhere - phone, tablet, any device:
-
-```bash
-# Start remote session
-remote
-
-# In Tunnel pane, start cloudflare tunnel
-tunnel
-```
-
-Connect from your phone with SSH. See [REMOTE_SESSIONS.md](docs/REMOTE_SESSIONS.md).
-
----
-
-## Configuration
-
-### Theme
-
-Everything uses **Tokyo Night** theme consistently:
-- Neovim
-- Zellij
-- tmux
-- Ghostty
-- Starship
-- fzf
-
-### File Locations
-
-```
-~/.zshrc                     # Shell config
-~/.config/nvim/              # Neovim (LazyVim)
-~/.config/zellij/            # Zellij + layouts
-~/.config/tmux/tmux.conf     # Tmux (agent teams companion)
-~/.config/starship.toml      # Prompt
-~/.config/ghostty/config     # Terminal
-```
-
-### Customization
-
-```bash
-# Personal shell additions (not overwritten)
-~/.zshrc.local
-
-# Custom nvim plugins
-~/.config/nvim/lua/plugins/custom.lua
-
-# Custom zellij layouts
-~/.config/zellij/layouts/
-```
-
----
-
-## Validation & Testing
-
-```bash
-# Validate all configs
-make validate
-
-# Health check
-make check
-
-# Full test suite
-make test
-
-# Docker test (CI)
-make docker-test
-```
-
----
-
-## Maintenance & Updates
-
-```bash
-# Check for updates (preview what would change)
-make update-check           # or: ./scripts/update.sh --check
-tui-check                   # shell alias
-
-# Update everything interactively
-make update                 # or: ./scripts/update.sh
-tui-update                  # shell alias
-
-# Update packages only
-make update-packages
-
-# Update configs only (syncs from repo)
-make update-configs
-
-# Update non-interactively (CI/automation)
-make update-all
-
-# Neovim plugins
-nvim -c 'Lazy update' -c 'quit'
-
-# Fix zellij sessions
-zk                          # Kill all sessions
-
-# Fix nvim plugins
-rm -rf ~/.local/share/nvim
-nvim                        # Reinstalls
-```
-
-The update system checks:
-- **Packages**: Outdated brew packages (shows current → new version)
-- **Configs**: Differences between repo and installed configs
-- **Repository**: New commits available from remote
-
----
-
-## Project Structure
-
-```
-tuidev/
-├── configs/
-│   ├── nvim/               # LazyVim config
-│   ├── zellij/layouts/     # 7 workspace layouts
-│   ├── tmux/tmux.conf      # Tmux config (agent teams)
-│   ├── zsh/.zshrc          # Shell config
-│   ├── starship/           # Prompt
-│   ├── ghostty/            # Terminal
-│   ├── claude/             # Claude Code hooks config
-│   ├── opencode/           # OpenCode CLI config
-│   └── ssh/                # SSH config (Tailscale)
-├── docs/                   # Guides
-├── templates/
-│   └── AGENTS_TEMPLATE.md  # Template for your projects
-├── scripts/
-│   ├── validate_configs.sh # Config validation
-│   ├── health_check.sh     # System check
-│   ├── test_suite.sh       # Full tests
-│   └── setup_agent_configs.sh  # AI agent symlinks
-├── AGENTS.md               # Universal AI agent instructions
-├── CLAUDE.md               # Claude Code project guidance
-├── install.sh              # Installer
-├── Makefile                # Dev commands
-└── Dockerfile              # CI testing
-```
-
----
+- `~/.zshrc` is written as a managed block (`# >>> tuidev managed (...) >>>`). User edits outside the block survive forever.
+- `~/.config/nvim` is **backed up** (timestamped) before new config lands — never `rm -rf`'d.
+- AI CLI settings (`~/.claude.json`, `~/.config/opencode/opencode.json`, `~/.codex/config.toml`) are `--adopt-existing` by default: if present, they are left alone.
+- Backups live in `~/.config/tuidev/backups/`.
+- `--dry-run` on any install or update command shows every mutation without performing it.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
+Issues and PRs welcome. See [VISION.md](VISION.md) and [docs/](docs/) for context on direction. Code style: keep packs self-contained, tests tagged, docs terse.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
-
----
-
-**Sponsored by [SpiceFactory](https://spfr.co)** | **Start coding:** `ai`
-
+MIT. Sponsored by [SpiceFactory](https://spfr.co).

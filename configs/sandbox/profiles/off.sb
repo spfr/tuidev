@@ -1,0 +1,18 @@
+;; off.sb — Tier 1 Seatbelt profile (OFF / pass-through)
+;;
+;; This is the documented escape hatch. Selecting `--profile off` in `sbx`
+;; will bypass `sandbox-exec` entirely in the wrapper, but this file exists
+;; as an explicit, auditable artifact so the meaning of "off" is never
+;; ambiguous: NO RESTRICTIONS. The process has full host privileges of the
+;; invoking user, same as running the command directly.
+;;
+;; Use only when:
+;;   - A tool genuinely needs unrestricted filesystem / network / IPC access.
+;;   - You have verified the command is trusted.
+;;   - The stricter profiles have been demonstrably too tight.
+;;
+;; There is no credential lockout here. Credentials ARE reachable. You have
+;; been warned.
+
+(version 1)
+(allow default)

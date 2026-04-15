@@ -5,6 +5,99 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-14
+
+Major rewrite. tmux becomes the primary multiplexer; Zellij demoted to an
+opt-in pack. Installer is now layered and non-destructive. AI agents run
+sandboxed by default on macOS. See [VISION.md](VISION.md) for the full
+product rationale, especially the "2026 Amendments" section.
+
+### Added
+
+- **Layered installer** with profiles (`minimal`, `desktop`, `remote`) and
+  composable packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`,
+  `--pack NAME`). Pack scripts live under `scripts/install/`.
+- **macOS Seatbelt sandbox** (Tier 1): `configs/sandbox/profiles/{strict,standard,off}.sb`
+  plus `bin/sbx` wrapper. `cc`/`cx`/`gem`/`oc` auto-route through `sbx` when
+  both are on `PATH`. Credentials (`~/.ssh`, `~/.aws`, `~/.gnupg`, keychains,
+  `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc`) are denied.
+- **Podman sandbox-container pack** (Tier 2) for VM-backed isolation
+  (`--pack sandbox-container`). Docker Desktop / OrbStack explicitly excluded
+  (not FOSS).
+- `scripts/lib/ui.sh` — shared shell library (colors, printers, `run_cmd`).
+- `scripts/lib/config_write.sh` — non-destructive managed-block writer with
+  9-case unit test suite (`scripts/lib/test_config_write.sh`).
+- `scripts/tmux/layout-*.sh` — nine reusable tmux layout helpers
+  (work / dev / ai / ai-single / ai-triple / fullstack / multi / remote / agents).
+- `configs/codex/config.toml` — opinionated Codex defaults
+  (`sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`).
+- Managed-block config writes: `~/.zshrc`, `~/.config/starship.toml`,
+  `~/.config/tmux/tmux.conf` now write under `# >>> tuidev managed (...) >>>`
+  markers that preserve user edits outside the block.
+- `~/.config/tuidev/profile` manifest + `~/.config/tuidev/env` sourceable
+  env file written at install time.
+- tmux plugins: `tmux-resurrect` + `tmux-continuum` declared in `tmux.conf`
+  for durable session state across reboots.
+- New docs: `docs/profiles.md`, `docs/sandboxing.md`, `docs/remote.md`,
+  `docs/migration.md`.
+- Claude Code hooks refreshed for 2.1.x: `PermissionDenied` event,
+  conditional `if` filter on `Stop` hook, `MCP_CONNECTION_NONBLOCKING=true`,
+  baseline `permissions.allow` seeded for common tools.
+- New Makefile targets: `install-{minimal,desktop,remote}`,
+  `check-{minimal,desktop,remote}`, `test-{core,ui,all}`, `sbx-test`,
+  `sandbox-up`/`sandbox-down`, `adopt`, `migrate`,
+  `update-sandbox-image`, `update-security`.
+- Health check and test suite now use profile-aware tag system
+  (`core`/`remote`/`sandbox`/`ui`/`extras`/`packs`); missing GUI apps no
+  longer fail the suite.
+- CI: macOS-runner job validates every Seatbelt profile with
+  `sandbox-exec -n`; Linux Docker job narrowed to `--tag core`.
+
+### Changed
+
+- **Default multiplexer: tmux.** The ergonomic commands `work`, `dev`,
+  `ai`, `ai-single`, `ai-triple`, `fullstack`, `multi`, `remote`,
+  `agents` now launch tmux via the layout helpers. Zellij versions are
+  namespaced `zdev`, `zwork`, `zai`, ... and only activate when
+  `command -v zellij` succeeds (i.e., after `./install.sh --pack zellij`).
+- Installer no longer overwrites `~/.zshrc`, `~/.config/starship.toml`,
+  or `~/.config/tmux/tmux.conf` — managed-block writes preserve user edits.
+- `~/.config/nvim` is **backed up** (timestamped, under
+  `~/.config/tuidev/backups/`) before a new config lands — no more
+  `rm -rf` of user state.
+- AI CLI configs (`~/.claude.json`, `~/.config/opencode/opencode.json`,
+  `~/.codex/config.toml`) use `--adopt-existing` by default: if present,
+  tuidev leaves them alone.
+- README trimmed from 403 → 154 lines; leads with tmux/sandbox/layered narrative.
+- Default package set shrunk: `nnn`, `lazydocker`, `k9s`, `atuin`, `broot`,
+  `bandwhich`, `dust`, `duf`, `hyperfine`, `tokei` moved to `--pack extras`.
+- Rectangle/Stats/Maccy/Hidden Bar/Hammerspoon now require
+  `--profile desktop` or `--pack ui`.
+- `update.sh` is profile-aware: updates only packs the user installed,
+  diffs managed blocks instead of blindly copying.
+
+### Deprecated
+
+- `ta`, `tdev`, `tai`, `tai-triple` shell functions — still work, but emit
+  a one-time deprecation notice (stamped in `~/.config/tuidev/deprecations`).
+  Use `work`, `dev`, `ai`, `ai-triple` instead.
+
+### Removed
+
+- `install.sh.legacy` backup copy (superseded; git history preserves the
+  old installer).
+- `scripts/ai-workflow.sh` — zellij-only launcher, superseded by
+  `scripts/tmux/layout-*.sh`.
+- Old README's multi-pane "hero box" framing and Zellij-first command tables.
+
+### Migration
+
+Existing users: on next update, `make update` will show drift on your
+shell dotfiles. Run `make adopt` to convert them to managed-block form.
+See [docs/migration.md](docs/migration.md) for the full cutover guide.
+
+---
+
 ## [1.3.0] - 2026-03-26
 
 ### Added

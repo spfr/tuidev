@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+# sbx — thin, uniform-UX wrapper around macOS `sandbox-exec`.
+#
+# Usage:
+#   sbx [--profile strict|standard|off] [--project DIR] [--dry-run] -- cmd [args...]
+#
+# Profiles ship in the repo at configs/sandbox/profiles/ and install to
+# $HOME/.config/tuidev/sandbox/. Lookup order (first hit wins):
+#   1. $TUIDEV_SANDBOX_DIR/<profile>.sb   (override)
+#   2. $HOME/.config/tuidev/sandbox/<profile>.sb
+#   3. <repo>/configs/sandbox/profiles/<profile>.sb
+#
+# Tier 1 of a tiered sandbox story. For stronger isolation (VM / container),
+# see `--pack sandbox-container` (Podman). See docs/sandboxing.md.
+
+set -euo pipefail
+
+# --- UI helpers: try to source the shared lib, fall back to minimal inline ---
+_sbx_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+_sbx_ui_loaded=0
+for _candidate in \
+  "${_sbx_script_dir}/../scripts/lib/ui.sh" \
+  "${_sbx_script_dir}/../../scripts/lib/ui.sh" \
+  "${HOME}/.config/tuidev/lib/ui.sh" \
+  "${HOME}/bin/lib/ui.sh"; do
+  if [[ -r "${_candidate}" ]]; then
+    # shellcheck disable=SC1090
+    . "${_candidate}" && _sbx_ui_loaded=1 && break
+  fi
+done
+unset _candidate
+
+if [[ "${_sbx_ui_loaded}" -ne 1 ]]; then
+  print_error() { printf 'error: %s\n' "$*" >&2; }
+  print_info()  { printf '%s\n' "$*" >&2; }
+  print_warn()  { printf 'warning: %s\n' "$*" >&2; }
+fi
+
+usage() {
+  cat <<'EOF'
+sbx — run a command inside a macOS Seatbelt sandbox.
+
+USAGE
+  sbx [options] -- COMMAND [ARGS...]
+
+OPTIONS
+  --profile PROFILE   strict | standard | off   (default: strict)
+  --project DIR       project working tree (default: $PWD)
+                      this is the only dir writable by the sandboxed command
+                      (besides /tmp)
+  --dry-run           print the sandbox-exec invocation and exit
+  -h, --help          show this help
+
+PROFILES
+  strict     broad HOME reads, writes only in project tree, network limited
+             to LLM providers + loopback. Credentials locked out.
+  standard   same filesystem policy as strict; network allowlist extended
+             to GitHub, npm, PyPI, crates.io, container registries, and
+             OS package mirrors.
+  off        pass-through; runs the command with no sandbox. Escape hatch.
+
+EXAMPLES
+  sbx -- cc                          # Claude Code under strict
+  sbx --profile standard -- npm ci   # wider network for installs
+  sbx --profile off -- some-tool     # no sandbox (escape hatch)
+  sbx --dry-run -- make test         # preview command without running
+
+ENVIRONMENT
+  TUIDEV_SANDBOX_DIR   overrides the directory searched for <profile>.sb
+  CC_NO_SANDBOX=1      honored by the cc/cx/gem/oc wrappers (not sbx itself)
+
+See docs/sandboxing.md for detail.
+EOF
+}
+
+# --- Platform guard ---
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  print_error "sbx requires macOS (sandbox-exec). For Linux, use --pack sandbox-container (Podman)."
+  exit 2
+fi
+
+# --- Argument parsing ---
+profile="strict"
+project="${PWD}"
+dry_run=0
+
+while (( $# > 0 )); do
+  case "$1" in
+    --profile)
+      [[ $# -ge 2 ]] || { print_error "--profile needs a value"; exit 2; }
+      profile="$2"
+      shift 2
+      ;;
+    --profile=*)
+      profile="${1#--profile=}"
+      shift
+      ;;
+    --project)
+      [[ $# -ge 2 ]] || { print_error "--project needs a value"; exit 2; }
+      project="$2"
+      shift 2
+      ;;
+    --project=*)
+      project="${1#--project=}"
+      shift
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      print_error "unknown flag: $1"
+      usage >&2
+      exit 2
+      ;;
+    *)
+      # First non-flag without `--` is the command — treat as end-of-options.
+      break
+      ;;
+  esac
+done
+
+if [[ $# -eq 0 ]]; then
+  print_error "no command given"
+  usage >&2
+  exit 2
+fi
+
+case "${profile}" in
+  strict|standard|off) ;;
+  *)
+    print_error "unknown profile: ${profile} (expected: strict|standard|off)"
+    exit 2
+    ;;
+esac
+
+# --- Normalize project path to absolute ---
+if [[ ! -d "${project}" ]]; then
+  print_error "--project is not a directory: ${project}"
+  exit 2
+fi
+project="$(cd -- "${project}" && pwd -P)"
+
+# --- Escape hatch: --profile off bypasses sandbox-exec entirely ---
+if [[ "${profile}" == "off" ]]; then
+  if [[ "${dry_run}" -eq 1 ]]; then
+    printf '%s\n' "exec $*"
+    exit 0
+  fi
+  exec "$@"
+fi
+
+# --- Locate profile file ---
+repo_profile_dir="${_sbx_script_dir}/../configs/sandbox/profiles"
+user_profile_dir="${HOME}/.config/tuidev/sandbox"
+override_dir="${TUIDEV_SANDBOX_DIR:-}"
+
+profile_path=""
+for _dir in "${override_dir}" "${user_profile_dir}" "${repo_profile_dir}"; do
+  [[ -n "${_dir}" ]] || continue
+  if [[ -r "${_dir}/${profile}.sb" ]]; then
+    profile_path="${_dir}/${profile}.sb"
+    break
+  fi
+done
+unset _dir
+
+if [[ -z "${profile_path}" ]]; then
+  print_error "profile file not found for '${profile}'"
+  print_info  "searched: ${override_dir:-<unset>}, ${user_profile_dir}, ${repo_profile_dir}"
+  exit 2
+fi
+
+# --- Build and execute ---
+home_dir="${HOME%/}"
+[[ -n "${home_dir}" ]] || home_dir="/"
+
+if [[ "${dry_run}" -eq 1 ]]; then
+  printf 'sandbox-exec -f %q -D %s -D %s -- ' \
+    "${profile_path}" "PROJECT_DIR=${project}" "HOME_DIR=${home_dir}"
+  printf '%q ' "$@"
+  printf '\n'
+  exit 0
+fi
+
+exec sandbox-exec \
+  -f "${profile_path}" \
+  -D "PROJECT_DIR=${project}" \
+  -D "HOME_DIR=${home_dir}" \
+  -- "$@"

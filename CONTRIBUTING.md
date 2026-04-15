@@ -1,6 +1,6 @@
-# Contributing to macOS TUI Development Setup
+# Contributing to tuidev
 
-Thank you for your interest in contributing! This document provides guidelines for contributing to this project.
+Thank you for your interest. This document captures the conventions this repo follows. See [VISION.md](VISION.md) for the product direction (especially the "2026 Amendments" at the top) before proposing anything directional.
 
 ## How to Contribute
 
@@ -19,9 +19,10 @@ Thank you for your interest in contributing! This document provides guidelines f
 2. **Follow code style** (see below)
 3. **Test your changes:**
    ```bash
-   make lint        # Shellcheck all scripts
-   make test        # Run full test suite
-   make docker-test # Test in clean environment
+   make lint              # shellcheck install/scripts/lib/tmux/install packs/bin
+   make validate-configs  # KDL / TOML / Lua / JSON syntax
+   make test-core         # core-tagged tests (CI-equivalent)
+   make docker-test       # Linux smoke test in a clean container
    ```
 4. **Update documentation** if you changed behavior
 5. **Write clear commit messages** using conventional commits
@@ -96,20 +97,29 @@ Run all checks:
 make ci-test
 ```
 
-### Areas for Contribution
+### Packs, profiles, and managed blocks
 
-- **New tools**: Add useful CLI tools to the installer
-- **Layouts**: Create new Zellij layouts for different workflows
-- **Documentation**: Improve guides and examples
-- **Bug fixes**: Fix reported issues
-- **Platform support**: Improve Linux compatibility
+- New tools go into the **right pack**: core (essential), remote (Tailscale/mosh), ui (macOS GUI), sandbox (Seatbelt/Podman), extras (optional), or a new pack under `scripts/install/packs/`.
+- Every pack script follows the contract in `scripts/install/core.sh`: `#!/bin/bash`, `set -e`, source `scripts/lib/ui.sh`, expose one entrypoint function named `<pack>_install`, runnable both directly and when sourced.
+- Configs that are written to `$HOME` use **managed blocks** via `scripts/lib/config_write.sh`. Never `cp` over a user's file; never `rm -rf ~/.config/X`.
+- Tmux layouts live under `scripts/tmux/layout-*.sh` and are attach-or-create + dry-run aware.
+- Sandbox profiles live under `configs/sandbox/profiles/*.sb` and must parse under `sandbox-exec -n NAME -f FILE` (CI enforces this on macOS).
 
-### What We're Not Looking For
+### Areas for contribution
 
-- GUI application additions (this is terminal-focused)
-- Controversial or unstable tools
-- Personal preference changes without discussion
-- Breaking changes to existing workflows
+- **New packs** that slot into the layered installer.
+- **Tmux layouts** for workflows we haven't covered.
+- **Seatbelt profile refinements** — especially narrowing net egress where Apple's kernel supports it.
+- **Linux parity**: `bubblewrap` wiring for the sandbox, apt/dnf fallbacks in packs.
+- **Docs**: clarity, not volume.
+- **Bug fixes** — always with a test tag.
+
+### What we're not looking for
+
+- GUI application additions beyond the `ui` pack (the repo is terminal-first).
+- AI tooling that runs **in-editor by default**. `configs/nvim/lua/plugins/ai.lua` stays empty; ACP integrations can be opt-in only.
+- Breaking changes to public commands (`work`, `dev`, `ai`, `sbx`, …) without a deprecation path.
+- Dependencies on non-FOSS tools for default paths (explains why Docker Desktop / OrbStack are not used).
 
 ## Getting Help
 

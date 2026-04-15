@@ -1,0 +1,95 @@
+;; standard.sb — Tier 1 Seatbelt profile (STANDARD)
+;;
+;; Purpose:
+;;   Same filesystem policy as strict.sb, but with a network allowlist wide
+;;   enough for realistic development work: package registries, GitHub,
+;;   container registries, and OS package mirrors, in addition to the LLM
+;;   provider endpoints.
+;;
+;; Parameters (both required, passed via `sandbox-exec -D NAME=value`):
+;;   PROJECT_DIR — absolute path of the project working tree.
+;;   HOME_DIR    — absolute path of $HOME (Seatbelt does not auto-populate
+;;                 env vars, so the wrapper passes this explicitly).
+;;
+;; Risk model:
+;;   Broader network reach than strict. Credentials are still locked out of
+;;   both read and write. Use this profile when the agent legitimately needs
+;;   `npm install`, `pip install`, `cargo fetch`, `git push`, etc.
+;;
+;; Non-goals:
+;;   Same as strict.sb — see that file for detail.
+
+(version 1)
+(deny default)
+
+(import "bsd.sb")
+
+;; --- Process / signal primitives ---
+(allow process-fork)
+(allow process-exec)
+(allow signal (target self))
+(allow signal (target children))
+
+;; --- Sysctl / mach lookups ---
+(allow sysctl-read)
+(allow mach-lookup)
+(allow iokit-open)
+
+;; --- File reads: system / toolchain / homebrew ---
+(allow file-read*
+  (subpath "/System")
+  (subpath "/Library")
+  (subpath "/usr/lib")
+  (subpath "/usr/share")
+  (subpath "/usr/bin")
+  (subpath "/usr/sbin")
+  (subpath "/bin")
+  (subpath "/sbin")
+  (subpath "/opt/homebrew")
+  (subpath "/usr/local")
+  (subpath "/Applications/Xcode.app")
+  (subpath "/Library/Developer/CommandLineTools")
+  (subpath "/private/etc")
+  (subpath "/private/var/db/timezone")
+  (subpath "/private/var/folders")
+  (subpath "/private/tmp"))
+
+;; --- File reads inside $HOME ---
+(allow file-read*
+  (subpath (param "HOME_DIR")))
+
+;; --- CREDENTIAL LOCKOUT ---
+(deny file-read* file-write*
+  (subpath (string-append (param "HOME_DIR") "/.ssh"))
+  (subpath (string-append (param "HOME_DIR") "/.aws"))
+  (subpath (string-append (param "HOME_DIR") "/.gnupg"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Keychains"))
+  (subpath (string-append (param "HOME_DIR") "/.config/gh"))
+  (subpath (string-append (param "HOME_DIR") "/.docker"))
+  (subpath (string-append (param "HOME_DIR") "/.kube"))
+  (literal (string-append (param "HOME_DIR") "/.netrc")))
+
+;; --- File writes: project tree + temp dirs only ---
+(allow file-write*
+  (subpath (param "PROJECT_DIR"))
+  (subpath "/private/tmp")
+  (subpath "/private/var/folders")
+  (subpath "/private/var/tmp"))
+
+(allow file-read*
+  (subpath (param "PROJECT_DIR")))
+
+;; --- Network ---
+;; See strict.sb for why Seatbelt cannot enforce per-hostname allowlists.
+;; At the socket level we widen the port set vs. strict: 443 (HTTPS), 80
+;; (HTTP, needed for Debian/Ubuntu mirrors), and 22 (SSH, for `git@github.com`
+;; style remotes). DNS and loopback as usual.
+(allow network-outbound (remote tcp "localhost:*"))
+(allow network-outbound (remote tcp "*:443"))
+(allow network-outbound (remote tcp "*:80"))
+(allow network-outbound (remote tcp "*:22"))
+(allow network-outbound (remote tcp "*:9418"))   ; git:// protocol
+(allow network-outbound (remote udp "*:53"))
+(allow network-bind     (local  ip  "localhost:*"))
+
+(allow network-outbound (literal "/private/var/run/syslog"))

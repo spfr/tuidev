@@ -1,505 +1,430 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 # ============================================================================
-# Health Check Script for macOS TUI Development Environment
+# Health Check — macOS TUI Development Environment
 # ============================================================================
-# This script verifies that all tools are installed and working correctly.
+# Profile-aware health check. Probes are split into required vs. optional:
+#
+#   required  → failure is counted toward the pass/fail summary and the
+#               script exits non-zero if any required probe fails.
+#   optional  → failure prints a warning only; never affects the exit code.
+#
+# Categories (which categories are required depends on the active profile):
+#
+#   core     — shell/editor/CLI staples (required in every profile)
+#   remote   — tailscale, mosh (required only in the `remote` profile)
+#   sandbox  — Seatbelt (macOS only; required in desktop & remote)
+#   ui       — Ghostty + macOS GUI apps (required only in `desktop`, macOS)
+#   extras   — optional quality-of-life tools (never required)
+#   packs    — optional packs listed in the profile manifest (never required)
+#
+# Usage:
+#   scripts/health_check.sh                      # auto-detect profile
+#   scripts/health_check.sh --profile minimal    # force a profile
+#   scripts/health_check.sh --profile desktop
+#   scripts/health_check.sh --profile remote
+#
+# Profile auto-detection reads ~/.config/tuidev/profile (the manifest written
+# by the installer). When absent, falls back to the platform default:
+#   macOS -> desktop, Linux -> minimal.
+# ============================================================================
 
-set -e
+set -uo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Track results
-PASSED=0
-FAILED=0
-WARNINGS=0
+# shellcheck source=lib/ui.sh disable=SC1091
+. "$SCRIPT_DIR/lib/ui.sh"
 
-# Helper functions
-print_header() {
-    echo ""
-    echo -e "${BLUE}============================================================================${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}============================================================================${NC}"
-    echo ""
+# Cache uname once. Probes run dozens of times across the suite.
+TUIDEV_OS="$(uname -s)"
+
+# ---------------------------------------------------------------------------
+# Counters
+# ---------------------------------------------------------------------------
+
+REQ_PASS=0
+REQ_FAIL=0
+OPT_WARN=0
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
+PROFILE="auto"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [--profile minimal|desktop|remote|auto]
+
+  --profile P   Force a specific profile.
+                Default: 'auto' (reads ~/.config/tuidev/profile, else
+                macOS->desktop, Linux->minimal).
+  -h, --help    Show this help.
+EOF
 }
 
-print_success() {
-    echo -e "${GREEN}✓ ${NC}$1"
-    ((PASSED++)) || true
-}
-
-print_error() {
-    echo -e "${RED}✗ ${NC}$1"
-    ((FAILED++)) || true
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠ ${NC}$1"
-    ((WARNINGS++)) || true
-}
-
-# Check if command exists
-check_command() {
-    if command -v "$1" > /dev/null 2>&1; then
-        print_success "$1 is installed (version: $($1 --version 2> /dev/null | head -1 || echo "unknown"))"
-        return 0
-    else
-        print_error "$1 is not installed"
-        return 1
-    fi
-}
-
-# Check if app exists in Applications
-check_app() {
-    if [[ -d "/Applications/$1.app" ]] || [[ -d "$HOME/Applications/$1.app" ]]; then
-        print_success "$1 is installed"
-        return 0
-    else
-        print_error "$1 is not installed"
-        return 1
-    fi
-}
-
-# Check if config file exists
-check_config() {
-    if [[ -f "$1" ]]; then
-        print_success "$1 exists"
-        return 0
-    else
-        print_error "$1 does not exist"
-        return 1
-    fi
-}
-
-# ============================================================================
-# System Checks
-# ============================================================================
-
-print_header "System Checks"
-
-# Check if running on macOS
-if [[ "$(uname)" != "Darwin" ]]; then
-    print_error "Not running on macOS (current: $(uname))"
-else
-    print_success "Running on macOS $(sw_vers -productVersion)"
-fi
-
-# Check if zsh is the default shell
-if [[ "$SHELL" == *"zsh"* ]]; then
-    print_success "Default shell is zsh"
-else
-    print_warning "Default shell is not zsh (current: $SHELL)"
-fi
-
-# ============================================================================
-# Homebrew Check
-# ============================================================================
-
-print_header "Package Manager Check"
-
-if command -v brew > /dev/null 2>&1; then
-    print_success "Homebrew is installed (version: $(brew --version | head -1))"
-    brew_output=$(brew doctor 2>&1 || true)
-    if echo "$brew_output" | grep -q "Your system is ready to brew"; then
-        print_success "Homebrew is healthy"
-    else
-        print_warning "Homebrew doctor found issues"
-        echo "$brew_output" | grep -A 5 "Warning\|Error" | head -10
-    fi
-else
-    print_error "Homebrew is not installed"
-fi
-
-# ============================================================================
-# Terminal & CLI Tools
-# ============================================================================
-
-print_header "Terminal & CLI Tools"
-
-CORE_TOOLS=(
-    "zellij"
-    "starship"
-    "fzf"
-    "rg"
-    "bat"
-    "eza"
-    "fd"
-    "zoxide"
-    "lazygit"
-    "delta"
-    "atuin"
-)
-
-for tool in "${CORE_TOOLS[@]}"; do
-    check_command "$tool" || true
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --profile)
+            [[ $# -ge 2 ]] || { print_error "--profile requires a value"; exit 2; }
+            PROFILE="$2"
+            shift 2
+            ;;
+        --profile=*)
+            PROFILE="${1#--profile=}"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            print_error "Unknown argument: $1"
+            usage
+            exit 2
+            ;;
+    esac
 done
 
-# Additional tools
-if command -v gh > /dev/null 2>&1; then
-    print_success "GitHub CLI is installed (version: $(gh --version 2> /dev/null | head -1))"
-else
-    print_warning "GitHub CLI is not installed (optional)"
-fi
+# ---------------------------------------------------------------------------
+# Profile manifest
+# ---------------------------------------------------------------------------
 
-if command -v nvim > /dev/null 2>&1; then
-    print_success "Neovim is installed (version: $(nvim --version | head -1))"
-else
-    print_warning "Neovim is not installed (optional)"
-fi
+MANIFEST_DIR="$HOME/.config/tuidev"
+MANIFEST_FILE="$MANIFEST_DIR/profile"
+ENV_FILE="$MANIFEST_DIR/env"
 
-if command -v btm > /dev/null 2>&1; then
-    print_success "bottom is installed (version: $(btm --version 2> /dev/null))"
-else
-    print_warning "bottom is not installed (optional)"
-fi
+# shellcheck source=lib/profile.sh disable=SC1091
+. "$SCRIPT_DIR/lib/profile.sh"
 
-if command -v jq > /dev/null 2>&1; then
-    print_success "jq is installed (version: $(jq --version))"
-else
-    print_warning "jq is not installed (optional)"
-fi
+# Legacy-named aliases over the lib's globals, so the rest of this file
+# doesn't need renames.
+MANIFEST_PROFILE=""
+MANIFEST_EXTRA_PACKS=""
+MANIFEST_INSTALLED_AT=""
+MANIFEST_REPO=""
 
-# Extended tools (v1.1+)
-EXTENDED_TOOLS=(
-    "yazi"
-    "sd"
-    "broot"
-    "procs"
-    "dust"
-    "duf"
-    "tokei"
-    "hyperfine"
-    "yq"
-    "tldr"
-    "glow"
-    "nnn"
-    "k9s"
-    "bandwhich"
-    "ncdu"
-    "fastfetch"
-    "httpie"
-)
+parse_manifest() {
+    load_tuidev_profile "$MANIFEST_FILE" || true
+    MANIFEST_PROFILE="$TUIDEV_PROFILE_NAME"
+    MANIFEST_EXTRA_PACKS="$TUIDEV_EXTRA_PACKS"
+    MANIFEST_INSTALLED_AT="$TUIDEV_PROFILE_INSTALLED_AT"
+    MANIFEST_REPO="$TUIDEV_PROFILE_REPO"
+}
 
-extended_found=0
-extended_total=${#EXTENDED_TOOLS[@]}
-for tool in "${EXTENDED_TOOLS[@]}"; do
-    if command -v "$tool" > /dev/null 2>&1; then
-        ((extended_found++)) || true
-    fi
-done
-print_success "Extended tools: ${extended_found}/${extended_total} installed"
+platform_default_profile() {
+    case "$TUIDEV_OS" in
+        Darwin) echo "desktop" ;;
+        *)      echo "minimal" ;;
+    esac
+}
 
-# ============================================================================
-# AI CLI Tools
-# ============================================================================
+resolve_profile() {
+    parse_manifest
 
-print_header "AI CLI Tools"
-
-# Check OpenCode
-if command -v opencode > /dev/null 2>&1; then
-    print_success "OpenCode is installed (version: $(opencode --version 2> /dev/null | head -1 || echo "unknown"))"
-else
-    print_warning "OpenCode is not installed (optional - install from https://opencode.ai)"
-fi
-
-# Check Claude Code
-if command -v claude > /dev/null 2>&1; then
-    print_success "Claude Code is installed (version: $(claude --version 2> /dev/null | head -1 || echo "unknown"))"
-else
-    print_warning "Claude Code is not installed (optional - curl -fsSL https://claude.ai/install.sh | bash)"
-fi
-
-# Check Codex CLI
-if command -v codex > /dev/null 2>&1; then
-    print_success "Codex CLI is installed (version: $(codex --version 2> /dev/null | head -1 || echo "unknown"))"
-else
-    print_warning "Codex CLI is not installed (optional - npm install -g @openai/codex)"
-fi
-
-# Check Gemini CLI
-if command -v gemini > /dev/null 2>&1; then
-    print_success "Gemini CLI is installed (version: $(gemini --version 2> /dev/null | head -1 || echo "unknown"))"
-else
-    print_warning "Gemini CLI is not installed (optional - npm install -g @google/gemini-cli)"
-fi
-
-# ============================================================================
-# AI CLI Configurations
-# ============================================================================
-
-print_header "AI CLI Configurations"
-
-# Check OpenCode config
-if [[ -f "$HOME/.config/opencode/opencode.json" ]]; then
-    print_success "OpenCode config exists"
-else
-    print_warning "OpenCode config not found (~/.config/opencode/opencode.json)"
-fi
-
-# Check Claude Code config
-if [[ -f "$HOME/.claude.json" ]]; then
-    print_success "Claude Code config exists"
-else
-    print_warning "Claude Code config not found (~/.claude.json)"
-fi
-
-
-
-# ============================================================================
-# Remote Access Tools
-# ============================================================================
-
-print_header "Remote Access Tools"
-
-# Check Tailscale
-if check_app "Tailscale"; then
-    print_success "Tailscale is installed"
-    if command -v tailscale > /dev/null 2>&1; then
-        ts_status=$(tailscale status --json 2>/dev/null | jq -r '.Self.Online // "unknown"' 2>/dev/null || echo "unknown")
-        if [[ "$ts_status" == "true" ]]; then
-            ts_ip=$(tailscale ip -4 2>/dev/null || echo "unknown")
-            print_success "Tailscale connected (IP: $ts_ip)"
+    if [[ "$PROFILE" == "auto" ]]; then
+        if [[ -n "$MANIFEST_PROFILE" ]]; then
+            PROFILE="$MANIFEST_PROFILE"
         else
-            print_warning "Tailscale installed but not connected"
+            PROFILE="$(platform_default_profile)"
         fi
-    else
-        print_warning "Tailscale app installed but CLI not in PATH"
     fi
-else
-    print_warning "Tailscale is not installed (optional - brew install --cask tailscale)"
-fi
 
-# Check mosh
-if command -v mosh > /dev/null 2>&1; then
-    print_success "mosh is installed (version: $(mosh --version 2>&1 | head -1 || echo "unknown"))"
-else
-    print_warning "mosh is not installed (optional - brew install mosh)"
-fi
+    case "$PROFILE" in
+        minimal|desktop|remote) ;;
+        *)
+            print_error "Invalid profile: $PROFILE (expected minimal|desktop|remote|auto)"
+            exit 2
+            ;;
+    esac
+}
 
-# Check notify.sh
-if [[ -x "$HOME/.local/bin/notify.sh" ]]; then
-    print_success "notify.sh is installed"
-else
-    print_warning "notify.sh is not installed (~/.local/bin/notify.sh)"
-fi
+# ---------------------------------------------------------------------------
+# Required/optional probe helpers
+# ---------------------------------------------------------------------------
 
-# Check SSH config
-if [[ -f "$HOME/.ssh/config" ]]; then
-    print_success "SSH client config exists"
-else
-    print_warning "SSH client config not found (~/.ssh/config)"
-fi
+# check_required NAME PROBE_CMD
+#   Runs PROBE_CMD via `eval`. On success, counts a required pass.
+#   On failure, counts a required fail and contributes to the non-zero exit.
+check_required() {
+    local name="$1"
+    local probe="$2"
+    if eval "$probe" >/dev/null 2>&1; then
+        print_success "$name"
+        REQ_PASS=$((REQ_PASS + 1))
+        return 0
+    else
+        print_error "$name (required)"
+        REQ_FAIL=$((REQ_FAIL + 1))
+        return 1
+    fi
+}
 
-# ============================================================================
-# Tmux Check
-# ============================================================================
+# check_optional NAME PROBE_CMD
+#   On failure, emits a warning and never affects the exit code.
+check_optional() {
+    local name="$1"
+    local probe="$2"
+    if eval "$probe" >/dev/null 2>&1; then
+        print_success "$name"
+        return 0
+    else
+        print_warning "$name (optional)"
+        OPT_WARN=$((OPT_WARN + 1))
+        return 1
+    fi
+}
 
-print_header "Tmux (Agent Teams)"
+# Convenience probe: command is on PATH. Invoked indirectly via
+# check_required/check_optional which pass probe commands as strings.
+# shellcheck disable=SC2329
+have_cmd() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-if command -v tmux > /dev/null 2>&1; then
-    print_success "tmux is installed (version: $(tmux -V 2>/dev/null || echo "unknown"))"
-else
-    print_warning "tmux is not installed (optional - brew install tmux; needed for Claude agent teams split-pane mode)"
-fi
+# App bundle probe (macOS GUI apps). Returns non-zero on non-macOS.
+# shellcheck disable=SC2329
+have_app() {
+    [[ "$TUIDEV_OS" == "Darwin" ]] || return 1
+    [[ -d "/Applications/$1.app" || -d "$HOME/Applications/$1.app" ]]
+}
 
-if [[ -f "$HOME/.config/tmux/tmux.conf" ]]; then
-    print_success "tmux config exists (~/.config/tmux/tmux.conf)"
-else
-    print_warning "tmux config not found (~/.config/tmux/tmux.conf)"
-fi
+# ---------------------------------------------------------------------------
+# Category: core
+# ---------------------------------------------------------------------------
 
-# True color hint
-if [[ "$TERM" == *"256color"* ]] || [[ "$COLORTERM" == "truecolor" ]] || [[ "$COLORTERM" == "24bit" ]]; then
-    print_success "True color terminal detected ($TERM)"
-else
-    print_warning "True color may not be active (TERM=$TERM, COLORTERM=${COLORTERM:-unset})"
-fi
+check_core() {
+    print_header "Core (required in every profile)"
 
-# ============================================================================
-# GUI Applications
-# ============================================================================
+    local tools=(
+        tmux
+        nvim
+        rg
+        fd
+        bat
+        fzf
+        zoxide
+        starship
+        delta
+        lazygit
+        jq
+        yq
+        eza
+        gh
+        shellcheck
+    )
 
-print_header "GUI Applications"
-
-GUI_APPS=(
-    "Rectangle"
-    "Stats"
-    "Maccy"
-    "Hidden Bar"
-    "Hammerspoon"
-)
-
-for app in "${GUI_APPS[@]}"; do
-    check_app "$app" || true
-done
-
-# Ghostty is optional
-if [[ -d "/Applications/Ghostty.app" ]] || command -v ghostty &> /dev/null; then
-    print_success "Ghostty is installed"
-else
-    print_warning "Ghostty is not installed (optional)"
-fi
-
-# ============================================================================
-# Configuration Files
-# ============================================================================
-
-print_header "Configuration Files"
-
-check_config "$HOME/.zshrc"
-check_config "$HOME/.config/starship.toml"
-check_config "$HOME/.config/zellij/config.kdl"
-
-# Check layouts
-if [[ -d "$HOME/.config/zellij/layouts" ]]; then
-    print_success "Zellij layouts directory exists"
-    for layout in dev.kdl dual.kdl triple.kdl single.kdl multi-agent.kdl fullstack.kdl remote.kdl; do
-        if [[ -f "$HOME/.config/zellij/layouts/$layout" ]]; then
-            print_success "Zellij layout: $layout"
-        else
-            print_warning "Zellij layout missing: $layout"
-        fi
+    local tool
+    for tool in "${tools[@]}"; do
+        check_required "$tool on PATH" "have_cmd $tool"
     done
-else
-    print_error "Zellij layouts directory does not exist"
-fi
 
-# Check Ghostty config (optional)
-if [[ -f "$HOME/.config/ghostty/config" ]]; then
-    print_success "Ghostty config exists"
-else
-    print_warning "Ghostty config does not exist (optional)"
-fi
+    # Git is implicit but worth checking as it underpins delta/lazygit/gh.
+    check_required "git on PATH" "have_cmd git"
+}
 
-# ============================================================================
-# Git Configuration
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Category: remote
+# ---------------------------------------------------------------------------
 
-print_header "Git Configuration"
+check_remote() {
+    local required="$1"   # "required" or "optional"
+    print_header "Remote (Tailscale + mosh)"
 
-if command -v git > /dev/null 2>&1; then
-    print_success "Git is installed (version: $(git --version | head -1))"
+    local fn="check_optional"
+    [[ "$required" == "required" ]] && fn="check_required"
 
-    # Check if delta is configured
-    if git config --global core.pager 2> /dev/null | grep -q "delta"; then
-        print_success "Git configured with delta pager"
-    else
-        print_warning "Git not configured with delta pager"
+    # Tailscale: CLI must be on PATH (mac app adds a /usr/local symlink).
+    "$fn" "tailscale on PATH" "have_cmd tailscale"
+    "$fn" "mosh on PATH" "have_cmd mosh"
+}
+
+# ---------------------------------------------------------------------------
+# Category: sandbox
+# ---------------------------------------------------------------------------
+
+check_sandbox() {
+    local required="$1"
+    print_header "Sandbox (Seatbelt)"
+
+    if [[ "$TUIDEV_OS" != "Darwin" ]]; then
+        print_info "Seatbelt is macOS-only; skipping sandbox probes."
+        return 0
     fi
 
-    # Check git user
-    if git config --global user.name > /dev/null 2>&1; then
-        print_success "Git user configured: $(git config --global user.name)"
-    else
-        print_warning "Git user.name not configured"
+    local fn="check_optional"
+    [[ "$required" == "required" ]] && fn="check_required"
+
+    # Is Seatbelt itself functional? Probe with an inline allow-default profile
+    # — stable across macOS versions (the built-in `no-profile` name was
+    # removed on recent releases).
+    "$fn" "sandbox-exec works (inline smoke profile)" \
+        "sandbox-exec -p '(version 1)(allow default)' /usr/bin/true"
+
+    # Does the strict profile exist where the installer puts it?
+    "$fn" "sandbox profile present (~/.config/tuidev/sandbox/strict.sb)" \
+        "[[ -f \"$HOME/.config/tuidev/sandbox/strict.sb\" ]]"
+
+    # Is the `sbx` wrapper on PATH?
+    "$fn" "sbx wrapper on PATH" "have_cmd sbx"
+}
+
+# ---------------------------------------------------------------------------
+# Category: ui (desktop GUI)
+# ---------------------------------------------------------------------------
+
+check_ui() {
+    local required="$1"
+    print_header "UI (Ghostty + macOS GUI apps)"
+
+    if [[ "$TUIDEV_OS" != "Darwin" ]]; then
+        print_info "GUI apps are macOS-only; skipping UI probes."
+        return 0
     fi
-else
-    print_error "Git is not installed"
-fi
 
-# ============================================================================
-# Shell Integration Tests
-# ============================================================================
+    local fn="check_optional"
+    [[ "$required" == "required" ]] && fn="check_required"
 
-print_header "Shell Integration Tests"
+    # Ghostty: either the app bundle or the ghostty binary counts.
+    "$fn" "Ghostty installed" \
+        "have_app Ghostty || have_cmd ghostty"
+    "$fn" "Ghostty config (~/.config/ghostty/config)" \
+        "[[ -f \"$HOME/.config/ghostty/config\" ]]"
 
-# Check if fzf is properly integrated
-if [[ -f ~/.fzf.zsh ]] || grep -q "fzf" ~/.zshrc 2>/dev/null || command -v fzf > /dev/null 2>&1; then
-    print_success "fzf is available"
-else
-    print_warning "fzf integration may not be working"
-fi
+    "$fn" "Rectangle.app"  "have_app Rectangle"
+    "$fn" "Stats.app"      "have_app Stats"
+    "$fn" "Maccy.app"      "have_app Maccy"
+    "$fn" "Hidden Bar.app" "have_app 'Hidden Bar'"
+    "$fn" "Hammerspoon.app" "have_app Hammerspoon"
+}
 
-# Check if starship is integrated
-if grep -q "starship init zsh" ~/.zshrc; then
-    print_success "Starship prompt is configured in .zshrc"
-else
-    print_error "Starship prompt is not configured in .zshrc"
-fi
+# ---------------------------------------------------------------------------
+# Category: extras (never required)
+# ---------------------------------------------------------------------------
 
-# Check if zoxide is integrated
-if grep -q "zoxide init zsh" ~/.zshrc; then
-    print_success "zoxide is configured in .zshrc"
-else
-    print_error "zoxide is not configured in .zshrc"
-fi
+check_extras() {
+    print_header "Extras (optional quality-of-life tools)"
 
-# Check if atuin is integrated
-if grep -q "atuin init zsh" ~/.zshrc; then
-    print_success "atuin is configured in .zshrc"
-else
-    print_warning "atuin is not configured in .zshrc"
-fi
+    local tools=(atuin dust broot bandwhich duf hyperfine tokei)
+    local tool
+    for tool in "${tools[@]}"; do
+        check_optional "$tool on PATH" "have_cmd $tool"
+    done
+}
 
-# ============================================================================
-# Functionality Tests
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Category: packs (optional, manifest-driven)
+# ---------------------------------------------------------------------------
 
-print_header "Functionality Tests"
+pack_probe() {
+    # Returns the probe command for a given pack name.
+    case "$1" in
+        zellij)             echo "have_cmd zellij" ;;
+        yazi)               echo "have_cmd yazi" ;;
+        nnn)                echo "have_cmd nnn" ;;
+        monitoring)         echo "have_cmd btm || have_cmd bottom || have_cmd htop" ;;
+        sandbox-container)  echo "have_cmd podman" ;;
+        *)                  echo "have_cmd $1" ;;
+    esac
+}
 
-# Test ripgrep
-if command -v rg > /dev/null 2>&1; then
-    if echo "test" | rg -q "test" 2> /dev/null; then
-        print_success "ripgrep is working"
-    else
-        print_error "ripgrep not working properly"
+check_packs() {
+    print_header "Packs (manifest-declared extras)"
+
+    if [[ -z "$MANIFEST_EXTRA_PACKS" ]]; then
+        print_info "No extra_packs declared in manifest (or manifest absent)."
+        return 0
     fi
-fi
 
-# Test fd
-if command -v fd > /dev/null 2>&1; then
-    if fd -H -t f -d 1 "health_check.sh" . > /dev/null 2>&1; then
-        print_success "fd is working"
-    else
-        print_error "fd not working properly"
+    # extra_packs is expected to be space- or comma-separated.
+    local packs_str="${MANIFEST_EXTRA_PACKS//,/ }"
+    # shellcheck disable=SC2206
+    local packs=($packs_str)
+
+    if [[ ${#packs[@]} -eq 0 ]]; then
+        print_info "No extra_packs declared in manifest."
+        return 0
     fi
-fi
 
-# Test eza
-if command -v eza > /dev/null 2>&1; then
-    if eza > /dev/null 2>&1; then
-        print_success "eza is working"
+    local pack probe
+    for pack in "${packs[@]}"; do
+        probe="$(pack_probe "$pack")"
+        check_optional "pack: $pack" "$probe"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
+show_profile_banner() {
+    print_header "Health check — profile: $PROFILE"
+    print_info "Platform: $(uname -s) $(uname -r)"
+    if [[ -f "$MANIFEST_FILE" ]]; then
+        print_info "Manifest: $MANIFEST_FILE"
+        [[ -n "$MANIFEST_INSTALLED_AT" ]] && print_info "Installed at: $MANIFEST_INSTALLED_AT"
+        [[ -n "$MANIFEST_REPO" ]]         && print_info "Repo: $MANIFEST_REPO"
     else
-        print_error "eza not working properly"
+        print_info "Manifest: (not found; using platform defaults)"
     fi
-fi
+    if [[ -f "$ENV_FILE" ]]; then
+        print_info "Env file: $ENV_FILE"
+    fi
+}
 
-# Test bat
-if command -v bat > /dev/null 2>&1; then
-    if echo "test" | bat --style=plain > /dev/null 2>&1; then
-        print_success "bat is working"
+run_checks() {
+    # Core is always required.
+    check_core
+
+    # Remote: required only in the `remote` profile, optional elsewhere.
+    case "$PROFILE" in
+        remote)  check_remote required ;;
+        *)       check_remote optional ;;
+    esac
+
+    # Sandbox: required in desktop + remote (macOS only); optional in minimal.
+    case "$PROFILE" in
+        desktop|remote) check_sandbox required ;;
+        *)              check_sandbox optional ;;
+    esac
+
+    # UI: required only in desktop profile (macOS only); skipped entirely on Linux.
+    case "$PROFILE" in
+        desktop) check_ui required ;;
+        *)       check_ui optional ;;
+    esac
+
+    # Extras + packs are never required.
+    check_extras
+    check_packs
+}
+
+print_summary() {
+    print_header "Summary"
+    printf '  Required passed:   %b%d%b\n' "$GREEN"  "$REQ_PASS" "$NC"
+    printf '  Required failed:   %b%d%b\n' "$RED"    "$REQ_FAIL" "$NC"
+    printf '  Optional warnings: %b%d%b\n' "$YELLOW" "$OPT_WARN" "$NC"
+    echo
+
+    if [[ $REQ_FAIL -eq 0 ]]; then
+        printf '%bAll required checks passed for profile: %s%b\n' "$GREEN" "$PROFILE" "$NC"
+        return 0
     else
-        print_error "bat not working properly"
+        printf '%b%d required check(s) failed for profile: %s%b\n' "$RED" "$REQ_FAIL" "$PROFILE" "$NC"
+        printf '%bRun the installer for this profile or install the missing tools.%b\n' "$YELLOW" "$NC"
+        return 1
     fi
-fi
+}
 
-# ============================================================================
-# Summary
-# ============================================================================
+main() {
+    resolve_profile
+    show_profile_banner
+    run_checks
+    if print_summary; then
+        exit 0
+    else
+        exit 1
+    fi
+}
 
-print_header "Health Check Summary"
-
-echo -e "Passed: ${GREEN}$PASSED${NC}"
-echo -e "Warnings: ${YELLOW}$WARNINGS${NC}"
-echo -e "Failed: ${RED}$FAILED${NC}"
-
-if [[ $FAILED -eq 0 ]]; then
-    echo ""
-    echo -e "${GREEN}All critical checks passed! Your environment is healthy. 🚀${NC}"
-    exit 0
-elif [[ $FAILED -le 5 ]]; then
-    echo ""
-    echo -e "${YELLOW}Some checks failed. Review the output above and install missing tools.${NC}"
-    echo "Run: ./install.sh"
-    exit 1
-else
-    echo ""
-    echo -e "${RED}Many checks failed. Consider running a fresh installation.${NC}"
-    echo "Run: ./install.sh"
-    exit 2
-fi
+main "$@"

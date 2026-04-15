@@ -1,277 +1,136 @@
 # Quick Start Guide
 
-Get productive with your TUI development environment in 5 minutes.
+5-minute crash course: zero to a working tmux session with Nvim and AI agents.
 
 ---
 
-## 1. Start Your First AI Session
-
-The killer feature - nvim + AI agent terminals side by side:
+## 1. Install
 
 ```bash
-ai
+git clone https://github.com/spfr/tuidev.git
+cd tuidev
+./install.sh --profile desktop
+source ~/.zshrc
 ```
 
-This opens:
-- **Left (60%)**: Neovim editor
-- **Right (40%)**: Terminal panes for AI tools (claude, codex, gemini, opencode)
+The `desktop` profile installs the core, remote, sandbox, and UI packs — everything a macOS developer needs. Other profiles:
 
-### Available Sessions
+| Profile | What you get | Use when |
+|---------|--------------|----------|
+| `minimal` | core only (Nvim, tmux, shell tooling) | headless box, slow disk |
+| `remote`  | core + remote (Tailscale, mosh, SSH) | VPS, Linux server |
+| `desktop` | core + remote + sandbox + UI | **recommended** for macOS |
+| `full`    | everything (+ extras pack) | kitchen sink |
 
-| Command | Layout | Use Case |
-|---------|--------|----------|
-| `ai` | nvim + 2 agents | Default - most common |
-| `ai-single` | nvim + 1 agent | Lighter workload |
-| `ai-triple` | nvim + 3 agents | Heavy AI work |
-| `fullstack` | 5 tabs | Full-stack development |
-| `multi` | Dev + Monitor + Git | Complete workflow |
-| `remote` | nvim + tunnel | Remote access |
-| `dev` | Classic layout | No AI focus |
+Add a single pack on top with `--pack NAME` (e.g. `--pack zellij`). See [profiles.md](profiles.md) for the full matrix.
 
 ---
 
-## 2. Navigate Zellij
+## 2. Your First Session
 
-| Key | Action |
-|-----|--------|
-| `Alt+h/j/k/l` | Move between panes |
-| `Alt+n` | New pane |
-| `Ctrl+t` then `n` | New tab |
-| `Ctrl+t` then `1-9` | Switch to tab |
-| `Alt+p` then `x` | Close pane |
-| `Ctrl+q` | Quit zellij |
-
-**Detach & Resume:**
-```bash
-# Detach (session keeps running)
-Ctrl+o, then d
-
-# Resume later
-zellij list-sessions
-zellij attach <session-name>
-```
-
----
-
-## 3. Master Fuzzy Finding
-
-The most productivity-boosting shortcuts:
-
-| Key | Action |
-|-----|--------|
-| `Ctrl+T` | Find files anywhere |
-| `Ctrl+R` | Search command history |
-| `Alt+C` | Jump to directory |
-
-**In fzf:**
-- Type to filter
-- Arrow keys to navigate
-- `Enter` to select
-- `Esc` to cancel
-
----
-
-## 4. Smart Navigation (zoxide)
-
-Stop typing long paths:
+tmux is the session layer. All launchers create a **named** session and re-attach if it already exists.
 
 ```bash
-# Visit directories normally first
-cd ~/projects/my-app
-cd ~/work/api
-
-# Later, jump with partial names
-z my-app    # → ~/projects/my-app
-z api       # → ~/work/api
-z proj api  # → multiple matches? picks best
+work myproject        # bare tmux session named "myproject"
+dev                   # 3-column: nvim (55%) | agent (25%) | runner (20%)
+ai                    # nvim (60%) + 2 stacked agent panes (40%)
 ```
+
+Exit with `Ctrl+a d` (detach — session keeps running). Reattach with `work myproject` or `ta myproject`.
+
+### All session launchers
+
+| Command | Layout |
+|---------|--------|
+| `work [name]` | bare named session (default: `$PWD` basename) |
+| `dev [name]`  | nvim + agent + runner |
+| `ai [name]`   | nvim + 2 agents |
+| `ai-triple [name]` | nvim + 3 agents |
+| `agents [name]` | claude + codex + gemini, one per pane |
+| `remote [name]` | minimal layout for mosh/SSH |
+| `tls` | list sessions |
+| `tk [name]` | kill one session |
+| `tka` | kill all (tmux kill-server) |
 
 ---
 
-## 5. Neovim Essentials
+## 3. tmux Keys You Need
 
-**Leader key = `Space`** - press and wait to see all commands.
+Prefix is `Ctrl+a`.
 
-| Key | Action |
-|-----|--------|
-| `Space f f` | Find files |
-| `Space f g` | Search in files (grep) |
-| `Space e` | File explorer |
-| `g d` | Go to definition |
-| `K` | Hover docs |
-| `Space c a` | Code actions |
+| Keys | Action |
+|------|--------|
+| `Ctrl+a \|` | split pane vertically |
+| `Ctrl+a -` | split pane horizontally |
+| `Ctrl+a h/j/k/l` | move between panes |
+| `Ctrl+a d` | detach (session survives) |
+| `Ctrl+a [` | scroll/copy mode (`q` to exit) |
+| `Ctrl+a ?` | list every keybinding |
 
-See [NEOVIM_QUICKSTART.md](NEOVIM_QUICKSTART.md) for complete guide.
-
----
-
-## 6. Git with LazyGit
-
-```bash
-lg    # or `lazygit`
-```
-
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate |
-| `Space` | Stage/unstage |
-| `c` | Commit |
-| `P` | Push |
-| `p` | Pull |
-| `?` | Help |
-| `q` | Quit |
+See [TERMINAL_NAVIGATION.md](TERMINAL_NAVIGATION.md) if arrow keys or Option-word-jump misbehave.
 
 ---
 
-## 7. Modern CLI Tools
+## 4. Run an AI Agent in a Sandbox
 
-Your commands got superpowers:
+AI tools write files and run commands. Launch them through `sbx` so they can't escape the project directory:
 
 ```bash
-# File listing (eza)
-ls          # With icons
-ll          # Long + git status
-lt          # Tree view
-
-# File viewing (bat)
-cat file.js # Syntax highlighted
-
-# Search (ripgrep)
-rg "TODO"              # Search all files
-rg "bug" --type py     # Only Python files
-
-# Find files (fd)
-fd "*.js"              # Find JS files
-fd -t d                # Find directories
-
-# Markdown (glow)
-glow README.md         # Beautiful rendering
+sbx -- cc              # Claude Code, sandboxed
+sbx -- cx              # Codex CLI, sandboxed
+sbx -- oc              # OpenCode, sandboxed
 ```
+
+On macOS, `sbx` uses Seatbelt (Tier 1) — no extra install. For stricter isolation (network-off, rootless container), see [sandboxing.md](sandboxing.md) for the Podman-based Tier 2 flow.
+
+Run AI agents unsandboxed with `cc`, `cx`, `gem`, `oc` if you need raw access — but prefer `sbx` by default.
 
 ---
 
-## 8. Window Management (Rectangle)
+## 5. Nvim Essentials
 
-| Shortcut | Action |
-|----------|--------|
-| `⌃⌥ ←` | Left half |
-| `⌃⌥ →` | Right half |
-| `⌃⌥ Enter` | Maximize |
-| `⌃⌥ C` | Center |
+Leader key is `Space`. Press and wait to see the menu.
 
----
+| Keys | Action |
+|------|--------|
+| `Space f f` | find files |
+| `Space f g` | grep across project |
+| `Space e`   | file tree |
+| `g d`       | go to definition |
+| `K`         | hover docs |
 
-## Daily Workflow
-
-### Start Work
-```bash
-ai                    # Start AI session
-z myproject           # Jump to project
-```
-
-### During Work
-- Edit in nvim (left pane)
-- Ask AI questions in right panes (claude, codex, gemini, opencode)
-- `Ctrl+T` to find any file
-- `Alt+h/l` to switch panes
-- `lg` for git operations
-
-### End of Day
-```bash
-Ctrl+o, d             # Detach (session keeps running)
-```
-
-### Next Day
-```bash
-zellij attach <name>  # Resume exactly where you left
-```
+Full guide: [NEOVIM_QUICKSTART.md](NEOVIM_QUICKSTART.md).
 
 ---
 
-## Useful Aliases
+## 6. Daily Flow
 
 ```bash
-v           # nvim
-lg          # lazygit
-gs          # git status
-..          # cd ..
-reload      # source ~/.zshrc
-zk          # kill all zellij sessions
-tls         # list tmux sessions
-tka         # kill all tmux sessions
+# Morning
+work myproject         # reattach or create
+z myproject            # jump to project dir (zoxide)
+
+# While working
+# - edit in nvim pane
+# - talk to an agent in the sbx pane
+# - Ctrl+a o to rotate panes, Ctrl+a z to zoom
+
+# End of day
+# Ctrl+a d              # detach — session keeps running
 ```
+
+Next morning: `work myproject` picks up exactly where you left off, even after a reboot of the remote host (as long as tmux server is still up).
 
 ---
 
-## 9. Claude Agent Teams
+## Got Stuck?
 
-Claude Code's **agent teams** let you coordinate multiple Claude instances working together. Two display modes:
-
-- **In-process** (default): works in any terminal including Ghostty. Use `Shift+Down` to cycle teammates.
-- **Split-pane**: requires tmux. Each teammate gets its own visible pane.
-
-Agent teams are enabled by default in the included Claude Code config.
-
-```bash
-# In-process mode (works anywhere)
-claude
-# Ask Claude to create an agent team — Shift+Down to cycle teammates
-
-# Split-pane mode (requires tmux)
-tai myproject
-claude --teammate-mode tmux
-# Claude automatically splits tmux panes for each teammate
-```
-
-**Key bindings** (prefix = `Ctrl+a`):
-
-| Key | Action |
-|-----|--------|
-| `Ctrl+a \|` | Split pane right |
-| `Ctrl+a -` | Split pane down |
-| `Ctrl+a h/j/k/l` | Navigate panes |
-| `Ctrl+a d` | Detach session |
-| `Ctrl+a r` | Reload config |
-
-**Session commands:**
-```bash
-ta [name]     # Attach or create session
-tdev          # 3-column: nvim | agent | runner
-tai           # nvim + 2 stacked agents (default for agent teams)
-agents        # Launch claude + codex + gemini in 3 panes
-tls           # List sessions
-tka           # Kill all sessions
-```
-
-**AI CLI aliases:**
-```bash
-cc            # Claude Code (primary)
-cx            # Codex CLI (OpenAI)
-gem           # Gemini CLI (optional)
-oc            # OpenCode (open-source)
-```
+- Arrow keys or Option misbehaving → [TERMINAL_NAVIGATION.md](TERMINAL_NAVIGATION.md)
+- Coming from the old Zellij-first setup → [migration.md](migration.md)
+- Want Zellij back → `./install.sh --pack zellij`, then see [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md)
+- Remote access (phone, iPad, Tailscale) → [remote.md](remote.md)
+- Anything else → [FAQ.md](FAQ.md)
 
 ---
 
-## Getting Help
-
-```bash
-tldr <command>        # Quick examples
-<command> --help      # Built-in help
-```
-
-**In Zellij:** `Alt+p` then `?`
-**In LazyGit:** `?`
-**In Neovim:** `Space` then wait
-
----
-
-## Next Steps
-
-1. [CHEATSHEET.md](CHEATSHEET.md) - All keybindings (print this!)
-2. [NEOVIM_QUICKSTART.md](NEOVIM_QUICKSTART.md) - Full nvim guide
-3. [REMOTE_SESSIONS.md](REMOTE_SESSIONS.md) - Work from phone/tablet
-
----
-
-**You're ready! Run `ai` and start coding.**
+**You're ready. Run `work` and start coding.**

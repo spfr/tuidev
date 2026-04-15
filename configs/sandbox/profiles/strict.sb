@@ -1,0 +1,117 @@
+;; strict.sb — Tier 1 Seatbelt profile (STRICT)
+;;
+;; Purpose:
+;;   Run an AI coding agent (or any untrusted-ish command) with broad access
+;;   inside the current project tree, but with credentials and network sharply
+;;   restricted. This is the default profile for `sbx` and the zsh wrappers
+;;   around `cc` / `cx` / `gem` / `oc`.
+;;
+;; Parameters (both required, passed via `sandbox-exec -D NAME=value`):
+;;   PROJECT_DIR — absolute path of the project working tree. The ONLY
+;;                 location outside of /tmp where writes are permitted.
+;;   HOME_DIR    — absolute path of $HOME. Seatbelt does not auto-populate
+;;                 environment variables, so the wrapper passes this in.
+;;
+;; Risk model:
+;;   - Agent-level broad READ access to $HOME (so it can read ~/.config,
+;;     dotfiles, etc.) EXCEPT the hard-coded credential directories listed
+;;     below, which are explicitly denied regardless of other rules.
+;;   - Write access is limited to PROJECT_DIR and the OS temp dirs. The agent
+;;     cannot scribble over the rest of $HOME.
+;;   - Network is default-deny with an allowlist scoped to the major LLM
+;;     provider endpoints plus loopback. Package registries, GitHub, etc. are
+;;     NOT reachable from strict — use the standard profile for those.
+;;
+;; Non-goals:
+;;   This profile does not protect against kernel exploits, sandbox-exec
+;;   escapes, or side-channels. For stronger isolation use the Tier 2
+;;   Podman-based container pack.
+;;
+;; Syntax notes:
+;;   Seatbelt uses TinyScheme-style S-expressions. `;` starts a comment.
+;;   Do NOT use `#` — it is not a comment character here.
+
+(version 1)
+(deny default)
+
+;; Baseline rules for typical BSD-style processes.
+(import "bsd.sb")
+
+;; --- Process / signal primitives ---
+(allow process-fork)
+(allow process-exec)
+(allow signal (target self))
+(allow signal (target children))
+
+;; --- Sysctl / mach lookups needed by almost every tool ---
+(allow sysctl-read)
+(allow mach-lookup)
+(allow iokit-open)
+
+;; --- File reads: system / toolchain / homebrew ---
+(allow file-read*
+  (subpath "/System")
+  (subpath "/Library")
+  (subpath "/usr/lib")
+  (subpath "/usr/share")
+  (subpath "/usr/bin")
+  (subpath "/usr/sbin")
+  (subpath "/bin")
+  (subpath "/sbin")
+  (subpath "/opt/homebrew")
+  (subpath "/usr/local")
+  (subpath "/Applications/Xcode.app")
+  (subpath "/Library/Developer/CommandLineTools")
+  (subpath "/private/etc")
+  (subpath "/private/var/db/timezone")
+  (subpath "/private/var/folders")
+  (subpath "/private/tmp"))
+
+;; --- File reads inside $HOME ---
+(allow file-read*
+  (subpath (param "HOME_DIR")))
+
+;; --- CREDENTIAL LOCKOUT (deny after the broad HOME read above) ---
+;; These directories are off-limits for both read and write, even if they
+;; live inside a path the agent could otherwise reach.
+(deny file-read* file-write*
+  (subpath (string-append (param "HOME_DIR") "/.ssh"))
+  (subpath (string-append (param "HOME_DIR") "/.aws"))
+  (subpath (string-append (param "HOME_DIR") "/.gnupg"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Keychains"))
+  (subpath (string-append (param "HOME_DIR") "/.config/gh"))
+  (subpath (string-append (param "HOME_DIR") "/.docker"))
+  (subpath (string-append (param "HOME_DIR") "/.kube"))
+  (literal (string-append (param "HOME_DIR") "/.netrc")))
+
+;; --- File writes: project tree + temp dirs only ---
+(allow file-write*
+  (subpath (param "PROJECT_DIR"))
+  (subpath "/private/tmp")
+  (subpath "/private/var/folders")
+  (subpath "/private/var/tmp"))
+
+;; Also allow reading the project dir (covered by HOME above in most cases,
+;; but project may live elsewhere).
+(allow file-read*
+  (subpath (param "PROJECT_DIR")))
+
+;; --- Network ---
+;; IMPORTANT: Apple's Seatbelt (sandbox-exec) enforces network rules at the
+;; socket layer. It supports host filters of `*` or `localhost` only — there
+;; is NO kernel-level per-hostname allowlist at this tier. The "LLM-only"
+;; intent of the strict profile is therefore advisory: the most we can
+;; enforce here is "outbound TLS (443) and DNS (53) allowed, everything else
+;; denied". Per-host enforcement is a Tier 2 (container / VM) feature.
+;;
+;; If you need true host-level enforcement, use:
+;;   sbx --profile off -- your-tool   (and rely on the tool's own controls)
+;; or the Tier 2 Podman-based pack which runs the agent inside a network
+;; namespace with proper egress rules.
+(allow network-outbound (remote tcp "localhost:*"))
+(allow network-outbound (remote tcp "*:443"))
+(allow network-outbound (remote udp "*:53"))
+(allow network-bind     (local  ip  "localhost:*"))
+
+;; Local IPC (unix sockets) for tooling that shells out to daemons.
+(allow network-outbound (literal "/private/var/run/syslog"))

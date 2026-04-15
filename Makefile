@@ -1,228 +1,224 @@
 # ============================================================================
-# Makefile for macOS TUI Development Environment
+# Makefile — tuidev
 # ============================================================================
-# Provides convenient commands for testing, building, and managing the setup.
+# Convenient targets for install, update, test, lint, and day-to-day use.
+# Run `make` with no args to see the help.
 
-.PHONY: help install test check clean docker docker-test docker-clean docker-build \
-        update update-check update-packages update-configs update-all brew-upgrade \
-        uninstall lint format validate-configs test-clean test-dirty fix-completions
+.PHONY: help \
+        install install-minimal install-desktop install-remote install-dry \
+        uninstall \
+        update update-check update-packages update-configs update-all \
+        update-sandbox-image update-security \
+        test test-core test-ui test-all \
+        check check-minimal check-desktop check-remote \
+        lint validate-configs validate \
+        sbx-test sandbox-up sandbox-down \
+        adopt migrate fix-completions clean \
+        docker-build docker-test docker-clean \
+        brew-upgrade ci-test \
+        quick-dev quick-ai quick-agents quick-lazygit quick-sysinfo
 
-# Default target
 .DEFAULT_GOAL := help
 
-# Colors for output
-BLUE := \033[0;34m
-GREEN := \033[0;32m
+BLUE   := \033[0;34m
+GREEN  := \033[0;32m
 YELLOW := \033[1;33m
-RED := \033[0;31m
-NC := \033[0m
+RED    := \033[0;31m
+NC     := \033[0m
 
-# ============================================================================
+# ----------------------------------------------------------------------------
 # Help
-# ============================================================================
+# ----------------------------------------------------------------------------
 
 help: ## Show this help message
-	@echo -e "${BLUE}macOS TUI Development Environment - Available Commands${NC}"
+	@echo -e "${BLUE}tuidev — available targets${NC}"
 	@echo ""
-	@echo -e "${GREEN}Installation & Management:${NC}"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  ${BLUE}%-20s${NC} %s\n", $$1, $$2}'
-	@echo ""
-	@echo -e "${GREEN}Testing:${NC}"
-	@echo "  make test               - Run full test suite"
-	@echo "  make check              - Run health check"
-	@echo "  make test-clean         - Test clean install (requires VM)"
-	@echo "  make test-dirty         - Test install on existing setup"
-	@echo ""
-	@echo -e "${GREEN}Docker:${NC}"
-	@echo "  make docker-build       - Build Docker test image"
-	@echo "  make docker-test        - Run tests in Docker"
-	@echo "  make docker-clean       - Clean Docker artifacts"
-	@echo ""
-	@echo -e "${GREEN}Validation:${NC}"
-	@echo "  make lint               - Lint shell scripts"
-	@echo "  make validate-configs   - Validate configuration files"
-	@echo ""
-	@echo -e "${GREEN}Utilities:${NC}"
-	@echo "  make fix-completions  - Fix insecure zsh completion directories"
-	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+	  | sort \
+	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  ${GREEN}%-24s${NC} %s\n", $$1, $$2}'
 
-# ============================================================================
-# Installation
-# ============================================================================
+# ----------------------------------------------------------------------------
+# Install
+# ----------------------------------------------------------------------------
 
-install: ## Run the installation script
-	@echo -e "${BLUE}Running installation...${NC}"
+install: ## Interactive install (defaults to desktop on macOS, minimal on Linux)
 	@./install.sh
 
-uninstall: ## Run the uninstallation script
-	@echo -e "${YELLOW}Running uninstallation...${NC}"
+install-minimal: ## Install the minimal profile (core only)
+	@./install.sh --profile minimal
+
+install-desktop: ## Install the desktop profile (core + ui + sandbox)
+	@./install.sh --profile desktop
+
+install-remote: ## Install the remote profile (core + remote + sandbox)
+	@./install.sh --profile remote
+
+install-dry: ## Preview install for a profile (PROFILE=desktop make install-dry)
+	@./install.sh --dry-run --profile $(if $(PROFILE),$(PROFILE),desktop)
+
+uninstall: ## Run the uninstaller
 	@./uninstall.sh
 
-update: ## Update everything (packages + configs) interactively
+# ----------------------------------------------------------------------------
+# Update
+# ----------------------------------------------------------------------------
+
+update: ## Update everything interactively (profile-aware)
 	@./scripts/update.sh
 
-update-check: ## Check for available updates (no changes)
+update-check: ## Preview available updates (no changes)
 	@./scripts/update.sh --check
 
-update-packages: ## Update brew packages only
+update-packages: ## Update brew packages for the installed profile only
 	@./scripts/update.sh --packages
 
-update-configs: ## Sync configs from repo only
+update-configs: ## Re-apply managed blocks and pack-owned configs
 	@./scripts/update.sh --configs
 
-update-all: ## Update everything non-interactively
+update-all: ## Non-interactive: packages + configs + repo
 	@./scripts/update.sh --all
 
-brew-upgrade: ## Raw brew upgrade (all packages)
-	@echo -e "${BLUE}Upgrading all brew packages...${NC}"
+update-sandbox-image: ## Rebuild the Podman sandbox image (if --pack sandbox-container)
+	@./scripts/update.sh --sandbox-image
+
+update-security: ## Audit Tailscale + SSH perms + Seatbelt profile drift
+	@./scripts/update.sh --security
+
+brew-upgrade: ## Raw `brew update && brew upgrade` (bypasses profile)
 	@brew update && brew upgrade
-	@echo -e "${GREEN}Upgrade complete!${NC}"
 
-# ============================================================================
-# Testing
-# ============================================================================
+# ----------------------------------------------------------------------------
+# Test + health check (profile-aware)
+# ----------------------------------------------------------------------------
 
-test: ## Run full test suite
-	@echo -e "${BLUE}Running full test suite...${NC}"
+test: ## Run tests for the active profile (default tags)
 	@./scripts/test_suite.sh
 
-check: ## Run health check
-	@echo -e "${BLUE}Running health check...${NC}"
+test-core: ## Run only the core-tag tests
+	@./scripts/test_suite.sh --tag core
+
+test-ui: ## Run only the ui-tag tests (macOS GUI)
+	@./scripts/test_suite.sh --tag ui
+
+test-all: ## Run all tags including ui
+	@./scripts/test_suite.sh --all
+
+check: ## Health check for the active profile
 	@./scripts/health_check.sh
 
-test-clean: ## Test clean install (CAUTION: destructive)
-	@echo -e "${RED}WARNING: This will perform a clean install test${NC}"
-	@echo -e "${RED}This may modify your system. Backup your configs first.${NC}"
-	@read -p "Continue? (y/N) " -n 1 -r; \
-	echo ""; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		echo -e "${BLUE}Creating backup...${NC}"; \
-		BACKUP_DIR="$$(mktemp -d)"; \
-		cp -r ~/.zshrc ~/.config "$$BACKUP_DIR/" 2>/dev/null || true; \
-		echo "Backup: $$BACKUP_DIR"; \
-		echo -e "${BLUE}Testing clean install...${NC}"; \
-		./install.sh; \
-		./scripts/test_suite.sh; \
-		echo -e "${GREEN}Clean install test complete${NC}"; \
-	fi
+check-minimal: ## Health check against the minimal profile
+	@./scripts/health_check.sh --profile minimal
 
-test-dirty: ## Test install on top of existing setup
-	@echo -e "${BLUE}Testing dirty install...${NC}"
-	@echo -e "${YELLOW}This will run install on your current setup${NC}"
-	@read -p "Continue? (y/N) " -n 1 -r; \
-	echo ""; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		./install.sh; \
-		./scripts/health_check.sh; \
-		echo -e "${GREEN}Dirty install test complete${NC}"; \
-	fi
+check-desktop: ## Health check against the desktop profile
+	@./scripts/health_check.sh --profile desktop
 
-# ============================================================================
-# Docker
-# ============================================================================
+check-remote: ## Health check against the remote profile
+	@./scripts/health_check.sh --profile remote
 
-docker-build: ## Build Docker test image
-	@echo -e "${BLUE}Building Docker test image...${NC}"
-	@docker build -t mactui-test .
+# ----------------------------------------------------------------------------
+# Lint + validate
+# ----------------------------------------------------------------------------
 
-docker-test: docker-build ## Run tests in Docker
-	@echo -e "${BLUE}Running tests in Docker...${NC}"
-	@docker run --rm mactui-test
+lint: ## Shellcheck all scripts (install/update/lib/tmux/install packs/bin)
+	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found. brew install shellcheck"; exit 1; }
+	@shellcheck \
+	    install.sh uninstall.sh \
+	    scripts/*.sh \
+	    scripts/lib/*.sh \
+	    scripts/tmux/layout-*.sh \
+	    scripts/install/*.sh \
+	    scripts/install/packs/*.sh \
+	    bin/sbx
+	@echo -e "${GREEN}shellcheck clean${NC}"
 
-docker-clean: ## Clean Docker artifacts
-	@echo -e "${BLUE}Cleaning Docker artifacts...${NC}"
-	@docker rmi mactui-test 2>/dev/null || true
-	@echo -e "${GREEN}Docker cleanup complete${NC}"
-
-# ============================================================================
-# Validation & Linting
-# ============================================================================
-
-lint: ## Lint shell scripts with shellcheck
-	@echo -e "${BLUE}Linting shell scripts...${NC}"
-	@command -v shellcheck >/dev/null 2>&1 || (echo "shellcheck not found. Install with: brew install shellcheck" && exit 1)
-	@shellcheck install.sh uninstall.sh scripts/*.sh
-	@echo -e "${GREEN}Linting complete!${NC}"
-
-validate-configs: ## Validate all configuration files
-	@echo -e "${BLUE}Validating configuration files...${NC}"
+validate-configs: ## Validate KDL, TOML, Lua, JSON syntax
 	@./scripts/validate_configs.sh
 
 validate: validate-configs ## Alias for validate-configs
 
+# ----------------------------------------------------------------------------
+# Sandbox
+# ----------------------------------------------------------------------------
+
+sbx-test: ## Smoke-test the Seatbelt wrapper: deny ~/.ssh, allow project
+	@command -v sbx >/dev/null 2>&1 || { echo "sbx not installed. Run make install-desktop or --pack sandbox"; exit 1; }
+	@echo -e "${BLUE}sbx smoke test${NC}"
+	@echo -e "1. ${YELLOW}sbx -- ls $$PWD${NC}  (should succeed)"
+	@sbx -- ls $$PWD >/dev/null 2>&1 && echo -e "   ${GREEN}PASS${NC}" || echo -e "   ${RED}FAIL${NC}"
+	@echo -e "2. ${YELLOW}sbx -- cat ~/.ssh/id_ed25519${NC}  (should FAIL — sandbox blocks credentials)"
+	@! sbx -- cat ~/.ssh/id_ed25519 2>/dev/null && echo -e "   ${GREEN}PASS${NC} (correctly denied)" || echo -e "   ${RED}FAIL${NC} (should have been denied)"
+
+sandbox-up: ## Start the Podman sandbox VM (Tier 2; requires --pack sandbox-container)
+	@command -v podman >/dev/null 2>&1 || { echo "podman not installed. Run ./install.sh --pack sandbox-container"; exit 1; }
+	@podman machine start || podman machine init --now
+
+sandbox-down: ## Stop the Podman sandbox VM
+	@command -v podman >/dev/null 2>&1 && podman machine stop || true
+
+# ----------------------------------------------------------------------------
+# Migration helpers
+# ----------------------------------------------------------------------------
+
+adopt: ## Convert existing dotfiles to tuidev managed-block form (one-time)
+	@echo -e "${BLUE}Adopting existing dotfiles into managed-block format...${NC}"
+	@./scripts/update.sh --configs
+
+migrate: ## Guided migration from the old zellij-first setup
+	@echo -e "${BLUE}tuidev migration helper${NC}"
+	@echo ""
+	@echo -e "${YELLOW}1.${NC} Your ai/dev/work/etc. commands now launch tmux (not zellij)."
+	@echo -e "${YELLOW}2.${NC} If you want zellij back: ${GREEN}./install.sh --pack zellij${NC}"
+	@echo -e "   The z* variants (zai, zdev, zwork, ...) activate automatically."
+	@echo -e "${YELLOW}3.${NC} Your ~/.zshrc is no longer overwritten; config drift is managed."
+	@echo -e "   Run: ${GREEN}make update-configs${NC} to re-apply the tuidev block."
+	@echo -e "${YELLOW}4.${NC} Backups live in ~/.config/tuidev/backups/."
+	@echo ""
+	@echo -e "See ${GREEN}docs/migration.md${NC} for the full guide."
+
 fix-completions: ## Fix insecure zsh completion directories
-	@echo -e "${BLUE}Fixing insecure completion directories...${NC}"
 	@./scripts/fix_completions.sh
 
-# ============================================================================
-# Cleanup
-# ============================================================================
+clean: ## Remove test results and transient files
+	@rm -rf test_results/ *.log
+	@echo -e "${GREEN}cleaned${NC}"
 
-clean: ## Clean test results and temporary files
-	@echo -e "${BLUE}Cleaning test results...${NC}"
-	@rm -rf test_results/
-	@rm -f *.log
-	@echo -e "${GREEN}Cleanup complete!${NC}"
+# ----------------------------------------------------------------------------
+# Docker (CI / Linux parity smoke test)
+# ----------------------------------------------------------------------------
 
-# ============================================================================
-# Utility
-# ============================================================================
+docker-build: ## Build the Ubuntu-based test image
+	@docker build -t mactui-test .
 
-backup: ## Create backup of current configs
-	@echo -e "${BLUE}Creating backup...${NC}"
-	@BACKUP_DIR="backup_$$(date +%Y%m%d_%H%M%S)"; \
-	mkdir -p "$$BACKUP_DIR"; \
-	cp -r ~/.zshrc ~/.config "$$BACKUP_DIR/" 2>/dev/null || true; \
-	echo "Backup created: $$BACKUP_DIR"
+docker-test: docker-build ## Run the core-tagged tests inside Docker
+	@docker run --rm mactui-test
 
-restore: ## Restore from backup (usage: make restore BACKUP=backup_YYYYMMDD_HHMMSS)
-	@echo -e "${YELLOW}Restoring from $(BACKUP)...${NC}"
-	@if [ -z "$(BACKUP)" ]; then \
-		echo "Usage: make restore BACKUP=backup_YYYYMMDD_HHMMSS"; \
-		echo "Available backups:"; \
-		ls -d backup_* 2>/dev/null || echo "No backups found"; \
-		exit 1; \
-	fi; \
-	if [ -d "$(BACKUP)" ]; then \
-		cp -r $(BACKUP)/.zshrc $(BACKUP)/.config ~ 2>/dev/null || true; \
-		echo -e "${GREEN}Restored from $(BACKUP)${NC}"; \
-	else \
-		echo -e "${RED}Backup $(BACKUP) not found${NC}"; \
-		exit 1; \
-	fi
+docker-clean: ## Remove the test image
+	@docker rmi mactui-test 2>/dev/null || true
 
-# ============================================================================
-# Quick Actions
-# ============================================================================
+# ----------------------------------------------------------------------------
+# Quick launchers (attach-or-create sessions)
+# ----------------------------------------------------------------------------
 
-quick-zellij: ## Launch zellij with dev layout
-	@command -v zellij >/dev/null 2>&1 || (echo "zellij not installed. Run: make install" && exit 1)
-	@zellij --layout dev
+quick-dev: ## Launch the dev tmux session (nvim | agent | runner)
+	@./scripts/tmux/layout-dev.sh
+
+quick-ai: ## Launch the ai tmux session (nvim + 2 agents)
+	@./scripts/tmux/layout-ai.sh
+
+quick-agents: ## Launch 3 AI CLIs side-by-side in tmux
+	@./scripts/tmux/layout-agents.sh
 
 quick-lazygit: ## Launch lazygit
-	@command -v lazygit >/dev/null 2>&1 || (echo "lazygit not installed. Run: make install" && exit 1)
-	@lazygit
-
-quick-lazydocker: ## Launch lazydocker
-	@command -v lazydocker >/dev/null 2>&1 || (echo "lazydocker not installed. Run: make install" && exit 1)
-	@lazydocker
-
-quick-nnn: ## Launch nnn file manager
-	@command -v nnn >/dev/null 2>&1 || (echo "nnn not installed. Run: make install" && exit 1)
-	@nnn
+	@command -v lazygit >/dev/null 2>&1 && lazygit || echo "lazygit not installed"
 
 quick-sysinfo: ## Show system info
-	@command -v fastfetch >/dev/null 2>&1 || (echo "fastfetch not installed. Run: make install" && exit 1)
-	@fastfetch
+	@command -v fastfetch >/dev/null 2>&1 && fastfetch || uname -a
 
-quick-check: ## Quick health check (less verbose)
-	@./scripts/health_check.sh 2>&1 | grep -E "✓|✗|⚠" || ./scripts/health_check.sh
+# ----------------------------------------------------------------------------
+# CI
+# ----------------------------------------------------------------------------
 
-# ============================================================================
-# CI/CD Helpers
-# ============================================================================
-
-ci-test: ## Run CI tests (no interaction)
-	@echo -e "${BLUE}Running CI tests...${NC}"
-	@./scripts/test_suite.sh
-	@./scripts/health_check.sh
+ci-test: ## Non-interactive test + lint run for CI
+	@$(MAKE) lint
+	@$(MAKE) validate-configs
+	@./scripts/test_suite.sh --tag core

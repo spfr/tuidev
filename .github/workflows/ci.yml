@@ -1,211 +1,235 @@
-name: CI Tests
+name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Shellcheck — every shell file under our control.
+  # ---------------------------------------------------------------------------
   lint-scripts:
-    name: Lint Shell Scripts
+    name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install shellcheck
+      - uses: actions/checkout@v4
+      - name: install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
-
-      - name: Lint shell scripts
+      - name: lint
         run: |
-          shellcheck install.sh uninstall.sh scripts/*.sh
-          echo "✓ All shell scripts linted successfully"
+          shellcheck \
+            install.sh uninstall.sh \
+            scripts/*.sh \
+            scripts/lib/*.sh \
+            scripts/tmux/layout-*.sh \
+            scripts/install/*.sh \
+            scripts/install/packs/*.sh \
+            bin/sbx
 
+  # ---------------------------------------------------------------------------
+  # Parse-only checks for scripts: bash -n across the tree.
+  # ---------------------------------------------------------------------------
+  script-syntax:
+    name: bash -n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: parse shell scripts
+        run: |
+          fail=0
+          while IFS= read -r -d '' script; do
+            bash -n "$script" || { echo "✗ $script"; fail=1; }
+          done < <(find install.sh uninstall.sh scripts bin -name '*.sh' -type f -print0 2>/dev/null; printf '\0%s\0' bin/sbx)
+          exit $fail
+
+  # ---------------------------------------------------------------------------
+  # Config file validation: JSON, TOML, KDL presence, Lua parse.
+  # ---------------------------------------------------------------------------
   validate-configs:
-    name: Validate Configuration Files
+    name: validate configs
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Validate KDL files
+      - uses: actions/checkout@v4
+      - name: install validators
         run: |
-          # Check if KDL files are well-formed (basic syntax check)
-          for file in configs/zellij/*.kdl configs/zellij/layouts/*.kdl; do
-            if [ -f "$file" ]; then
-              echo "Checking $file..."
-              # Basic syntax check: ensure no obvious syntax errors
-              # In a real setup, you'd install kdl-cli for full validation
-              if grep -q 'layout' "$file" || grep -q 'keybinds' "$file" || grep -q 'theme' "$file"; then
-                echo "  ✓ $file looks valid"
-              else
-                echo "  ✗ $file may be invalid"
-                exit 1
-              fi
+          sudo apt-get update
+          sudo apt-get install -y python3 lua5.4 jq
+      - name: validate JSON
+        run: |
+          for f in configs/claude/settings.json configs/opencode/opencode.json; do
+            [[ -f "$f" ]] && jq empty "$f" && echo "✓ $f"
+          done
+      - name: validate TOML
+        run: |
+          for f in configs/starship/starship.toml configs/codex/config.toml; do
+            if [[ -f "$f" ]]; then
+              python3 -c "import tomllib; tomllib.load(open('$f','rb'))" && echo "✓ $f"
             fi
           done
-          echo "✓ All KDL files validated"
-
-      - name: Validate TOML files
+      - name: validate Lua
         run: |
-          # Basic TOML validation: check for section headers and balanced quotes
-          if grep -qE '^\[' configs/starship/starship.toml; then
-            echo "✓ starship.toml has valid sections"
-          else
-            echo "✗ starship.toml missing sections"
-            exit 1
-          fi
-          echo "✓ TOML files validated"
-
-  test-scripts:
-    name: Test Script Functionality
-    runs-on: ubuntu-latest
-    container: ubuntu:22.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          apt-get update
-          apt-get install -y curl git zsh
-
-      - name: Test script syntax
-        run: |
-          # Check scripts can be parsed
-          for script in install.sh uninstall.sh scripts/*.sh; do
-            echo "Testing $script..."
-            bash -n "$script" || exit 1
-          done
-          echo "✓ All scripts have valid syntax"
-
-      - name: Check script permissions
-        run: |
-          # Ensure scripts are executable
-          for script in install.sh uninstall.sh scripts/*.sh; do
-            if [ -x "$script" ]; then
-              echo "✓ $script is executable"
-            else
-              echo "⚠ $script is not executable"
-            fi
+          for f in $(find configs/nvim configs/hammerspoon -name '*.lua' 2>/dev/null); do
+            lua5.4 -e "loadfile('$f')" && echo "✓ $f"
           done
 
-  check-configurations:
-    name: Check Configuration Consistency
+  # ---------------------------------------------------------------------------
+  # No hardcoded user paths leaked into shipped configs or scripts.
+  # ---------------------------------------------------------------------------
+  check-paths:
+    name: no hardcoded paths
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check for hardcoded paths
+      - uses: actions/checkout@v4
+      - name: grep for /Users/NAME and /home/NAME
         run: |
-          echo "Checking for hardcoded user paths..."
-          # Check for any hardcoded /Users/username paths (macOS) or /home/username (Linux)
-          if grep -rE '/Users/[a-zA-Z0-9_-]+/' configs/ install.sh 2>/dev/null | grep -v '.git'; then
-            echo "⚠ Found hardcoded macOS user paths. These should use \$HOME or environment variables."
+          if grep -rE '/Users/[a-zA-Z0-9_-]+/' configs/ scripts/ install.sh 2>/dev/null | grep -v '.git'; then
+            echo "✗ hardcoded /Users/USER path found"
             exit 1
           fi
-          if grep -rE '/home/[a-zA-Z0-9_-]+/' configs/ install.sh 2>/dev/null | grep -v '.git' | grep -v 'testuser'; then
-            echo "⚠ Found hardcoded Linux user paths. These should use \$HOME or environment variables."
+          if grep -rE '/home/[a-zA-Z0-9_-]+/' configs/ scripts/ install.sh 2>/dev/null \
+             | grep -v '.git' | grep -v 'testuser'; then
+            echo "✗ hardcoded /home/USER path found"
             exit 1
           fi
-          echo "✓ No hardcoded user paths found"
+          echo "✓ clean"
 
-      - name: Check config file existence
-        run: |
-          echo "Checking required config files exist..."
-          required_files=(
-            "configs/zsh/.zshrc"
-            "configs/starship/starship.toml"
-            "configs/zellij/config.kdl"
-            "configs/zellij/layouts/dev.kdl"
-            "configs/zellij/layouts/multi-agent.kdl"
-            "configs/zellij/layouts/fullstack.kdl"
-            "configs/zellij/layouts/remote.kdl"
-            "configs/ghostty/config"
-            "configs/ssh/config"
-            "scripts/notify.sh"
+  # ---------------------------------------------------------------------------
+  # Config-file presence: the files install.sh references must exist.
+  # Zellij layouts are NOT required here — they're in the opt-in zellij pack.
+  # ---------------------------------------------------------------------------
+  required-files:
+    name: required files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          required=(
+            install.sh
+            Makefile
+            configs/zsh/.zshrc
+            configs/starship/starship.toml
+            configs/tmux/tmux.conf
+            configs/ghostty/config
+            configs/ssh/config
+            configs/claude/settings.json
+            configs/codex/config.toml
+            configs/sandbox/profiles/strict.sb
+            configs/sandbox/profiles/standard.sb
+            configs/sandbox/profiles/off.sb
+            bin/sbx
+            scripts/lib/ui.sh
+            scripts/lib/config_write.sh
+            scripts/notify.sh
+            scripts/health_check.sh
+            scripts/test_suite.sh
+            scripts/update.sh
+            docs/sandboxing.md
+            docs/profiles.md
+            docs/remote.md
+            docs/migration.md
           )
-
-          for file in "${required_files[@]}"; do
-            if [ -f "$file" ]; then
-              echo "✓ $file exists"
+          missing=0
+          for f in "${required[@]}"; do
+            if [[ -e "$f" ]]; then
+              echo "✓ $f"
             else
-              echo "✗ $file is missing"
-              exit 1
+              echo "✗ $f  (missing)"
+              missing=1
             fi
           done
+          exit $missing
 
-  docker-test:
-    name: Docker Tests
+  # ---------------------------------------------------------------------------
+  # Seatbelt profiles parse on the macOS runner.
+  # ---------------------------------------------------------------------------
+  seatbelt-profiles:
+    name: seatbelt profiles parse (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: parse each .sb
+        run: |
+          for p in configs/sandbox/profiles/*.sb; do
+            # -n = dry-run: load + validate + exit without executing.
+            sandbox-exec -n "$(basename "$p" .sb)" -f "$p" -D HOME_DIR="$HOME" -D PROJECT_DIR="$PWD" \
+              /usr/bin/true && echo "✓ $p"
+          done
+      - name: smoke-test sbx wrapper
+        run: |
+          chmod +x bin/sbx
+          ./bin/sbx --help | head -5
+          ./bin/sbx --dry-run -- echo hello
+          echo "✓ sbx executes"
+
+  # ---------------------------------------------------------------------------
+  # scripts/lib/ unit tests + cross-file contract checks.
+  # ---------------------------------------------------------------------------
+  lib-tests:
+    name: scripts/lib tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - run: bash scripts/lib/test_config_write.sh
+      - run: bash scripts/lib/test_profile.sh
+      - run: bash scripts/lib/test_contract.sh
 
-      - name: Build Docker image
-        run: |
-          docker build -t mactui-test .
-          echo "✓ Docker image built successfully"
-
-      - name: Run Docker tests
-        run: |
-          docker run --rm mactui-test /home/testuser/run_tests.sh
-          echo "✓ Docker tests passed"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker rmi mactui-test || true
-
-  summary:
-    name: Test Summary
+  # ---------------------------------------------------------------------------
+  # Docker Ubuntu smoke test for the core pack. UI tests are skipped here.
+  # ---------------------------------------------------------------------------
+  docker-core:
+    name: docker core-tag test
     runs-on: ubuntu-latest
-    needs: [lint-scripts, validate-configs, test-scripts, check-configurations, docker-test, check-documentation]
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: docker build -t mactui-test .
+      - name: run core tests
+        run: docker run --rm mactui-test bash -c "./scripts/test_suite.sh --tag core"
+      - name: cleanup
+        if: always()
+        run: docker rmi mactui-test || true
+
+  # ---------------------------------------------------------------------------
+  # Doc link + presence check.
+  # ---------------------------------------------------------------------------
+  check-docs:
+    name: documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: referenced docs exist
+        run: |
+          missing=0
+          for f in $(grep -oE '\(docs/[^)]+\)' README.md 2>/dev/null | tr -d '()' | sort -u); do
+            if [[ -f "$f" ]]; then
+              echo "✓ $f"
+            else
+              echo "✗ $f  (referenced but missing)"
+              missing=1
+            fi
+          done
+          exit $missing
+
+  # ---------------------------------------------------------------------------
+  # Aggregate result.
+  # ---------------------------------------------------------------------------
+  summary:
+    name: summary
+    runs-on: ubuntu-latest
+    needs:
+      - lint-scripts
+      - script-syntax
+      - validate-configs
+      - check-paths
+      - required-files
+      - seatbelt-profiles
+      - lib-tests
+      - docker-core
+      - check-docs
     if: always()
     steps:
-      - name: Check results
-        run: |
-          echo "All CI checks completed!"
-          echo "Check individual job results above for details."
-
-  # Additional job for documentation checks
-  check-documentation:
-    name: Check Documentation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check documentation links
-        run: |
-          echo "Checking documentation links..."
-          # Check if all referenced doc files exist
-          grep -oE '\(docs/[^)]+\)' README.md | tr -d '()' | sort -u | while read file; do
-            if [ -f "$file" ]; then
-              echo "✓ $file exists"
-            else
-              echo "✗ $file referenced but doesn't exist"
-              exit 1
-            fi
-          done
-
-      - name: Check README structure
-        run: |
-          echo "Checking README.md structure..."
-          required_sections=(
-            "Quick Start"
-            "What's Included"
-            "Validation & Testing"
-            "Contributing"
-          )
-
-          for section in "${required_sections[@]}"; do
-            if grep -q "## $section" README.md; then
-              echo "✓ Section '$section' found in README.md"
-            else
-              echo "⚠ Section '$section' not found in README.md"
-            fi
-          done
+      - run: |
+          echo "All CI checks completed. See per-job results above."

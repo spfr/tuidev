@@ -1,145 +1,153 @@
 # Terminal Navigation Guide
 
-> Fixing common keyboard issues in macOS terminals with Zellij
+> Fix keyboard issues and learn the pane-navigation keys you need.
 
 ---
 
-## Quick Fixes
+## tmux (primary)
 
-### Arrow Keys Not Working in Command Line
+Prefix is `Ctrl+a`. Release the prefix, then press the action key.
 
-**Problem:** Arrow keys navigate Zellij panes instead of moving in the command line.
+### Pane navigation
 
-**Solution:** Press `Ctrl+g` to enter **Locked Mode** - this passes all keys directly to the terminal.
+| Keys | Action |
+|------|--------|
+| `Ctrl+a \|` | split pane vertically (new pane right) |
+| `Ctrl+a -` | split pane horizontally (new pane below) |
+| `Ctrl+a h/j/k/l` | move left/down/up/right |
+| `Ctrl+a o` | cycle to next pane |
+| `Ctrl+a z` | zoom (toggle) current pane |
+| `Ctrl+a x` | close current pane |
+| `Ctrl+a Space` | cycle pane layouts |
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+g` | Toggle Locked Mode (pass keys to terminal) |
-| `Esc` | Return to Normal Mode |
+### Session & window management
+
+| Keys | Action |
+|------|--------|
+| `Ctrl+a d` | detach (session keeps running) |
+| `Ctrl+a c` | new window |
+| `Ctrl+a n` / `p` | next / previous window |
+| `Ctrl+a 0-9` | jump to window by number |
+| `Ctrl+a ,` | rename window |
+| `Ctrl+a $` | rename session |
+| `Ctrl+a s` | pick session from list |
+| `Ctrl+a ?` | show every binding |
+
+### Copy / scroll mode
+
+| Keys | Action |
+|------|--------|
+| `Ctrl+a [` | enter scroll/copy mode |
+| `v` / `y` | start selection / yank (vi keys) |
+| `q` | exit copy mode |
+
+### Shell wrappers
+
+```bash
+work [name]        # attach or create bare session (default: $PWD basename)
+dev [name]         # nvim | agent | runner
+ai [name]          # nvim + 2 agents
+ai-triple [name]   # nvim + 3 agents
+agents [name]      # claude + codex + gemini
+remote [name]      # minimal for mosh / SSH
+
+tls                # list sessions
+tk [name]          # kill one
+tka                # kill server (all sessions)
+```
 
 ---
 
-## Common Issues & Solutions
+## Shell line editing (inside any pane)
 
-### 1. Arrow keys navigate panes, not command line
+| Keys | Action |
+|------|--------|
+| `Ctrl+a` / `Ctrl+e` | start / end of line (inside a cell, not tmux prefix) |
+| `Ctrl+u` / `Ctrl+k` | delete to start / end |
+| `Ctrl+w` | delete word back |
+| `Alt+b` / `Alt+f` | word back / forward |
+| `Ctrl+r` | history search (atuin) |
+| `Ctrl+l` | clear screen |
 
-```
-Symptom: Pressing left/right moves to different panes
-Fix: Ctrl+g (Locked Mode)
-```
-
-### 2. fn+Delete triggers Caps Lock
-
-```
-Symptom: Forward delete activates caps lock indicator
-Fix: Already configured in Ghostty config
-```
-
-### 3. Option+Arrow doesn't skip words
-
-```
-Symptom: Option+Arrow outputs special characters instead of word-jumping
-Fix: Already configured in Ghostty with macos-option-as-alt = true
-```
-
-### 4. Home/End keys don't work
-
-```
-Symptom: Home/End do nothing or trigger wrong actions
-Fix: Mapped in Ghostty config to standard sequences
-```
+> Note on the `Ctrl+a` overlap: tmux uses it as the prefix, so to send a literal `Ctrl+a` to the shell (line-start), press `Ctrl+a` twice.
 
 ---
 
-## Ghostty Key Mappings
+## Common Issues
 
-The setup includes these key fixes in `~/.config/ghostty/config`:
+### Arrow keys output garbage, not word-jump on Option+Arrow
+
+Already fixed if you're on Ghostty with the shipped config. The key bits:
 
 ```
-# Navigation keys (fn+arrows for Home/End/PageUp/PageDown)
+macos-option-as-alt = true
 keybind = fn+left=text:\x1b[1~
 keybind = fn+right=text:\x1b[4~
-keybind = fn+up=text:\x1b[5~
-keybind = fn+down=text:\x1b[6~
-
-# Home/End keys
 keybind = home=text:\x1b[1~
 keybind = end=text:\x1b[4~
+```
 
-# Ctrl+p pass-through (for Zellij)
-keybind = ctrl+p=text:\x10
+iTerm2: Preferences → Profiles → Keys → Left/Right Option Key = `Esc+`.
 
-macos-option-as-alt = true
+### fn+Delete triggers Caps Lock
+
+Already configured in the shipped Ghostty config.
+
+### Keys look fine in plain zsh but break inside tmux
+
+tmux may be eating them. Check `~/.config/tmux/tmux.conf` for `set -g xterm-keys on` and confirm `TERM=tmux-256color` or `screen-256color` is set. Reload config with `Ctrl+a r` (or `tmux source ~/.config/tmux/tmux.conf`).
+
+### Debugging key sequences
+
+```bash
+cat -v         # then press keys; Ctrl+c to exit
 ```
 
 ---
 
-## Zellij Modes Explained
+## Zellij (opt-in pack)
 
-| Mode | Purpose | Enter | Exit |
-|------|---------|-------|------|
-| **Normal** | Default, pane navigation with Alt | Default | - |
-| **Locked** | Pass all keys to terminal | `Ctrl+g` | `Ctrl+g` |
-| **Pane** | Manage panes | `Alt+p` | `Esc` |
-| **Tab** | Manage tabs | `Ctrl+t` | `Esc` |
-| **Scroll** | Scroll and search | `Ctrl+s` | `Esc` |
+If you installed the Zellij pack (`./install.sh --pack zellij`), its key model is different from tmux.
 
----
+### Zellij modes
 
-## Shell Line Editing Keys
+| Mode | Enter | Exit | Purpose |
+|------|-------|------|---------|
+| **Normal** | default | — | `Alt+h/j/k/l` between panes |
+| **Locked** | `Ctrl+g` | `Ctrl+g` | pass every key to the terminal |
+| **Pane** | `Alt+p` | `Esc` | manage panes |
+| **Tab** | `Ctrl+t` | `Esc` | manage tabs |
+| **Scroll** | `Ctrl+s` | `Esc` | scroll / search |
 
-When in **Locked Mode** or using keys that aren't captured by Zellij:
+### Prefix key conflict
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+a` | Beginning of line |
-| `Ctrl+e` | End of line |
-| `Ctrl+u` | Delete to beginning |
-| `Ctrl+k` | Delete to end |
-| `Ctrl+w` | Delete word backward |
-| `Alt+b` | Move word backward |
-| `Alt+f` | Move word forward |
-| `Ctrl+l` | Clear screen |
-| `Ctrl+r` | Search history (atuin) |
+Zellij's default `Ctrl+g` lock mode plus the tab/pane mode prefixes (`Ctrl+t`, `Alt+p`) can clash with app bindings (git `Ctrl+g`, shell tab-completion on some setups). Options:
+
+- Press `Ctrl+g` to enter Locked Mode when you need all keys to pass through.
+- Or remap in `~/.config/zellij/config.kdl` (see [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md)).
+
+### Zellij shell wrappers
+
+Installed only with the pack:
+
+```bash
+zwork / zdev / zai / zai-triple / zfullstack / zmulti / zremote
+```
 
 ---
 
 ## Troubleshooting Workflow
 
-1. **Keys not responding as expected?**
-   - Check if you're in a Zellij mode (look at status bar)
-   - Try `Esc` to exit current mode
-   - Try `Ctrl+g` for Locked Mode
-
-2. **Still not working?**
-   - Verify Ghostty config: `cat ~/.config/ghostty/config`
-   - Verify Zellij config: `cat ~/.config/zellij/config.kdl`
-
-3. **Need to debug key sequences?**
-   - Run `cat -v` and press keys to see raw sequences
-   - Press `Ctrl+c` to exit
-
----
-
-## Terminal Emulator Settings
-
-### Ghostty (Recommended)
-Already configured with this setup. Verify settings:
-```bash
-cat ~/.config/ghostty/config
-```
-
-### iTerm2
-If using iTerm2, configure:
-- Preferences > Profiles > Keys > Left Option key: `Esc+`
-- Preferences > Profiles > Keys > Right Option key: `Esc+`
-
-### Terminal.app
-Limited support. Consider switching to Ghostty.
+1. Look at the status bar — which multiplexer / mode are you in?
+2. Try `Esc` to exit any mode (Zellij) or the prefix (tmux).
+3. Verify Ghostty: `cat ~/.config/ghostty/config`
+4. Verify tmux: `cat ~/.config/tmux/tmux.conf`
+5. Still stuck? [FAQ.md](FAQ.md) or open an issue with `tmux -V`, `tmux info`, and a `cat -v` trace.
 
 ---
 
 ## See Also
 
-- [CHEATSHEET.md](CHEATSHEET.md) - Full keybinding reference
-- [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md) - Zellij-specific issues
+- [CHEATSHEET.md](CHEATSHEET.md) — full keybinding reference
+- [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md) — for the opt-in Zellij pack
+- [remote.md](remote.md) — keyboard quirks when SSHing from iOS clients

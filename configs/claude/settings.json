@@ -1,10 +1,24 @@
 {
   "permissions": {
-    "allow": [],
+    "allow": [
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(tmux:*)",
+      "Bash(sbx:*)",
+      "Bash(make:*)",
+      "Bash(rg:*)",
+      "Bash(fd:*)",
+      "Bash(fzf:*)",
+      "Bash(jq:*)",
+      "Bash(yq:*)",
+      "Bash(lazygit)",
+      "Bash(shellcheck:*)"
+    ],
     "deny": []
   },
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "MCP_CONNECTION_NONBLOCKING": "true"
   },
   "hooks": {
     "Notification": [
@@ -21,6 +35,7 @@
     "Stop": [
       {
         "matcher": "",
+        "if": "agent_type != 'teammate'",
         "hooks": [
           {
             "type": "command",
@@ -36,6 +51,17 @@
           {
             "type": "command",
             "command": "notify.sh 'Claude Code' 'Teammate idle' 'Agent Teams'"
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify.sh 'Claude Code' 'Permission denied — review and retry' 'Sandbox'"
           }
         ]
       }

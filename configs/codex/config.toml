@@ -1,0 +1,51 @@
+# ============================================================================
+# Codex CLI — tuidev opinionated defaults
+# ============================================================================
+# Shipped to ~/.codex/config.toml on install. Existing user files are
+# preserved (install.sh uses --adopt-existing for this path).
+#
+# Rationale for the defaults below:
+#   - sandbox_mode = "workspace-write": agent can read freely, but writes
+#     are confined to the current project tree. Matches the Seatbelt
+#     strict profile used by `sbx` at the OS layer.
+#   - approval_policy = "on-request": Codex asks for approval when a
+#     command falls outside the sandbox; nothing runs "silently broad."
+#   - network_access_during_exec = false: stops the agent from reaching
+#     the internet from a shell tool. LLM calls still go out; exec tools
+#     cannot. Matches the Claude Code "no shell-level egress" default.
+#   - disable_response_storage = true: don't persist responses on
+#     OpenAI's side; this is for users who prefer local-only transcripts.
+#
+# Override any of these in a project-local .codex/config.toml; project
+# values win over user values.
+# ============================================================================
+
+model = "gpt-5-codex"
+
+# Safe default: workspace-write + on-request approval.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+# Stay inside the project tree by default. Codex can still read anywhere
+# via explicit approval.
+writable_roots = []
+network_access = false
+exclude_tmpdir_env_var = false
+exclude_slash_tmp = false
+
+# Persist shell history inside the sandbox (useful for reproducing what
+# the agent did). Set to "none" to disable.
+[history]
+persistence = "save-all"
+
+# Don't retain response bodies on the provider side.
+disable_response_storage = true
+
+# File opener for `codex @`-style references. Neovim matches the rest of
+# tuidev; override if you prefer a GUI editor.
+file_opener = "nvim"
+
+# Notification: wire to the same notify.sh helper Claude Code uses.
+# Commented out by default so Codex users opt in explicitly.
+# notify = ["notify.sh", "Codex CLI"]
