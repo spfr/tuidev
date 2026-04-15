@@ -1,6 +1,12 @@
 # SSH Clients for iPhone
 
-Top recommendations for connecting to your Mac from iPhone:
+Top recommendations for connecting to your Mac from iPhone.
+
+> **Multiplexer note:** tuidev is tmux-first. The examples below use the shell
+> wrappers (`work`, `dev`, `ai`, `agents`, `tls`, ...) and `tmux attach` — all
+> ship with the default install. If you installed the Zellij pack
+> (`./install.sh --pack zellij`), equivalent `z*` wrappers (`zwork`, `zai`, ...)
+> and `zellij attach` also work. Use whichever you have.
 
 ## 1. Termius (Best Overall) ⭐
 
@@ -29,7 +35,7 @@ Top recommendations for connecting to your Mac from iPhone:
 5. Under "Advanced", set Protocol to **Mosh** for resilient mobile connections
 6. Tap "Key" and generate or import SSH key (ED25519 recommended)
 7. Copy public key to your Mac: add to `~/.ssh/authorized_keys`
-8. Connect and run: `zellij attach`
+8. Connect and run: `work` (bare tmux session) or `remote` (narrow layout)
 
 **Setup without Tailscale:**
 1. Download Termius from App Store
@@ -41,7 +47,7 @@ Top recommendations for connecting to your Mac from iPhone:
    - **Username:** your-username
 4. Tap "Key" and generate or import SSH key
 5. Copy public key to your Mac: add to `~/.ssh/authorized_keys`
-6. Connect and run: `zellij attach`
+6. Connect and run: `work` (bare tmux session) or `remote` (narrow layout)
 
 ---
 
@@ -67,8 +73,9 @@ Top recommendations for connecting to your Mac from iPhone:
 # In Blink Shell, connect with mosh for best mobile experience:
 mosh your-username@100.x.x.x
 
-# Then attach to your Zellij session:
-zellij attach
+# Then attach a tmux session (durable across disconnects):
+work          # bare attach-or-create
+# or: tmux attach
 ```
 
 **Best for:** Power users who need full shell control
@@ -95,7 +102,7 @@ zellij attach
 ```bash
 # On iPhone in a-Shell
 ssh username@192.168.1.x
-zellij attach ai-dev
+ai ai-dev     # attach-or-create nvim + 2 agent panes, session name "ai-dev"
 ```
 
 **Best for:** Quick connections on local network, budget-conscious users
@@ -217,40 +224,41 @@ zellij attach ai-dev
 2. First time: Accept the fingerprint
 3. You're now connected!
 
-4. Attach to your Zellij session:
+4. Attach to a session:
    ```bash
-   zellij attach ai-dev
-   # or
-   zellij list-sessions
+   ai ai-dev              # attach-or-create nvim + 2 agent panes
+   tls                    # list tmux sessions
+   tmux attach -t ai-dev  # raw tmux equivalent
    ```
 
-### Step 5: Zellij Tips for Mobile
+### Step 5: Tips for Mobile
 
 #### Keyboard Shortcuts in Termius
 
-Termius provides a special keyboard row for Zellij:
+Termius provides a special keyboard row useful for any multiplexer:
 
-- **Esc** - Escape key (important for Zellij)
+- **Esc** - Escape key
 - **Tab** - Tab completion
-- **Ctrl** - Control key combinations
-- **Arrow keys** - Navigate panes
-- **Function keys** - F1-F12 for modes
+- **Ctrl** - Control key combinations (tmux prefix is `Ctrl+a`)
+- **Arrow keys** - Navigate panes (with `Ctrl+a` prefix in tmux)
+- **Function keys** - F1-F12
 
 #### Managing Sessions
 
 ```bash
 # List sessions
-zellij list-sessions
+tls                      # or: tmux ls
 
-# Attach to specific session
-zellij attach ai-dev
+# Attach to a named session (creates if absent)
+work ai-dev              # bare
+ai ai-dev                # nvim + 2 agent panes
 
-# Attach to latest session (interactive picker)
-zellij attach
-
- # Show session info while attached
- # Press Alt+p, then ? in Zellij
+# Detach (session keeps running)
+Ctrl+a d
 ```
+
+If you installed `--pack zellij`, equivalents are `zls`, `zwork ai-dev`,
+`zai ai-dev`, and detach is `Ctrl+o d`.
 
 #### Copy/Paste in Termius
 
@@ -259,28 +267,30 @@ zellij attach
 
 #### Disconnecting
 
-- **Detach from Zellij:** `Ctrl+o`, then `d`
+- **Detach from tmux:** `Ctrl+a d`
 - **Keep session running:** Just close Termius
-- **Reconnect later:** Open Termius, run `zellij attach ai-dev`
+- **Reconnect later:** Open Termius, run `ai ai-dev` (or `work ai-dev`) again
 
 ---
 
 ## Optimizing for Mobile
 
-### 1. Use Simplified Zellij UI
+### 1. Use a Narrow Layout
 
-Edit `~/.config/zellij/config.kdl`:
-```kdl
-ui {
-    simplified_ui true  // Simplified UI for mobile
-    pane_frames true
-}
+```bash
+remote       # minimal: nvim + single terminal, fits narrow windows
 ```
 
-### 2. Reduce Scrollback
+### 2. Simplified Multiplexer UI
+
+tmux already uses a minimal status line in the shipped config. If you
+installed `--pack zellij`, edit `~/.config/zellij/config.kdl`:
 
 ```kdl
-scrollback_lines 1000  // Less scrollback = faster
+ui {
+    simplified_ui true
+    pane_frames true
+}
 ```
 
 ### 3. Use Larger Fonts
@@ -296,8 +306,9 @@ If using a Bluetooth keyboard:
 ### 5. Set Up Snippets
 
 In Termius, create common commands:
-- `zellij attach ai-dev` → `zj`
-- `zellij list-sessions` → `zls`
+- `ai ai-dev` → `ai`
+- `work ai-dev` → `w`
+- `tls` → `tls`
 - `tmux attach -t dev` → `tad`
 
 ---
@@ -372,7 +383,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
 
 ## Alternative: Web-Based Access
 
-### Zellij Web Interface
+### Zellij Web Interface (requires `--pack zellij`)
 
 Zellij has built-in web support:
 
@@ -383,6 +394,9 @@ zellij web --port 8080
 # On iPhone, open Safari
 http://your-mac-ip:8080
 ```
+
+tmux has no equivalent built-in web server; for tmux-over-browser, use a
+separate tool like [ttyd](https://github.com/tsl0922/ttyd).
 
 **Pros:**
 - No app needed
@@ -405,6 +419,6 @@ http://your-mac-ip:8080
 2. Add Mac host
 3. Generate SSH key
 4. Copy key to Mac
-5. Connect: `zellij attach ai-dev`
+5. Connect: `ai ai-dev` (or `work` for a bare session)
 
 Happy coding from anywhere! 📱

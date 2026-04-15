@@ -36,7 +36,7 @@ dev                   # 3-column: nvim (55%) | agent (25%) | runner (20%)
 ai                    # nvim (60%) + 2 stacked agent panes (40%)
 ```
 
-Exit with `Ctrl+a d` (detach — session keeps running). Reattach with `work myproject` or `ta myproject`.
+Exit with `Ctrl+a d` (detach — session keeps running). Reattach by re-running the same launcher (`work myproject`) — launchers are attach-or-create.
 
 ### All session launchers
 

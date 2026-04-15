@@ -1,8 +1,13 @@
 # Neovim + LazyVim Quick Start Guide
 
-This setup uses **[LazyVim](https://www.lazyvim.org/)** - the most popular Neovim distribution. It provides a full IDE experience out of the box.
+This setup uses **[LazyVim](https://www.lazyvim.org/)** — the most popular Neovim distribution. It provides a full IDE experience out of the box.
 
 > **Note**: This setup uses terminal-based AI tools (claude, codex, gemini, opencode) in separate tmux panes rather than in-editor AI plugins. This keeps nvim fast and focused on editing.
+
+> **Versions**: Tested against Neovim 0.12.x (current stable). The config
+> tracks LazyVim upstream (`version = false`, see `configs/nvim/init.lua`), so
+> plugins update on each `:Lazy sync`. Run `:checkhealth` after upgrading
+> Neovim — LazyVim surfaces any breaking changes there.
 
 ## First Launch
 

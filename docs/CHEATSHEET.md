@@ -20,10 +20,11 @@ Default name is the current directory basename.
 | `multi [name]`       | Dev + Monitor + Git tabs                                         |
 | `remote [name]`      | Minimal remote layout (nvim + terminal)                          |
 | `agents [name]`      | claude + codex + gemini in 3 panes                               |
-| `ta [name]`          | Attach or create bare session (alias of `work`)                  |
 | `tls`                | List sessions                                                    |
 | `tk [name]`          | Kill named session                                               |
 | `tka`                | Kill all sessions (`tmux kill-server`)                           |
+
+> Legacy `ta` / `tdev` / `tai` / `tai-triple` still work but emit a one-time deprecation notice. Use the canonical names above.
 
 ---
 
@@ -89,7 +90,7 @@ CC_NO_SANDBOX=1 cc               # env-var bypass honored by the wrappers
 
 ```bash
 claude                           # in-process teammates (any terminal)
-tai myproject                    # tmux split-pane layout
+ai myproject                     # tmux split-pane layout (nvim + 2 agents)
 claude --teammate-mode tmux      # split-pane agent teams
 ```
 

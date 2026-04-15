@@ -76,6 +76,25 @@ product rationale, especially the "2026 Amendments" section.
 - `update.sh` is profile-aware: updates only packs the user installed,
   diffs managed blocks instead of blindly copying.
 
+### Fixed
+
+- `update.sh` now detects the **pre-managed-block duplication** foot-gun
+  (an older installer wrote the raw source into the file; a newer run
+  wrapped the same content in markers, producing TOML duplicate-key
+  errors in starship, `parse error near '()'` in zsh when a legacy
+  `alias cc=...` collided with the managed-block `cc()` function, and
+  redundant `set -g` directives in tmux.conf). `detect_outside_duplication`
+  categorizes matches as `exact-*` (safe to auto-clean with backup) or
+  `partial-*` (signature match, warn only). Surfaced in both
+  `make update-check` and interactive `make update-configs`.
+- `configs/zsh/.zshrc`: `unalias cc cx gem oc` is now issued before the
+  function definitions, making the managed block robust against stale
+  aliases from pre-2.0 installs.
+- `scripts/lib/config_write.sh`: `write_managed_block` passes content via
+  a sidecar file instead of `awk -v`; BSD awk on macOS rejects literal
+  newlines in `-v` values and was silently emptying the destination on
+  in-place replacement.
+
 ### Deprecated
 
 - `ta`, `tdev`, `tai`, `tai-triple` shell functions — still work, but emit
