@@ -70,7 +70,7 @@ product rationale, especially the "2026 Amendments" section.
   tuidev leaves them alone.
 - README trimmed from 403 → 154 lines; leads with tmux/sandbox/layered narrative.
 - Default package set shrunk: `nnn`, `lazydocker`, `k9s`, `atuin`, `broot`,
-  `bandwhich`, `dust`, `duf`, `hyperfine`, `tokei` moved to `--pack extras`.
+  `bandwhich`, `dust`, `duf`, `hyperfine`, `tokei` moved to `--extras`.
 - Rectangle/Stats/Maccy/Hidden Bar/Hammerspoon now require
   `--profile desktop` or `--pack ui`.
 - `update.sh` is profile-aware: updates only packs the user installed,

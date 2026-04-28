@@ -224,8 +224,10 @@ pack_casks() {
     upper="$(printf '%s' "$pack" | tr '[:lower:]' '[:upper:]')"
     local candidates=(
         "${upper}_CASKS"
+        "${upper}_CASKS_MACOS"
         "${upper}_BREW_CASKS"
         "CASKS"
+        "CASKS_MACOS"
     )
     (
         set +u +e
@@ -617,10 +619,11 @@ outdated_subset() {
         return 0
     fi
 
-    local json
+    local json status
     if command -v jq >/dev/null 2>&1; then
-        json="$(brew outdated --json=v2 2>/dev/null || true)"
-        if [[ -n "$json" ]]; then
+        status=0
+        json="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --json=v2 2>/dev/null)" || status=$?
+        if [[ $status -eq 0 && -n "$json" ]]; then
             printf '%s\n' "${wanted[@]}" \
                 | jq -Rr --argjson blob "$json" '
                     . as $n
@@ -633,7 +636,44 @@ outdated_subset() {
     fi
 
     # Fallback without jq
-    local outdated_list; outdated_list="$(brew outdated --quiet 2>/dev/null || true)"
+    local outdated_list
+    if ! outdated_list="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --quiet 2>/dev/null)"; then
+        return 2
+    fi
+    local w
+    for w in "${wanted[@]}"; do
+        grep -qxF "$w" <<<"$outdated_list" && printf '%s\n' "$w"
+    done
+}
+
+outdated_cask_subset() {
+    local -a wanted=("$@")
+    (( ${#wanted[@]} == 0 )) && return 0
+
+    if ! command -v brew >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local json status
+    if command -v jq >/dev/null 2>&1; then
+        status=0
+        json="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --json=v2 2>/dev/null)" || status=$?
+        if [[ $status -eq 0 && -n "$json" ]]; then
+            printf '%s\n' "${wanted[@]}" \
+                | jq -Rr --argjson blob "$json" '
+                    . as $n
+                    | $blob.casks[]?
+                    | select((.name // "") == $n or (.token // "") == $n or (.full_name // "") == $n)
+                    | (.name // .token)
+                '
+            return 0
+        fi
+    fi
+
+    local outdated_list
+    if ! outdated_list="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --cask --quiet 2>/dev/null)"; then
+        return 2
+    fi
     local w
     for w in "${wanted[@]}"; do
         grep -qxF "$w" <<<"$outdated_list" && printf '%s\n' "$w"
@@ -648,7 +688,11 @@ run_packages_mode() {
         return 0
     fi
 
-    run_cmd brew update --quiet || true
+    if [[ "$MODE" == "check" ]]; then
+        print_info "Using local Homebrew metadata; run --packages to refresh and upgrade."
+    else
+        run_cmd brew update --quiet || true
+    fi
 
     local packs; packs=$(active_packs)
     if [[ -z "$packs" ]]; then
@@ -656,39 +700,77 @@ run_packages_mode() {
         return 0
     fi
 
-    local total_outdated=0
+    local total_outdated=0 unknown_updates=0
     local pack name_list outdated
     for pack in $packs; do
         mapfile -t name_list < <(pack_formulae "$pack")
         if [[ ${#name_list[@]} -eq 0 ]]; then
             print_info "${pack^} updates: (no formulae discovered in scripts/install/${pack}.sh)"
-            continue
+        else
+            local outdated_raw formula_status
+            formula_status=0
+            outdated_raw="$(outdated_subset "${name_list[@]}")" || formula_status=$?
+            mapfile -t outdated < <(printf '%s\n' "$outdated_raw" | awk 'NF')
+            echo ""
+            if [[ $formula_status -ne 0 ]]; then
+                echo -e "  ${BOLD}${pack^} updates${NC} (${#name_list[@]} tracked, status unknown):"
+                print_warning "brew outdated failed; package status unknown"
+                unknown_updates=$((unknown_updates + 1))
+                continue
+            fi
+
+            echo -e "  ${BOLD}${pack^} updates${NC} (${#name_list[@]} tracked, ${#outdated[@]} outdated):"
+            if [[ ${#outdated[@]} -eq 0 ]]; then
+                print_success "all up to date"
+            else
+                local o
+                for o in "${outdated[@]}"; do
+                    printf "    ${CYAN}•${NC} %s\n" "$o"
+                done
+
+                total_outdated=$((total_outdated + ${#outdated[@]}))
+
+                if [[ "$MODE" != "check" ]] && confirm "Upgrade ${#outdated[@]} ${pack} formula(e)?"; then
+                    for o in "${outdated[@]}"; do
+                        run_cmd brew upgrade "$o" || print_warning "Failed to upgrade $o"
+                    done
+                fi
+            fi
         fi
 
-        mapfile -t outdated < <(outdated_subset "${name_list[@]}")
-        echo ""
-        echo -e "  ${BOLD}${pack^} updates${NC} (${#name_list[@]} tracked, ${#outdated[@]} outdated):"
+        if is_macos; then
+            local cask_list cask_outdated c
+            mapfile -t cask_list < <(pack_casks "$pack")
+            if [[ ${#cask_list[@]} -gt 0 ]]; then
+                local cask_raw cask_status
+                cask_status=0
+                cask_raw="$(outdated_cask_subset "${cask_list[@]}")" || cask_status=$?
+                mapfile -t cask_outdated < <(printf '%s\n' "$cask_raw" | awk 'NF')
+                echo ""
+                if [[ $cask_status -ne 0 ]]; then
+                    echo -e "  ${BOLD}${pack^} cask updates${NC} (${#cask_list[@]} tracked, status unknown):"
+                    print_warning "brew outdated --cask failed; cask status unknown"
+                    unknown_updates=$((unknown_updates + 1))
+                    continue
+                fi
 
-        if [[ ${#outdated[@]} -eq 0 ]]; then
-            print_success "all up to date"
-            continue
-        fi
+                echo -e "  ${BOLD}${pack^} cask updates${NC} (${#cask_list[@]} tracked, ${#cask_outdated[@]} outdated):"
+                if [[ ${#cask_outdated[@]} -eq 0 ]]; then
+                    print_success "all up to date"
+                else
+                    for c in "${cask_outdated[@]}"; do
+                        printf "    ${CYAN}•${NC} %s\n" "$c"
+                    done
 
-        local o
-        for o in "${outdated[@]}"; do
-            printf "    ${CYAN}•${NC} %s\n" "$o"
-        done
+                    total_outdated=$((total_outdated + ${#cask_outdated[@]}))
 
-        total_outdated=$((total_outdated + ${#outdated[@]}))
-
-        if [[ "$MODE" == "check" ]]; then
-            continue
-        fi
-
-        if confirm "Upgrade ${#outdated[@]} ${pack} formula(e)?"; then
-            for o in "${outdated[@]}"; do
-                run_cmd brew upgrade "$o" || print_warning "Failed to upgrade $o"
-            done
+                    if [[ "$MODE" != "check" ]] && confirm "Upgrade ${#cask_outdated[@]} ${pack} cask(s)?"; then
+                        for c in "${cask_outdated[@]}"; do
+                            run_cmd brew upgrade --cask "$c" || print_warning "Failed to upgrade cask $c"
+                        done
+                    fi
+                fi
+            fi
         fi
     done
 
@@ -727,7 +809,9 @@ run_packages_mode() {
 
     echo ""
     if [[ "$MODE" == "check" ]]; then
-        if [[ $total_outdated -eq 0 ]]; then
+        if [[ $unknown_updates -gt 0 ]]; then
+            print_warning "${unknown_updates} package group(s) could not be checked"
+        elif [[ $total_outdated -eq 0 ]]; then
             print_success "All pack-tracked packages up to date"
         else
             print_info "${total_outdated} package(s) have updates available — run without --check to apply"

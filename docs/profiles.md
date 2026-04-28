@@ -29,6 +29,7 @@ Profiles are pre-selected pack sets for common install shapes. They are shortcut
 | fzf         | Fuzzy finder                                |
 | eza, bat    | `ls` / `cat` replacements                   |
 | zoxide      | Smarter `cd`                                |
+| httpie      | Friendly HTTP requests via `http`           |
 | claude      | Anthropic CLI                               |
 | codex       | OpenAI CLI                                  |
 
@@ -107,10 +108,10 @@ Any of these can be added to any profile with `--pack NAME`:
 - `--pack zellij` — Zellij multiplexer + `z*` shell wrappers (`zai`, `zdev`, `zwork`, …). See [`migration.md`](migration.md).
 - `--pack yazi` — TUI file manager.
 - `--pack nnn` — Minimal TUI file manager.
-- `--pack monitoring` — `lazydocker`, `k9s`.
+- `--pack monitoring` — `lazydocker`, `k9s`, `bottom` (`btm`).
 - `--pack sandbox-container` — Podman machine for VM-backed sandboxing (Tier 2).
 - `--pack mosh` — mosh on its own, without the full `--remote` pack.
-- `--pack extras` — `atuin`, `dust`, `broot`, `bandwhich`, `duf`, `hyperfine`, `tokei`.
+- `--extras` — `atuin`, `dust`, `broot`, `bandwhich`, `duf`, `hyperfine`, `tokei`.
 
 Example:
 

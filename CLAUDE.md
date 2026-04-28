@@ -110,7 +110,7 @@ scripts/
 │       ├── zellij.sh        # Opt-in zellij pack
 │       ├── yazi.sh          # Opt-in file manager
 │       ├── nnn.sh
-│       ├── monitoring.sh    # lazydocker, k9s
+│       ├── monitoring.sh    # lazydocker, k9s, bottom
 │       └── sandbox-container.sh  # Podman machine (Tier 2)
 └── tmux/
     ├── layout-work.sh       # Reproducible attach-or-create layout helpers

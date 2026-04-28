@@ -376,7 +376,7 @@ run_core() {
 
     # --- Core CLI tool presence ------------------------------------------
     local tool
-    for tool in tmux nvim rg fd bat fzf zoxide starship delta lazygit jq yq eza gh shellcheck git; do
+    for tool in tmux nvim rg fd bat fzf zoxide starship delta lazygit jq yq eza gh http shellcheck git; do
         start_test "$tool installed" core
         if command -v "$tool" >/dev/null 2>&1; then
             local v

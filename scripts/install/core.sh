@@ -30,6 +30,7 @@ CORE_FORMULAE=(
     gh
     git
     git-delta
+    httpie
     jq
     lazygit
     neovim

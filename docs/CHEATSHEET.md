@@ -149,6 +149,7 @@ Full nvim intro: [`NEOVIM_QUICKSTART.md`](NEOVIM_QUICKSTART.md).
 | `fzf`   | —        | `Ctrl-T` files, `Ctrl-R` history, `Alt-C` cd |
 | `zoxide`| `cd`     | `z partial-name`, `zi` interactive       |
 | `btm`   | `top`    | aliased as `top` and `bottom`            |
+| `http`  | `curl`   | HTTPie with pretty output                |
 
 ---
 

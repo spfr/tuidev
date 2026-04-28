@@ -211,6 +211,7 @@ check_core() {
         yq
         eza
         gh
+        http
         shellcheck
     )
 
@@ -221,6 +222,13 @@ check_core() {
 
     # Git is implicit but worth checking as it underpins delta/lazygit/gh.
     check_required "git on PATH" "have_cmd git"
+
+    if have_cmd zsh; then
+        check_required "zsh completion directories pass compaudit" \
+            "[[ -z \"\$(zsh -f -c 'autoload -Uz compaudit; compaudit' 2>/dev/null)\" ]]"
+    else
+        check_required "zsh on PATH" "have_cmd zsh"
+    fi
 }
 
 # ---------------------------------------------------------------------------

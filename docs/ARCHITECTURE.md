@@ -112,7 +112,7 @@ Tier 1 is always available on macOS (no install). Tier 2 ships with the `sandbox
 ```
 ./install.sh --profile <profile>
 ./install.sh --pack <name> [--pack <name>...]
-./install.sh --profile desktop --pack extras
+./install.sh --profile desktop --extras
 
      │
      ▼

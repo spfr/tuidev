@@ -86,10 +86,11 @@ Tier 2 — Podman-backed microVMs — is available behind `./install.sh --pack s
 | [zoxide](https://github.com/ajeetdsouza/zoxide) | Smarter `cd` |
 | [git-delta](https://github.com/dandavison/delta) | Git diffs |
 | [lazygit](https://github.com/jesseduffield/lazygit) | Git TUI |
+| [HTTPie](https://httpie.io/) | Friendly HTTP requests via `http` |
 | [jq](https://stedolan.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | JSON / YAML |
 | [eza](https://github.com/eza-community/eza) / [bat](https://github.com/sharkdp/bat) | `ls` / `cat` replacements |
 
-Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s), `--pack sandbox-container` (Podman), `--pack extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
+Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Podman), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
 
 ## AI CLIs
 

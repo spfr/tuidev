@@ -20,6 +20,7 @@ When executing shell commands, prefer these modern alternatives:
 | System monitor | `btm` | `top` |
 | Directory jump | `z <partial>` | `cd path` |
 | Git TUI | `lg` (lazygit) | - |
+| HTTP requests | `http` (HTTPie) | `curl` |
 
 ### Shell Aliases Available
 

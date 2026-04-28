@@ -65,13 +65,21 @@ export NVM_DIR="$HOME/.nvm"
 # ============================================================================
 # Completions
 if type brew &>/dev/null; then
-  FPATH=$(brew --prefix)/share/zsh-completions:$FPATH
-  FPATH=$(brew --prefix)/share/zsh/site-functions:$FPATH
+  _tuidev_brew_prefix="$(brew --prefix)"
+  FPATH="$_tuidev_brew_prefix/share/zsh-completions:$FPATH"
+  FPATH="$_tuidev_brew_prefix/share/zsh/site-functions:$FPATH"
+  unset _tuidev_brew_prefix
 
   autoload -Uz compinit
 
-  # Initialize completions (use -i to ignore insecure directories)
-  compinit -i
+  # Keep the completion dump out of $HOME and avoid startup prompts if an
+  # external installer leaves a completion directory writable. Run
+  # `make fix-completions` from the tuidev repo to repair the underlying
+  # permissions.
+  _tuidev_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-${ZSH_VERSION}"
+  mkdir -p "${_tuidev_zcompdump:h}" 2>/dev/null
+  compinit -i -d "$_tuidev_zcompdump"
+  unset _tuidev_zcompdump
 fi
 
 # ============================================================================
@@ -101,7 +109,7 @@ export FZF_DEFAULT_OPTS='
 '
 
 # zoxide - Smarter cd
-eval "$(zoxide init zsh)"
+command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
 # atuin - Better shell history
 command -v atuin &>/dev/null && eval "$(atuin init zsh)"
@@ -156,17 +164,15 @@ alias gco='git checkout'
 alias gb='git branch'
 
 # Elite TUI Tools
-alias ld='lazydocker'
-alias sys='fastfetch'
-alias k9s='k9s'
+command -v lazydocker &>/dev/null && alias ld='lazydocker'
+command -v fastfetch &>/dev/null && alias sys='fastfetch'
 
 # File managers (nnn = classic, yazi = modern)
-alias nnn='nnn'
 command -v yazi &>/dev/null && alias y='yazi'
 # Note: broot uses its own shell function 'br' (installed via `broot --install`)
 
 # Disk tools
-alias ncdu='ncdu'
+command -v ncdu &>/dev/null && alias ncdu='ncdu'
 
 # tldr pages
 command -v tldr &>/dev/null && alias help='tldr'
@@ -181,8 +187,10 @@ alias ....='cd ../../..'
 [[ -o interactive ]] && alias cd='z'  # Use zoxide (only in interactive shells)
 
 # System
-alias top='btm'     # bottom system monitor
-alias bottom='btm'  # explicit bottom command
+if command -v btm &>/dev/null; then
+  alias top='btm'     # bottom system monitor
+  alias bottom='btm'  # explicit bottom command
+fi
 command -v procs &>/dev/null && alias ps='procs'
 command -v dust &>/dev/null && alias du='dust'
 command -v duf &>/dev/null && alias df='duf'
@@ -191,7 +199,7 @@ command -v duf &>/dev/null && alias df='duf'
 command -v glow &>/dev/null && alias md='glow'
 
 # Development
-alias http='http --pretty=all --style=monokai'
+command -v http &>/dev/null && alias http='http --pretty=all --style=monokai'
 alias serve='python3 -m http.server'
 
 # Utility
@@ -598,7 +606,11 @@ setopt INTERACTIVE_COMMENTS    # Allow comments in interactive shells
 # bindkey -v
 
 # Better history search
-bindkey '^R' atuin-search
+if [[ "${widgets[atuin-search]+set}" == set ]]; then
+  bindkey '^R' atuin-search
+else
+  bindkey '^R' history-incremental-search-backward
+fi
 bindkey '^[[A' history-search-backward  # Up arrow
 bindkey '^[[B' history-search-forward   # Down arrow
 

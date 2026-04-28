@@ -14,6 +14,7 @@
 
 # Logs
 *.log
+.nvimlog
 npm-debug.log*
 firebase-debug.log
 
