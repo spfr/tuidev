@@ -183,7 +183,7 @@ have_cmd() {
 }
 
 # App bundle probe (macOS GUI apps). Returns non-zero on non-macOS.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 have_app() {
     [[ "$TUIDEV_OS" == "Darwin" ]] || return 1
     [[ -d "/Applications/$1.app" || -d "$HOME/Applications/$1.app" ]]

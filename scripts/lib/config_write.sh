@@ -53,12 +53,12 @@ tuidev_backup() {
     cp -R "$src" "$target"
 
     # Retention: drop everything past the N most-recent entries for this prefix.
-    # Uses find -print0 to handle odd filenames, sorts by mtime, keeps N.
-    find "$TUIDEV_BACKUP_DIR" -mindepth 1 -maxdepth 1 -name "${prefix}.*" -print0 \
+    # Backup names include sortable timestamps, which keeps this portable across
+    # BSD and GNU userlands without relying on incompatible stat flags.
+    find "$TUIDEV_BACKUP_DIR" -mindepth 1 -maxdepth 1 -name "${prefix}.*" -print \
         2>/dev/null |
-        xargs -0 stat -f '%m %N' 2>/dev/null |
-        sort -rn |
-        awk -v keep="$TUIDEV_BACKUP_KEEP" 'NR>keep {sub(/^[0-9]+ /,""); print}' |
+        sort -r |
+        awk -v keep="$TUIDEV_BACKUP_KEEP" 'NR>keep {print}' |
         while IFS= read -r old; do
             rm -rf -- "$old"
         done

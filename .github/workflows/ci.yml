@@ -42,7 +42,7 @@ jobs:
           fail=0
           while IFS= read -r -d '' script; do
             bash -n "$script" || { echo "✗ $script"; fail=1; }
-          done < <(find install.sh uninstall.sh scripts bin -name '*.sh' -type f -print0 2>/dev/null; printf '\0%s\0' bin/sbx)
+          done < <(find install.sh uninstall.sh scripts bin -name '*.sh' -type f -print0 2>/dev/null; printf '%s\0' bin/sbx)
           exit $fail
 
   # ---------------------------------------------------------------------------
@@ -153,8 +153,7 @@ jobs:
       - name: parse each .sb
         run: |
           for p in configs/sandbox/profiles/*.sb; do
-            # -n = dry-run: load + validate + exit without executing.
-            sandbox-exec -n "$(basename "$p" .sb)" -f "$p" -D HOME_DIR="$HOME" -D PROJECT_DIR="$PWD" \
+            sandbox-exec -f "$p" -D HOME_DIR="$HOME" -D PROJECT_DIR="$PWD" -- \
               /usr/bin/true && echo "✓ $p"
           done
       - name: smoke-test sbx wrapper

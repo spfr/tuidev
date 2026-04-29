@@ -11,14 +11,26 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TERM=xterm-256color
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
-    curl wget git build-essential pkg-config \
+RUN apt-get update && apt-get install -y software-properties-common \
+    && add-apt-repository universe -y \
+    && apt-get update \
+    && apt-get install -y \
+    curl wget git gh tmux shellcheck httpie build-essential pkg-config \
     libssl-dev libevent-dev ncurses-dev \
     zlib1g-dev zsh lua5.4 luarocks \
     bat ripgrep fd-find jq unzip \
-    software-properties-common \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Install yq from upstream because Ubuntu 22.04 package availability differs
+# across architectures.
+RUN case "$(uname -m)" in \
+      x86_64) yq_arch=amd64 ;; \
+      aarch64|arm64) yq_arch=arm64 ;; \
+      *) echo "unsupported architecture for yq: $(uname -m)" >&2; exit 1 ;; \
+    esac \
+    && wget -O /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_${yq_arch}" \
+    && chmod +x /usr/local/bin/yq
 
 # Install Neovim (latest stable)
 RUN add-apt-repository ppa:neovim-ppa/stable -y \
@@ -29,7 +41,7 @@ RUN add-apt-repository ppa:neovim-ppa/stable -y \
 # Install Rust and Rust-based tools
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo install zellij starship zoxide bottom eza --root /usr/local
+RUN cargo install zellij starship zoxide bottom eza git-delta --root /usr/local
 
 # Install fzf
 RUN git clone --depth 1 https://github.com/junegunn/fzf.git /opt/fzf \
@@ -55,15 +67,17 @@ RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd \
 COPY --chown=testuser:testuser . /home/testuser/tuidev/
 
 USER testuser
-WORKDIR /home/testuser
+WORKDIR /home/testuser/tuidev
 
 # Set up configurations
-RUN mkdir -p ~/.config/zellij/layouts ~/.config/nvim ~/.local/bin \
+RUN mkdir -p ~/.config/zellij/layouts ~/.config/nvim ~/.config/tmux ~/.local/bin \
     && cp /home/testuser/tuidev/configs/zsh/.zshrc ~/.zshrc \
     && cp /home/testuser/tuidev/configs/starship/starship.toml ~/.config/starship.toml \
+    && cp /home/testuser/tuidev/configs/tmux/tmux.conf ~/.config/tmux/tmux.conf \
     && cp /home/testuser/tuidev/configs/zellij/config.kdl ~/.config/zellij/config.kdl \
     && cp /home/testuser/tuidev/configs/zellij/layouts/*.kdl ~/.config/zellij/layouts/ \
-    && cp -r /home/testuser/tuidev/configs/nvim/* ~/.config/nvim/
+    && cp -r /home/testuser/tuidev/configs/nvim/* ~/.config/nvim/ \
+    && git config --global core.pager delta
 
 # Make scripts executable
 RUN chmod +x /home/testuser/tuidev/scripts/*.sh

@@ -6,10 +6,12 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+tmp="$(mktemp -d)"
+export TUIDEV_BACKUP_DIR="$tmp/backups"
+
 # shellcheck source=./config_write.sh disable=SC1091
 . "$SCRIPT_DIR/config_write.sh"
 
-tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
