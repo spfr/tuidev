@@ -231,6 +231,14 @@ if [[ -f "$REPO_DIR/configs/ghostty/config" ]]; then
     else
         log_pass "ghostty/config - no deprecated actions"
     fi
+
+    # Check for command-finish notification duration without a unit.
+    # Ghostty expects duration values such as 5s, 1m, or 1h30m.
+    if grep -qE '^notify-on-command-finish-after\s*=\s*[0-9]+(\s*#.*)?$' "$ghostty_config" 2>/dev/null; then
+        log_fail "ghostty/config - notify-on-command-finish-after must include a duration unit (e.g., 10s)"
+    else
+        log_pass "ghostty/config - notification duration valid"
+    fi
 else
     log_fail "ghostty/config - file not found"
 fi

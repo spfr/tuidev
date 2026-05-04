@@ -178,7 +178,7 @@ scrollbar = system
 
 # Notify when long-running commands finish (useful for AI agent tasks)
 notify-on-command-finish = unfocused
-notify-on-command-finish-after = 10
+notify-on-command-finish-after = 10s
 
 # ============================================================================
 # macOS Specific
