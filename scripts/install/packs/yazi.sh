@@ -16,10 +16,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../lib/brew.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/brew.sh"
 
+# Declared so `update.sh --packages` can discover/upgrade it.
+YAZI_FORMULAE=(yazi)
+
 yazi_install() {
     print_header "Pack: yazi"
     command_exists brew || die "Homebrew is required. Install it first: https://brew.sh"
-    brew_install_formula yazi
+    brew_install_formulae "${YAZI_FORMULAE[@]}"
     print_info "yazi ships with sensible defaults; no config written."
     print_info "Optional alias (not shipped): add 'alias y=\"yazi\"' to your zshrc."
     print_success "yazi pack complete"

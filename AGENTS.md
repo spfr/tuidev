@@ -43,6 +43,12 @@ When executing shell commands, prefer these faster, better alternatives:
 | Benchmarking | `hyperfine` | `time` | Statistical analysis |
 | Code stats | `tokei` | `cloc` | Fast line counting |
 
+> **Agents: the interactive TUIs are for the human, not you.** `lazygit`,
+> `lazydocker`, `k9s`, `btm`/`bottom`, `yazi`, `fzf`, and `atuin` need a live
+> terminal you can't drive non-interactively. Use the scriptable equivalents
+> instead: `git`/`gh`, `docker`/`kubectl`, `git diff`, plain `fd`/`rg`. `gh` in
+> particular (PRs, issues, `gh run view` for CI logs) is high-value and scriptable.
+
 ### Available Aliases
 
 ```bash
@@ -78,12 +84,11 @@ cd              # z (zoxide) in interactive shells; builtin cd in scripts
 ...             # cd ../..
 ....            # cd ../../..
 
-# AI CLI Tools (all auto-route through sbx when installed)
+# AI CLI Tools (opt-in: ./install.sh --pack ai-clis; auto-route through sbx)
 cc              # claude (primary)
 cx              # codex (OpenAI)
-gem             # gemini (optional)
 oc              # opencode
-agents          # Launch claude + codex + gemini in 3 tmux panes
+agents          # Launch claude + codex in 2 tmux panes
 ```
 
 ---
@@ -171,12 +176,11 @@ When creating or modifying projects with this setup:
 
 ### AI Tool Configurations
 
-All AI CLIs are self-updating and manage their own configs. The repo ships hooks/policy; individual user configs are `--adopt-existing` by default (if present, left alone).
+AI CLIs are opt-in via `./install.sh --pack ai-clis` and self-update. That pack ships hooks/policy and the `cc`/`cx`/`oc` wrappers; individual user configs are `--adopt-existing` by default (if present, left alone). Gemini CLI is deprecated (successor: Antigravity, `agy`) — not shipped.
 
 ```
 ~/.claude.json                       # Claude Code (primary)
 ~/.codex/config.toml                 # Codex CLI (OpenAI)
-~/.gemini/settings.json              # Gemini CLI (optional)
 ~/.config/opencode/opencode.json     # OpenCode CLI
 ```
 
@@ -200,7 +204,7 @@ ai [name]         # nvim 60% + 2 stacked agent panes
 ai-single [name]  # nvim + 1 agent
 ai-triple [name]  # nvim + 3 stacked agent panes
 
-# Multi-agent (claude | codex | gemini in 3 columns)
+# Multi-agent (claude | codex in 2 columns; needs --pack ai-clis)
 agents [name]
 
 # Other layouts
@@ -268,7 +272,7 @@ If the user installed `--pack zellij`, parallel commands are available: `zwork`,
 
 ## Sandboxed AI Execution
 
-On macOS, the `cc`/`cx`/`gem`/`oc` wrappers auto-route through `sbx` (a Seatbelt wrapper) when both the CLI and `sbx` are on `PATH`. Three profiles are shipped:
+On macOS, the `cc`/`cx`/`oc` wrappers (from `--pack ai-clis`) auto-route through `sbx` (a Seatbelt wrapper) when both the CLI and `sbx` are on `PATH`. Three profiles are shipped:
 
 - **strict** (default) — agent runs, LLM APIs work, package installs don't
 - **standard** — adds GitHub, npm, PyPI, crates, and common registries
@@ -381,7 +385,7 @@ v file                    # Open in nvim
 work [name]               # Bare named session
 dev [name]                # 3-column dev layout
 ai [name]                 # AI workflow (nvim + 2 agents)
-agents [name]             # claude | codex | gemini
+agents [name]             # claude | codex (needs --pack ai-clis)
 tls / tk / tka            # List / kill named / kill all
 ```
 
@@ -396,6 +400,7 @@ If building AI agents that integrate with this environment:
 3. **Assume tmux, not Zellij** — Zellij is opt-in via `--pack zellij`
 4. **Respect the sandbox** — On macOS, agents run under Seatbelt; don't expect host-level filesystem access
 5. **Tokyo Night theme** — If generating TUI output, match the color scheme
+6. **Follow the engineering conventions** — When editing this repo's scripts, see [docs/engineering.md](docs/engineering.md): use the shared libs, follow the pack contract, never `cp` over user files
 
 ### Multi-agent symlink helper
 

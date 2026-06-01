@@ -19,7 +19,7 @@ session already exists, otherwise create).
 | `layout-fullstack.sh`   | `fullstack`     | 5 windows: code \| web \| api \| db \| logs            |
 | `layout-multi.sh`       | `multi`         | 3 windows: dev (3-col) \| monitor (btop) \| git (lazygit) |
 | `layout-remote.sh`      | `remote`        | nvim (70%) + shell (30%) — for narrow / high-latency links |
-| `layout-agents.sh`      | `agents`        | 3 equal columns: claude \| codex \| gemini             |
+| `layout-agents.sh`      | `agents`        | 2 columns: claude \| codex (needs --pack ai-clis)      |
 
 ## Session-name convention
 

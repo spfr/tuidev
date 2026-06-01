@@ -105,7 +105,7 @@ work myproject        # bare session
 dev                   # nvim | agent | runner (3 columns)
 ai                    # nvim + 2 agent panes
 ai-triple             # nvim + 3 agent panes
-agents                # claude + codex + gemini, one per pane
+agents                # claude + codex, one per pane
 remote                # minimal layout for mosh/SSH
 ```
 
@@ -227,10 +227,9 @@ return {
 |------|-------|----------|
 | Claude Code | `cc` | complex tasks, large context, agent teams |
 | Codex | `cx` | OpenAI-flavored workflows |
-| Gemini | `gem` | long-context Google workflows |
 | OpenCode | `oc` | open-source, multi-model |
 
-Run multiple in parallel via `ai` or `agents`. Prefer `sbx -- <alias>` over raw invocation.
+Aliases come from the opt-in `--pack ai-clis`. (Gemini CLI is deprecated upstream — successor: Antigravity, `agy`; add your own wrapper if you use it.) Run multiple in parallel via `ai` or `agents`. Prefer `sbx -- <alias>` over raw invocation.
 
 ---
 

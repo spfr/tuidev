@@ -2,7 +2,7 @@
 
 ## Why a sandbox
 
-Running AI coding agents (Claude Code, Codex, Gemini, OpenCode) locally means handing a non-deterministic process broad shell access to your machine. Even with permission prompts, it is easy for a confused or prompt-injected agent to read `~/.ssh`, exfiltrate a token from `~/.aws`, or reach out to an unexpected host. A sandbox is a thin, always-on safety net that constrains what the agent can do — even if the agent itself decides to misbehave.
+Running AI coding agents (Claude Code, Codex, OpenCode) locally means handing a non-deterministic process broad shell access to your machine. Even with permission prompts, it is easy for a confused or prompt-injected agent to read `~/.ssh`, exfiltrate a token from `~/.aws`, or reach out to an unexpected host. A sandbox is a thin, always-on safety net that constrains what the agent can do — even if the agent itself decides to misbehave.
 
 ## Tier 1 default: Seatbelt
 
@@ -31,7 +31,7 @@ sbx --dry-run -- make test             # print the sandbox-exec command, don't r
 sbx --help                             # full option list
 ```
 
-The `cc` / `cx` / `gem` / `oc` shell functions will pick up `sbx` automatically once the zsh integration lands (added in a later phase). Today you can wrap invocations manually.
+The `cc` / `cx` / `oc` shell functions (installed by `--pack ai-clis`) auto-route through `sbx` automatically when both are on `PATH`. Without `sbx` they call the CLI directly; without the pack, wrap manually: `sbx -- claude`.
 
 ## Escape hatch
 

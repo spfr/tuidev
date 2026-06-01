@@ -46,7 +46,7 @@ Exit with `Ctrl+a d` (detach — session keeps running). Reattach by re-running 
 | `dev [name]`  | nvim + agent + runner |
 | `ai [name]`   | nvim + 2 agents |
 | `ai-triple [name]` | nvim + 3 agents |
-| `agents [name]` | claude + codex + gemini, one per pane |
+| `agents [name]` | claude + codex, one per pane (needs --pack ai-clis) |
 | `remote [name]` | minimal layout for mosh/SSH |
 | `tls` | list sessions |
 | `tk [name]` | kill one session |
@@ -83,7 +83,7 @@ sbx -- oc              # OpenCode, sandboxed
 
 On macOS, `sbx` uses Seatbelt (Tier 1) — no extra install. For stricter isolation (network-off, rootless container), see [sandboxing.md](sandboxing.md) for the Podman-based Tier 2 flow.
 
-Run AI agents unsandboxed with `cc`, `cx`, `gem`, `oc` if you need raw access — but prefer `sbx` by default.
+Run AI agents unsandboxed with `cc`, `cx`, `oc` if you need raw access — but prefer `sbx` by default.
 
 ---
 

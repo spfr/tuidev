@@ -29,6 +29,10 @@ Thank you for your interest. This document captures the conventions this repo fo
 
 ### Code Style
 
+> The canonical engineering conventions — shared libs, the pack contract, the
+> package-array discovery convention, managed-block rules, and the small-function
+> bar — live in [docs/engineering.md](docs/engineering.md). The highlights:
+
 #### Shell Scripts
 
 - Use `shellcheck` for linting (run `make lint`)
@@ -98,6 +102,9 @@ make ci-test
 ```
 
 ### Packs, profiles, and managed blocks
+
+See [docs/engineering.md](docs/engineering.md) for the full pack contract and a
+worked example. In short:
 
 - New tools go into the **right pack**: core (essential), remote (Tailscale/mosh), ui (macOS GUI), sandbox (Seatbelt/Podman), extras (optional), or a new pack under `scripts/install/packs/`.
 - Every pack script follows the contract in `scripts/install/core.sh`: `#!/bin/bash`, `set -e`, source `scripts/lib/ui.sh`, expose one entrypoint function named `<pack>_install`, runnable both directly and when sourced.

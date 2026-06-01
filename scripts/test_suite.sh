@@ -445,14 +445,14 @@ run_core() {
         skip_test "FZF_DEFAULT_COMMAND not set in this shell"
     fi
 
-    # --- AI CLI presence (soft: SKIP when absent, not fail) ---------------
+    # --- AI CLI presence (soft: SKIP when absent — opt-in --pack ai-clis) -
     local aitool
-    for aitool in claude codex gemini opencode; do
+    for aitool in claude codex opencode; do
         start_test "AI CLI: $aitool" core
         if command -v "$aitool" >/dev/null 2>&1; then
             pass_test "$aitool on PATH"
         else
-            skip_test "$aitool not installed (optional)"
+            skip_test "$aitool not installed (optional; --pack ai-clis)"
         fi
     done
 

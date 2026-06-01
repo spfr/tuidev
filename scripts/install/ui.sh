@@ -54,9 +54,7 @@ ui_install() {
     fi
 
     # Desktop utility casks.
-    for c in "${UI_CASKS_MACOS[@]}"; do
-        brew_install_cask "$c"
-    done
+    brew_install_casks "${UI_CASKS_MACOS[@]}"
 
     # Hammerspoon init script (if repo ships one).
     local hs_src="$REPO_ROOT/configs/hammerspoon/init.lua"

@@ -24,7 +24,8 @@
 #   --extras     atuin, dust, broot, bandwhich, duf, hyperfine, tokei, ...
 #
 #   --pack NAME  optional pack (repeatable): zellij, yazi, nnn,
-#                monitoring, sandbox-container, mosh
+#                monitoring, sandbox-container, mosh, cmux, bosun, fnm,
+#                ai-clis (cc/cx/oc wrappers + AI CLI configs)
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files
@@ -173,7 +174,7 @@ done
 # or are fundamental to the shell experience. Packs install *tools*; this
 # section writes *settings*.
 
-print_header "Configuring shell, editor, and AI CLI settings"
+print_header "Configuring shell and editor"
 
 # Helper: write a cross-cutting config according to WRITE_MODE.
 #   managed-block  (default) wrap repo content in tuidev managed markers.
@@ -192,9 +193,35 @@ _install_cross_cutting() {
     esac
 }
 
+# Bootstrap TPM (tmux plugin manager) so tmux-resurrect / tmux-continuum — the
+# durability layer — actually load. Idempotent and non-fatal; only runs once
+# tmux.conf is in place. Skipped under --dry-run.
+_bootstrap_tmux_plugins() {
+    command_exists tmux || return 0
+    command_exists git  || return 0
+    local tpm_dir="$HOME/.config/tmux/plugins/tpm"
+    if [[ -d "$tpm_dir/.git" ]]; then
+        print_success "tpm (already present)"
+    else
+        print_step "installing TPM (tmux plugin manager)"
+        run_cmd git clone --depth 1 https://github.com/tmux-plugins/tpm "$tpm_dir" \
+            || { print_warning "tpm clone failed (continuing)"; return 0; }
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+        print_info "[DRY RUN] would run: $tpm_dir/bin/install_plugins"
+    elif [[ -x "$tpm_dir/bin/install_plugins" ]]; then
+        print_step "installing tmux plugins (resurrect, continuum)"
+        "$tpm_dir/bin/install_plugins" >/dev/null 2>&1 \
+            || print_warning "tmux plugin install failed (open tmux and press 'prefix + I' to retry)"
+    fi
+}
+
 _install_cross_cutting "$HOME/.zshrc"                  "$TUIDEV_REPO/configs/zsh/.zshrc"                   tuidev-zshrc
 _install_cross_cutting "$HOME/.config/starship.toml"   "$TUIDEV_REPO/configs/starship/starship.toml"       tuidev-starship
 _install_cross_cutting "$HOME/.config/tmux/tmux.conf"  "$TUIDEV_REPO/configs/tmux/tmux.conf"               tuidev-tmux
+
+# TPM bootstrap runs after tmux.conf is in place; tmux ships with --core.
+$PACKS_CORE && _bootstrap_tmux_plugins
 
 # --- Neovim (LazyVim). Non-destructive: backup-then-copy, never rm -rf.
 #     Honors WRITE_MODE=adopt-existing by leaving any existing nvim config
@@ -217,26 +244,8 @@ if [[ -d "$TUIDEV_REPO/configs/nvim" ]] && command_exists nvim; then
     fi
 fi
 
-# --- AI CLI configs: adopt-existing (never clobber user customization) ---
-if [[ -f "$TUIDEV_REPO/configs/claude/settings.json" ]]; then
-    install_config "$HOME/.claude.json" \
-        "$TUIDEV_REPO/configs/claude/settings.json" \
-        --adopt-existing
-fi
-
-if [[ -f "$TUIDEV_REPO/configs/opencode/opencode.json" ]]; then
-    mkdir -p "$HOME/.config/opencode"
-    install_config "$HOME/.config/opencode/opencode.json" \
-        "$TUIDEV_REPO/configs/opencode/opencode.json" \
-        --adopt-existing
-fi
-
-if [[ -f "$TUIDEV_REPO/configs/codex/config.toml" ]]; then
-    mkdir -p "$HOME/.codex"
-    install_config "$HOME/.codex/config.toml" \
-        "$TUIDEV_REPO/configs/codex/config.toml" \
-        --adopt-existing
-fi
+# AI CLI wrappers + configs live in the opt-in `--pack ai-clis` (kept out of the
+# core terminal-tools bundle); they are not written here.
 
 # --- Git: delta pager (only if delta installed) ---
 if command_exists delta && $PACKS_CORE; then
@@ -251,7 +260,7 @@ if command_exists delta && $PACKS_CORE; then
 fi
 
 # --- Local bin for installed helpers (sbx, notify, etc.) ---
-mkdir -p "$HOME/.local/bin"
+[[ "$DRY_RUN" == true ]] || mkdir -p "$HOME/.local/bin"
 if [[ -f "$TUIDEV_REPO/scripts/notify.sh" ]]; then
     install_config "$HOME/.local/bin/notify.sh" "$TUIDEV_REPO/scripts/notify.sh" \
         --overwrite
@@ -307,15 +316,15 @@ ${GREEN}Next steps:${NC}
   1. Restart your shell:  ${YELLOW}exec zsh -l${NC}
   2. Try a session:       ${YELLOW}work myproject${NC}     (bare tmux session)
                           ${YELLOW}dev${NC}                 (nvim | agent | runner)
-                          ${YELLOW}ai${NC}                  (nvim | 2 AI agents)
-  3. Sandboxed agents:    ${YELLOW}sbx -- cc${NC}           (Claude in Seatbelt)
+                          ${YELLOW}ai${NC}                  (nvim | 2 work panes)
+  3. AI CLIs (opt-in):    ${YELLOW}./install.sh --pack ai-clis${NC}  (cc/cx/oc + sbx routing)
   4. Verify health:       ${YELLOW}make check${NC}
 
 ${CYAN}Docs:${NC}
-  docs/profiles.md       what each profile installs
-  docs/sandboxing.md     Seatbelt details and escape hatches
-  docs/remote.md         Tailscale + tmux + mosh workflow
-  docs/migration.md      upgrading from the old zellij-first setup
+  docs/profiles.md         what each profile installs
+  docs/sandboxing.md       Seatbelt details and escape hatches
+  docs/remote.md           Tailscale + tmux + mosh workflow
+  docs/agent-workflows.md  AI CLIs, remote control, cmux, bosun
 
 ${CYAN}Your profile manifest:${NC} ~/.config/tuidev/profile
 EOF

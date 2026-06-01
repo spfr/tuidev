@@ -40,7 +40,7 @@ command -v jenv &>/dev/null && eval "$(jenv init -)"
 # Python (pyenv) - if installed
 [[ -d "$HOME/.pyenv" ]] && export PATH="${HOME}/.pyenv/shims:${PATH}"
 
-# Node.js (nvm) - if installed (lazy loaded at bottom for fast shell startup)
+# Node.js (nvm) - if installed (default version added to PATH below; nvm is lazy)
 export NVM_DIR="$HOME/.nvm"
 
 # Yarn - if installed
@@ -48,6 +48,9 @@ export NVM_DIR="$HOME/.nvm"
 
 # RVM (Ruby Version Manager) - if installed
 [[ -d "$HOME/.rvm/bin" ]] && export PATH="$PATH:$HOME/.rvm/bin"
+
+# Rust (cargo) - if installed; exposes `cargo install`ed tools (e.g. bosun)
+[[ -d "$HOME/.cargo/bin" ]] && export PATH="$HOME/.cargo/bin:$PATH"
 
 # Local binaries
 [[ -d "$HOME/.local/bin" ]] && export PATH="$PATH:$HOME/.local/bin"
@@ -209,39 +212,6 @@ alias cleanup='brew cleanup && brew autoremove'
 
 # Code stats
 command -v tokei &>/dev/null && alias loc='tokei'
-
-# ============================================================================
-# AI CLI Tool Wrappers
-# ============================================================================
-# Invocations auto-route through the Seatbelt sandbox (sbx) when both are
-# installed. Escape hatches:
-#   CC_NO_SANDBOX=1 cc ...          one-shot, per invocation
-#   sbx --profile off -- claude     explicit, documented profile bypass
-#   unalias cc                      nuclear option
-#
-# Claude Code and Codex also ship their own native sandboxing; sbx is a
-# uniform-UX layer on top. See docs/sandboxing.md.
-
-_tuidev_run_ai() {
-  # Dispatch CLI through sbx unless the escape hatch is active.
-  local cli="$1"; shift
-  if [[ -n "${CC_NO_SANDBOX:-}" ]] || ! command -v sbx >/dev/null 2>&1; then
-    command "$cli" "$@"
-  else
-    command sbx -- "$cli" "$@"
-  fi
-}
-
-# Drop any pre-existing aliases of these names (zsh refuses to define a
-# function whose name collides with an existing alias). Safe no-op when
-# they are absent — protects upgrades from legacy installs that shipped
-# `alias cc='claude'` et al. before the sbx-wrapped function form.
-unalias cc cx gem oc 2>/dev/null
-
-command -v claude   >/dev/null 2>&1 && cc()  { _tuidev_run_ai claude   "$@"; }
-command -v codex    >/dev/null 2>&1 && cx()  { _tuidev_run_ai codex    "$@"; }
-command -v gemini   >/dev/null 2>&1 && gem() { _tuidev_run_ai gemini   "$@"; }
-command -v opencode >/dev/null 2>&1 && oc()  { _tuidev_run_ai opencode "$@"; }
 
 # ============================================================================
 # Functions
@@ -628,19 +598,46 @@ bindkey '^[[B' history-search-forward   # Down arrow
 # Performance Optimization
 # ============================================================================
 
-# Lazy load nvm (speeds up shell startup significantly)
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  # Setup nvm function to load nvm on first use
-  nvm() {
-    unfunction nvm
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm "$@"
+# Node.js version manager — prefer fnm (fast, Rust) when installed, else nvm.
+#   fnm: ~1ms init, puts Node on PATH eagerly, auto-switches on .nvmrc/.node-version.
+#   nvm: the default version's bin is added to PATH immediately — nearly free (no
+#        ~1s sourcing of nvm.sh) yet node/npm/npx AND every globally installed Node
+#        CLI (codex, language servers, tsc, …) work from the very first
+#        prompt in every shell — editors and AI agents included. `nvm` stays lazy.
+export NVM_DIR="$HOME/.nvm"
+if command -v fnm >/dev/null 2>&1; then
+  eval "$(fnm env --use-on-cd)"
+elif [ -s "$NVM_DIR/nvm.sh" ]; then
+  () {
+    emulate -L zsh
+    setopt local_options null_glob
+    local versions=("$NVM_DIR/versions/node/"v*(/))
+    (( ${#versions} )) || return                 # nothing installed yet
+    versions=(${(nO)versions})                   # newest version first
+    local def="" dir="${versions[1]}" v
+    [ -r "$NVM_DIR/alias/default" ] && def="$(<"$NVM_DIR/alias/default")"
+    if [ -n "$def" ]; then
+      for v in $versions; do
+        if [[ "${v:t}" == "v$def" || "${v:t}" == "v$def."* ]]; then dir="$v"; break; fi
+      done
+    fi
+    [ -d "$dir/bin" ] && export PATH="$dir/bin:$PATH"
   }
+  # Lazy-load the full nvm machinery only when a version command is invoked.
+  nvm() { unset -f nvm; . "$NVM_DIR/nvm.sh"; nvm "$@"; }
+fi
 
-  # Lazy load npm, node, npx
-  for cmd in npm node npx; do
-    eval "${cmd}() { unfunction ${cmd}; [ -s '$NVM_DIR/nvm.sh' ] && . '$NVM_DIR/nvm.sh'; ${cmd} \$@; }"
+# ============================================================================
+# Optional pack shell fragments
+# ============================================================================
+# Each opt-in pack that needs shell hooks (e.g. `--pack ai-clis`) drops a
+# *.zsh file into ~/.config/tuidev/shell.d/. Sourced last so PATH (node,
+# cargo, brew) is fully resolved before any fragment's `command -v` guards run.
+if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/shell.d" ]]; then
+  for _tuidev_frag in "${XDG_CONFIG_HOME:-$HOME/.config}"/tuidev/shell.d/*.zsh(N); do
+    source "$_tuidev_frag"
   done
+  unset _tuidev_frag
 fi
 
 # ============================================================================

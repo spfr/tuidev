@@ -178,6 +178,7 @@ PACK_SCRIPT_DIR="$SCRIPT_DIR/install"
 pack_formulae() {
     local pack="$1"
     local script="$PACK_SCRIPT_DIR/${pack}.sh"
+    [[ -f "$script" ]] || script="$PACK_SCRIPT_DIR/packs/${pack}.sh"
     [[ -f "$script" ]] || return 0
 
     # Candidate array names — keep the list generous.
@@ -218,6 +219,7 @@ pack_formulae() {
 pack_casks() {
     local pack="$1"
     local script="$PACK_SCRIPT_DIR/${pack}.sh"
+    [[ -f "$script" ]] || script="$PACK_SCRIPT_DIR/packs/${pack}.sh"
     [[ -f "$script" ]] || return 0
 
     local upper
@@ -245,57 +247,6 @@ pack_casks() {
             | tr ' ' '\n' \
             | grep -Ev '^(--|-|$)'
     )
-}
-
-# Collect formulae from every enabled pack, including extras listed in the
-# manifest. Deduplicated.
-collect_active_formulae() {
-    local all=()
-    local p
-    for p in $(active_packs); do
-        while IFS= read -r f; do
-            [[ -n "$f" ]] && all+=("$f")
-        done < <(pack_formulae "$p")
-    done
-    # Extra packs (scripts/install/packs/<name>.sh) — best-effort.
-    for p in "${EXTRA_PACKS[@]:-}"; do
-        [[ -z "$p" ]] && continue
-        local script="$PACK_SCRIPT_DIR/packs/${p}.sh"
-        [[ -f "$script" ]] || continue
-        while IFS= read -r f; do
-            [[ -n "$f" ]] && all+=("$f")
-        done < <(
-            (
-                set +u +e
-                # shellcheck disable=SC1090
-                source "$script" 2>/dev/null || true
-                for name in FORMULAE PACKAGES; do
-                    local arr_ref="${name}[@]"
-                    if declare -p "$name" >/dev/null 2>&1; then
-                        printf '%s\n' "${!arr_ref}"
-                        exit 0
-                    fi
-                done
-                grep -E 'brew install[[:space:]]+' "$script" 2>/dev/null \
-                    | grep -v -- '--cask' \
-                    | sed -E 's/.*brew install[[:space:]]+//; s/#.*$//; s/["'\'']//g' \
-                    | tr ' ' '\n' \
-                    | grep -Ev '^(--|-|$)'
-            )
-        )
-    done
-    printf '%s\n' "${all[@]}" | awk 'NF && !seen[$0]++'
-}
-
-collect_active_casks() {
-    local all=()
-    local p
-    for p in $(active_packs); do
-        while IFS= read -r c; do
-            [[ -n "$c" ]] && all+=("$c")
-        done < <(pack_casks "$p")
-    done
-    printf '%s\n' "${all[@]}" | awk 'NF && !seen[$0]++'
 }
 
 # ----------------------------------------------------------------------------
@@ -680,6 +631,88 @@ outdated_cask_subset() {
     done
 }
 
+# ----------------------------------------------------------------------------
+# Per-pack update reporting — shared by profile packs and extra packs
+# ----------------------------------------------------------------------------
+
+# Accumulators summed across packs by _report_brew_group; read by the
+# run_packages_mode summary. Reset at the top of run_packages_mode.
+PKG_OUTDATED_TOTAL=0
+PKG_UNKNOWN=0
+
+# Report (and, outside --check, optionally upgrade) one brew group for a pack.
+# Formula vs cask handling differs only in the brew flag and the outdated probe.
+#   $1 header  section label, e.g. "core updates" / "core cask updates"
+#   $2 noun    confirm-prompt noun, e.g. "core formula(e)" / "core cask(s)"
+#   $3 kind    "formula" | "cask"
+#   $4.. items tracked names (no-op when empty)
+_report_brew_group() {
+    local header="$1" noun="$2" kind="$3"; shift 3
+    (( $# == 0 )) && return 0
+    local items=("$@")
+
+    local raw status=0
+    if [[ "$kind" == cask ]]; then
+        raw="$(outdated_cask_subset "${items[@]}")" || status=$?
+    else
+        raw="$(outdated_subset "${items[@]}")" || status=$?
+    fi
+    local outdated
+    mapfile -t outdated < <(printf '%s\n' "$raw" | awk 'NF')
+
+    echo ""
+    if [[ $status -ne 0 ]]; then
+        echo -e "  ${BOLD}${header}${NC} (${#items[@]} tracked, status unknown):"
+        print_warning "brew outdated probe failed; status unknown"
+        PKG_UNKNOWN=$((PKG_UNKNOWN + 1))
+        return 0
+    fi
+
+    echo -e "  ${BOLD}${header}${NC} (${#items[@]} tracked, ${#outdated[@]} outdated):"
+    if (( ${#outdated[@]} == 0 )); then
+        print_success "all up to date"
+        return 0
+    fi
+    local o
+    for o in "${outdated[@]}"; do
+        printf "    ${CYAN}•${NC} %s\n" "$o"
+    done
+    PKG_OUTDATED_TOTAL=$((PKG_OUTDATED_TOTAL + ${#outdated[@]}))
+
+    [[ "$MODE" == "check" ]] && return 0
+    confirm "Upgrade ${#outdated[@]} ${noun}?" || return 0
+    for o in "${outdated[@]}"; do
+        if [[ "$kind" == cask ]]; then
+            run_cmd brew upgrade --cask "$o" || print_warning "Failed to upgrade cask $o"
+        else
+            run_cmd brew upgrade "$o" || print_warning "Failed to upgrade $o"
+        fi
+    done
+}
+
+# Report every brew item a pack contributes: formulae always, casks on macOS.
+# Discovery goes through pack_formulae/pack_casks so profile packs and extra
+# packs are tracked identically.
+#   $1 pack   pack name (core, fnm, …)
+#   $2 label  display label (default: capitalized pack name)
+report_pack_updates() {
+    local pack="$1" label="${2:-${1^}}"
+
+    local name_list
+    mapfile -t name_list < <(pack_formulae "$pack")
+    if (( ${#name_list[@]} == 0 )); then
+        print_info "${label} updates: (no formulae discovered for '${pack}')"
+    else
+        _report_brew_group "${label} updates" "${label} formula(e)" formula "${name_list[@]}"
+    fi
+
+    if is_macos; then
+        local cask_list
+        mapfile -t cask_list < <(pack_casks "$pack")
+        _report_brew_group "${label} cask updates" "${label} cask(s)" cask "${cask_list[@]}"
+    fi
+}
+
 run_packages_mode() {
     print_section "Checking pack-scoped package updates"
 
@@ -694,127 +727,37 @@ run_packages_mode() {
         run_cmd brew update --quiet || true
     fi
 
-    local packs; packs=$(active_packs)
-    if [[ -z "$packs" ]]; then
+    PKG_OUTDATED_TOTAL=0
+    PKG_UNKNOWN=0
+
+    # Profile packs (core/remote/sandbox/ui/extras) and user-selected extra packs
+    # are reported the same way: report_pack_updates discovers both via
+    # pack_formulae/pack_casks, so e.g. fnm's FNM_FORMULAE and cmux's CMUX_CASKS
+    # are tracked just like core's formulae.
+    local pack any_pack=false
+    for pack in $(active_packs); do
+        any_pack=true
+        report_pack_updates "$pack"
+    done
+    for pack in "${EXTRA_PACKS[@]:-}"; do
+        [[ -z "$pack" ]] && continue
+        any_pack=true
+        report_pack_updates "$pack" "Extra pack: $pack"
+    done
+
+    if [[ "$any_pack" != true ]]; then
         print_warning "No active packs detected; nothing to update"
         return 0
     fi
 
-    local total_outdated=0 unknown_updates=0
-    local pack name_list outdated
-    for pack in $packs; do
-        mapfile -t name_list < <(pack_formulae "$pack")
-        if [[ ${#name_list[@]} -eq 0 ]]; then
-            print_info "${pack^} updates: (no formulae discovered in scripts/install/${pack}.sh)"
-        else
-            local outdated_raw formula_status
-            formula_status=0
-            outdated_raw="$(outdated_subset "${name_list[@]}")" || formula_status=$?
-            mapfile -t outdated < <(printf '%s\n' "$outdated_raw" | awk 'NF')
-            echo ""
-            if [[ $formula_status -ne 0 ]]; then
-                echo -e "  ${BOLD}${pack^} updates${NC} (${#name_list[@]} tracked, status unknown):"
-                print_warning "brew outdated failed; package status unknown"
-                unknown_updates=$((unknown_updates + 1))
-                continue
-            fi
-
-            echo -e "  ${BOLD}${pack^} updates${NC} (${#name_list[@]} tracked, ${#outdated[@]} outdated):"
-            if [[ ${#outdated[@]} -eq 0 ]]; then
-                print_success "all up to date"
-            else
-                local o
-                for o in "${outdated[@]}"; do
-                    printf "    ${CYAN}•${NC} %s\n" "$o"
-                done
-
-                total_outdated=$((total_outdated + ${#outdated[@]}))
-
-                if [[ "$MODE" != "check" ]] && confirm "Upgrade ${#outdated[@]} ${pack} formula(e)?"; then
-                    for o in "${outdated[@]}"; do
-                        run_cmd brew upgrade "$o" || print_warning "Failed to upgrade $o"
-                    done
-                fi
-            fi
-        fi
-
-        if is_macos; then
-            local cask_list cask_outdated c
-            mapfile -t cask_list < <(pack_casks "$pack")
-            if [[ ${#cask_list[@]} -gt 0 ]]; then
-                local cask_raw cask_status
-                cask_status=0
-                cask_raw="$(outdated_cask_subset "${cask_list[@]}")" || cask_status=$?
-                mapfile -t cask_outdated < <(printf '%s\n' "$cask_raw" | awk 'NF')
-                echo ""
-                if [[ $cask_status -ne 0 ]]; then
-                    echo -e "  ${BOLD}${pack^} cask updates${NC} (${#cask_list[@]} tracked, status unknown):"
-                    print_warning "brew outdated --cask failed; cask status unknown"
-                    unknown_updates=$((unknown_updates + 1))
-                    continue
-                fi
-
-                echo -e "  ${BOLD}${pack^} cask updates${NC} (${#cask_list[@]} tracked, ${#cask_outdated[@]} outdated):"
-                if [[ ${#cask_outdated[@]} -eq 0 ]]; then
-                    print_success "all up to date"
-                else
-                    for c in "${cask_outdated[@]}"; do
-                        printf "    ${CYAN}•${NC} %s\n" "$c"
-                    done
-
-                    total_outdated=$((total_outdated + ${#cask_outdated[@]}))
-
-                    if [[ "$MODE" != "check" ]] && confirm "Upgrade ${#cask_outdated[@]} ${pack} cask(s)?"; then
-                        for c in "${cask_outdated[@]}"; do
-                            run_cmd brew upgrade --cask "$c" || print_warning "Failed to upgrade cask $c"
-                        done
-                    fi
-                fi
-            fi
-        fi
-    done
-
-    # Extras (optional per-pack user-selected scripts).
-    local extra
-    for extra in "${EXTRA_PACKS[@]:-}"; do
-        [[ -z "$extra" ]] && continue
-        local script="$PACK_SCRIPT_DIR/packs/${extra}.sh"
-        [[ -f "$script" ]] || continue
-        mapfile -t name_list < <(
-            (
-                set +u +e
-                # shellcheck disable=SC1090
-                source "$script" 2>/dev/null || true
-                for n in FORMULAE PACKAGES; do
-                    ref="${n}[@]"
-                    if declare -p "$n" >/dev/null 2>&1; then
-                        printf '%s\n' "${!ref}"; exit 0
-                    fi
-                done
-            )
-        )
-        (( ${#name_list[@]} == 0 )) && continue
-        mapfile -t outdated < <(outdated_subset "${name_list[@]}")
-        echo ""
-        echo -e "  ${BOLD}Extra pack: ${extra}${NC} (${#name_list[@]} tracked, ${#outdated[@]} outdated):"
-        (( ${#outdated[@]} == 0 )) && { print_success "all up to date"; continue; }
-        total_outdated=$((total_outdated + ${#outdated[@]}))
-        [[ "$MODE" == "check" ]] && continue
-        if confirm "Upgrade ${#outdated[@]} formula(e) from extra pack '$extra'?"; then
-            for o in "${outdated[@]}"; do
-                run_cmd brew upgrade "$o" || print_warning "Failed to upgrade $o"
-            done
-        fi
-    done
-
     echo ""
     if [[ "$MODE" == "check" ]]; then
-        if [[ $unknown_updates -gt 0 ]]; then
-            print_warning "${unknown_updates} package group(s) could not be checked"
-        elif [[ $total_outdated -eq 0 ]]; then
+        if [[ $PKG_UNKNOWN -gt 0 ]]; then
+            print_warning "${PKG_UNKNOWN} package group(s) could not be checked"
+        elif [[ $PKG_OUTDATED_TOTAL -eq 0 ]]; then
             print_success "All pack-tracked packages up to date"
         else
-            print_info "${total_outdated} package(s) have updates available — run without --check to apply"
+            print_info "${PKG_OUTDATED_TOTAL} package(s) have updates available — run without --check to apply"
         fi
     fi
 }

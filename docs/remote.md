@@ -4,6 +4,13 @@
 
 The host provides terminal, tmux, editor, and SSH. You reconnect from any client and run `tmux attach`. The core workflow survives disconnects because tmux does — not because of any magic layer above it. Everything else (Tailscale, mosh, mobile clients) is transport; tmux is the durability layer. See [`VISION.md`](../VISION.md) §"Remote Access Strategy" for the rationale.
 
+> **Just want to drive an agent from your phone?** The AI CLIs now ship native
+> remote control (Claude Code Remote Control; Codex via third-party layers) — you
+> can steer a local agent from `claude.ai/code` or the mobile app without an SSH
+> session. That covers the "talk to Claude on the go" case; this doc covers the
+> durable *full terminal* backbone underneath it. See
+> [`agent-workflows.md`](agent-workflows.md).
+
 ## Primary Path: Tailscale SSH + tmux
 
 Bring the node online:
@@ -83,9 +90,12 @@ remote myproject
 ## Mobile (iOS / iPadOS)
 
 - **Blink Shell** — native iOS/iPadOS SSH + mosh client.
+- **Moshi** — iOS terminal purpose-built for AI agents: native mosh, an agent
+  inbox, Live Activities, Apple Watch actions, and voice input for prompts.
 - **Termius** — cross-platform SSH client with sync.
 
-Both work. Neither is recommended over the other; pick by UI preference and pricing model.
+All three work. Pick by UI preference and pricing model. See
+[`IPHONE_SSH_CLIENTS.md`](IPHONE_SSH_CLIENTS.md) for a fuller comparison.
 
 ## Push Notifications (Optional)
 

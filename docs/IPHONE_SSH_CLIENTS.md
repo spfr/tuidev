@@ -8,6 +8,13 @@ Top recommendations for connecting to your Mac from iPhone.
 > (`./install.sh --pack zellij`), equivalent `z*` wrappers (`zwork`, `zai`, ...)
 > and `zellij attach` also work. Use whichever you have.
 
+> **Just steering an agent? You may not need SSH at all.** The AI CLIs now ship
+> native remote control — drive a local Claude Code session from `claude.ai/code`
+> or the Claude iOS/Android app (Codex via third-party layers). Use that for
+> "talk to my agent on the go"; use an SSH client below when you need a full
+> terminal (editing files, running anything, non-agent work). See
+> [`agent-workflows.md`](agent-workflows.md).
+
 ## 1. Termius (Best Overall) ⭐
 
 **App Store:** https://apps.apple.com/app/termius/id549039008
@@ -82,7 +89,34 @@ work          # bare attach-or-create
 
 ---
 
-## 3. a-Shell (Free, Local Network Only)
+## 3. Moshi (Best for AI Agents) 🤖
+
+**Web:** https://getmoshi.app
+
+**Pros:**
+- ✅ Native mosh (the only iOS terminal that ships it) — ideal over cellular
+- ✅ Agent inbox: see which agents need you across sessions
+- ✅ Live Activities + Apple Watch actions for long-running agent tasks
+- ✅ Image paste and voice input built for coding prompts
+- ✅ Pairs with Tailscale + tmux for a durable backbone
+
+**Cons:**
+- Paid app, newer / smaller ecosystem than Termius
+
+**Setup with Tailscale + Mosh:**
+```bash
+# Connect with mosh, then attach a durable tmux session:
+mosh your-username@100.x.x.x
+ai ai-dev      # attach-or-create nvim + 2 agent panes
+```
+
+**Best for:** Mobile-first AI agent workflows where you want native mosh plus
+agent-aware notifications. Complements native Remote Control (see the callout at
+the top) for the times you need a real terminal.
+
+---
+
+## 4. a-Shell (Free, Local Network Only)
 
 **App Store:** https://apps.apple.com/app/a-shell-icmd/id1473805434
 
@@ -109,7 +143,7 @@ ai ai-dev     # attach-or-create nvim + 2 agent panes, session name "ai-dev"
 
 ---
 
-## 4. Prompt (Simple & Beautiful)
+## 5. Prompt (Simple & Beautiful)
 
 **App Store:** https://apps.apple.com/app/prompt/id1465280838
 
@@ -130,7 +164,7 @@ ai ai-dev     # attach-or-create nvim + 2 agent panes, session name "ai-dev"
 
 ---
 
-## 5. SecureCRT (Enterprise)
+## 6. SecureCRT (Enterprise)
 
 **App Store:** https://apps.apple.com/app/secureshell-ssh-client/id1330623518
 
@@ -154,6 +188,7 @@ ai ai-dev     # attach-or-create nvim + 2 agent panes, session name "ai-dev"
 | App | Price | Best For | Key Features |
 |-----|-------|-----------|--------------|
 | **Termius** | Free/Pro | Everyone | Beautiful UI, sync, file browser |
+| **Moshi** | Paid | AI agents | Native mosh, agent inbox, voice input |
 | **Blink Shell** | $29.99/yr | Power users | Full shell, Mosh, iCloud |
 | **a-Shell** | Free | Local network | No cost, runs Python/Node |
 | **Prompt** | $14.99 | Simplicity | Clean UI, Touch ID |
@@ -165,8 +200,12 @@ ai ai-dev     # attach-or-create nvim + 2 agent panes, session name "ai-dev"
 
 **For Most Users:** Termius
 - Best balance of features and usability
-- Great for Zellij sessions
+- Great for tmux sessions (and Zellij, if installed)
 - Excellent SSH key management
+
+**For AI Agent Workflows:** Moshi (+ native Remote Control)
+- Native mosh and agent-aware notifications
+- Pair with Claude Code Remote Control for low-friction steering
 
 **For Power Users:** Blink Shell
 - Full shell capabilities
@@ -218,7 +257,7 @@ ai ai-dev     # attach-or-create nvim + 2 agent panes, session name "ai-dev"
    chmod 700 ~/.ssh
    ```
 
-### Step 4: Connect & Use Zellij
+### Step 4: Connect & Use tmux
 
 1. In Termius, tap on your Mac host
 2. First time: Accept the fingerprint

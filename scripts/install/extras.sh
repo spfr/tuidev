@@ -43,9 +43,7 @@ extras_install() {
     print_header "Pack: extras"
     command_exists brew || die "Homebrew is required; install from https://brew.sh"
     brew_update_once
-    for f in "${EXTRAS_FORMULAE[@]}"; do
-        brew_install_formula "$f"
-    done
+    brew_install_formulae "${EXTRAS_FORMULAE[@]}"
     print_success "extras pack complete"
 }
 

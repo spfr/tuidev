@@ -11,7 +11,7 @@
 A small, opinionated set of configs + install scripts for an AI-assisted coding workflow. Three ideas shape it:
 
 1. **One session, one pane, one task.** Your work has to survive disconnects, narrow terminals, and mobile reattaches. tmux is the durability layer; splits are a local bonus, not the story.
-2. **Sandbox by default.** AI agents run inside macOS Seatbelt by default. Credentials (`~/.ssh`, `~/.aws`, keychain) are locked out even if the agent is compromised.
+2. **Sandbox-ready.** `sbx` runs any command inside macOS Seatbelt; install `--pack ai-clis` and your AI CLIs route through it automatically. Credentials (`~/.ssh`, `~/.aws`, keychain) are locked out even if the agent is compromised.
 3. **Layered install.** Pick a profile (`minimal`, `desktop`, `remote`) or compose packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack zellij`, ...). Your `~/.zshrc` is never overwritten — edits outside the tuidev-managed block survive forever.
 
 ## Quick start
@@ -24,8 +24,10 @@ exec zsh -l
 
 work myproject                    # bare tmux session, attach-or-create
 dev                               # nvim | agent | runner
-ai                                # nvim + 2 agent panes
-sbx -- cc                         # Claude Code under Seatbelt
+ai                                # nvim + 2 work panes
+sbx -- some-cmd                   # run anything under Seatbelt
+
+./install.sh --pack ai-clis       # opt-in: cc/cx/oc wrappers for AI CLIs
 ```
 
 ## The three profiles
@@ -49,7 +51,7 @@ All commands are attach-or-create and accept an optional session name:
 | `ai [name]`      | nvim 60% + two agent panes                       |
 | `ai-single`      | nvim + one shell                                |
 | `ai-triple`      | nvim + three agent panes                         |
-| `agents [name]`  | three columns: claude ∣ codex ∣ gemini          |
+| `agents [name]`  | two columns: claude ∣ codex (needs `--pack ai-clis`) |
 | `fullstack`      | five windows: code / web / api / db / logs      |
 | `multi`          | three windows: dev / monitor / git              |
 | `remote [name]`  | minimal nvim + shell for narrow terminals        |
@@ -59,13 +61,16 @@ All commands are attach-or-create and accept an optional session name:
 
 ## Sandboxed agents
 
-Claude Code, Codex, Gemini, and OpenCode are routed through a Seatbelt wrapper:
+`sbx` is a general Seatbelt wrapper (from `--pack sandbox`) — run *anything* under
+it. Install the opt-in `--pack ai-clis` and your AI CLIs auto-route through it:
 
 ```bash
-cc                          # = sbx -- claude (strict profile by default)
-CC_NO_SANDBOX=1 cc          # one-shot escape hatch
 sbx --profile standard -- npm ci   # wider network for package installs
 sbx --profile off -- some-tool     # documented pass-through
+
+# With --pack ai-clis installed:
+cc                          # = sbx -- claude (strict profile by default)
+CC_NO_SANDBOX=1 cc          # one-shot escape hatch
 ```
 
 Three profiles are shipped: **strict** (agent runs, LLM APIs work, package installs don't), **standard** (adds GitHub, npm, PyPI, crates, registries), **off** (escape hatch). The agent can read most of `$HOME` but **cannot** read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc` — ever.
@@ -90,18 +95,24 @@ Tier 2 — Podman-backed microVMs — is available behind `./install.sh --pack s
 | [jq](https://stedolan.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | JSON / YAML |
 | [eza](https://github.com/eza-community/eza) / [bat](https://github.com/sharkdp/bat) | `ls` / `cat` replacements |
 
-Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Podman), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
+Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Podman), `--pack fnm` (fast Node manager), `--pack ai-clis` (cc/cx/oc wrappers + AI CLI configs), `--pack cmux` / `--pack bosun` (parallel-agent tools — see [docs/agent-workflows.md](docs/agent-workflows.md)), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
 
-## AI CLIs
+## AI CLIs (opt-in — `--pack ai-clis`)
+
+The core install is a **CLI-agnostic terminal-tools bundle**; AI CLIs churn faster
+than the tools do, so their wrappers + configs live in one opt-in pack:
+
+```bash
+./install.sh --pack ai-clis   # cc/cx/oc wrappers + adopt-existing configs
+```
 
 | Tool | Shell function | Notes |
 |------|----------------|-------|
 | [Claude Code](https://claude.ai/code) | `cc` | Primary; hooks in `configs/claude/settings.json` |
 | [Codex CLI](https://github.com/openai/codex) | `cx` | Defaults in `configs/codex/config.toml` (workspace-write, on-request) |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gem` | Optional |
 | [OpenCode](https://opencode.ai) | `oc` | Multi-model |
 
-All four auto-route through `sbx` when installed. Philosophy: **AI stays in external panes**. `configs/nvim/lua/plugins/ai.lua` is intentionally empty. (ACP-driven in-editor agents are a conscious non-goal; see VISION.md.)
+All three auto-route through `sbx` when `--pack sandbox` is present (otherwise they call the CLI directly). The pack does **not** install the CLIs — they self-update. Gemini CLI is deprecated (succeeded by Antigravity, `agy`); tuidev stays CLI-agnostic, so add your own wrapper if you use one. Philosophy: **AI stays in external panes** — `configs/nvim/lua/plugins/ai.lua` is intentionally empty (ACP-driven in-editor agents are a conscious non-goal; see VISION.md). See [docs/agent-workflows.md](docs/agent-workflows.md).
 
 ## Remote workflow
 
@@ -113,6 +124,8 @@ tmux attach -t main # your session survived the disconnect
 ```
 
 mosh is an optional upgrade for flaky networks (`--pack mosh`). Full setup in [docs/remote.md](docs/remote.md). iOS clients: Blink, Moshi.
+
+To drive agents from your phone, the CLIs now ship native remote control (no SSH needed just to steer Claude/Codex), and `--pack cmux` / `--pack bosun` run agents in parallel — see [docs/agent-workflows.md](docs/agent-workflows.md).
 
 ## Day-to-day
 
@@ -132,6 +145,9 @@ make help             # every available target
 | [docs/sandboxing.md](docs/sandboxing.md) | Seatbelt profiles, escape hatches, Tier 2 pointer |
 | [docs/remote.md](docs/remote.md) | Tailscale + tmux + mosh workflow |
 | [docs/migration.md](docs/migration.md) | Upgrading from the old Zellij-first setup |
+| [docs/agent-workflows.md](docs/agent-workflows.md) | Remote control, cmux, bosun — driving agents |
+| [docs/agent-primer.md](docs/agent-primer.md) | Copy-paste brief to teach any agentic CLI the environment |
+| [docs/engineering.md](docs/engineering.md) | Code conventions: libs, pack contract, managed blocks |
 | [VISION.md](VISION.md) | Product direction + 2026 amendments |
 | [AGENTS.md](AGENTS.md) | Universal instructions for AI coding agents |
 | [CLAUDE.md](CLAUDE.md) | Claude Code–specific guidance for this repo |

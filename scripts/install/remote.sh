@@ -115,12 +115,8 @@ remote_install() {
         command_exists brew || die "Homebrew is required on macOS; install from https://brew.sh"
         brew_update_once
 
-        for c in "${REMOTE_CASKS_MACOS[@]}"; do
-            brew_install_cask "$c"
-        done
-        for f in "${REMOTE_FORMULAE[@]}"; do
-            brew_install_formula "$f"
-        done
+        brew_install_casks "${REMOTE_CASKS_MACOS[@]}"
+        brew_install_formulae "${REMOTE_FORMULAE[@]}"
 
     elif is_linux; then
         # Tailscale is not provided via the same channels on Linux and has its
@@ -129,9 +125,7 @@ remote_install() {
         if command_exists brew; then
             print_info "brew detected on Linux; using brew for formulae"
             brew_update_once
-            for f in "${REMOTE_FORMULAE[@]}"; do
-                brew_install_formula "$f"
-            done
+            brew_install_formulae "${REMOTE_FORMULAE[@]}"
         elif command_exists apt-get; then
             run_cmd sudo apt-get update -y || print_warning "apt-get update failed (continuing)"
             for f in "${REMOTE_FORMULAE[@]}"; do

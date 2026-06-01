@@ -12,6 +12,8 @@
 #   brew_has_cask NAME      true if a cask is installed
 #   brew_install_formula N  idempotent formula install via run_cmd
 #   brew_install_cask N     idempotent cask install via run_cmd
+#   brew_install_formulae … idempotent install of one or more formulae
+#   brew_install_casks …    idempotent install of one or more casks
 #
 # Caching: first `brew_has_formula` / `brew_has_cask` call populates a
 # newline-separated list via `brew list` once instead of once per probe.
@@ -100,4 +102,18 @@ brew_install_cask() {
             print_warning "failed: $c (continuing)"
         fi
     fi
+}
+
+# Plural convenience wrappers — install each argument via the singular helper.
+# Callers decide whether to brew_update_once first. Usage:
+#   brew_install_formulae "${PACK_FORMULAE[@]}"
+#   brew_install_casks    "${PACK_CASKS[@]}"
+brew_install_formulae() {
+    local f
+    for f in "$@"; do brew_install_formula "$f"; done
+}
+
+brew_install_casks() {
+    local c
+    for c in "$@"; do brew_install_cask "$c"; done
 }

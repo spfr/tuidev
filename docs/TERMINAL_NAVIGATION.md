@@ -48,7 +48,7 @@ work [name]        # attach or create bare session (default: $PWD basename)
 dev [name]         # nvim | agent | runner
 ai [name]          # nvim + 2 agents
 ai-triple [name]   # nvim + 3 agents
-agents [name]      # claude + codex + gemini
+agents [name]      # claude + codex (needs --pack ai-clis)
 remote [name]      # minimal for mosh / SSH
 
 tls                # list sessions

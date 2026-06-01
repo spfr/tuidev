@@ -49,7 +49,7 @@ TUIDEV_ENV_FILE_DEFAULT="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/env"
 TUIDEV_VALID_PROFILES=(minimal desktop remote)
 
 # Valid pack names (non-profile packs exposed via --pack NAME).
-TUIDEV_VALID_PACKS=(zellij yazi nnn monitoring sandbox-container mosh)
+TUIDEV_VALID_PACKS=(zellij yazi nnn monitoring sandbox-container mosh cmux bosun fnm ai-clis)
 
 load_tuidev_profile() {
     local file="${1:-$TUIDEV_PROFILE_FILE_DEFAULT}"

@@ -64,7 +64,7 @@ Any terminal works. Ghostty is configured out of the box with macos-option-as-al
 │   (LazyVim)      │     │                              │
 │                  │     │  sbx -- cc    Claude Code    │
 │  • LSP           │     │  sbx -- cx    Codex          │
-│  • Completion    │     │  sbx -- gem   Gemini         │
+│  • Completion    │     │  (opt-in: --pack ai-clis)    │
 │  • Git signs     │     │  sbx -- oc    OpenCode       │
 │  (no AI plugins) │     │                              │
 └──────────────────┘     └──────────────────────────────┘

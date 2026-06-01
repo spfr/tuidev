@@ -26,11 +26,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 # shellcheck source=../../lib/config_write.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/config_write.sh"
 
+# Declared so `update.sh --packages` can discover/upgrade it.
+ZELLIJ_FORMULAE=(zellij)
+
 zellij_install() {
     print_header "Pack: zellij"
     command_exists brew || die "Homebrew is required. Install it first: https://brew.sh"
 
-    brew_install_formula zellij
+    brew_install_formulae "${ZELLIJ_FORMULAE[@]}"
 
     run_cmd mkdir -p "$HOME/.config/zellij/layouts"
 

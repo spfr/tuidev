@@ -30,10 +30,9 @@ Profiles are pre-selected pack sets for common install shapes. They are shortcut
 | eza, bat    | `ls` / `cat` replacements                   |
 | zoxide      | Smarter `cd`                                |
 | httpie      | Friendly HTTP requests via `http`           |
-| claude      | Anthropic CLI                               |
-| codex       | OpenAI CLI                                  |
 
-No GUI apps, no sandbox profiles, no remote stack.
+No GUI apps, no sandbox profiles, no remote stack, no AI CLIs (those are the
+opt-in `--pack ai-clis`).
 
 ## `desktop`
 
@@ -92,7 +91,7 @@ See [`remote.md`](remote.md) for the workflow.
 | tmux                | ✓       | ✓       | ✓      |
 | neovim              | ✓       | ✓       | ✓      |
 | ripgrep / fd / fzf  | ✓       | ✓       | ✓      |
-| claude / codex CLIs | ✓       | ✓       | ✓      |
+| AI CLIs (`--pack ai-clis`) | +  | +       | +      |
 | Ghostty config      |         | ✓       |        |
 | Rectangle / Stats / Maccy / Hidden Bar |  | ✓ |    |
 | Hammerspoon         |         | ✓       |        |
@@ -100,6 +99,9 @@ See [`remote.md`](remote.md) for the workflow.
 | Tailscale           |         |         | ✓      |
 | mosh                |         |         | ✓      |
 | SSH hardening       |         |         | ✓      |
+
+`✓` = included in the profile. `+` = not bundled, but addable to any profile as an
+opt-in pack (`--pack NAME`).
 
 ## Packs Available Outside Profiles
 
@@ -111,6 +113,10 @@ Any of these can be added to any profile with `--pack NAME`:
 - `--pack monitoring` — `lazydocker`, `k9s`, `bottom` (`btm`).
 - `--pack sandbox-container` — Podman machine for VM-backed sandboxing (Tier 2).
 - `--pack mosh` — mosh on its own, without the full `--remote` pack.
+- `--pack fnm` — fnm (Fast Node Manager); the zsh config prefers it over nvm when present.
+- `--pack cmux` — [cmux](https://github.com/manaflow-ai/cmux), a macOS terminal for running AI agents in parallel (macOS 14+). See [`agent-workflows.md`](agent-workflows.md).
+- `--pack bosun` — [bosun](https://github.com/yetidevworks/bosun), a tmux-native AI-agent session orchestrator. See [`agent-workflows.md`](agent-workflows.md).
+- `--pack ai-clis` — AI coding-CLI integration: the `cc`/`cx`/`oc` shell wrappers (sbx auto-routing) + adopt-existing claude/codex/opencode configs. Kept out of the core terminal-tools bundle so the repo stays CLI-agnostic; pair with `--pack sandbox`. See [`agent-workflows.md`](agent-workflows.md).
 - `--extras` — `atuin`, `dust`, `broot`, `bandwhich`, `duf`, `hyperfine`, `tokei`.
 
 Example:

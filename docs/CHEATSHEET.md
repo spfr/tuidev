@@ -19,7 +19,7 @@ Default name is the current directory basename.
 | `fullstack [name]`   | 5-tab full-stack layout                                          |
 | `multi [name]`       | Dev + Monitor + Git tabs                                         |
 | `remote [name]`      | Minimal remote layout (nvim + terminal)                          |
-| `agents [name]`      | claude + codex + gemini in 3 panes                               |
+| `agents [name]`      | claude + codex in 2 panes (needs --pack ai-clis)                 |
 | `tls`                | List sessions                                                    |
 | `tk [name]`          | Kill named session                                               |
 | `tka`                | Kill all sessions (`tmux kill-server`)                           |
@@ -75,11 +75,10 @@ Default name is the current directory basename.
 |-------|----------------|-------------------------------|
 | `cc`  | Claude Code    | Anthropic, primary            |
 | `cx`  | Codex CLI      | OpenAI                        |
-| `gem` | Gemini CLI     | Google, optional              |
 | `oc`  | OpenCode       | Open-source, multi-model      |
 
-All four auto-route through `sbx` with the `strict` profile once the
-sandbox pack is installed. Escape hatches:
+Aliases ship in the opt-in `--pack ai-clis`; all three auto-route through `sbx`
+(`strict` profile) when `--pack sandbox` is present. Escape hatches:
 
 ```bash
 sbx --profile off -- cc          # explicit one-shot bypass

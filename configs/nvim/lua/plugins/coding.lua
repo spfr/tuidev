@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Coding Plugins & Enhancements
--- No in-editor AI (using side terminal for claude/codex/gemini instead)
+-- No in-editor AI (using side terminal for claude/codex instead)
 -- ============================================================================
 
 return {

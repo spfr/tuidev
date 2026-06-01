@@ -19,8 +19,11 @@ ERRORS=0
 WARNINGS=0
 
 log_pass() { echo -e "${GREEN}[PASS]${NC} $1"; }
-log_fail() { echo -e "${RED}[FAIL]${NC} $1"; ((ERRORS++)); }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; ((WARNINGS++)); }
+# Use arithmetic *assignment* (not ((x++))) — under `set -e`, ((x++)) returns a
+# non-zero status when the pre-increment value is 0, which would abort the script
+# on the very first failure/warning.
+log_fail() { echo -e "${RED}[FAIL]${NC} $1"; ERRORS=$((ERRORS + 1)); }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; WARNINGS=$((WARNINGS + 1)); }
 
 echo "============================================"
 echo "Configuration Validator"
@@ -32,7 +35,12 @@ echo ""
 # ============================================================================
 echo "--- Shell Scripts ---"
 
-for script in "$REPO_DIR"/*.sh "$REPO_DIR"/scripts/*.sh; do
+for script in "$REPO_DIR"/*.sh \
+              "$REPO_DIR"/scripts/*.sh \
+              "$REPO_DIR"/scripts/lib/*.sh \
+              "$REPO_DIR"/scripts/install/*.sh \
+              "$REPO_DIR"/scripts/install/packs/*.sh \
+              "$REPO_DIR"/scripts/tmux/*.sh; do
     if [[ -f "$script" ]]; then
         name=$(basename "$script")
         if bash -n "$script" 2>/dev/null; then
@@ -178,11 +186,18 @@ if [[ -f "$REPO_DIR/configs/zsh/.zshrc" ]]; then
         log_pass ".zshrc - no duplicate functions"
     fi
 
-    # Check function syntax
-    if bash -n "$REPO_DIR/configs/zsh/.zshrc" 2>/dev/null; then
+    # Check syntax with zsh (the correct parser for a zsh rc) when available;
+    # fall back to bash -n only if zsh is absent.
+    if command -v zsh >/dev/null 2>&1; then
+        if zsh -n "$REPO_DIR/configs/zsh/.zshrc" 2>/dev/null; then
+            log_pass ".zshrc - syntax OK (zsh -n)"
+        else
+            log_fail ".zshrc - zsh -n syntax check failed"
+        fi
+    elif bash -n "$REPO_DIR/configs/zsh/.zshrc" 2>/dev/null; then
         log_pass ".zshrc - syntax OK"
     else
-        log_warn ".zshrc - bash -n check failed (may be zsh-specific)"
+        log_warn ".zshrc - bash -n check failed (install zsh for an accurate check)"
     fi
 else
     log_fail ".zshrc - file not found"

@@ -17,11 +17,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../lib/brew.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/brew.sh"
 
+# Declared so `update.sh --packages` can discover/upgrade it (brew path).
+MOSH_FORMULAE=(mosh)
+
 mosh_install() {
     print_header "Pack: mosh"
 
     if command_exists brew; then
-        brew_install_formula mosh
+        brew_install_formulae "${MOSH_FORMULAE[@]}"
     elif is_linux && command_exists apt-get; then
         run_cmd sudo apt-get update -y || print_warning "apt-get update failed (continuing)"
         if dpkg -s mosh &>/dev/null; then

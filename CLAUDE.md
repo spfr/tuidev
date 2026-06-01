@@ -2,11 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> See also: [AGENTS.md](AGENTS.md) for universal AI agent instructions about CLI tools and environment.
+> See also: [AGENTS.md](AGENTS.md) for universal AI agent instructions about CLI tools and environment, and [docs/engineering.md](docs/engineering.md) for the code conventions (shared libs, pack contract, managed blocks) to follow when editing `scripts/`, `bin/`, or `install.sh`.
 
 ## Project Overview
 
-macOS TUI Development Setup — an opinionated, terminal-first developer environment for AI-powered workflows. **tmux is the primary multiplexer** (durable sessions survive disconnects, narrow terminals, and mobile reattaches); **Zellij is an opt-in pack** installed via `--pack zellij`. Nvim stays lightweight (no in-editor AI plugins); AI CLIs (claude, codex, gemini, opencode) still run in external panes for maximum speed and multi-agent collaboration.
+macOS TUI Development Setup — an opinionated, terminal-first developer environment for AI-powered workflows. **tmux is the primary multiplexer** (durable sessions survive disconnects, narrow terminals, and mobile reattaches); **Zellij is an opt-in pack** installed via `--pack zellij`. Nvim stays lightweight (no in-editor AI plugins); AI CLIs (claude, codex, opencode) are opt-in via `--pack ai-clis` and run in external panes for maximum speed and multi-agent collaboration.
 
 Installation is layered — pick a profile (`minimal`, `desktop`, `remote`) or compose packs directly (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack NAME`). See `docs/profiles.md`.
 
@@ -60,7 +60,7 @@ make docker-test
 # Quick launchers
 make quick-dev            # tmux dev layout (nvim | agent | runner)
 make quick-ai             # tmux ai layout (nvim + 2 agents)
-make quick-agents         # claude + codex + gemini side-by-side
+make quick-agents         # claude + codex side-by-side (needs --pack ai-clis)
 make quick-lazygit
 ```
 
@@ -118,7 +118,7 @@ scripts/
     ├── layout-ai.sh         # nvim + 2 agents
     ├── layout-ai-single.sh
     ├── layout-ai-triple.sh
-    ├── layout-agents.sh     # claude | codex | gemini
+    ├── layout-agents.sh     # claude | codex
     ├── layout-fullstack.sh
     ├── layout-multi.sh
     └── layout-remote.sh
@@ -129,7 +129,7 @@ scripts/
 
 1. **AI runs externally.** `configs/nvim/lua/plugins/ai.lua` is intentionally empty — AI tools run in adjacent tmux panes, not in-editor. ACP is a conscious non-goal.
 2. **tmux-primary; Zellij optional pack.** The ergonomic commands (`work`, `dev`, `ai`, ...) dispatch to tmux via reproducible layout scripts. Zellij wrappers are namespaced `z*` and only activate once `--pack zellij` is installed.
-3. **Sandbox by default.** AI CLIs (`cc`/`cx`/`gem`/`oc`) auto-route through `sbx` (Seatbelt) on macOS when both the CLI and `sbx` are on `PATH`. `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc` are denied in every shipped profile. Escape hatch: `CC_NO_SANDBOX=1`.
+3. **Sandbox-ready.** `sbx` (Seatbelt) wraps any command; the AI-CLI wrappers (`cc`/`cx`/`oc`, from the opt-in `--pack ai-clis`) auto-route through it on macOS when both the CLI and `sbx` are on `PATH`. `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc` are denied in every shipped profile. Escape hatch: `CC_NO_SANDBOX=1`.
 4. **Rust-based CLI tools.** ripgrep, fd, starship, zoxide, eza, bat, delta for performance.
 5. **Tokyo Night theme.** Consistent across terminal, editor, multiplexer, and prompt.
 6. **User-agnostic paths.** All configs use `$HOME`; no hardcoded `/Users/NAME` strings (CI enforces this).
@@ -144,7 +144,7 @@ Bare `tmux` opens a single pane. Use the shell wrappers or the scripts directly 
 - `layout-ai.sh` — nvim (60%) + 2 stacked agent panes (40%)
 - `layout-ai-single.sh` — nvim + 1 agent
 - `layout-ai-triple.sh` — nvim (55%) + 3 stacked agent panes (45%)
-- `layout-agents.sh` — 3 columns: claude | codex | gemini
+- `layout-agents.sh` — 3 columns: claude | codex
 - `layout-fullstack.sh` — 5 windows: code / web / api / db / logs
 - `layout-multi.sh` — 3 windows: dev / monitor / git
 - `layout-remote.sh` — minimal nvim + shell for narrow terminals
@@ -165,7 +165,7 @@ All wrappers are attach-or-create, accept an optional name, and default to a lay
 - `fullstack [name]` — 5-window full-stack layout
 - `multi [name]` — dev + monitor + git windows
 - `remote [name]` — minimal layout for narrow terminals
-- `agents [name]` — claude + codex + gemini side-by-side
+- `agents [name]` — claude + codex side-by-side (needs --pack ai-clis)
 
 ### Deprecated (one-time warning, forward to the new names)
 
@@ -182,16 +182,21 @@ All wrappers are attach-or-create, accept an optional name, and default to a lay
 - `zwork`, `zdev`, `zai`, `zai-single`, `zai-triple`, `zfullstack`, `zmulti`, `zremote`
 - `zk` — kill all zellij sessions
 
-## AI CLI Tools
+## AI CLI Tools (opt-in — `--pack ai-clis`)
 
-Four AI CLIs are supported. All are self-updating. `cc`/`cx`/`gem`/`oc` are zsh functions (not plain aliases) that auto-route through `sbx` when both the CLI and `sbx` are on `PATH`.
+The core install is CLI-agnostic; AI CLIs live in one opt-in pack
+(`./install.sh --pack ai-clis`). All are self-updating. `cc`/`cx`/`oc` are zsh
+functions (not plain aliases) that auto-route through `sbx` when both the CLI and
+`sbx` are on `PATH` (else they call the CLI directly).
 
 | Tool | Function | Config | Purpose |
 |------|----------|--------|---------|
 | Claude Code | `cc` | `configs/claude/settings.json` | Anthropic's official CLI (primary) |
 | Codex CLI | `cx` | `configs/codex/config.toml` | OpenAI; `sandbox_mode=workspace-write`, `approval_policy=on-request` |
-| Gemini CLI | `gem` | n/a | Google's AI CLI (optional) |
 | OpenCode | `oc` | `configs/opencode/opencode.json` | Open-source, multi-model |
+
+Gemini CLI is deprecated upstream (successor: Antigravity, `agy`) and is not
+shipped — the pack stays CLI-agnostic; add your own wrapper if you use one.
 
 Escape hatches for the sandbox (all one-shot):
 
@@ -200,7 +205,7 @@ cc                          # = sbx -- claude (strict profile)
 CC_NO_SANDBOX=1 cc          # bypass sbx for this invocation
 sbx --profile standard -- cc  # wider profile (GitHub, npm, PyPI, registries)
 sbx --profile off -- cc     # full pass-through
-agents                      # claude + codex + gemini in 3 tmux panes
+agents                      # claude + codex in 2 tmux panes
 ```
 
 See `docs/sandboxing.md` for profile internals and customization.

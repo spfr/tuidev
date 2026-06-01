@@ -4,7 +4,7 @@
 ;;   Run an AI coding agent (or any untrusted-ish command) with broad access
 ;;   inside the current project tree, but with credentials and network sharply
 ;;   restricted. This is the default profile for `sbx` and the zsh wrappers
-;;   around `cc` / `cx` / `gem` / `oc`.
+;;   around `cc` / `cx` / `oc` (from --pack ai-clis).
 ;;
 ;; Parameters (both required, passed via `sandbox-exec -D NAME=value`):
 ;;   PROJECT_DIR — absolute path of the project working tree. The ONLY

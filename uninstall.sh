@@ -144,11 +144,12 @@ if [[ "$ANSWER" == "y" ]] && command_exists brew; then
         atuin bandwhich bottom broot dust duf fastfetch glow hyperfine
         ncdu procs sd tealdeer tokei
         # packs
-        zellij yazi nnn lazydocker k9s podman
+        zellij yazi nnn lazydocker k9s podman fnm
+        # (bosun is cargo-installed, not brew; remove with: cargo uninstall bosun)
     )
 
     CASKS=(
-        ghostty tailscale rectangle stats maccy hiddenbar hammerspoon
+        ghostty tailscale rectangle stats maccy hiddenbar hammerspoon cmux
     )
 
     for f in "${FORMULAE[@]}"; do

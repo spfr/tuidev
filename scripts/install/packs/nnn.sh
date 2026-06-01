@@ -18,6 +18,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../lib/brew.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/brew.sh"
 
+# Declared so `update.sh --packages` can discover/upgrade it.
+NNN_FORMULAE=(nnn)
+
 nnn_install() {
     print_header "Pack: nnn"
     command_exists brew || die "Homebrew is required. Install it first: https://brew.sh"
@@ -27,7 +30,7 @@ nnn_install() {
         print_warning "yazi is already installed. You can have both, but we recommend picking one for muscle memory."
     fi
 
-    brew_install_formula nnn
+    brew_install_formulae "${NNN_FORMULAE[@]}"
     print_info "nnn ships with sensible defaults; no config written."
     print_success "nnn pack complete"
 }

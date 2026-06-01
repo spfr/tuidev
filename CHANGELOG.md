@@ -5,6 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-06-01
+
+Modernization for the 2026 agentic stack. **The core install is now a pure,
+continuously-updatable terminal-tools bundle**; AI CLIs, faster Node, and
+parallel-agent tooling are opt-in packs. tmux stays the durable backbone.
+
+> **Heads-up (behavior change):** AI CLI wrappers (`cc`/`cx`/`oc`) moved out of
+> the default install into `--pack ai-clis`. If you relied on them, add the pack
+> — see [Migration](#migration-2-0--2-1).
+
+### Added
+
+- **`--pack ai-clis`** — opt-in AI coding-CLI integration: the `cc`/`cx`/`oc`
+  wrappers (sbx auto-routing) + adopt-existing claude/codex/opencode configs.
+  Keeps the repo CLI-agnostic as CLIs churn. Pairs with `--pack sandbox`.
+- **`--pack fnm`** — fnm (Fast Node Manager, Rust): ~1ms shell init, auto-switch
+  Node per project from `.nvmrc`/`.node-version`, Node 24 (LTS) default. The
+  shipped `~/.zshrc` prefers fnm when present and falls back to nvm.
+- **`--pack cmux`** — native macOS GUI terminal for agents side-by-side
+  (notification rings, built-in browser, Claude Teams). A desk-side tmux complement.
+- **`--pack bosun`** — tmux-native Rust orchestrator for agent sessions on a
+  dedicated `tmux -L bosun` socket; never touches your main tmux state.
+- **`shell.d/` loader** — the managed `~/.zshrc` sources opt-in pack fragments
+  from `~/.config/tuidev/shell.d/`, so packs can add shell hooks cleanly.
+- **New docs:** `agent-workflows.md` (remote control, cmux, bosun),
+  `agent-primer.md` (copy-paste brief for any agentic CLI),
+  `engineering.md` (shared libs, pack contract, package-array convention).
+- TPM (tmux plugin manager) is **bootstrapped on install**.
+
+### Changed
+
+- **Core = terminal tools only.** AI-CLI wrappers/configs no longer install on
+  every profile; the cross-cutting installer is "shell + editor", nothing else.
+- **Node works from the first prompt in every shell** — the default version's bin
+  is on `PATH` immediately, so `node`/`npx` and global Node CLIs resolve on the
+  very first command; the heavy manager stays lazy.
+- `update.sh --packages` rewritten around one shared discovery path — every
+  pack's formulae **and** casks are tracked.
+- DRY pass: plural `brew_install_formulae`/`brew_install_casks` helpers; deduped
+  install loops across 11 pack scripts.
+- `agents` layout is now **claude | codex** (two panes).
+- Remote/mobile docs reframed tmux-first; **Moshi** added to the iOS client list.
+- opencode model bumped to `anthropic/claude-sonnet-4-6`; CI `seatbelt-profiles`
+  pinned to `macos-15`.
+
+### Deprecated
+
+- **Gemini CLI** is no longer shipped (deprecated upstream; succeeded by
+  Antigravity, `agy`). The repo stays CLI-agnostic — add your own wrapper in
+  `~/.config/tuidev/shell.d/` if you use it.
+
+### Fixed
+
+- `update.sh --packages` silently skipped `fnm`/`cmux` (extra-pack loop ignored
+  casks and most array-name conventions).
+- `--pack bosun` now actually usable: correct `cargo install --git` + `~/.cargo/bin`
+  on `PATH`. Removed dead `collect_active_*` helpers.
+
+### Removed
+
+- `docs/REMOTE_SESSIONS.md` — deprecated stub, superseded by `remote.md` +
+  `agent-workflows.md`.
+
+### Migration (2.0 → 2.1)
+
+- Want the `cc`/`cx`/`oc` wrappers back? `./install.sh --pack ai-clis`
+  (add `--pack sandbox` for Seatbelt routing).
+- Want fnm? `./install.sh --pack fnm` — your existing nvm setup keeps working
+  either way.
+
+---
+
 ## [2.0.0] - 2026-04-14
 
 Major rewrite. tmux becomes the primary multiplexer; Zellij demoted to an
@@ -297,32 +369,7 @@ Claude Code's experimental agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_
 
 ## Pre-release Development
 
-### Elite Tools Phase
-- Added nnn TUI file manager
-- Added lazydocker for Docker management
-- Added ncdu for disk usage analysis
-- Added bandwhich for network monitoring
-- Added fastfetch for system info
-- Added k9s for Kubernetes
-- Added Hammerspoon for macOS automation
-
-### Testing Infrastructure Phase
-- Created health check script
-- Created comprehensive test suite
-- Added Docker test environment
-- Added GitHub Actions CI/CD
-- Added Makefile for development workflow
-- Added dry-run mode to installer
-
-### Documentation Phase
-- Created remote sessions guide
-- Created iPhone SSH clients guide
-- Created Zellij troubleshooting guide
-- Updated all documentation for clarity
-
-### AI Integration Phase
-- Added OpenCode configuration
-- Added Claude Code configuration
-- Added Gemini CLI configuration
-- Pre-configured MCP servers
+Iterative build-up to 1.0.0 (all folded into the 1.0.0 entry above): the
+modern-CLI tool set, macOS automation, the test/CI/Docker harness, the docs set,
+and the first AI-CLI + MCP integration.
 - Created AGENTS.md for AI assistants

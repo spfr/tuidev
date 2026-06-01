@@ -313,7 +313,7 @@ check_ui() {
 check_extras() {
     print_header "Extras (optional quality-of-life tools)"
 
-    local tools=(atuin dust broot bandwhich duf hyperfine tokei)
+    local tools=(atuin dust broot bandwhich duf fastfetch glow hyperfine ncdu procs sd tealdeer tokei)
     local tool
     for tool in "${tools[@]}"; do
         check_optional "$tool on PATH" "have_cmd $tool"

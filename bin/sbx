@@ -67,7 +67,7 @@ EXAMPLES
 
 ENVIRONMENT
   TUIDEV_SANDBOX_DIR   overrides the directory searched for <profile>.sb
-  CC_NO_SANDBOX=1      honored by the cc/cx/gem/oc wrappers (not sbx itself)
+  CC_NO_SANDBOX=1      honored by the cc/cx/oc wrappers (not sbx itself)
 
 See docs/sandboxing.md for detail.
 EOF

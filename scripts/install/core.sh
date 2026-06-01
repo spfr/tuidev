@@ -56,14 +56,10 @@ core_install() {
 
     brew_update_once
 
-    for f in "${CORE_FORMULAE[@]}"; do
-        brew_install_formula "$f"
-    done
+    brew_install_formulae "${CORE_FORMULAE[@]}"
 
     if is_macos; then
-        for c in "${CORE_CASKS_MACOS[@]}"; do
-            brew_install_cask "$c"
-        done
+        brew_install_casks "${CORE_CASKS_MACOS[@]}"
     fi
 
     print_success "core pack complete"
