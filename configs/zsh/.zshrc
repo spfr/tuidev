@@ -180,8 +180,10 @@ command -v ncdu &>/dev/null && alias ncdu='ncdu'
 # tldr pages
 command -v tldr &>/dev/null && alias help='tldr'
 
-# sed replacement (intuitive syntax)
-command -v sd &>/dev/null && alias sed='sd'
+# NOTE: sd, procs, dust, and duf are NOT aliased over sed/ps/du/df.
+# Their flags are incompatible (e.g. `sed -n '1,5p'` breaks under sd), which
+# silently breaks scripts and AI agents that inherit shell aliases.
+# Call them by their own names: sd, procs, dust, duf.
 
 # Navigation
 alias ..='cd ..'
@@ -194,9 +196,6 @@ if command -v btm &>/dev/null; then
   alias top='btm'     # bottom system monitor
   alias bottom='btm'  # explicit bottom command
 fi
-command -v procs &>/dev/null && alias ps='procs'
-command -v dust &>/dev/null && alias du='dust'
-command -v duf &>/dev/null && alias df='duf'
 
 # Markdown viewer
 command -v glow &>/dev/null && alias md='glow'
