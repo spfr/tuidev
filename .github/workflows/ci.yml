@@ -15,7 +15,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: lint
@@ -36,7 +36,7 @@ jobs:
     name: bash -n
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: parse shell scripts
         run: |
           fail=0
@@ -52,7 +52,7 @@ jobs:
     name: validate configs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: install validators
         run: |
           sudo apt-get update
@@ -82,7 +82,7 @@ jobs:
     name: no hardcoded paths
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: grep for /Users/NAME and /home/NAME
         run: |
           if grep -rE '/Users/[a-zA-Z0-9_-]+/' configs/ scripts/ install.sh 2>/dev/null | grep -v '.git'; then
@@ -104,7 +104,7 @@ jobs:
     name: required files
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: |
           required=(
             install.sh
@@ -149,7 +149,7 @@ jobs:
     name: seatbelt profiles parse (macOS)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: parse each .sb
         run: |
           for p in configs/sandbox/profiles/*.sb; do
@@ -170,7 +170,7 @@ jobs:
     name: scripts/lib tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: bash scripts/lib/test_config_write.sh
       - run: bash scripts/lib/test_profile.sh
       - run: bash scripts/lib/test_contract.sh
@@ -182,7 +182,7 @@ jobs:
     name: docker core-tag test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: build
         run: docker build -t mactui-test .
       - name: run core tests
@@ -198,7 +198,7 @@ jobs:
     name: documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: referenced docs exist
         run: |
           missing=0
