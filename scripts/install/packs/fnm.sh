@@ -57,7 +57,9 @@ _fnm_ensure_node() {
     "$fnm_bin" install --lts || print_warning "fnm install --lts failed (continuing)"
     local latest
     latest="$("$fnm_bin" ls 2>/dev/null | grep -oiE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)"
-    [[ -n "$latest" ]] && "$fnm_bin" default "$latest" 2>/dev/null || true
+    if [[ -n "$latest" ]]; then
+        "$fnm_bin" default "$latest" 2>/dev/null || true
+    fi
 }
 
 fnm_install() {
