@@ -58,6 +58,7 @@ TUIDEV_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # later always answers "yes, installed". Decides whether historical migrations
 # get baselined away (fresh machine) or actually applied (upgrade).
 TUIDEV_FRESH_INSTALL=false
+# shellcheck disable=SC2119  # STATE_DIR arg is optional; the default is wanted
 tuidev_is_fresh_install && TUIDEV_FRESH_INSTALL=true
 
 # Bookkeeping, not chatter: from here on, every brew install and every config
@@ -169,6 +170,7 @@ _apply_install_migrations() {
     [[ -z "$(tuidev_migrations_pending)" ]] && return 0
 
     print_header "Applying pending migrations"
+    # shellcheck disable=SC2119  # --list arg is optional; a real run is wanted
     if ! tuidev_run_migrations; then
         die "migration failed — resolve it and re-run; no packs were installed"
     fi

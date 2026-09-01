@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- `scripts/lib/migrate.sh` no longer honors `XDG_CONFIG_HOME` for its state
+  paths — every other tuidev state file lives literally under
+  `~/.config/tuidev`, and the mismatch made an installed machine read as a
+  fresh one (baselining away its pending migrations) wherever
+  `XDG_CONFIG_HOME` points elsewhere.
+- Docker test image builds Rust tools with `cargo install --locked`, so
+  transitive crate drift (e.g. `palette`) can't break the build.
+- Two `shellcheck disable=SC2119` annotations in `install.sh` for
+  optional-arg lib calls (shellcheck 0.9.0 flags them; newer versions don't).
 
 ---
 

@@ -41,7 +41,10 @@ _TUIDEV_MIGRATE_LOADED=1
 _TUIDEV_MIGRATE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 : "${TUIDEV_MIGRATIONS_DIR:=$(dirname "$_TUIDEV_MIGRATE_LIB_DIR")/migrations}"
-: "${TUIDEV_MIGRATIONS_STATE:=${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/migrations}"
+# $HOME/.config literally, not ${XDG_CONFIG_HOME:-...}: every other tuidev
+# state path (profile, manifest, env, backups) is hardcoded there, and honoring
+# XDG only here makes an installed machine read as fresh when the two diverge.
+: "${TUIDEV_MIGRATIONS_STATE:=$HOME/.config/tuidev/migrations}"
 
 # tuidev_migration_id PATH — filename without directory or .sh suffix.
 tuidev_migration_id() {
@@ -100,7 +103,7 @@ tuidev_migrations_pending() {
 # `./install.sh --pack foo` on a year-old install is the common upgrade path.
 # An existing profile or manifest is proof the machine was installed to before.
 tuidev_is_fresh_install() {
-    local dir="${1:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}"
+    local dir="${1:-$HOME/.config/tuidev}"
     if [[ -f "$dir/profile" || -f "$dir/manifest" || -f "$TUIDEV_MIGRATIONS_STATE" ]]; then
         return 1
     fi

@@ -41,7 +41,9 @@ RUN add-apt-repository ppa:neovim-ppa/stable -y \
 # Install Rust and Rust-based tools
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo install zellij starship zoxide bottom eza git-delta --root /usr/local
+# --locked: build each tool against its committed Cargo.lock — unlocked
+# resolution pulls fresh transitive crates and breaks on their API drift.
+RUN cargo install --locked zellij starship zoxide bottom eza git-delta --root /usr/local
 
 # Install fzf
 RUN git clone --depth 1 https://github.com/junegunn/fzf.git /opt/fzf \
