@@ -4,6 +4,8 @@
 
 Profiles are pre-selected pack sets for common install shapes. They are shortcuts, not walls: every pack a profile enables can be added or omitted individually with `--pack NAME`. If a profile doesn't fit, compose packs directly. See [`VISION.md`](../VISION.md) for the architectural rationale and [`sandboxing.md`](sandboxing.md) for sandbox details.
 
+**Package managers.** macOS requires Homebrew. Linux uses Homebrew when it is installed and `apt-get` otherwise, so `minimal` and `remote` install on Debian/Ubuntu — including arm64 boards like a Raspberry Pi, where Homebrew has no build. Packages apt cannot supply for your release are skipped with a link to the upstream install page; the installer never pipes a remote install script into a shell for you. See the Linux question in [`FAQ.md`](FAQ.md) for what bookworm does and doesn't cover.
+
 ## `minimal`
 
 **For:** remote servers, slim VMs, CI runners, anyone who only needs the terminal layer.
@@ -116,6 +118,7 @@ Any of these can be added to any profile with `--pack NAME`:
 - `--pack fnm` — fnm (Fast Node Manager); the zsh config prefers it over nvm when present.
 - `--pack cmux` — [cmux](https://github.com/manaflow-ai/cmux), a macOS terminal for running AI agents in parallel (macOS 14+). See [`agent-workflows.md`](agent-workflows.md).
 - `--pack bosun` — [bosun](https://github.com/yetidevworks/bosun), a tmux-native AI-agent session orchestrator. See [`agent-workflows.md`](agent-workflows.md).
+- `--pack herdr` — [Herdr](https://herdr.dev/), an agent-aware runtime (sidebar states, CLI + socket API). Installs via Homebrew when a formula is available; otherwise it prints the official installer command (`curl -fsSL https://herdr.dev/install.sh | sh`, which drops the binary in `~/.local/bin`) for you to run — the pack never pipes a remote script into a shell on your behalf. tmux stays the default for `work` / `dev` / `ai`. See [`agent-workflows.md`](agent-workflows.md).
 - `--pack ai-clis` — AI coding-CLI integration: the `cc`/`cx`/`oc` shell wrappers (sbx auto-routing) + adopt-existing claude/codex/opencode configs. Kept out of the core terminal-tools bundle so the repo stays CLI-agnostic; pair with `--pack sandbox`. See [`agent-workflows.md`](agent-workflows.md).
 - `--extras` — `atuin`, `dust`, `broot`, `bandwhich`, `duf`, `hyperfine`, `tokei`.
 
@@ -132,4 +135,5 @@ Example:
 - Is this a constrained server, VM, or CI runner? → `minimal`.
 - Do you want Zellij back after the tmux inversion? → any profile `--pack zellij`.
 - Do you need Podman-based sandboxing? → any profile `--pack sandbox-container`.
+- Want fleet attention (which agent is blocked)? → any profile `--pack herdr`.
 - Unsure? → `desktop` on your laptop, `remote` on everything you SSH into.

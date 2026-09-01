@@ -3,6 +3,11 @@
 # Optimized for AI development workflows
 # ============================================================================
 
+# Color source: scripts/theme.sh writes a [palettes.tuidev] table as a managed
+# block. Until a theme is applied this reference is inert (starship falls back
+# to default colors silently).
+palette = "tuidev"
+
 format = """
 [╭─](bold green)$username\
 $hostname\

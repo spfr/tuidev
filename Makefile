@@ -7,7 +7,7 @@
 .PHONY: help \
         install install-minimal install-desktop install-remote install-dry \
         uninstall \
-        update update-check update-packages update-configs update-all \
+        update update-check update-packages update-configs update-migrations update-all \
         update-sandbox-image update-security \
         test test-core test-ui test-all \
         check check-minimal check-desktop check-remote \
@@ -16,7 +16,8 @@
         adopt migrate fix-completions clean \
         docker-build docker-test docker-clean \
         brew-upgrade ci-test \
-        quick-dev quick-ai quick-agents quick-lazygit quick-sysinfo
+        quick-dev quick-ai quick-agents quick-worktrees quick-lazygit quick-sysinfo \
+        theme theme-list
 
 .DEFAULT_GOAL := help
 
@@ -75,6 +76,9 @@ update-packages: ## Update brew packages for the installed profile only
 update-configs: ## Re-apply managed blocks and pack-owned configs
 	@./scripts/update.sh --configs
 
+update-migrations: ## Run pending one-shot migrations
+	@./scripts/update.sh --migrations
+
 update-all: ## Non-interactive: packages + configs + repo
 	@./scripts/update.sh --all
 
@@ -128,6 +132,7 @@ lint: ## Shellcheck all scripts (install/update/lib/tmux/install packs/bin)
 	    scripts/tmux/layout-*.sh \
 	    scripts/install/*.sh \
 	    scripts/install/packs/*.sh \
+	    scripts/migrations/*.sh \
 	    bin/sbx
 	@echo -e "${GREEN}shellcheck clean${NC}"
 
@@ -205,14 +210,23 @@ quick-dev: ## Launch the dev tmux session (nvim | agent | runner)
 quick-ai: ## Launch the ai tmux session (nvim + 2 agents)
 	@./scripts/tmux/layout-ai.sh
 
-quick-agents: ## Launch 3 AI CLIs side-by-side in tmux
+quick-agents: ## Launch claude + codex side-by-side in tmux
 	@./scripts/tmux/layout-agents.sh
+
+quick-worktrees: ## Launch one git worktree + tmux window per agent (N=2 CMD=)
+	@./scripts/tmux/layout-worktrees.sh $(if $(SESSION),$(SESSION),) -n $(if $(N),$(N),2) $(if $(CMD),--cmd "$(CMD)",)
 
 quick-lazygit: ## Launch lazygit
 	@command -v lazygit >/dev/null 2>&1 && lazygit || echo "lazygit not installed"
 
 quick-sysinfo: ## Show system info
 	@command -v fastfetch >/dev/null 2>&1 && fastfetch || uname -a
+
+theme-list: ## List available color themes
+	@./scripts/theme.sh list
+
+theme: ## Apply a theme: make theme NAME=catppuccin-mocha
+	@./scripts/theme.sh apply $(or $(NAME),tokyo-night)
 
 # ----------------------------------------------------------------------------
 # CI

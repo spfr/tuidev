@@ -11,6 +11,7 @@
 #   ./scripts/update.sh --check            # preview only
 #   ./scripts/update.sh --packages         # upgrade brew formulae for active packs
 #   ./scripts/update.sh --configs          # re-apply managed blocks + pack configs
+#   ./scripts/update.sh --migrations       # run pending one-shot migrations
 #   ./scripts/update.sh --repo             # git pull the repo
 #   ./scripts/update.sh --sandbox-image    # rebuild agent-sandbox image
 #   ./scripts/update.sh --security         # security audit (tailscale/ssh/seatbelt)
@@ -38,6 +39,10 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/config_write.sh"
 # shellcheck source=lib/profile.sh disable=SC1091
 . "$SCRIPT_DIR/lib/profile.sh"
+# shellcheck source=lib/migrate.sh disable=SC1091
+. "$SCRIPT_DIR/lib/migrate.sh"
+# shellcheck source=lib/manifest.sh disable=SC1091
+. "$SCRIPT_DIR/lib/manifest.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -46,7 +51,7 @@ print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
 # Argument parsing
 # ----------------------------------------------------------------------------
 
-MODE=""              # check|packages|configs|repo|sandbox-image|security|all|menu
+MODE=""              # check|packages|configs|migrations|repo|sandbox-image|security|all|menu
 NON_INTERACTIVE=false
 
 set_mode() {
@@ -65,6 +70,8 @@ Modes (pick one; default is an interactive menu):
   --check             Preview outdated packages and config drift; mutate nothing
   --packages          brew upgrade formulae/casks belonging to active packs
   --configs           Re-apply repo managed blocks and pack-owned configs
+                      (runs pending migrations first)
+  --migrations        Run pending one-shot migrations only
   --repo              git pull the tuidev repo and show git-clean dry-run
   --sandbox-image     Rebuild agent-sandbox container (needs sandbox-container pack)
   --security          Audit tailscale/ssh perms/seatbelt profiles
@@ -82,6 +89,7 @@ while [[ $# -gt 0 ]]; do
         --check|-c)         set_mode check; shift ;;
         --packages|-p)      set_mode packages; shift ;;
         --configs|-C)       set_mode configs; shift ;;
+        --migrations|-m)    set_mode migrations; shift ;;
         --repo|-r)          set_mode repo; shift ;;
         --sandbox-image)    set_mode sandbox-image; shift ;;
         --security)         set_mode security; shift ;;
@@ -763,6 +771,33 @@ run_packages_mode() {
 }
 
 # ----------------------------------------------------------------------------
+# Mode: --migrations
+#
+# One-shot fixups for machines installed by an older tuidev — the things
+# idempotent pack re-runs can never repair, because the artifact's source is
+# gone from the repo. See scripts/migrations/README.md for the contract.
+#
+# Runs before --configs re-applies anything, so a migration that repairs the
+# shape of a file is done before drift detection reads it. A failure stops the
+# whole run: the machine is in a known-bad state and re-applying configs on top
+# would only obscure it.
+# ----------------------------------------------------------------------------
+
+run_migrations_mode() {
+    print_section "One-shot migrations"
+
+    if [[ "$MODE" == "check" ]]; then
+        tuidev_run_migrations --list
+        return 0
+    fi
+
+    if ! tuidev_run_migrations; then
+        print_error "Migration failed — stopping before any further changes."
+        exit 1
+    fi
+}
+
+# ----------------------------------------------------------------------------
 # Mode: --configs
 # ----------------------------------------------------------------------------
 
@@ -817,7 +852,11 @@ run_configs_mode() {
     fi
 
     print_section "Re-syncing pack-owned configs"
+    # Anything the re-sync installs (a formula a pack gained since the last
+    # release, a config file that was missing) belongs in the manifest too.
+    tuidev_manifest_enable
     pack_reapply_configs
+    tuidev_manifest_disable
     print_success "Pack configs re-applied"
 }
 
@@ -987,6 +1026,7 @@ run_menu() {
     5) Rebuild sandbox image
     6) Security audit
     7) Update all (packages + configs + repo)
+    8) Run pending migrations
     q) Quit
 EOF
     local reply
@@ -1000,6 +1040,7 @@ EOF
         5) MODE=sandbox-image;  run_mode ;;
         6) MODE=security;       run_mode ;;
         7) MODE=all;            run_mode ;;
+        8) MODE=migrations;     run_mode ;;
         q|Q|"") print_info "No action selected." ;;
         *) print_error "Unknown choice: $reply"; exit 2 ;;
     esac
@@ -1014,16 +1055,19 @@ run_mode() {
         check)
             # In --check, we run everything in read-only mode.
             run_packages_mode
+            run_migrations_mode
             run_configs_mode
             run_repo_mode
             ;;
         packages)      run_packages_mode ;;
-        configs)       run_configs_mode ;;
+        migrations)    run_migrations_mode ;;
+        configs)       run_migrations_mode; run_configs_mode ;;
         repo)          run_repo_mode ;;
         sandbox-image) run_sandbox_image_mode ;;
         security)      run_security_mode ;;
         all)
             run_packages_mode
+            run_migrations_mode
             run_configs_mode
             run_repo_mode
             ;;

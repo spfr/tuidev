@@ -20,6 +20,7 @@ session already exists, otherwise create).
 | `layout-multi.sh`       | `multi`         | 3 windows: dev (3-col) \| monitor (btop) \| git (lazygit) |
 | `layout-remote.sh`      | `remote`        | nvim (70%) + shell (30%) — for narrow / high-latency links |
 | `layout-agents.sh`      | `agents`        | 2 columns: claude \| codex (needs --pack ai-clis)      |
+| `layout-worktrees.sh`   | `worktrees`     | 1 window per git worktree (one per agent) + `main` window |
 
 ## Session-name convention
 

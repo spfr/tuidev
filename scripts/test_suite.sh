@@ -499,7 +499,7 @@ run_core() {
     fi
 
     local harness
-    for harness in test_config_write test_profile test_contract; do
+    for harness in test_config_write test_profile test_contract test_theme test_migrations; do
         start_test "lib harness: $harness.sh" core
         if [[ -f "$SCRIPT_DIR/lib/$harness.sh" ]]; then
             if bash "$SCRIPT_DIR/lib/$harness.sh" >>"$LOG_FILE" 2>&1; then

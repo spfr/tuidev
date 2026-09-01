@@ -193,17 +193,23 @@ tuidev/
 │   ├── ghostty/                # terminal (macOS)
 │   ├── hammerspoon/            # macOS automation (UI pack)
 │   ├── claude/                 # Claude Code hooks
+│   ├── codex/                  # Codex CLI defaults
 │   ├── opencode/               # OpenCode settings
+│   ├── herdr/                  # opt-in fleet runtime (--pack herdr)
 │   ├── ssh/                    # remote pack
 │   ├── sandbox/                # Seatbelt .sb + Containerfile
+│   ├── themes/                 # one palette.toml per theme
 │   └── zellij/                 # opt-in pack
 ├── scripts/
-│   ├── lib/                    # shared shell helpers
-│   ├── install/                # numbered pack installers
+│   ├── lib/                    # shared helpers: ui, brew, profile,
+│   │                           #   manifest, migrate, config_write + tests
+│   ├── install/                # pack installers (packs/ for the opt-in ones)
+│   ├── migrations/             # timestamped one-shot repairs
 │   ├── tmux/                   # tmux layout builders
 │   ├── health_check.sh
 │   ├── test_suite.sh
 │   ├── validate_configs.sh
+│   ├── theme.sh
 │   └── update.sh
 ├── docs/
 ├── templates/
@@ -223,7 +229,7 @@ tuidev/
                     │
                     ▼
          ┌────────────────────────┐
-         │  sbx <tier> -- <cli>   │
+         │ sbx --profile P -- CLI │
          │  (Seatbelt or Podman)  │
          └──────────┬─────────────┘
                     │

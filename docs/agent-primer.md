@@ -38,12 +38,19 @@ SCRIPTABLE TOOLS worth reaching for in Bash (installed, fast, non-interactive):
   rg / fd — search contents / find files (sane defaults, respect .gitignore)
   delta   — readable diffs; hyperfine — benchmarks; tokei — LOC counts
 
-DON'T script the TUIs — lazygit, btm/bottom, lazydocker, k9s, yazi, fzf, atuin
-  are interactive apps for the human, not you. Use git/gh, kubectl, `git diff`,
-  plain commands instead.
+DON'T script the TUIs — lazygit, btm/bottom, lazydocker, k9s, yazi, fzf, atuin,
+  and the Herdr UI are interactive apps for the human, not you. Use git/gh,
+  kubectl, `git diff`, `herdr agent list` / `herdr status` instead.
 
-HYGIENE — quote paths; use $HOME, never /Users/<name>; small, idempotent changes;
-  match the project's existing patterns over introducing new ones.
+HERDR — if HERDR_ENV=1 you are already inside a Herdr pane; do not run `herdr`
+  again (nested launches are blocked). Prefix ctrl+b is Herdr; this setup's tmux
+  prefix is ctrl+a.
+
+DONE MEANS VERIFIED — lint/tests/health/CI before you claim a change is finished.
+  `make lint`, `make test-core`, `make check` as the environment provides them.
+
+HYGIENE — quote paths; use $HOME, never a hardcoded home directory; small,
+  idempotent changes; match the project's existing patterns over introducing new ones.
 ```
 
 ## What's intentionally omitted
@@ -63,8 +70,8 @@ all for Claude Code, which:
   list and the `sbx --profile standard` escape hatch to save a failed turn.
 
 What's left in the block above is the genuinely machine-specific part: tmux
-durability, the exact sandbox boundary, Node auto-switching, and which tools are
-*scriptable* vs. *human-only TUIs*.
+durability, the exact sandbox boundary, Node auto-switching, Herdr nesting,
+verification-as-done, and which tools are *scriptable* vs. *human-only TUIs*.
 
 ## Note on AI CLIs
 

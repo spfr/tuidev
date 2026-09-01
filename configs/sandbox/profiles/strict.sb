@@ -115,3 +115,14 @@
 
 ;; Local IPC (unix sockets) for tooling that shells out to daemons.
 (allow network-outbound (literal "/private/var/run/syslog"))
+
+;; herdr control socket (--pack herdr). Under (deny default) an AF_UNIX connect
+;; is blocked, so a sandboxed agent could not run `herdr agent list` / `herdr
+;; status` — the very API docs/agent-primer.md tells agents to use. Scoped to
+;; herdr's own config dir rather than a blanket unix-socket allow:
+;;   default session  ~/.config/herdr/herdr.sock
+;;   named sessions   ~/.config/herdr/sessions/<name>/herdr.sock
+;; If HERDR_SOCKET_PATH points somewhere else, that path is NOT covered — move
+;; the socket back under ~/.config/herdr or run `sbx --profile off`.
+(allow network-outbound
+  (subpath (string-append (param "HOME_DIR") "/.config/herdr")))

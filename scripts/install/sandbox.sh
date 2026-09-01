@@ -102,11 +102,13 @@ sandbox_install() {
     fi
     print_success "sbx installed"
 
-    # 3. Ensure ~/.local/bin is on PATH via managed block in ~/.zshrc.
-    print_step "ensuring ~/.local/bin on PATH via ~/.zshrc (managed block)"
-    # shellcheck disable=SC2016  # we want the literal $HOME / $PATH written to .zshrc
-    write_managed_block "$HOME/.zshrc" "tuidev-sandbox-path" \
-        'export PATH="$HOME/.local/bin:$PATH"'
+    # 3. The ~/.local/bin PATH export used to live here, in a `tuidev-sandbox-path`
+    #    block. That was the wrong owner: this pack is macOS-only and skipped on
+    #    Linux, yet core.sh (Debian fd/bat shims) and install.sh (notify.sh) both
+    #    put binaries in that directory on every platform. The export now ships
+    #    in the tuidev-zshrc block. Drop the old block so existing installs
+    #    converge instead of carrying a duplicate PATH entry.
+    remove_managed_block "$HOME/.zshrc" "tuidev-sandbox-path"
 
     # 4. Verification hint.
     print_info "verify Seatbelt is available:"

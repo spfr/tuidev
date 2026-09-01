@@ -109,6 +109,16 @@ if [[ -f "$REPO_DIR/configs/starship/starship.toml" ]]; then
 else
     log_fail "starship.toml - file not found"
 fi
+
+if [[ -f "$REPO_DIR/configs/herdr/config.toml" ]]; then
+    if grep -qE '^\[' "$REPO_DIR/configs/herdr/config.toml"; then
+        log_pass "herdr/config.toml - has sections"
+    else
+        log_warn "herdr/config.toml - no sections found"
+    fi
+else
+    log_fail "herdr/config.toml - file not found"
+fi
 echo ""
 
 # ============================================================================
@@ -295,6 +305,31 @@ fi
 echo ""
 
 # ============================================================================
+# Theme palettes: every configs/themes/*/palette.toml must carry the exact
+# 26-key color contract (see docs/theming.md); key sets must match across
+# themes so `theme.sh apply` renders identically for any of them.
+# ============================================================================
+echo "--- Theme Palettes ---"
+
+theme_ref=""
+for palette in "$REPO_DIR"/configs/themes/*/palette.toml; do
+    [[ -f "$palette" ]] || continue
+    name=$(basename "$(dirname "$palette")")
+    keys=$(grep -oE '^[a-z0-9_]+ = "#[0-9a-f]{6}"' "$palette" | cut -d' ' -f1 | sort)
+    count=$(printf '%s\n' "$keys" | grep -c .)
+    if [[ "$count" -ne 26 ]]; then
+        log_fail "$name/palette.toml - expected 26 color keys, found $count"
+    elif [[ -z "$theme_ref" ]]; then
+        theme_ref="$keys"; log_pass "$name/palette.toml - 26 keys"
+    elif [[ "$keys" != "$theme_ref" ]]; then
+        log_fail "$name/palette.toml - key set differs from the contract"
+    else
+        log_pass "$name/palette.toml - matches the contract"
+    fi
+done
+echo ""
+
+# ============================================================================
 # 8. Check Required Files
 # ============================================================================
 echo "--- Required Files ---"
@@ -311,6 +346,9 @@ required_files=(
     "configs/zellij/layouts/triple.kdl"
     "configs/nvim/init.lua"
     "configs/starship/starship.toml"
+    "configs/herdr/config.toml"
+    "configs/themes/tokyo-night/palette.toml"
+    "configs/themes/catppuccin-mocha/palette.toml"
     "configs/ghostty/config"
     "configs/hammerspoon/init.lua"
     "scripts/health_check.sh"

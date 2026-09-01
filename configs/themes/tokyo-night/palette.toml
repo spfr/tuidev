@@ -1,0 +1,59 @@
+# ============================================================================
+# tuidev palette: Tokyo Night
+# ============================================================================
+# The single source of truth for this theme's colors. `scripts/theme.sh apply
+# tokyo-night` renders tmux / ghostty / starship snippets from these 26 keys.
+#
+# Provenance — every value below is lifted verbatim from the configs this repo
+# already ships, so applying this theme is a visual no-op on a stock install:
+#   configs/tmux/tmux.conf     (TN_* variables and the pane-border styles)
+#   configs/ghostty/config     (background/foreground/cursor/selection/palette)
+#
+# Format contract (parsed by grep/sed — keep it strict):
+#   * one key per line, exactly `key = "#rrggbb"`
+#   * lowercase snake_case keys, 6-digit lowercase hex, always quoted
+#   * no inline arrays, no multi-line values, no key repeated across sections
+# See docs/theming.md for what each key means.
+# ============================================================================
+
+[theme]
+name = "tokyo-night"
+description = "Tokyo Night — the tuidev default; matches the shipped configs exactly."
+
+[colors]
+
+# --- Surfaces ---------------------------------------------------------------
+bg = "#1a1b26"            # tmux TN_BG / ghostty background
+bg_dark = "#16161e"       # tmux TN_BG_DARK
+bg_highlight = "#292e42"  # tmux TN_BG_HIGHLIGHT
+
+# --- Text -------------------------------------------------------------------
+fg = "#c0caf5"            # tmux TN_FG / ghostty foreground
+fg_dim = "#a9b1d6"        # ghostty palette 7 (normal white)
+
+# --- Interface --------------------------------------------------------------
+accent = "#7aa2f7"        # tmux TN_ACCENT
+cursor = "#c0caf5"        # ghostty cursor-color
+selection_bg = "#33467c"  # ghostty selection-background
+border = "#292e42"        # tmux pane-border-style
+border_active = "#7aa2f7" # tmux pane-active-border-style
+
+# --- ANSI 0-7 (normal) ------------------------------------------------------
+ansi_black = "#15161e"
+ansi_red = "#f7768e"
+ansi_green = "#9ece6a"
+ansi_yellow = "#e0af68"
+ansi_blue = "#7aa2f7"
+ansi_magenta = "#bb9af7"
+ansi_cyan = "#7dcfff"
+ansi_white = "#a9b1d6"
+
+# --- ANSI 8-15 (bright) -----------------------------------------------------
+ansi_bright_black = "#414868"
+ansi_bright_red = "#f7768e"
+ansi_bright_green = "#9ece6a"
+ansi_bright_yellow = "#e0af68"
+ansi_bright_blue = "#7aa2f7"
+ansi_bright_magenta = "#bb9af7"
+ansi_bright_cyan = "#7dcfff"
+ansi_bright_white = "#c0caf5"

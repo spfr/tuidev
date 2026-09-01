@@ -73,17 +73,33 @@ See [TERMINAL_NAVIGATION.md](TERMINAL_NAVIGATION.md) if arrow keys or Option-wor
 
 ## 4. Run an AI Agent in a Sandbox
 
-AI tools write files and run commands. Launch them through `sbx` so they can't escape the project directory:
+AI tools write files and run commands. `sbx` runs *anything* under macOS Seatbelt so it can't reach your credentials:
 
 ```bash
-sbx -- cc              # Claude Code, sandboxed
-sbx -- cx              # Codex CLI, sandboxed
-sbx -- oc              # OpenCode, sandboxed
+sbx -- claude          # any command, strict profile
+sbx -- npm test
 ```
 
-On macOS, `sbx` uses Seatbelt (Tier 1) — no extra install. For stricter isolation (network-off, rootless container), see [sandboxing.md](sandboxing.md) for the Podman-based Tier 2 flow.
+Install the opt-in AI-CLI pack and the wrappers route through `sbx` for you:
 
-Run AI agents unsandboxed with `cc`, `cx`, `oc` if you need raw access — but prefer `sbx` by default.
+```bash
+./install.sh --pack ai-clis   # adds cc / cx / oc
+cc                     # = sbx -- claude   (Claude Code, sandboxed)
+cx                     # = sbx -- codex    (Codex CLI, sandboxed)
+oc                     # = sbx -- opencode (OpenCode, sandboxed)
+```
+
+The pack doesn't install the CLIs themselves — they self-update. If `sbx` isn't on `PATH` (no `--sandbox`), the wrappers just call the CLI directly.
+
+Need raw access for one command? Use an escape hatch rather than avoiding the wrappers:
+
+```bash
+CC_NO_SANDBOX=1 cc            # bypass the sandbox for this invocation
+sbx --profile standard -- cc  # wider profile: GitHub, npm, PyPI, registries
+sbx --profile off -- cc       # full pass-through
+```
+
+On macOS, `sbx` uses Seatbelt (Tier 1) — no extra install. For stricter isolation (rootless container), see [sandboxing.md](sandboxing.md) for the Podman-based Tier 2 flow (`--pack sandbox-container`).
 
 ---
 

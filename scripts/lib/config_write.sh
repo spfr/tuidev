@@ -22,6 +22,11 @@ _TUIDEV_CFGW_LOADED=1
 
 # shellcheck source=./ui.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
+# Manifest recording. A no-op unless a caller enabled it (install.sh does):
+# every block and file written through this lib is recorded so uninstall can
+# remove exactly what this machine got.
+# shellcheck source=./manifest.sh disable=SC1091
+. "$(dirname "${BASH_SOURCE[0]}")/manifest.sh"
 
 # Where --overwrite and the install.sh nvim path park their backups, and how
 # many to keep. 10 covers a few months of active use without unbounded growth.
@@ -130,6 +135,7 @@ write_managed_block() {
         mv "$tmp" "$file"
     fi
 
+    tuidev_manifest_record block "$block_id" "$file"
     print_success "managed block '${block_id}' → ${file}"
 }
 
@@ -183,6 +189,7 @@ install_config() {
                 else
                     mkdir -p "$(dirname "$dest")"
                     cp "$source" "$dest"
+                    tuidev_manifest_record file "$dest"
                     print_success "installed $dest (new)"
                 fi
             fi
@@ -194,6 +201,7 @@ install_config() {
                     print_info "[DRY RUN] would overwrite $dest with $source"
                 else
                     cp "$source" "$dest"
+                    tuidev_manifest_record file "$dest"
                     print_success "overwrote $dest (backup in $TUIDEV_BACKUP_DIR)"
                 fi
             else
@@ -202,6 +210,7 @@ install_config() {
                 else
                     mkdir -p "$(dirname "$dest")"
                     cp "$source" "$dest"
+                    tuidev_manifest_record file "$dest"
                     print_success "installed $dest"
                 fi
             fi

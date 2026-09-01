@@ -24,8 +24,8 @@
 #   --extras     atuin, dust, broot, bandwhich, duf, hyperfine, tokei, ...
 #
 #   --pack NAME  optional pack (repeatable): zellij, yazi, nnn,
-#                monitoring, sandbox-container, mosh, cmux, bosun, fnm,
-#                ai-clis (cc/cx/oc wrappers + AI CLI configs)
+#                monitoring, sandbox-container, mosh, cmux, bosun, herdr,
+#                fnm, ai-clis (cc/cx/oc wrappers + AI CLI configs)
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files
@@ -48,6 +48,23 @@ TUIDEV_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$TUIDEV_REPO/scripts/lib/ui.sh"
 # shellcheck source=scripts/lib/config_write.sh disable=SC1091
 . "$TUIDEV_REPO/scripts/lib/config_write.sh"
+# shellcheck source=scripts/lib/manifest.sh disable=SC1091
+. "$TUIDEV_REPO/scripts/lib/manifest.sh"
+# shellcheck source=scripts/lib/migrate.sh disable=SC1091
+. "$TUIDEV_REPO/scripts/lib/migrate.sh"
+
+# Is this a machine tuidev has never touched? Captured HERE, before a single
+# byte is written: the profile manifest is rewritten on every run, so asking
+# later always answers "yes, installed". Decides whether historical migrations
+# get baselined away (fresh machine) or actually applied (upgrade).
+TUIDEV_FRESH_INSTALL=false
+tuidev_is_fresh_install && TUIDEV_FRESH_INSTALL=true
+
+# Bookkeeping, not chatter: from here on, every brew install and every config
+# write that goes through the shared libs appends a line to
+# ~/.config/tuidev/manifest. uninstall.sh reads it to remove exactly what this
+# machine got. Silent by design; nothing below prints because of it.
+tuidev_manifest_enable
 
 # ----------------------------------------------------------------------------
 # Argument parsing
@@ -130,6 +147,36 @@ print_info "write:    $WRITE_MODE"
 print_info "dry-run:  $DRY_RUN"
 
 # ----------------------------------------------------------------------------
+# Migrations
+# ----------------------------------------------------------------------------
+#
+# A first install has no legacy state, so historical fixups are noise: record
+# them as applied without running any. Every other run is an upgrade of an
+# existing machine — `./install.sh --pack herdr` on a year-old install is the
+# common case — so pending migrations actually run, before the packs write
+# anything a migration might be there to repair.
+
+_apply_install_migrations() {
+    if $TUIDEV_FRESH_INSTALL; then
+        local baselined
+        baselined="$(tuidev_migrations_baseline)"
+        if [[ "${baselined:-0}" -gt 0 ]]; then
+            print_info "new install: ${baselined} migration(s) marked applied, none run"
+        fi
+        return 0
+    fi
+
+    [[ -z "$(tuidev_migrations_pending)" ]] && return 0
+
+    print_header "Applying pending migrations"
+    if ! tuidev_run_migrations; then
+        die "migration failed — resolve it and re-run; no packs were installed"
+    fi
+}
+
+_apply_install_migrations
+
+# ----------------------------------------------------------------------------
 # Pack dispatch
 # ----------------------------------------------------------------------------
 
@@ -140,6 +187,7 @@ run_pack() {
         # shellcheck disable=SC1090
         . "$TUIDEV_REPO/scripts/install/$script"
         "$fn"
+        tuidev_manifest_record pack "${script%.sh}"
     else
         print_warning "pack missing: scripts/install/$script"
     fi
@@ -154,6 +202,7 @@ run_optional_pack() {
     # shellcheck disable=SC1090
     . "$TUIDEV_REPO/scripts/install/$script"
     "$fn"
+    tuidev_manifest_record pack "$name"
 }
 
 $PACKS_CORE    && run_pack core.sh    core_install
@@ -239,6 +288,7 @@ if [[ -d "$TUIDEV_REPO/configs/nvim" ]] && command_exists nvim; then
         else
             mkdir -p "$nvim_dest"
             cp -R "$TUIDEV_REPO/configs/nvim/." "$nvim_dest/"
+            tuidev_manifest_record dir "$nvim_dest"
             print_success "nvim (LazyVim) config installed"
         fi
     fi
@@ -268,12 +318,50 @@ if [[ -f "$TUIDEV_REPO/scripts/notify.sh" ]]; then
 fi
 
 # --- Default shell ---
+# chsh authenticates through PAM. Run where it cannot succeed — no TTY, or a
+# PAM stack that won't authenticate the user — it emits a bare "Password:"
+# prompt and fails, and the login shell silently stays bash (so none of the
+# zshrc functions load on login). Attempt it only when it has a chance, and
+# otherwise hand the user the exact command.
 if [[ "$SHELL" != *zsh ]] && command_exists zsh; then
+    zsh_path="$(command -v zsh)"
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] would set default shell to zsh"
-    else
+    elif ! command_exists chsh; then
+        print_warning "chsh is not installed; set your login shell manually:"
+        print_info "    chsh -s $zsh_path"
+    elif [[ -f /etc/shells ]] && ! grep -qxF "$zsh_path" /etc/shells; then
+        # chsh refuses any shell missing from /etc/shells (common for a
+        # brew-installed zsh on Linux).
+        print_warning "$zsh_path is not listed in /etc/shells; leaving your login shell alone."
+        print_info "To switch manually:"
+        print_info "    echo '$zsh_path' | sudo tee -a /etc/shells"
+        print_info "    chsh -s $zsh_path"
+    elif [[ "$(id -u)" -eq 0 ]] || [[ -t 0 ]]; then
+        # root is never prompted; anyone else needs a terminal to answer PAM.
         print_step "setting default shell to zsh"
-        chsh -s "$(command -v zsh)" || print_warning "could not change default shell"
+        if ! chsh -s "$zsh_path"; then
+            print_warning "could not change default shell (chsh failed)."
+            print_info "Run this yourself when convenient:"
+            print_info "    chsh -s $zsh_path"
+        fi
+    else
+        print_info "not changing your login shell: chsh needs a terminal for its password prompt."
+        print_info "Run this yourself:"
+        print_info "    chsh -s $zsh_path"
+    fi
+fi
+
+# ----------------------------------------------------------------------------
+# Default theme
+# ----------------------------------------------------------------------------
+# The shipped starship config selects palette "tuidev", but the palette table
+# itself is written by scripts/theme.sh. Without this step every prompt warns
+# "Could not find color palette: tuidev" until a theme is applied. Respect an
+# already-chosen theme; only seed the default on machines with no theme state.
+if [[ "$DRY_RUN" != true && ! -f "$HOME/.config/tuidev/theme" ]]; then
+    if ! "$TUIDEV_REPO/scripts/theme.sh" apply tokyo-night; then
+        print_warning "could not apply the default theme; run: make theme NAME=tokyo-night"
     fi
 fi
 
@@ -283,6 +371,30 @@ fi
 
 if [[ "$DRY_RUN" != true ]]; then
     mkdir -p "$HOME/.config/tuidev"
+    # Installs are additive: merge with any existing profile record so a
+    # pack-only run (./install.sh --pack NAME) doesn't erase what earlier
+    # runs installed. Groups only ever flip to true; extra_packs is a union;
+    # the profile name is kept unless --profile was passed this run.
+    MERGED_PACKS="${EXTRA_PACKS[*]}"
+    if [[ -f "$HOME/.config/tuidev/profile" ]]; then
+        while IFS='=' read -r _k _v; do
+            case "$_k" in
+                profile) [[ -z "$PROFILE" && "$_v" != custom ]] && PROFILE="$_v" ;;
+                core)    [[ "$_v" == true ]] && PACKS_CORE=true ;;
+                remote)  [[ "$_v" == true ]] && PACKS_REMOTE=true ;;
+                sandbox) [[ "$_v" == true ]] && PACKS_SANDBOX=true ;;
+                ui)      [[ "$_v" == true ]] && PACKS_UI=true ;;
+                extras)  [[ "$_v" == true ]] && PACKS_EXTRAS=true ;;
+                extra_packs)
+                    for _p in $_v; do
+                        case " $MERGED_PACKS " in
+                            *" $_p "*) ;;
+                            *) MERGED_PACKS="${MERGED_PACKS:+$MERGED_PACKS }$_p" ;;
+                        esac
+                    done ;;
+            esac
+        done < "$HOME/.config/tuidev/profile"
+    fi
     {
         echo "profile=${PROFILE:-custom}"
         echo "core=$PACKS_CORE"
@@ -290,7 +402,7 @@ if [[ "$DRY_RUN" != true ]]; then
         echo "sandbox=$PACKS_SANDBOX"
         echo "ui=$PACKS_UI"
         echo "extras=$PACKS_EXTRAS"
-        echo "extra_packs=${EXTRA_PACKS[*]}"
+        echo "extra_packs=$MERGED_PACKS"
         echo "installed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "repo=$TUIDEV_REPO"
     } > "$HOME/.config/tuidev/profile"
@@ -304,6 +416,8 @@ if [[ "$DRY_RUN" != true ]]; then
         echo "export TUIDEV_PROFILE=\"${PROFILE:-custom}\""
     } > "$HOME/.config/tuidev/env"
     print_success "shell env written: $HOME/.config/tuidev/env"
+
+    tuidev_manifest_record profile "${PROFILE:-custom}"
 fi
 
 # ----------------------------------------------------------------------------
@@ -324,7 +438,8 @@ ${CYAN}Docs:${NC}
   docs/profiles.md         what each profile installs
   docs/sandboxing.md       Seatbelt details and escape hatches
   docs/remote.md           Tailscale + tmux + mosh workflow
-  docs/agent-workflows.md  AI CLIs, remote control, cmux, bosun
+  docs/agent-workflows.md  AI CLIs, Herdr, remote control, cmux, bosun
 
 ${CYAN}Your profile manifest:${NC} ~/.config/tuidev/profile
+${CYAN}What was installed:${NC}    ~/.config/tuidev/manifest  (read by ./uninstall.sh)
 EOF

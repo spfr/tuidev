@@ -5,6 +5,135 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Nothing yet.
+
+---
+
+## [2.2.0] - 2026-09-01
+
+Elite agent-orchestration layer. tmux stays the durability backbone; **Herdr**
+is an opt-in fleet runtime. Personal LAN hosts stay in gitignored `*.local`
+overlays.
+
+### Added
+
+- **`--pack herdr`** — [Herdr](https://herdr.dev/) agent-aware runtime (sidebar
+  states, CLI + socket API). Homebrew-only install; without brew it prints the
+  official installer command rather than piping a remote script to a shell. tmux
+  wrappers (`work` / `dev` / `ai`) are unchanged. Prefix `ctrl+b` vs tmux
+  `ctrl+a`.
+- **[`docs/inspiration.md`](docs/inspiration.md)** — Omarchy/Omacosy practices
+  we steal vs desktop systems we refuse; the `.local` split.
+- Shipped SSH snippet `Include`s `~/.ssh/config.local*` (glob; missing file is
+  ignored). Generic `Host always-on` / `workbox` examples only.
+- First-fleet walkthrough and detach/verify practices in
+  [`docs/agent-workflows.md`](docs/agent-workflows.md).
+- CI `check-paths` also scans docs and fails on mDNS `user@` + hostname forms.
+- **Worktree-per-agent layout** — `scripts/tmux/layout-worktrees.sh`, the
+  `worktrees` shell wrapper, and `make quick-worktrees`. One git worktree per
+  agent under `../<repo>-wt/<branch>` on `agent/N` branches, one tmux window
+  each, with window `main` kept on the original repo for review and merging.
+  Attach-or-create and idempotent; `--list` reports status; `--clean` removes
+  only worktrees that are clean and fully merged (relative to the current or
+  `--base` branch), printing what blocks the rest, and warns-and-continues when
+  git refuses a branch delete instead of aborting the run. Bare `worktrees`
+  defaults to a per-repo `<repo>-wt` session.
+- **Palette-driven theming** — `scripts/theme.sh list|show|apply`, a 26-key
+  palette contract under `configs/themes/`, and two shipped themes
+  (`tokyo-night`, `catppuccin-mocha`). Applying writes `tuidev-theme` managed
+  blocks into tmux/Ghostty/Starship configs; user edits outside the blocks
+  survive. `apply` skips starship (with the fix to run) until `install.sh` has
+  written its own block and a top-level `palette = "tuidev"` selector, rather
+  than appending a table that would swallow the rest of the file, and it moves
+  the theme block back to the end of any file it is no longer last in so the
+  palette actually wins. `make theme NAME=…` / `make theme-list` wrap it.
+  See [`docs/theming.md`](docs/theming.md).
+- **Versioned one-shot migrations** — `scripts/migrations/` holds timestamped
+  scripts run at most once per machine (applied ids in
+  `~/.config/tuidev/migrations`); `update.sh --migrations` runs them, and they
+  run first in `--configs` / `--all`. A failure stops the run and stays
+  unrecorded so the next update retries it. Re-running `install.sh` on an
+  existing machine applies pending migrations before the packs run; only a
+  machine tuidev has never touched baselines history without running it.
+  Inaugural migration prunes orphaned pre-2.0 files
+  (`~/.local/bin/ai-workflow.sh`, `~/.config/mcp-env.template`) with backups.
+  See [`docs/updating.md`](docs/updating.md).
+- **Install manifest** — installs record packs, formulae, casks, managed
+  blocks, and files to `~/.config/tuidev/manifest` (opt-in, append-only,
+  recorded via the shared libs). `uninstall.sh` consults it when present and
+  purges only what *we* installed — a pre-existing `ripgrep` now survives;
+  pre-manifest installs fall back to the old behavior with a warning.
+- **[`docs/roadmap.md`](docs/roadmap.md)** — 2027/28 readiness groundwork:
+  multiplexer landscape (tmux/Herdr/Superlogical posture), Seatbelt →
+  Apple-containerization succession, fleet-scale agent horizons, and explicit
+  adopt/hold criteria for the watch-list.
+- **Linux/apt support** — `minimal` and `remote` install on Debian/Ubuntu
+  without Homebrew, including arm64 boards like a Raspberry Pi. See
+  [`docs/profiles.md`](docs/profiles.md).
+- New Makefile targets: `update-migrations`, `theme`, `theme-list`,
+  `quick-worktrees`.
+- CI `lib-tests` also runs `test_profile.sh`, `test_contract.sh`,
+  `test_theme.sh`, and `test_migrations.sh`.
+
+### Fixed
+
+- Linux install: the core pack no longer hard-requires Homebrew. On apt-only
+  systems (Debian/Raspberry Pi — Homebrew has no aarch64 Linux build) it probes
+  `apt-cache policy` per tool, installs what the release actually packages,
+  shims Debian's renamed binaries (`fdfind`→`fd`, `batcat`→`bat`) into
+  `~/.local/bin`, declines Debian's incompatible `yq` v3, and prints official
+  install commands for the rest instead of piping remote installers. Extras
+  warn-and-skip on brewless Linux instead of aborting. The apt path records the
+  `fd`/`bat` compat shims it drops in `~/.local/bin` as manifest `file` records
+  (so `uninstall.sh` removes them) and the apt packages it installs under a new
+  `apt` manifest kind (recorded but not yet purged — inert until a future
+  uninstall step consumes it).
+- Login shell: `chsh` needs a TTY for its PAM password prompt, so a piped or
+  CI install silently left the shell as bash. The installer now detects the
+  cases it cannot win (no TTY, no `chsh`, `zsh` absent from `/etc/shells`) and
+  prints the exact command to run by hand instead of failing quietly.
+- SSH managed block: prefix the `Include ~/.ssh/config.local*` with
+  `Match all` — appended after a user config ending in a `Host` stanza, a bare
+  `Include` was scoped to that host and `config.local` was never read.
+- Sandbox: `strict.sb` / `standard.sb` now allow outbound AF_UNIX connects
+  under `~/.config/herdr` only, so sandboxed agents can use the Herdr socket
+  API the docs point them at. Credential paths stay denied.
+- Health check: the `ai-clis` probe was a literal `true`; it now checks that at
+  least one of claude/codex/opencode is on `PATH`.
+- CI `check-paths`: capture matches once instead of piping into `grep -q .`
+  (SIGPIPE under `pipefail` silently passed above ~5k matching lines); also
+  scan `bin/`, `uninstall.sh`, and `Makefile`.
+- `install.sh` now auto-applies the `tokyo-night` theme on a fresh, non-dry-run
+  install with no existing `~/.config/tuidev/theme`. Previously the shipped
+  `starship.toml` selected `palette = "tuidev"` with no `[palettes.tuidev]`
+  table until you ran `make theme` by hand, so every prompt warned `Could not
+  find color palette: tuidev`. An already-themed machine is left alone.
+- `install.sh`'s profile record is now additive: a pack-only run (e.g.
+  `./install.sh --pack herdr`) merges with any existing
+  `~/.config/tuidev/profile` instead of rewriting it from scratch — group
+  booleans (core/remote/sandbox/ui/extras) only ever flip true, `extra_packs`
+  is a set union, and a previously recorded profile name (minimal/desktop/
+  remote) survives unless `--profile` is explicitly passed this run.
+- `scripts/health_check.sh`: `profile=custom` (recorded by pack-only installs)
+  no longer exits 2 with "Invalid profile" — it now checks the minimal
+  baseline and prints an info line explaining why.
+
+### Changed
+
+- [`docs/agent-workflows.md`](docs/agent-workflows.md) is a control-plane guide
+  (attention queue, machine roles, decision table, verification-as-done).
+- Agent primer: Herdr nesting, don't script the Herdr TUI, done means verified.
+- [`docs/inspiration.md`](docs/inspiration.md) now distinguishes adopted vs
+  watched practices (manifest-driven uninstall, in-progress theming pipeline),
+  adds an omarchy executable-theme supply-chain caution, and OpenClaw 2.0
+  lessons.
+- `uninstall.sh` also strips `tuidev-theme` managed blocks from tmux, Ghostty
+  and Starship configs, and removes the theme state file.
+
+---
+
 ## [2.1.0] - 2026-06-01
 
 Modernization for the 2026 agentic stack. **The core install is now a pure,

@@ -1,0 +1,9 @@
+# tuidev defaults for Herdr (opt-in --pack herdr).
+# Dropped in only when ~/.config/herdr/config.toml is absent (--adopt-existing).
+#
+# Prefix stays the Herdr default (ctrl+b) so it does not clash with tmux
+# in this setup (ctrl+a). Do not nest `herdr` inside a Herdr pane
+# (HERDR_ENV=1). See docs/agent-workflows.md.
+
+[theme]
+name = "tokyo-night"

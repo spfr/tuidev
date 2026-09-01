@@ -12,6 +12,10 @@ The original vision below was authored before several early-2026 shifts in the a
 
 4. **Neovim stays lean. ACP not adopted.** Agent Client Protocol matured and can drive Nvim in-editor, but the "AI runs in external panes" principle holds. `configs/nvim/lua/plugins/ai.lua` remains intentionally empty. Users who want in-editor agents can add ACP themselves; the repo will not ship it by default.
 
+5. **Fleet attention is opt-in Herdr, not a tmux replacement.** `--pack herdr` installs an agent-aware runtime (sidebar states, CLI + socket API). `work` / `dev` / `ai` stay tmux. [Superlogical](https://www.superlogical.com/) is a watch-list until a beta exists. Personal LAN hosts never enter git — [`docs/inspiration.md`](docs/inspiration.md).
+
+For the forward-looking view — the multiplexer landscape shift, the macOS sandboxing succession story, and explicit adopt/hold criteria for what's on the watch-list — see [`docs/roadmap.md`](docs/roadmap.md).
+
 ## What This Project Should Become
 
 This project should become an opinionated, minimal, macOS-first terminal development system for AI-assisted coding.
@@ -117,10 +121,10 @@ Why:
 
 Why:
 
-- The repo explicitly binds `Ctrl+g` to lock mode in [configs/zellij/config.kdl](/Users/miloszikic/workspace/playground/mactui_setup/configs/zellij/config.kdl:138).
+- The repo explicitly binds `Ctrl+g` to lock mode in [configs/zellij/config.kdl](configs/zellij/config.kdl:138).
 - Zellij documents `Ctrl` as the primary modifier and `Alt` as the secondary modifier, and exposes `Ctrl+g` flows in its unlock-first preset.
 - That is exactly the kind of modal interception that clashes with terminal-native tools and Vim-adjacent AI CLIs.
-- The shell wrappers also make Zellij the default entrypoint for `dev`, `work`, `ai`, `ai-single`, `ai-triple`, `remote`, `fullstack`, and `multi` in [configs/zsh/.zshrc](/Users/miloszikic/workspace/playground/mactui_setup/configs/zsh/.zshrc:344).
+- The shell wrappers also make Zellij the default entrypoint for `dev`, `work`, `ai`, `ai-single`, `ai-triple`, `remote`, `fullstack`, and `multi` in [configs/zsh/.zshrc](configs/zsh/.zshrc:344).
 
 Decision:
 
@@ -250,7 +254,7 @@ The new story should be:
 
 ### 2. Split Installation Into Layers
 
-The current installer at [install.sh](/Users/miloszikic/workspace/playground/mactui_setup/install.sh:184) installs a large mixed set of tools and GUI apps, then overwrites core shell/editor config files.
+The current installer at [install.sh](install.sh:184) installs a large mixed set of tools and GUI apps, then overwrites core shell/editor config files.
 
 Replace it with layered commands:
 
@@ -270,9 +274,9 @@ And add:
 
 Current examples:
 
-- shell config copy in [install.sh](/Users/miloszikic/workspace/playground/mactui_setup/install.sh:335)
-- starship config copy in [install.sh](/Users/miloszikic/workspace/playground/mactui_setup/install.sh:460)
-- zellij config copy in [install.sh](/Users/miloszikic/workspace/playground/mactui_setup/install.sh:509)
+- shell config copy in [install.sh](install.sh:335)
+- starship config copy in [install.sh](install.sh:460)
+- zellij config copy in [install.sh](install.sh:509)
 
 The project should move toward:
 
@@ -283,7 +287,7 @@ The project should move toward:
 
 ### 4. Promote tmux Wrappers, Demote Zellij Wrappers
 
-The shell config currently makes Zellij wrappers the main ergonomic path and tmux wrappers secondary in [configs/zsh/.zshrc](/Users/miloszikic/workspace/playground/mactui_setup/configs/zsh/.zshrc:344) and [configs/zsh/.zshrc](/Users/miloszikic/workspace/playground/mactui_setup/configs/zsh/.zshrc:456).
+The shell config currently makes Zellij wrappers the main ergonomic path and tmux wrappers secondary in [configs/zsh/.zshrc](configs/zsh/.zshrc:344) and [configs/zsh/.zshrc](configs/zsh/.zshrc:456).
 
 This should invert.
 
@@ -308,8 +312,8 @@ The current test suite and health check treat missing optional GUI apps as failu
 
 Examples:
 
-- GUI checks in [scripts/health_check.sh](/Users/miloszikic/workspace/playground/mactui_setup/scripts/health_check.sh:57)
-- GUI tests in [scripts/test_suite.sh](/Users/miloszikic/workspace/playground/mactui_setup/scripts/test_suite.sh:67)
+- GUI checks in [scripts/health_check.sh](scripts/health_check.sh:57)
+- GUI tests in [scripts/test_suite.sh](scripts/test_suite.sh:67)
 
 The new test model should separate:
 
@@ -322,7 +326,7 @@ The new test model should separate:
 
 The update script is useful, but it is still a package and file sync tool, not an environment policy tool.
 
-Current behavior in [scripts/update.sh](/Users/miloszikic/workspace/playground/mactui_setup/scripts/update.sh:123) and [scripts/update.sh](/Users/miloszikic/workspace/playground/mactui_setup/scripts/update.sh:312):
+Current behavior in [scripts/update.sh](scripts/update.sh:123) and [scripts/update.sh](scripts/update.sh:312):
 
 - checks a hardcoded package list
 - diffs copied config files

@@ -41,7 +41,22 @@ EXTRAS_FORMULAE=(
 
 extras_install() {
     print_header "Pack: extras"
-    command_exists brew || die "Homebrew is required; install from https://brew.sh"
+
+    # extras are never required (see health_check.sh). On a Linux box without
+    # Homebrew — e.g. aarch64, which brew does not support — skip gracefully
+    # instead of killing the whole install.
+    if ! command_exists brew; then
+        if is_macos; then
+            die "Homebrew is required on macOS; install from https://brew.sh"
+        fi
+        print_warning "extras pack needs Homebrew, which is not installed."
+        print_info "These are optional quality-of-life tools; core is unaffected."
+        print_info "Install them from your distribution instead, e.g.:"
+        print_info "    sudo apt-get install -y ${EXTRAS_FORMULAE[*]}"
+        print_info "(names and availability vary by release; skip what apt lacks)"
+        return 0
+    fi
+
     brew_update_once
     brew_install_formulae "${EXTRAS_FORMULAE[@]}"
     print_success "extras pack complete"

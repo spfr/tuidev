@@ -26,6 +26,7 @@ make update-check         # Preview available updates
 make update               # Interactive update
 make update-packages      # Brew packages for active profile
 make update-configs       # Re-apply managed blocks and pack-owned configs
+make update-migrations    # Run pending one-shot migrations (once per machine)
 make update-all           # Non-interactive: packages + configs + repo
 make update-sandbox-image # Rebuild Podman image (requires --pack sandbox-container)
 make update-security      # Audit Tailscale + SSH + Seatbelt drift
@@ -61,7 +62,12 @@ make docker-test
 make quick-dev            # tmux dev layout (nvim | agent | runner)
 make quick-ai             # tmux ai layout (nvim + 2 agents)
 make quick-agents         # claude + codex side-by-side (needs --pack ai-clis)
+make quick-worktrees      # One git worktree + tmux window per agent (N=, CMD=)
 make quick-lazygit
+
+# Theming (palette-driven, managed blocks)
+make theme-list           # Available themes, active one marked
+make theme NAME=catppuccin-mocha  # Re-theme tmux / Ghostty / Starship
 ```
 
 All install commands support `--dry-run` for previewing mutations.
@@ -83,6 +89,8 @@ configs/
 ├── codex/config.toml        # sandbox_mode=workspace-write, approval=on-request
 ├── opencode/opencode.json
 ├── sandbox/profiles/        # Seatbelt profiles: strict.sb, standard.sb, off.sb
+├── themes/                  # One palette.toml per theme (26-key contract)
+├── herdr/config.toml        # Tokyo Night snippet; --adopt-existing (--pack herdr)
 └── ssh/                     # Client config + sshd snippets
 
 bin/
@@ -93,15 +101,22 @@ scripts/
 ├── test_suite.sh            # Tagged test runner (--tag core/ui/...)
 ├── validate_configs.sh
 ├── update.sh                # Profile-aware, drift-detecting updater
+├── theme.sh                 # list | show | apply — palette-driven theming
 ├── fix_completions.sh
 ├── setup_agent_configs.sh   # AI-agent symlink generator
 ├── notify.sh
 ├── lib/
 │   ├── ui.sh                # Shared printing / prompt helpers
+│   ├── brew.sh              # Homebrew helpers (plural formulae/casks install)
+│   ├── profile.sh           # Active-profile / pack resolution
+│   ├── manifest.sh          # Append-only record of what we installed
+│   ├── migrate.sh           # One-shot migration runner + state file
 │   ├── config_write.sh      # Managed-block writer (preserves user edits)
-│   └── test_config_write.sh # Unit tests for config_write
+│   └── test_*.sh            # Unit tests: config_write, profile, contract,
+│                            #   theme, migrations (all run by CI `lib-tests`)
+├── migrations/              # Timestamped one-shot scripts, run once per machine
 ├── install/
-│   ├── core.sh              # Core pack (always installed)
+│   ├── core.sh              # Core pack (always installed; apt fallback on Linux)
 │   ├── remote.sh            # Tailscale + ssh + (optional) mosh
 │   ├── sandbox.sh           # sbx + Seatbelt profile install
 │   ├── ui.sh                # Ghostty, Hammerspoon, Rectangle, etc.
@@ -111,14 +126,22 @@ scripts/
 │       ├── yazi.sh          # Opt-in file manager
 │       ├── nnn.sh
 │       ├── monitoring.sh    # lazydocker, k9s, bottom
-│       └── sandbox-container.sh  # Podman machine (Tier 2)
+│       ├── sandbox-container.sh  # Podman machine (Tier 2)
+│       ├── mosh.sh          # mosh alone, without the full --remote pack
+│       ├── fnm.sh           # Fast Node Manager
+│       ├── cmux.sh          # macOS GUI terminal for parallel agents
+│       ├── bosun.sh         # tmux-native agent session orchestrator
+│       ├── ai-clis.sh       # cc/cx/oc wrappers + adopt-existing CLI configs
+│       └── herdr.sh         # Opt-in agent runtime (fleet attention)
 └── tmux/
+    ├── _lib.sh              # Shared attach-or-create / arg-parsing helpers
     ├── layout-work.sh       # Reproducible attach-or-create layout helpers
     ├── layout-dev.sh        # nvim | agent | runner
     ├── layout-ai.sh         # nvim + 2 agents
     ├── layout-ai-single.sh
     ├── layout-ai-triple.sh
     ├── layout-agents.sh     # claude | codex
+    ├── layout-worktrees.sh  # One git worktree + tmux window per agent
     ├── layout-fullstack.sh
     ├── layout-multi.sh
     └── layout-remote.sh
@@ -131,9 +154,12 @@ scripts/
 2. **tmux-primary; Zellij optional pack.** The ergonomic commands (`work`, `dev`, `ai`, ...) dispatch to tmux via reproducible layout scripts. Zellij wrappers are namespaced `z*` and only activate once `--pack zellij` is installed.
 3. **Sandbox-ready.** `sbx` (Seatbelt) wraps any command; the AI-CLI wrappers (`cc`/`cx`/`oc`, from the opt-in `--pack ai-clis`) auto-route through it on macOS when both the CLI and `sbx` are on `PATH`. `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc` are denied in every shipped profile. Escape hatch: `CC_NO_SANDBOX=1`.
 4. **Rust-based CLI tools.** ripgrep, fd, starship, zoxide, eza, bat, delta for performance.
-5. **Tokyo Night theme.** Consistent across terminal, editor, multiplexer, and prompt.
-6. **User-agnostic paths.** All configs use `$HOME`; no hardcoded `/Users/NAME` strings (CI enforces this).
+5. **One palette, applied everywhere.** Tokyo Night is the default; `scripts/theme.sh apply NAME` re-themes tmux, Ghostty and Starship from a single `configs/themes/<name>/palette.toml`. Neovim is deliberately out of scope (LazyVim owns its colorscheme). See [docs/theming.md](docs/theming.md).
+6. **User-agnostic paths.** All configs use `$HOME`; no hardcoded `/Users/NAME` strings (CI enforces this). Personal LAN hosts belong in `~/.ssh/config.local` / `~/.zshrc.local`.
 7. **Non-destructive by default.** `~/.zshrc` is written as a managed block (`# >>> tuidev managed >>>`); user edits outside survive. AI CLI settings use `--adopt-existing`. Backups live in `~/.config/tuidev/backups/`.
+8. **Fleet attention is opt-in.** `--pack herdr` does not replace tmux layouts. Homebrew-only install — if brew has no formula the pack prints the official installer command instead of piping a remote script into a shell. See [docs/agent-workflows.md](docs/agent-workflows.md).
+9. **Reversible installs.** Every install appends what it actually placed to `~/.config/tuidev/manifest`; `uninstall.sh` purges only those records, so a pre-existing `ripgrep` survives. One-shot `scripts/migrations/` repair past releases' leftovers and run before packs on an existing machine. See [docs/updating.md](docs/updating.md).
+10. **macOS-first, Linux-capable.** `minimal` and `remote` install on Debian/Ubuntu via an apt fallback when Homebrew is absent (including arm64 boards like a Raspberry Pi). The installer never pipes a remote install script into a shell — it prints the command for you.
 
 ## Session Layouts
 
@@ -144,7 +170,8 @@ Bare `tmux` opens a single pane. Use the shell wrappers or the scripts directly 
 - `layout-ai.sh` — nvim (60%) + 2 stacked agent panes (40%)
 - `layout-ai-single.sh` — nvim + 1 agent
 - `layout-ai-triple.sh` — nvim (55%) + 3 stacked agent panes (45%)
-- `layout-agents.sh` — 3 columns: claude | codex
+- `layout-agents.sh` — 2 columns: claude | codex
+- `layout-worktrees.sh` — one git worktree + tmux window per agent; window `main` stays on the original repo. `[-n N] [--branch-prefix P] [--base REF] [--cmd CMD] | --list | --clean`. Default session `<repo>-wt`.
 - `layout-fullstack.sh` — 5 windows: code / web / api / db / logs
 - `layout-multi.sh` — 3 windows: dev / monitor / git
 - `layout-remote.sh` — minimal nvim + shell for narrow terminals
@@ -166,6 +193,7 @@ All wrappers are attach-or-create, accept an optional name, and default to a lay
 - `multi [name]` — dev + monitor + git windows
 - `remote [name]` — minimal layout for narrow terminals
 - `agents [name]` — claude + codex side-by-side (needs --pack ai-clis)
+- `worktrees [name]` — one git worktree + tmux window per agent (default 2, max 8); `--list` / `--clean`
 
 ### Deprecated (one-time warning, forward to the new names)
 
@@ -217,12 +245,13 @@ See `docs/sandboxing.md` for profile internals and customization.
 - `lint-scripts` — shellcheck over `install.sh`, `scripts/*.sh`, `scripts/lib/*.sh`, `scripts/tmux/layout-*.sh`, `scripts/install/*.sh`, `scripts/install/packs/*.sh`, `bin/sbx`
 - `script-syntax` — `bash -n` across install/uninstall/scripts/bin
 - `validate-configs` — JSON (claude, opencode), TOML (starship, codex), Lua (nvim, hammerspoon)
-- `check-paths` — no hardcoded `/Users/NAME` or `/home/NAME` leaked into configs
+- `check-paths` — no hardcoded `/Users/NAME` or `/home/NAME` leaked into configs, docs, `bin/`, `uninstall.sh`, or the `Makefile`; also fails on mDNS `user@host.local` forms
 - `required-files` — every file `install.sh` references must exist (tmux, sandbox profiles, codex config, sbx, lib, docs)
 - `seatbelt-profiles` (macOS runner) — each `.sb` parses under `sandbox-exec -n` and `bin/sbx --dry-run` runs
-- `lib-tests` — `scripts/lib/test_config_write.sh`
+- `lib-tests` — `test_config_write.sh`, `test_profile.sh`, `test_contract.sh`, `test_theme.sh`, `test_migrations.sh` under `scripts/lib/`
 - `docker-core` — Ubuntu image runs `test_suite.sh --tag core`
 - `check-docs` — every `docs/...` link in README exists
+- `summary` — aggregates the job results into one required status
 
 ## Commit Conventions
 

@@ -27,6 +27,10 @@ _TUIDEV_BREW_LOADED=1
 
 # shellcheck source=./ui.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
+# Manifest recording. A no-op unless a caller enabled it (install.sh does), so
+# packs get "record what we installed" for free without knowing about it.
+# shellcheck source=./manifest.sh disable=SC1091
+. "$(dirname "${BASH_SOURCE[0]}")/manifest.sh"
 
 export _TUIDEV_INSTALLED_FORMULAE=""
 export _TUIDEV_INSTALLED_CASKS=""
@@ -83,6 +87,9 @@ brew_install_formula() {
         if run_cmd brew install "$f"; then
             print_success "$f"
             _TUIDEV_INSTALLED_FORMULAE="${_TUIDEV_INSTALLED_FORMULAE}"$'\n'"$f"
+            # Only formulae *we* installed are recorded, so uninstall never
+            # removes one the user already had.
+            tuidev_manifest_record formula "$f"
         else
             print_warning "failed: $f (continuing)"
         fi
@@ -98,6 +105,7 @@ brew_install_cask() {
         if run_cmd brew install --cask "$c"; then
             print_success "$c"
             _TUIDEV_INSTALLED_CASKS="${_TUIDEV_INSTALLED_CASKS}"$'\n'"$c"
+            tuidev_manifest_record cask "$c"
         else
             print_warning "failed: $c (continuing)"
         fi

@@ -89,6 +89,9 @@ cc              # claude (primary)
 cx              # codex (OpenAI)
 oc              # opencode
 agents          # Launch claude + codex in 2 tmux panes
+
+# Fleet runtime (opt-in: ./install.sh --pack herdr)
+herdr           # attach to the local Herdr server (prefix ctrl+b)
 ```
 
 ---
@@ -206,6 +209,12 @@ ai-triple [name]  # nvim + 3 stacked agent panes
 
 # Multi-agent (claude | codex in 2 columns; needs --pack ai-clis)
 agents [name]
+
+# Worktree-per-agent: one git worktree + one tmux window per agent, so parallel
+# agents never fight over the index. Window `main` stays on the original repo.
+worktrees [name] [-n N] [--branch-prefix P] [--base REF] [--cmd CMD]
+worktrees --list          # path, branch, dirty?, commits ahead
+worktrees --clean         # remove only clean, fully-merged worktrees
 
 # Other layouts
 fullstack [name]  # 5 windows: code / web / api / db / logs
@@ -386,6 +395,7 @@ work [name]               # Bare named session
 dev [name]                # 3-column dev layout
 ai [name]                 # AI workflow (nvim + 2 agents)
 agents [name]             # claude | codex (needs --pack ai-clis)
+worktrees [name]          # One git worktree + tmux window per agent
 tls / tk / tka            # List / kill named / kill all
 ```
 
@@ -399,8 +409,10 @@ If building AI agents that integrate with this environment:
 2. **Use the shell aliases** — They're faster and more user-friendly
 3. **Assume tmux, not Zellij** — Zellij is opt-in via `--pack zellij`
 4. **Respect the sandbox** — On macOS, agents run under Seatbelt; don't expect host-level filesystem access
-5. **Tokyo Night theme** — If generating TUI output, match the color scheme
+5. **Read the palette, don't hardcode it** — Tokyo Night is the default, but the user may have applied another theme. The active one is named in `~/.config/tuidev/theme` and its colors live in `configs/themes/<name>/palette.toml`
 6. **Follow the engineering conventions** — When editing this repo's scripts, see [docs/engineering.md](docs/engineering.md): use the shared libs, follow the pack contract, never `cp` over user files
+7. **Record what you install** — Anything placed on the machine goes through the shared libs so it lands in `~/.config/tuidev/manifest` and `uninstall.sh` can undo it. Removing a previously installed file needs a migration under `scripts/migrations/`, not just a repo deletion
+8. **Don't pipe remote scripts into a shell** — If a package manager can't supply a tool, print the official install command and let the user run it
 
 ### Multi-agent symlink helper
 

@@ -20,6 +20,33 @@
 
 Seatbelt (Tier 1 sandbox), Ghostty, Hammerspoon, and Rectangle are macOS-only and ship in the `ui` pack.
 
+`--core` uses Homebrew when it is present and falls back to `apt-get` when it is
+not — which is what makes `minimal` / `remote` work on arm64 Debian (a Raspberry
+Pi, say), where Homebrew has no build at all. Core probes each package against
+your release rather than assuming, so the split adapts as distros move. At the
+time of writing, Debian 12 bookworm's apt supplied 14 of the 20 core tools;
+`eza`, `starship`, `lazygit`, `git-delta`, `zsh-completions` and `yq` were
+skipped with a link to each project's install page. (Debian's `yq`
+is a different program — a Python jq wrapper — so core deliberately declines it.)
+Debian renames two binaries; core symlinks `fdfind` → `fd` and `batcat` → `bat`
+into `~/.local/bin` so the aliases and docs work unchanged. If apt needs a
+password and passwordless `sudo` isn't set up, core prints the exact command to
+run instead of hanging on a prompt. `--pack herdr` installs Herdr only when
+Homebrew has the formula; without brew it prints the official installer command
+(`curl -fsSL https://herdr.dev/install.sh | sh`, binary lands in `~/.local/bin`)
+for you to run yourself, then re-run the pack to get the config. Bind real hostnames in
+`~/.ssh/config.local`, not in this repo. See [inspiration.md](inspiration.md)
+and [agent-workflows.md](agent-workflows.md).
+
+For the 5 tools apt can't supply on arm64 Debian (`eza`, `starship`,
+`lazygit`, `git-delta`, `zsh-completions` — a Raspberry Pi, say), the
+recommended pattern is the same manual one used for the Herdr fallback above:
+grab the `aarch64`/`arm64` binary asset from each project's GitHub Releases
+page and drop it straight into `~/.local/bin`, no pipe-to-shell needed. Note
+that `~/.local/bin` only lands on `PATH` for interactive shells (`.zshrc`) —
+a non-interactive SSH session (e.g. a script run via `ssh host 'cmd'`) won't
+see it; see [agent-workflows.md](agent-workflows.md) for that distinction.
+
 ### Q: How do I install a minimal profile?
 
 ```bash
@@ -31,11 +58,15 @@ Just the core: Nvim, tmux, zsh, Starship, and the modern CLI tools. Add packs on
 ### Q: How do I add a specific pack to an existing install?
 
 ```bash
-./install.sh --pack zellij       # add Zellij on top of whatever you have
-./install.sh --pack sandbox      # add the Podman-based Tier 2 sandbox
+./install.sh --pack zellij            # add Zellij on top of whatever you have
+./install.sh --sandbox                # Seatbelt profiles + the `sbx` wrapper (Tier 1)
+./install.sh --pack sandbox-container # Podman machine for VM-backed isolation (Tier 2)
+./install.sh --pack ai-clis           # cc/cx/oc wrappers + adopt-existing CLI configs
 ```
 
-Packs are idempotent.
+Packs are idempotent. On a machine that already has tuidev, re-running
+`install.sh` applies any pending one-shot migrations before the packs run — see
+[updating.md](updating.md).
 
 ### Q: The installer failed. How do I retry?
 
@@ -73,6 +104,19 @@ time zsh -i -c exit
 ### Q: How do I add my own aliases?
 
 Edit `~/.zshrc.local`. Sourced last, never overwritten.
+
+### Q: Where do personal SSH hosts / LAN names go?
+
+Not in this repo. Put `Host` stanzas in `~/.ssh/config.local`. The shipped SSH
+snippet `Include`s `~/.ssh/config.local*` (glob, so a missing file is ignored).
+The block opens with `Match all` so the `Include` is unconditional: it is
+appended to whatever `~/.ssh/config` you already had, and without that reset a
+trailing `Host` stanza of yours would scope the `Include` to just that host.
+Because the block is appended, your own stanzas are read first and win on
+conflicts (ssh takes the first value for each option).
+You can also put hosts *outside* the tuidev managed block in `~/.ssh/config`.
+The gitignore already drops `*.local` files in a clone. Published docs use
+generic names (`devbox`, `workbox`, `always-on`) only.
 
 ### Q: The `z` command doesn't work
 

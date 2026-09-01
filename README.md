@@ -2,6 +2,7 @@
 
 > Opinionated, terminal-first developer environment built around **tmux durability**, **sandboxed AI agents**, and **layered installation**.
 
+[![CI](https://github.com/spfr/tuidev/actions/workflows/ci.yml/badge.svg)](https://github.com/spfr/tuidev/actions/workflows/ci.yml)
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -12,7 +13,7 @@ A small, opinionated set of configs + install scripts for an AI-assisted coding 
 
 1. **One session, one pane, one task.** Your work has to survive disconnects, narrow terminals, and mobile reattaches. tmux is the durability layer; splits are a local bonus, not the story.
 2. **Sandbox-ready.** `sbx` runs any command inside macOS Seatbelt; install `--pack ai-clis` and your AI CLIs route through it automatically. Credentials (`~/.ssh`, `~/.aws`, keychain) are locked out even if the agent is compromised.
-3. **Layered install.** Pick a profile (`minimal`, `desktop`, `remote`) or compose packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack zellij`, ...). Your `~/.zshrc` is never overwritten — edits outside the tuidev-managed block survive forever.
+3. **Layered install.** Pick a profile (`minimal`, `desktop`, `remote`) or compose packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack zellij`, ...). Your `~/.zshrc` is never overwritten — edits outside the tuidev-managed block survive forever. macOS is the daily driver; `minimal` and `remote` also install on Debian/Ubuntu, falling back to `apt` where Homebrew has no build (arm64 boards like a Raspberry Pi included).
 
 ## Quick start
 
@@ -52,6 +53,7 @@ All commands are attach-or-create and accept an optional session name:
 | `ai-single`      | nvim + one shell                                |
 | `ai-triple`      | nvim + three agent panes                         |
 | `agents [name]`  | two columns: claude ∣ codex (needs `--pack ai-clis`) |
+| `worktrees [name]` | one git worktree + tmux window per agent (`-n N --cmd cc`; `--list` / `--clean`) |
 | `fullstack`      | five windows: code / web / api / db / logs      |
 | `multi`          | three windows: dev / monitor / git              |
 | `remote [name]`  | minimal nvim + shell for narrow terminals        |
@@ -95,7 +97,7 @@ Tier 2 — Podman-backed microVMs — is available behind `./install.sh --pack s
 | [jq](https://stedolan.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | JSON / YAML |
 | [eza](https://github.com/eza-community/eza) / [bat](https://github.com/sharkdp/bat) | `ls` / `cat` replacements |
 
-Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Podman), `--pack fnm` (fast Node manager), `--pack ai-clis` (cc/cx/oc wrappers + AI CLI configs), `--pack cmux` / `--pack bosun` (parallel-agent tools — see [docs/agent-workflows.md](docs/agent-workflows.md)), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
+Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Podman), `--pack fnm` (fast Node manager), `--pack ai-clis` (cc/cx/oc wrappers + AI CLI configs), `--pack cmux` / `--pack bosun` / `--pack herdr` (parallel-agent and fleet tools — see [docs/agent-workflows.md](docs/agent-workflows.md)), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
 
 ## AI CLIs (opt-in — `--pack ai-clis`)
 
@@ -125,7 +127,7 @@ tmux attach -t main # your session survived the disconnect
 
 mosh is an optional upgrade for flaky networks (`--pack mosh`). Full setup in [docs/remote.md](docs/remote.md). iOS clients: Blink, Moshi.
 
-To drive agents from your phone, the CLIs now ship native remote control (no SSH needed just to steer Claude/Codex), and `--pack cmux` / `--pack bosun` run agents in parallel — see [docs/agent-workflows.md](docs/agent-workflows.md).
+To drive agents from your phone, the CLIs now ship native remote control (no SSH needed just to steer Claude/Codex). `--pack herdr` is the fleet-attention runtime; `--pack cmux` / `--pack bosun` cover desk GUI and tmux session picking — see [docs/agent-workflows.md](docs/agent-workflows.md). Bind personal hosts in `~/.ssh/config.local`, never in this repo.
 
 ## Day-to-day
 
@@ -133,9 +135,14 @@ To drive agents from your phone, the CLIs now ship native remote control (no SSH
 make check            # health check against installed profile
 make test             # run core tests + any tags the active profile enables
 make update           # profile-aware, drift-detecting update
+make theme NAME=catppuccin-mocha  # re-theme tmux/Ghostty/Starship from one palette
 make sbx-test         # prove the sandbox blocks creds and allows project writes
 make help             # every available target
 ```
+
+Themes are a single 26-key palette file (`configs/themes/<name>/palette.toml`) rendered into tmux, Ghostty, and Starship as `tuidev-theme` managed blocks — `tokyo-night` and `catppuccin-mocha` ship, and adding one is a copied TOML file. Details in [docs/theming.md](docs/theming.md).
+
+Running several agents at once? `worktrees -n 3 --cmd cc` gives each one its own git worktree, branch, and tmux window, keeping window `main` on the original repo for review; `worktrees --clean` removes only the worktrees that are clean and already merged.
 
 ## Documentation
 
@@ -145,8 +152,12 @@ make help             # every available target
 | [docs/sandboxing.md](docs/sandboxing.md) | Seatbelt profiles, escape hatches, Tier 2 pointer |
 | [docs/remote.md](docs/remote.md) | Tailscale + tmux + mosh workflow |
 | [docs/migration.md](docs/migration.md) | Upgrading from the old Zellij-first setup |
-| [docs/agent-workflows.md](docs/agent-workflows.md) | Remote control, cmux, bosun — driving agents |
+| [docs/updating.md](docs/updating.md) | Migrations, the install manifest, and how updates work |
+| [docs/agent-workflows.md](docs/agent-workflows.md) | Fleet attention, Herdr, cmux, bosun, remote control |
 | [docs/agent-primer.md](docs/agent-primer.md) | Copy-paste brief to teach any agentic CLI the environment |
+| [docs/inspiration.md](docs/inspiration.md) | Omarchy/Omacosy practices vs non-goals; `.local` split |
+| [docs/roadmap.md](docs/roadmap.md) | 2027/28 readiness: multiplexer shift, sandbox succession, fleet-scale agents, adopt/hold criteria |
+| [docs/theming.md](docs/theming.md) | Palette contract, `theme.sh`, adding a theme |
 | [docs/engineering.md](docs/engineering.md) | Code conventions: libs, pack contract, managed blocks |
 | [VISION.md](VISION.md) | Product direction + 2026 amendments |
 | [AGENTS.md](AGENTS.md) | Universal instructions for AI coding agents |
@@ -161,6 +172,8 @@ Additional references live in `docs/`: CHEATSHEET, ARCHITECTURE, NEOVIM_QUICKSTA
 - AI CLI settings (`~/.claude.json`, `~/.config/opencode/opencode.json`, `~/.codex/config.toml`) are `--adopt-existing` by default: if present, they are left alone.
 - Backups live in `~/.config/tuidev/backups/`.
 - `--dry-run` on any install or update command shows every mutation without performing it.
+- Every install records what it actually placed in `~/.config/tuidev/manifest`, so `./uninstall.sh` removes only what tuidev installed — a `ripgrep` you already had survives.
+- One-shot **migrations** (`make update-migrations`) clean up artifacts past releases left behind, run at most once per machine. A fresh machine skips the history; an existing one applies it before packs run. See [docs/updating.md](docs/updating.md).
 
 ## Contributing
 
@@ -168,4 +181,4 @@ Issues and PRs welcome. See [VISION.md](VISION.md) and [docs/](docs/) for contex
 
 ## License
 
-MIT. Sponsored by [SpiceFactory](https://spfr.co).
+[MIT](LICENSE). Sponsored by [SpiceFactory](https://spfr.co).

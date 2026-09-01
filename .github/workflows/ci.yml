@@ -27,6 +27,7 @@ jobs:
             scripts/tmux/layout-*.sh \
             scripts/install/*.sh \
             scripts/install/packs/*.sh \
+            scripts/migrations/*.sh \
             bin/sbx
 
   # ---------------------------------------------------------------------------
@@ -83,18 +84,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: grep for /Users/NAME and /home/NAME
+      - name: grep for hardcoded user paths and personal mDNS hosts
         run: |
-          if grep -rE '/Users/[a-zA-Z0-9_-]+/' configs/ scripts/ install.sh 2>/dev/null | grep -v '.git'; then
-            echo "✗ hardcoded /Users/USER path found"
-            exit 1
+          set -euo pipefail
+          failed=0
+          roots=(configs scripts bin install.sh uninstall.sh Makefile docs README.md VISION.md CLAUDE.md AGENTS.md CONTRIBUTING.md CHANGELOG.md)
+
+          # Placeholder spellings docs use to *describe* the rule rather than
+          # violate it — including the mDNS examples in docs/remote.md.
+          filter_placeholders() {
+            grep -vE '/Users/NAME|/home/NAME|/Users/username|/home/username|@(hostname|HOSTNAME|host|machine|example|your-[A-Za-z0-9-]+)\.local\b' || true
+          }
+
+          # scan LABEL PATTERN [EXTRA_EXCLUDE_PATTERN]
+          # Matches are captured ONCE and reused for both the test and the
+          # printed list. The old form piped grep into `grep -q .`, which exits
+          # on the first match and SIGPIPEs the upstream grep (141); under
+          # `pipefail` that made the pipeline non-zero, so beyond a few thousand
+          # matching lines the check silently "passed" while violations existed.
+          scan() {
+            local label="$1" pattern="$2" extra="${3:-}"
+            local hits
+            hits="$(grep -rE "$pattern" "${roots[@]}" 2>/dev/null | grep -v '/\.git/' || true)"
+            if [[ -n "$extra" ]]; then
+              hits="$(printf '%s\n' "$hits" | grep -vE "$extra" || true)"
+            fi
+            hits="$(printf '%s\n' "$hits" | filter_placeholders | grep -v '^[[:space:]]*$' || true)"
+            if [[ -n "$hits" ]]; then
+              echo "✗ $label"
+              printf '%s\n' "$hits"
+              failed=1
+            fi
+            return 0
+          }
+
+          scan "hardcoded /Users/USER path found" '/Users/[a-zA-Z0-9_-]+/'
+          scan "hardcoded /home/USER path found"  '/home/[a-zA-Z0-9_-]+/' 'testuser'
+          # user@hostname.local mDNS — do not ban ~/.local/bin or config.local
+          scan "personal mDNS host (user@ + hostname) found — keep those in gitignored *.local overlays" \
+               '@[A-Za-z0-9._-]+\.local\b'
+
+          if [[ "$failed" -eq 0 ]]; then
+            echo "✓ clean"
           fi
-          if grep -rE '/home/[a-zA-Z0-9_-]+/' configs/ scripts/ install.sh 2>/dev/null \
-             | grep -v '.git' | grep -v 'testuser'; then
-            echo "✗ hardcoded /home/USER path found"
-            exit 1
-          fi
-          echo "✓ clean"
+          exit "$failed"
 
   # ---------------------------------------------------------------------------
   # Config-file presence: the files install.sh references must exist.
@@ -122,14 +155,22 @@ jobs:
             bin/sbx
             scripts/lib/ui.sh
             scripts/lib/config_write.sh
+            scripts/lib/migrate.sh
+            scripts/lib/manifest.sh
+            docs/updating.md
             scripts/notify.sh
             scripts/health_check.sh
             scripts/test_suite.sh
             scripts/update.sh
+            configs/themes/tokyo-night/palette.toml
+            configs/themes/catppuccin-mocha/palette.toml
+            scripts/theme.sh
             docs/sandboxing.md
             docs/profiles.md
             docs/remote.md
             docs/migration.md
+            docs/theming.md
+            docs/roadmap.md
           )
           missing=0
           for f in "${required[@]}"; do
@@ -174,6 +215,8 @@ jobs:
       - run: bash scripts/lib/test_config_write.sh
       - run: bash scripts/lib/test_profile.sh
       - run: bash scripts/lib/test_contract.sh
+      - run: bash scripts/lib/test_theme.sh
+      - run: bash scripts/lib/test_migrations.sh
 
   # ---------------------------------------------------------------------------
   # Docker Ubuntu smoke test for the core pack. UI tests are skipped here.

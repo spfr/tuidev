@@ -35,7 +35,39 @@ dev myproject              # 3-column dev layout: nvim | agent | runner
 ai myproject               # nvim + 2 agent panes
 ```
 
-Detach with `Ctrl-b d`. The session keeps running. Reconnect from a different laptop, phone, or network and `tmux attach -t myproject` picks up exactly where you left off.
+Detach with `Ctrl+a d` (this setup's tmux prefix). The session keeps running. Reconnect from a different laptop, phone, or network and `tmux attach -t myproject` picks up exactly where you left off.
+
+## Always-on Linux node
+
+Any cheap box that stays awake (Raspberry Pi, NUC, VM) is a **node**, not a
+second product. SSH in and attach:
+
+```bash
+ssh user@devbox
+tmux attach -t main
+# or, with --pack herdr installed on that box:
+herdr
+```
+
+From the Mac, a thin Herdr client can attach without opening a remote shell first:
+
+```bash
+herdr --remote workbox
+```
+
+`workbox` / `devbox` are placeholders. Real hostnames, mDNS names, and accounts
+belong in `~/.ssh/config.local` (the shipped snippet `Include`s
+`~/.ssh/config.local*`, preceded by `Match all` so the include applies
+unconditionally even when appended after your own `Host` stanzas) or outside
+the tuidev managed block. See
+[`inspiration.md`](inspiration.md) and the first-fleet walkthrough in
+[`agent-workflows.md`](agent-workflows.md).
+
+`--core` on Linux uses Homebrew when present and otherwise falls back to
+apt-get, probing per tool and printing official install commands for anything
+the release doesn't package (see [`profiles.md`](profiles.md)). `--pack herdr`
+installs Herdr only when Homebrew has the formula — otherwise it prints the
+official installer command for you to run.
 
 ## Why Tailscale SSH over Raw SSH
 

@@ -1,0 +1,61 @@
+# ============================================================================
+# tuidev palette: Catppuccin Mocha
+# ============================================================================
+# Upstream values, not eyeballed. Sources:
+#   * catppuccin/palette  -> palette.json, `mocha` (the canonical hex list)
+#   * catppuccin/ghostty  -> themes/catppuccin-mocha.conf (the official ANSI
+#     mapping; note white = subtext0 and bright white = subtext1, which is the
+#     reverse of the naive guess)
+#
+# Catppuccin name -> tuidev key, for anyone re-deriving these:
+#   base #1e1e2e -> bg          mantle #181825 -> bg_dark
+#   surface0 #313244 -> bg_highlight   surface1 #45475a -> border / ansi_black
+#   surface2 #585b70 -> ansi_bright_black
+#   text #cdd6f4 -> fg          subtext0 #a6adc8 -> fg_dim / ansi_white
+#   blue #89b4fa -> accent      rosewater #f5e0dc -> cursor
+#
+# Same strict `key = "#rrggbb"` format contract as every other palette; see
+# docs/theming.md.
+# ============================================================================
+
+[theme]
+name = "catppuccin-mocha"
+description = "Catppuccin Mocha — warmer, lower-contrast dark alternative."
+
+[colors]
+
+# --- Surfaces ---------------------------------------------------------------
+bg = "#1e1e2e"            # base
+bg_dark = "#181825"       # mantle
+bg_highlight = "#313244"  # surface0
+
+# --- Text -------------------------------------------------------------------
+fg = "#cdd6f4"            # text
+fg_dim = "#a6adc8"        # subtext0
+
+# --- Interface --------------------------------------------------------------
+accent = "#89b4fa"        # blue
+cursor = "#f5e0dc"        # rosewater
+selection_bg = "#353749"  # official ghostty port selection-background
+border = "#45475a"        # surface1
+border_active = "#89b4fa" # blue
+
+# --- ANSI 0-7 (normal) ------------------------------------------------------
+ansi_black = "#45475a"
+ansi_red = "#f38ba8"
+ansi_green = "#a6e3a1"
+ansi_yellow = "#f9e2af"
+ansi_blue = "#89b4fa"
+ansi_magenta = "#f5c2e7"
+ansi_cyan = "#94e2d5"
+ansi_white = "#a6adc8"
+
+# --- ANSI 8-15 (bright) -----------------------------------------------------
+ansi_bright_black = "#585b70"
+ansi_bright_red = "#f38ba8"
+ansi_bright_green = "#a6e3a1"
+ansi_bright_yellow = "#f9e2af"
+ansi_bright_blue = "#89b4fa"
+ansi_bright_magenta = "#f5c2e7"
+ansi_bright_cyan = "#94e2d5"
+ansi_bright_white = "#bac2de"

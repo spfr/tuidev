@@ -132,6 +132,12 @@ resolve_profile() {
 
     case "$PROFILE" in
         minimal|desktop|remote) ;;
+        custom)
+            # Pack-only installs record profile=custom; check the core
+            # baseline (packs are covered by the extra_packs section).
+            print_info "Profile is 'custom' (pack-only install): checking the minimal baseline."
+            PROFILE="minimal"
+            ;;
         *)
             print_error "Invalid profile: $PROFILE (expected minimal|desktop|remote|auto)"
             exit 2
@@ -332,6 +338,12 @@ pack_probe() {
         nnn)                echo "have_cmd nnn" ;;
         monitoring)         echo "have_cmd btm || have_cmd bottom || have_cmd htop" ;;
         sandbox-container)  echo "have_cmd podman" ;;
+        mosh)               echo "have_cmd mosh" ;;
+        cmux)               echo "have_cmd cmux || have_app cmux" ;;
+        bosun)              echo "have_cmd bosun" ;;
+        herdr)              echo "have_cmd herdr" ;;
+        fnm)                echo "have_cmd fnm" ;;
+        ai-clis)            echo "have_cmd claude || have_cmd codex || have_cmd opencode" ;;
         *)                  echo "have_cmd $1" ;;
     esac
 }

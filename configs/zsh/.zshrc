@@ -52,8 +52,16 @@ export NVM_DIR="$HOME/.nvm"
 # Rust (cargo) - if installed; exposes `cargo install`ed tools (e.g. bosun)
 [[ -d "$HOME/.cargo/bin" ]] && export PATH="$HOME/.cargo/bin:$PATH"
 
-# Local binaries
-[[ -d "$HOME/.local/bin" ]] && export PATH="$PATH:$HOME/.local/bin"
+# Local binaries — tuidev's own install target: sbx, notify.sh, and on Debian
+# the fd/bat shims core.sh creates for Debian's renamed binaries.
+#
+# Unconditional (no -d guard): the directory is often created later in the same
+# install run, and a guard would leave PATH stale until the next shell. Prepend
+# so our shims win over a same-named system binary. `typeset -U` keeps the
+# entry unique, so re-sourcing this file never grows PATH.
+typeset -U path PATH
+path=("$HOME/.local/bin" $path)
+export PATH
 
 # opencode AI CLI
 [[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
@@ -371,6 +379,13 @@ fullstack()   { _tuidev_layout fullstack "$@"; }
 multi()       { _tuidev_layout multi "$@"; }
 remote()      { _tuidev_layout remote "$@"; }
 agents()      { _tuidev_layout agents "$@"; }
+
+# One git worktree per agent, one tmux window per worktree. Also takes
+# -n N / --branch-prefix P / --base REF / --cmd CMD, plus --list and --clean.
+#   worktrees                     # 2 worktrees, plain shells
+#   worktrees feat -n 3 --cmd cc  # 3 agents each running Claude Code
+#   worktrees --list / --clean    # status / remove clean, fully-merged ones
+worktrees()   { _tuidev_layout worktrees "$@"; }
 
 # One-time deprecation warning for old t* aliases. Writes a stamped file so
 # the warning prints only once per machine per rename.

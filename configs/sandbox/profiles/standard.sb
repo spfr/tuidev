@@ -93,3 +93,9 @@
 (allow network-bind     (local  ip  "localhost:*"))
 
 (allow network-outbound (literal "/private/var/run/syslog"))
+
+;; herdr control socket (--pack herdr) — see strict.sb for the rationale.
+;;   default session  ~/.config/herdr/herdr.sock
+;;   named sessions   ~/.config/herdr/sessions/<name>/herdr.sock
+(allow network-outbound
+  (subpath (string-append (param "HOME_DIR") "/.config/herdr")))
