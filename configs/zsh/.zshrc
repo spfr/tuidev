@@ -75,23 +75,26 @@ export PATH
 
 # ============================================================================
 # Completions
+# Homebrew adds its completion dirs; Debian/Ubuntu already ship theirs in
+# the default $fpath. compinit itself must run everywhere — the tool
+# completions evaluated below (gh, fzf, ...) call compdef and fail without it.
 if type brew &>/dev/null; then
   _tuidev_brew_prefix="$(brew --prefix)"
   FPATH="$_tuidev_brew_prefix/share/zsh-completions:$FPATH"
   FPATH="$_tuidev_brew_prefix/share/zsh/site-functions:$FPATH"
   unset _tuidev_brew_prefix
-
-  autoload -Uz compinit
-
-  # Keep the completion dump out of $HOME and avoid startup prompts if an
-  # external installer leaves a completion directory writable. Run
-  # `make fix-completions` from the tuidev repo to repair the underlying
-  # permissions.
-  _tuidev_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-${ZSH_VERSION}"
-  mkdir -p "${_tuidev_zcompdump:h}" 2>/dev/null
-  compinit -i -d "$_tuidev_zcompdump"
-  unset _tuidev_zcompdump
 fi
+
+autoload -Uz compinit
+
+# Keep the completion dump out of $HOME and avoid startup prompts if an
+# external installer leaves a completion directory writable. Run
+# `make fix-completions` from the tuidev repo to repair the underlying
+# permissions.
+_tuidev_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-${ZSH_VERSION}"
+mkdir -p "${_tuidev_zcompdump:h}" 2>/dev/null
+compinit -i -d "$_tuidev_zcompdump"
+unset _tuidev_zcompdump
 
 # ============================================================================
 # Modern CLI Tools Integration
