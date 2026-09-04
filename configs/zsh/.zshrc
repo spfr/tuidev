@@ -101,8 +101,17 @@ fi
 command -v starship &>/dev/null && eval "$(starship init zsh)"
 
 # fzf - Fuzzy Finder
+# `fzf --zsh` needs fzf >= 0.48 (Homebrew); Debian/Ubuntu ship older builds
+# that print "unknown option" instead, so fall back to their example scripts.
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-eval "$(fzf --zsh)" 2>/dev/null
+if command -v fzf &>/dev/null; then
+  if fzf --zsh &>/dev/null; then
+    eval "$(fzf --zsh)"
+  else
+    [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
+    [ -f /usr/share/doc/fzf/examples/completion.zsh ]   && source /usr/share/doc/fzf/examples/completion.zsh
+  fi
+fi
 
 # Set fzf to use ripgrep for faster searches
 export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
@@ -131,16 +140,32 @@ if command -v gh &> /dev/null; then
 fi
 
 # ============================================================================
-# ZSH Plugins (Homebrew-installed)
+# ZSH Plugins (Homebrew on macOS, apt on Debian/Ubuntu)
 # ============================================================================
 
+# Homebrew installs under $(brew --prefix)/share, Debian/Ubuntu under
+# /usr/share. Probe both so Linux boxes without brew stay warning-free.
+_tuidev_plugin_dirs=(/usr/share)
+if command -v brew &>/dev/null; then
+  _tuidev_plugin_dirs=("$(brew --prefix)/share" "${_tuidev_plugin_dirs[@]}")
+fi
+
 # Syntax highlighting (must be near the end)
-[[ -f "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] && \
-    source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+for _tuidev_dir in "${_tuidev_plugin_dirs[@]}"; do
+  if [[ -f "$_tuidev_dir/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]]; then
+    source "$_tuidev_dir/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+    break
+  fi
+done
 
 # Autosuggestions (must be at the end)
-[[ -f "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] && \
-    source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+for _tuidev_dir in "${_tuidev_plugin_dirs[@]}"; do
+  if [[ -f "$_tuidev_dir/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
+    source "$_tuidev_dir/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    break
+  fi
+done
+unset _tuidev_plugin_dirs _tuidev_dir
 
 # Autosuggestion behavior
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
