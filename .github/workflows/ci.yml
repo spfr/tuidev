@@ -170,7 +170,6 @@ jobs:
             docs/sandboxing.md
             docs/profiles.md
             docs/remote.md
-            docs/migration.md
             docs/theming.md
             docs/roadmap.md
           )

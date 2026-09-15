@@ -18,39 +18,43 @@ stub() {  # stub NAME — records "name args" into the log
     chmod +x "$tmp/bin/$1"
 }
 mkdir -p "$tmp/bin"
-export PATH="$tmp/bin:/usr/bin:/bin"
 unset TUIDEV_CONTAINER_RUNTIME
+
+# Resolve with ONLY the stub dir on PATH — CI runners ship real docker and
+# podman in /usr/bin, which would otherwise leak into the preference tests.
+rt() { PATH="$tmp/bin" tuidev_container_runtime; }
 
 # Force the Darwin branch so `container` is eligible regardless of host OS.
 # shellcheck disable=SC2329,SC2317  # invoked indirectly by the lib
 uname() { echo Darwin; }
 
-[[ -z "$(tuidev_container_runtime || true)" ]] || fail "no runtimes should print nothing"
+[[ -z "$(rt || true)" ]] || fail "no runtimes should print nothing"
 pass "no runtime → empty"
 
 stub docker
-[[ "$(tuidev_container_runtime)" == docker ]] || fail "docker alone"
+[[ "$(rt)" == docker ]] || fail "docker alone"
 stub podman
-[[ "$(tuidev_container_runtime)" == podman ]] || fail "podman beats docker"
+[[ "$(rt)" == podman ]] || fail "podman beats docker"
 stub container
-[[ "$(tuidev_container_runtime)" == container ]] || fail "container beats podman"
+[[ "$(rt)" == container ]] || fail "container beats podman"
 pass "preference order container > podman > docker"
 
 export TUIDEV_CONTAINER_RUNTIME=docker
-[[ "$(tuidev_container_runtime)" == docker ]] || fail "env override"
+[[ "$(rt)" == docker ]] || fail "env override"
 export TUIDEV_CONTAINER_RUNTIME=missing
-tuidev_container_runtime >/dev/null && fail "override to a missing binary must fail"
+rt >/dev/null && fail "override to a missing binary must fail"
 unset TUIDEV_CONTAINER_RUNTIME
 pass "TUIDEV_CONTAINER_RUNTIME override"
 
 # shellcheck disable=SC2329,SC2317
 uname() { echo Linux; }
-[[ "$(tuidev_container_runtime)" == podman ]] || fail "Apple container skipped on Linux"
+[[ "$(rt)" == podman ]] || fail "Apple container skipped on Linux"
 # shellcheck disable=SC2329,SC2317
 uname() { echo Darwin; }
 pass "container is macOS-only"
 
 : > "$log"
+export PATH="$tmp/bin:$PATH"   # shims: stubs must shadow any real runtime
 tuidev_container_rmi container img
 tuidev_container_rmi podman img
 tuidev_container_pull container img
