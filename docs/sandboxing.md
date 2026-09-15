@@ -8,7 +8,20 @@ Running AI coding agents (Claude Code, Codex, OpenCode) locally means handing a 
 
 Tier 1 is **macOS-native**, **zero-install**, and **FOSS**: we wrap Apple's built-in `sandbox-exec` (Seatbelt) with a small CLI called `sbx`. There is no daemon, no VM, no container runtime. The cost is a limitation on network filtering (see the matrix below). For stronger isolation, see the Tier 2 pointer at the end.
 
-Claude Code and Codex already ship their own native sandboxing; `sbx` is a uniform-UX wrapper so every agent invocation goes through the same policy file, regardless of tool. The agent CLIs' own sandbox flags remain canonical for their own concerns.
+Claude Code and Codex ship their own native sandboxing (Seatbelt on macOS, bubblewrap on Linux); `sbx` is a uniform-UX wrapper so every agent invocation goes through the same policy file, regardless of tool. The agent CLIs' own sandbox flags remain canonical for their own concerns.
+
+## `sbx` vs. Claude Code's built-in sandbox — pick one
+
+Seatbelt profiles do not nest. A process already running under `sandbox-exec` cannot apply a second profile (`sandbox_apply: Operation not permitted`), and Claude Code's built-in Bash sandbox (`/sandbox`, `sandbox.enabled` in `~/.claude/settings.json`) *is* `sandbox-exec`. So for Claude Code it is one or the other:
+
+| | `sbx -- claude` (tuidev default) | Claude's native sandbox (`sandbox.enabled`) |
+|---|---|---|
+| What is confined | The whole CLI process: every tool, every child, the CLI's own file reads | Only the Bash tool and its children; `Read`/`Edit` are governed by permission rules, not the kernel |
+| Credential dirs | Kernel-denied by the profile | Denied only if you list them under `sandbox.credentials` or `permissions.deny` |
+| Network | Port-level only (Seatbelt limitation) | Per-domain allowlist through Claude's proxy |
+| Prompts | Unchanged; Claude still asks per its permission mode | `autoAllowBashIfSandboxed` skips prompts for sandboxed commands |
+
+The shipped `cc` wrapper resolves the conflict automatically: when `~/.claude/settings.json` has `"sandbox": {"enabled": true}` it calls `claude` directly instead of through `sbx`, so Claude's own sandbox can apply. Flip it back by disabling the native sandbox. The shipped `configs/claude/settings.json` does not enable the native sandbox; it adds `permissions.deny` rules for the same credential directories `sbx` blocks, so the `Read` tool honors the boundary even when you run `CC_NO_SANDBOX=1 cc`. Codex's `sandbox_mode = "workspace-write"` has the same nesting constraint under `cx`; Codex detects it and falls back to approval-only mode, which is the intended layering.
 
 ## Profile matrix
 
@@ -73,7 +86,7 @@ The shipped profiles are deliberately verbose; copy one and edit rather than wri
 
 ## Tier 2 pointer
 
-When per-host egress rules, kernel-namespace isolation, or a truly disposable filesystem matter, reach for the Tier 2 pack: `mactui --pack sandbox-container` (Podman machine). That's a separate opt-in install with its own lifecycle and its own docs — not duplicated here.
+When per-host egress rules, kernel-namespace isolation, or a truly disposable filesystem matter, reach for the Tier 2 pack: `./install.sh --pack sandbox-container`. It uses whichever runtime is present, in this order: Apple's native `container` CLI (macOS 26+, Containerization.framework, one lightweight VM per container) → Podman → Docker. Force one with `TUIDEV_CONTAINER_RUNTIME`. `make sandbox-up` / `make sandbox-down` start and stop the backend regardless of which one you have.
 
 ## Troubleshooting
 

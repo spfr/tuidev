@@ -499,7 +499,7 @@ run_core() {
     fi
 
     local harness
-    for harness in test_config_write test_profile test_contract test_theme test_migrations; do
+    for harness in test_config_write test_profile test_contract test_theme test_migrations test_container; do
         start_test "lib harness: $harness.sh" core
         if [[ -f "$SCRIPT_DIR/lib/$harness.sh" ]]; then
             if bash "$SCRIPT_DIR/lib/$harness.sh" >>"$LOG_FILE" 2>&1; then
@@ -690,32 +690,6 @@ run_packs() {
 
     # Built-in pack probes. Each one checks the pack's shipped artifacts
     # only when that pack is listed in the active profile's extra_packs.
-    if _packs_contains zellij; then
-        start_test "zellij: config.kdl present" packs
-        if [[ -f "$HOME/.config/zellij/config.kdl" ]]; then
-            if grep -q "default_shell\|theme\|keybinds" "$HOME/.config/zellij/config.kdl"; then
-                pass_test "zellij config.kdl present"
-            else
-                fail_test "zellij config.kdl looks incomplete"
-            fi
-        else
-            fail_test "zellij config.kdl missing"
-        fi
-
-        start_test "zellij: layouts installed" packs
-        if [[ -d "$HOME/.config/zellij/layouts" ]]; then
-            local n
-            n=$(find "$HOME/.config/zellij/layouts" -name '*.kdl' 2>/dev/null | wc -l | tr -d ' ')
-            if [[ ${n:-0} -ge 2 ]]; then
-                pass_test "$n zellij layouts installed"
-            else
-                fail_test "only ${n:-0} zellij layouts found"
-            fi
-        else
-            fail_test "zellij layouts directory missing"
-        fi
-    fi
-
     if _packs_contains yazi || _packs_contains nnn; then
         local fm; _packs_contains yazi && fm=yazi || fm=nnn
         start_test "$fm: binary on PATH" packs
@@ -736,11 +710,11 @@ run_packs() {
     fi
 
     if _packs_contains sandbox-container; then
-        start_test "sandbox-container: podman on PATH" packs
-        if command -v podman >/dev/null 2>&1; then
-            pass_test "podman available"
+        start_test "sandbox-container: a container runtime on PATH" packs
+        if command -v container >/dev/null 2>&1 || command -v podman >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+            pass_test "container runtime available (Apple container / podman / docker)"
         else
-            fail_test "podman not found on PATH"
+            fail_test "no container runtime found (Apple container, podman, or docker)"
         fi
     fi
 

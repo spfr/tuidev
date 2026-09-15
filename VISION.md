@@ -1,3 +1,5 @@
+> **Status note (Sept 2026):** the Zellij pack this document argued to demote was removed outright in 2.3.0 — nobody used it and every agent tool targets tmux. Zellij references below are historical.
+
 # Vision
 
 ## 2026 Amendments
@@ -8,7 +10,7 @@ The original vision below was authored before several early-2026 shifts in the a
 
 2. **tmux is the default multiplexer. Zellij is an opt-in pack.** The original "keep Zellij optional" wording was soft. The concrete change: `ai`, `dev`, `work`, `fullstack`, `multi`, `remote` shell functions dispatch to tmux. Zellij-equivalent wrappers are namespaced `zai`, `zdev`, `zwork`, …, and only activate when `--pack zellij` is installed.
 
-3. **Claude Code / Codex native controls are canonical.** `configs/claude/settings.json` and a new `configs/codex/config.toml` carry the authoritative policy (`PermissionDenied` hook, `MCP_CONNECTION_NONBLOCKING`, `sandbox_mode=workspace-write`, `approval_policy=on-request`). The repo's `sbx` wrapper is a uniform UX layer on top, not a replacement.
+3. **Claude Code / Codex native controls are canonical.** `configs/claude/settings.json` and a new `configs/codex/config.toml` carry the authoritative policy (`PermissionDenied` hook, credential `permissions.deny` rules, `sandbox_mode=workspace-write`, `approval_policy=on-request`). The repo's `sbx` wrapper is a uniform UX layer on top, not a replacement.
 
 4. **Neovim stays lean. ACP not adopted.** Agent Client Protocol matured and can drive Nvim in-editor, but the "AI runs in external panes" principle holds. `configs/nvim/lua/plugins/ai.lua` remains intentionally empty. Users who want in-editor agents can add ACP themselves; the repo will not ship it by default.
 

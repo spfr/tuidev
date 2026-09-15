@@ -22,7 +22,7 @@ The `desktop` profile installs the core, remote, sandbox, and UI packs — every
 | `desktop` | core + remote + sandbox + UI | **recommended** for macOS |
 | `full`    | everything (+ extras pack) | kitchen sink |
 
-Add a single pack on top with `--pack NAME` (e.g. `--pack zellij`). See [profiles.md](profiles.md) for the full matrix.
+Add a single pack on top with `--pack NAME` (e.g. `--pack ai-clis`). See [profiles.md](profiles.md) for the full matrix.
 
 ---
 
@@ -142,8 +142,6 @@ Next morning: `work myproject` picks up exactly where you left off, even after a
 ## Got Stuck?
 
 - Arrow keys or Option misbehaving → [TERMINAL_NAVIGATION.md](TERMINAL_NAVIGATION.md)
-- Coming from the old Zellij-first setup → [migration.md](migration.md)
-- Want Zellij back → `./install.sh --pack zellij`, then see [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md)
 - Remote access (phone, iPad, Tailscale) → [remote.md](remote.md)
 - Anything else → [FAQ.md](FAQ.md)
 

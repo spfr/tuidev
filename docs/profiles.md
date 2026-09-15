@@ -109,11 +109,10 @@ opt-in pack (`--pack NAME`).
 
 Any of these can be added to any profile with `--pack NAME`:
 
-- `--pack zellij` — Zellij multiplexer + `z*` shell wrappers (`zai`, `zdev`, `zwork`, …). See [`migration.md`](migration.md).
 - `--pack yazi` — TUI file manager.
 - `--pack nnn` — Minimal TUI file manager.
 - `--pack monitoring` — `lazydocker`, `k9s`, `bottom` (`btm`).
-- `--pack sandbox-container` — Podman machine for VM-backed sandboxing (Tier 2).
+- `--pack sandbox-container` — VM-backed sandboxing (Tier 2): Apple container → Podman → Docker, first present wins.
 - `--pack mosh` — mosh on its own, without the full `--remote` pack.
 - `--pack fnm` — fnm (Fast Node Manager); the zsh config prefers it over nvm when present.
 - `--pack cmux` — [cmux](https://github.com/manaflow-ai/cmux), a macOS terminal for running AI agents in parallel (macOS 14+). See [`agent-workflows.md`](agent-workflows.md).
@@ -125,7 +124,7 @@ Any of these can be added to any profile with `--pack NAME`:
 Example:
 
 ```bash
-./install.sh --profile desktop --pack zellij --pack yazi
+./install.sh --profile desktop --pack ai-clis --pack yazi
 ```
 
 ## Picking a Profile
@@ -133,7 +132,6 @@ Example:
 - Do you have a display and work locally on this Mac? → `desktop`.
 - Is this machine headless / only reached via SSH? → `remote`.
 - Is this a constrained server, VM, or CI runner? → `minimal`.
-- Do you want Zellij back after the tmux inversion? → any profile `--pack zellij`.
-- Do you need Podman-based sandboxing? → any profile `--pack sandbox-container`.
+- Do you need container-based sandboxing? → any profile `--pack sandbox-container`.
 - Want fleet attention (which agent is blocked)? → any profile `--pack herdr`.
 - Unsure? → `desktop` on your laptop, `remote` on everything you SSH into.

@@ -29,7 +29,7 @@ remote=false
 sandbox=true
 ui=true
 extras=false
-extra_packs=zellij yazi
+extra_packs=herdr yazi
 installed_at=2026-04-14T12:00:00Z
 repo=/tmp/fake-repo
 EOF
@@ -40,8 +40,8 @@ load_tuidev_profile "$tmp/desktop" || fail "should return 0 on valid file"
 [[ "$TUIDEV_PACK_SANDBOX" == true ]] || fail "sandbox"
 [[ "$TUIDEV_PACK_UI" == true ]]      || fail "ui"
 [[ "$TUIDEV_PACK_EXTRAS" == false ]] || fail "extras"
-[[ "$TUIDEV_EXTRA_PACKS" == "zellij yazi" ]] || fail "extra_packs: '$TUIDEV_EXTRA_PACKS'"
-[[ "${TUIDEV_EXTRA_PACKS_ARR[0]}" == "zellij" ]] || fail "arr[0]"
+[[ "$TUIDEV_EXTRA_PACKS" == "herdr yazi" ]] || fail "extra_packs: '$TUIDEV_EXTRA_PACKS'"
+[[ "${TUIDEV_EXTRA_PACKS_ARR[0]}" == "herdr" ]] || fail "arr[0]"
 [[ "${TUIDEV_EXTRA_PACKS_ARR[1]}" == "yazi" ]] || fail "arr[1]"
 [[ "$TUIDEV_PROFILE_INSTALLED_AT" == "2026-04-14T12:00:00Z" ]] || fail "installed_at"
 [[ "$TUIDEV_PROFILE_REPO" == "/tmp/fake-repo" ]] || fail "repo"
@@ -52,7 +52,7 @@ pass "desktop manifest parsed"
 cat > "$tmp/commas" <<'EOF'
 profile=desktop
 core=true
-extra_packs=zellij,yazi,monitoring
+extra_packs=herdr,yazi,monitoring
 EOF
 load_tuidev_profile "$tmp/commas"
 [[ "${#TUIDEV_EXTRA_PACKS_ARR[@]}" == 3 ]] || fail "comma-separated: got ${#TUIDEV_EXTRA_PACKS_ARR[@]}"
@@ -84,7 +84,7 @@ pass "quoted values unwrapped"
 # 6. tuidev_active_packs returns expected set
 load_tuidev_profile "$tmp/desktop"
 got="$(tuidev_active_packs | tr '\n' ' ')"
-[[ "$got" == "core sandbox ui zellij yazi " ]] || fail "active_packs: '$got'"
+[[ "$got" == "core sandbox ui herdr yazi " ]] || fail "active_packs: '$got'"
 pass "tuidev_active_packs"
 
 # 7. Valid profile check

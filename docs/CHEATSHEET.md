@@ -128,9 +128,9 @@ remote script into your shell. tmux stays the default for `work` / `dev` / `ai`.
 ### Claude agent teams
 
 ```bash
-claude                           # in-process teammates (any terminal)
-ai myproject                     # tmux split-pane layout (nvim + 2 agents)
-claude --teammate-mode tmux      # split-pane agent teams
+ai myproject                     # tmux layout (nvim + 2 agents)
+cc                               # inside tmux → one pane per teammate (teammateMode=auto)
+cc --teammate-mode in-process    # one terminal; arrow keys / Enter in the agent panel
 ```
 
 ---
@@ -368,36 +368,3 @@ make help               # authoritative target list
 
 ---
 
-## Zellij (opt-in pack)
-
-These apply only after `./install.sh --pack zellij`. Namespaced under
-`z*` (`zdev`, `zwork`, `zai`, …) so they never shadow the tmux defaults.
-For install troubleshooting see
-[`ZELLIJ_TROUBLESHOOTING.md`](ZELLIJ_TROUBLESHOOTING.md).
-
-### Zellij sessions
-
-| Command          | Layout                                          |
-|------------------|-------------------------------------------------|
-| `zwork [name]`   | Bare named session                              |
-| `zdev [name]`    | 3-column: nvim \| agent \| runner               |
-| `zai [name]`     | nvim + 2 AI agent terminals                     |
-| `zai-single`     | nvim + 1 terminal                               |
-| `zai-triple`     | nvim + 3 agents                                 |
-| `zfullstack`     | 5-tab full-stack setup                          |
-| `zmulti`         | Dev + Monitor + Git tabs                        |
-| `zremote`        | Minimal remote layout                           |
-
-### Zellij keybindings
-
-| Chord            | Action                          |
-|------------------|---------------------------------|
-| `Alt-n`          | New pane                        |
-| `Alt-h/j/k/l`    | Navigate panes                  |
-| `Alt-=` / `Alt--`| Grow / shrink pane              |
-| `Alt-p`          | Pane mode                       |
-| `Ctrl-t`         | Tab mode                        |
-| `Ctrl-s`         | Scroll / search mode            |
-| `Ctrl-o`         | Session mode (detach with `d`)  |
-| `Ctrl-g`         | Locked mode — passthrough keys  |
-| `Ctrl-q`         | Quit                            |

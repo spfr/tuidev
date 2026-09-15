@@ -58,9 +58,8 @@ Just the core: Nvim, tmux, zsh, Starship, and the modern CLI tools. Add packs on
 ### Q: How do I add a specific pack to an existing install?
 
 ```bash
-./install.sh --pack zellij            # add Zellij on top of whatever you have
 ./install.sh --sandbox                # Seatbelt profiles + the `sbx` wrapper (Tier 1)
-./install.sh --pack sandbox-container # Podman machine for VM-backed isolation (Tier 2)
+./install.sh --pack sandbox-container # VM-backed isolation (Tier 2): Apple container → podman → docker
 ./install.sh --pack ai-clis           # cc/cx/oc wrappers + adopt-existing CLI configs
 ```
 
@@ -101,6 +100,25 @@ Measure:
 time zsh -i -c exit
 ```
 
+### Q: Ghostty tabs broke after upgrading to macOS 27
+
+Stable Ghostty 1.3.1 predates macOS 27: with `macos-titlebar-style = tabs` the
+tab strip collapses into a tiny box beside the `+` button. The fix
+(ghostty-org/ghostty#13069) is on the tip channel only until 1.4.0 ships. Two
+ways out:
+
+1. **Stay on stable** — the shipped config now defaults to
+   `macos-titlebar-style = transparent`, whose native tab bar lays out
+   correctly. `make update-configs` re-applies it; restart Ghostty.
+2. **Get titlebar tabs back** — add `auto-update-channel = tip` to
+   `~/.config/ghostty/config` (outside the managed block), set
+   `macos-titlebar-style = tabs`, fully quit and relaunch, accept the update.
+   Or swap casks: `brew uninstall --cask ghostty && brew install --cask ghostty@tip`.
+   Known cosmetic leftover on 27: the tab strip renders in the system glass
+   material rather than the terminal background (#14103).
+
+Tracking issue for the public-release status: ghostty-org/ghostty#13070.
+
 ### Q: How do I add my own aliases?
 
 Edit `~/.zshrc.local`. Sourced last, never overwritten.
@@ -131,15 +149,6 @@ z myapp                   # jump there forever
 
 ## Sessions & tmux
 
-### Q: Why tmux (not Zellij)?
-
-- **Durability**: tmux sessions survive SSH disconnects and terminal crashes. Critical for remote work over flaky connections (iOS hotspot, mosh, long-running agents).
-- **Remote parity**: every VPS, Linux server, and SSH host already has tmux; no extra install for remote sessions.
-- **Agent integration**: Claude Code's agent teams split-pane mode targets tmux. iTerm2 is supported too, but tmux works in any terminal.
-- **Ubiquity**: if you already know tmux, your muscle memory carries over to any other machine.
-
-Zellij is still shipped as an opt-in pack (`./install.sh --pack zellij`) for users who prefer its workspace model.
-
 ### Q: How do I launch a session?
 
 All launchers create a **named** session; calling them again reattaches.
@@ -157,9 +166,8 @@ Management: `tls` (list), `tk NAME` (kill one), `tka` (kill server).
 
 ### Q: Where did the old `ai` command go?
 
-It still works — it just runs tmux now instead of Zellij. Same for `dev`, `ai-triple`, `fullstack` (where applicable), `remote`. The `t*` aliases (`ta`, `tdev`, `tai`, ...) remain available as the explicit tmux-named counterparts.
+It still works — it runs tmux. Same for `dev`, `ai-triple`, `fullstack` (where applicable), `remote`. The `t*` aliases (`ta`, `tdev`, `tai`, ...) remain available as the explicit tmux-named counterparts.
 
-Coming from the pre-pivot setup? See [migration.md](migration.md).
 
 ### Q: tmux colors look wrong / config not loading
 
@@ -172,12 +180,22 @@ ln -s ~/.config/tmux/tmux.conf ~/.tmux.conf          # fallback for <3.2
 
 ### Q: Claude agent teams split-pane mode?
 
+Agent teams are still experimental; the shipped `configs/claude/settings.json`
+enables them (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) and sets
+`"teammateMode": "auto"`, which opens one tmux pane per teammate whenever `cc`
+already runs inside tmux and stays in-process otherwise:
+
 ```bash
-ai myproject
-claude --teammate-mode tmux
+ai myproject          # tmux layout first …
+cc                    # … then teammates get their own panes
+cc --teammate-mode in-process   # one session only
 ```
 
-In-process mode (default `claude`) works in any terminal — use `Shift+Down` to cycle teammates.
+In-process mode works in any terminal (arrow keys select a teammate in the
+agent panel, Enter opens it). Split panes need tmux or iTerm2 — not Ghostty's
+native splits. Side effect worth knowing: with teams enabled, a *named*
+subagent launches as a teammate; set the variable to `0` to get plain
+subagents back.
 
 ---
 
@@ -206,28 +224,6 @@ Full details and the policy file layout: [sandboxing.md](sandboxing.md).
 ### Q: The sandbox blocked something I need
 
 Either switch tiers (`sbx --tier 1 -- ...`) or edit the policy at `~/.config/sandbox/<profile>.sb` (Seatbelt) or the `Containerfile` (Podman). Don't run agents unsandboxed as a workaround — scope the policy instead.
-
----
-
-## Zellij (opt-in pack)
-
-### Q: I want Zellij back
-
-```bash
-./install.sh --pack zellij
-source ~/.zshrc
-```
-
-Launchers: `zdev`, `zai`, `zai-triple`, `zfullstack`, `zmulti`, `zremote`, `zwork`. Keybindings, prefix-mode conflicts, and layout files: [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md).
-
-### Q: My old Zellij layout isn't loading
-
-```bash
-ls ~/.config/zellij/layouts/
-zellij --layout dual
-```
-
-If the `zellij/` dir is missing, you're on a profile without the pack — install it: `./install.sh --pack zellij`.
 
 ---
 
@@ -273,7 +269,7 @@ return {
 | Codex | `cx` | OpenAI-flavored workflows |
 | OpenCode | `oc` | open-source, multi-model |
 
-Aliases come from the opt-in `--pack ai-clis`. (Gemini CLI is deprecated upstream — successor: Antigravity, `agy`; add your own wrapper if you use it.) Run multiple in parallel via `ai` or `agents`. Prefer `sbx -- <alias>` over raw invocation.
+Aliases come from the opt-in `--pack ai-clis`. (Gemini CLI is deprecated upstream — successor: Antigravity, `agy`; add your own wrapper if you use it.) Run multiple in parallel via `ai` or `agents`. The wrappers already route through `sbx`; see [sandboxing.md](sandboxing.md#sbx-vs-claude-codes-built-in-sandbox--pick-one) before enabling Claude's own `/sandbox` — Seatbelt does not nest, so it is one or the other.
 
 ---
 

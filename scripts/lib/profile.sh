@@ -33,7 +33,7 @@
 #   sandbox=true
 #   ui=true
 #   extras=false
-#   extra_packs=zellij yazi
+#   extra_packs=herdr yazi
 #   installed_at=2026-04-14T18:51:20Z
 #   repo=/path/to/mactui_setup
 
@@ -49,7 +49,7 @@ TUIDEV_ENV_FILE_DEFAULT="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/env"
 TUIDEV_VALID_PROFILES=(minimal desktop remote)
 
 # Valid pack names (non-profile packs exposed via --pack NAME).
-TUIDEV_VALID_PACKS=(zellij yazi nnn monitoring sandbox-container mosh cmux bosun herdr fnm ai-clis)
+TUIDEV_VALID_PACKS=(yazi nnn monitoring sandbox-container mosh cmux bosun herdr fnm ai-clis)
 
 load_tuidev_profile() {
     local file="${1:-$TUIDEV_PROFILE_FILE_DEFAULT}"

@@ -1,5 +1,5 @@
 # ============================================================================
-# Ghostty Terminal Configuration (v1.3+)
+# Ghostty Terminal Configuration (1.3.x; macOS 27 aware)
 # Optimized for AI development and multi-agent workflows
 # ============================================================================
 
@@ -130,9 +130,6 @@ keybind = global:ctrl+grave_accent=toggle_quick_terminal
 keybind = home=text:\x1b[1~
 keybind = end=text:\x1b[4~
 
-# Ctrl+p pass-through (for Zellij)
-keybind = ctrl+p=text:\x10
-
 # ============================================================================
 # Clipboard
 # ============================================================================
@@ -187,8 +184,16 @@ notify-on-command-finish-after = 10s
 # Option key behavior (useful for macOS)
 macos-option-as-alt = true
 
-# Window control
-macos-titlebar-style = tabs
+# Titlebar / tabs. `tabs` (tab bar inside the titlebar) is broken on
+# macOS 27 with the stable 1.3.1 build: the tab strip collapses into a
+# tiny box beside the "+" button. The fix (ghostty-org/ghostty#13069,
+# tracked in #13070) ships only on the tip channel until 1.4.0. The
+# default `transparent` style lays tabs out correctly on every macOS
+# release, so it is the shipped default. To get titlebar tabs back on
+# macOS 27, switch to tip (auto-update-channel below) and set `tabs`.
+macos-titlebar-style = transparent
 
-# Auto-update
+# Auto-update. Set `auto-update-channel = tip` on macOS 27 if you want
+# the titlebar-tabs fix before 1.4.0 ships (restart Ghostty afterwards).
 auto-update = check
+# auto-update-channel = tip

@@ -197,12 +197,11 @@ if [[ "$ANSWER" == "y" ]]; then
         "$HOME/.config/nvim" \
         "$HOME/.config/ghostty" \
         "$HOME/.config/tmux" \
-        "$HOME/.config/zellij" \
         "$HOME/.config/opencode" \
         "$HOME/.config/herdr" \
         "$HOME/.config/starship.toml" \
         "$HOME/.codex" \
-        "$HOME/.claude.json" \
+        "$HOME/.claude/settings.json" \
         "$HOME/.hammerspoon"; do
         remove_config_path "$path"
     done
@@ -275,7 +274,7 @@ EOF
         atuin bandwhich bottom broot dust duf fastfetch glow hyperfine
         ncdu procs sd tealdeer tokei
         # packs
-        zellij yazi nnn lazydocker k9s podman fnm herdr
+        yazi nnn lazydocker k9s podman fnm herdr
         # (bosun is cargo-installed, not brew; remove with: cargo uninstall bosun)
         # (herdr may instead come from https://herdr.dev/install.sh, which drops
         #  the binary in $HOME/.local/bin; then: rm -f "$HOME/.local/bin/herdr")

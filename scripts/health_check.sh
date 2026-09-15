@@ -333,11 +333,10 @@ check_extras() {
 pack_probe() {
     # Returns the probe command for a given pack name.
     case "$1" in
-        zellij)             echo "have_cmd zellij" ;;
         yazi)               echo "have_cmd yazi" ;;
         nnn)                echo "have_cmd nnn" ;;
         monitoring)         echo "have_cmd btm || have_cmd bottom || have_cmd htop" ;;
-        sandbox-container)  echo "have_cmd podman" ;;
+        sandbox-container)  echo "have_cmd container || have_cmd podman || have_cmd docker" ;;
         mosh)               echo "have_cmd mosh" ;;
         cmux)               echo "have_cmd cmux || have_app cmux" ;;
         bosun)              echo "have_cmd bosun" ;;

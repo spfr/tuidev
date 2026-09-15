@@ -28,7 +28,7 @@ for id in $INSTALL_IDS; do
     # and isn't in the cross-cutting drift list — that's intentional
     # (it's a pure PATH export, not a repo-backed config).
     case "$id" in
-        tuidev-sandbox-path|tuidev-ghostty|tuidev-hammerspoon|tuidev-remote|tuidev-zellij*) continue ;;
+        tuidev-sandbox-path|tuidev-ghostty|tuidev-hammerspoon|tuidev-remote) continue ;;
     esac
     if ! grep -qF "|$id\"" "$REPO_DIR/scripts/update.sh"; then
         fail "install.sh writes managed-block '$id' but update.sh MANAGED_BLOCKS doesn't list it"
@@ -52,7 +52,7 @@ pass "Seatbelt audit paths match installer"
 #    and are invoked via --<name>, not --pack <name>, so they're excluded.
 FIRSTCLASS_PACKS="core remote sandbox ui extras"
 
-DOCS_PACKS="$(grep -hoE -- '--pack [a-z][a-z0-9-]+' "$REPO_DIR"/{README.md,install.sh,docs/profiles.md,docs/migration.md} 2>/dev/null \
+DOCS_PACKS="$(grep -hoE -- '--pack [a-z][a-z0-9-]+' "$REPO_DIR"/{README.md,install.sh,docs/profiles.md} 2>/dev/null \
     | awk '{print $2}' | sort -u)"
 
 for pack in $DOCS_PACKS; do

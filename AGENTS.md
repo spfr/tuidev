@@ -2,7 +2,7 @@
 
 > Universal AI Agent Instructions for TUI Development Environment
 
-This file provides guidance to AI coding agents (Claude Code, OpenCode, Cursor, Windsurf, etc.) when working with this setup or projects that use it.
+This file provides guidance to AI coding agents (Claude Code, Codex CLI, OpenCode, and any other tool that reads `AGENTS.md`) when working with this setup or projects that use it.
 
 ---
 
@@ -11,7 +11,7 @@ This file provides guidance to AI coding agents (Claude Code, OpenCode, Cursor, 
 This is a **terminal-first, AI-powered development environment** with:
 
 - **Neovim** as the primary editor (no in-editor AI plugins by design)
-- **tmux** as the primary terminal multiplexer (durable sessions; Zellij is an opt-in pack)
+- **tmux** as the only terminal multiplexer (durable sessions; agent tooling targets it)
 - **Modern Rust CLI tools** replacing traditional Unix commands
 - **AI agents run in parallel tmux panes**, not embedded in the editor
 - **Sandbox by default** on macOS: AI CLIs auto-route through `sbx` (Seatbelt). Credentials (`~/.ssh`, `~/.aws`, keychain, etc.) are denied inside the sandbox.
@@ -170,7 +170,6 @@ When creating or modifying projects with this setup:
 ~/.zshrc.local                   # Personal customizations (gitignored)
 ~/.config/nvim/                  # Neovim (LazyVim)
 ~/.config/tmux/tmux.conf         # Primary multiplexer
-~/.config/zellij/                # Only present if --pack zellij was installed
 ~/.config/starship.toml          # Shell prompt
 ~/.config/ghostty/config         # Terminal emulator
 ~/.hammerspoon/init.lua          # macOS automation (desktop profile)
@@ -182,10 +181,21 @@ When creating or modifying projects with this setup:
 AI CLIs are opt-in via `./install.sh --pack ai-clis` and self-update. That pack ships hooks/policy and the `cc`/`cx`/`oc` wrappers; individual user configs are `--adopt-existing` by default (if present, left alone). Gemini CLI is deprecated (successor: Antigravity, `agy`) — not shipped.
 
 ```
-~/.claude.json                       # Claude Code (primary)
+~/.claude/settings.json              # Claude Code (primary) — NOT ~/.claude.json (that is CLI state)
 ~/.codex/config.toml                 # Codex CLI (OpenAI)
 ~/.config/opencode/opencode.json     # OpenCode CLI
+~/.config/opencode/tui.json          # OpenCode TUI (theme, scroll, attention)
 ```
+
+**Which CLI reads which instruction file** (verified against each tool's docs, Sept 2026):
+
+| CLI | Reads natively | To load the other file |
+|-----|----------------|------------------------|
+| Claude Code | `CLAUDE.md` (managed → `~/.claude/CLAUDE.md` → project → `CLAUDE.local.md`), `.claude/rules/*.md` | put `@AGENTS.md` in `CLAUDE.md`, or `ln -s AGENTS.md CLAUDE.md` |
+| Codex CLI | `AGENTS.md` (`~/.codex/AGENTS.md`, then repo root down to cwd; 32 KiB cap) | `project_doc_fallback_filenames = ["CLAUDE.md"]` |
+| OpenCode | nearest `AGENTS.md`; falls back to `CLAUDE.md` only when no `AGENTS.md` exists | list `CLAUDE.md` under `instructions` (the shipped config does) |
+
+Keep instruction files under ~200 lines each; every one loads into context at session start.
 
 ---
 
@@ -255,27 +265,26 @@ Sessions:
 
 ### Agent Teams Integration
 
-Claude agent teams support two display modes:
+Claude agent teams are experimental and off upstream; the shipped
+`configs/claude/settings.json` turns them on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`)
+and sets `"teammateMode": "auto"`. Two display modes:
 
-- **In-process** (default): teammates run inside your terminal. `Shift+Down` cycles through them. Works in any terminal including Ghostty.
-- **Split-pane**: each teammate gets its own tmux pane. Requires tmux. Not supported in Ghostty's native splits, VS Code terminal, or Windows Terminal.
+- **In-process** (upstream default): teammates run inside your terminal; the
+  agent panel below the prompt lists them (arrow keys select, Enter opens,
+  `x` stops). Works in any terminal including Ghostty.
+- **Split-pane** (`auto` picks it when you are already inside tmux): each
+  teammate gets its own tmux pane. Needs tmux or iTerm2 + `it2`; not
+  Ghostty's native splits, VS Code's terminal, or Windows Terminal.
 
 ```bash
-# In-process mode (works anywhere)
-cc
-# Ask Claude to create an agent team — Shift+Down to cycle teammates
-
-# Split-pane mode (requires tmux)
-ai myproject
-cc --teammate-mode tmux
-
-# Force in-process mode explicitly
-cc --teammate-mode in-process
+ai myproject                  # tmux layout first …
+cc                            # … teammates open as panes (teammateMode=auto)
+cc --teammate-mode in-process # one terminal, agent panel
 ```
 
-### Zellij (opt-in)
-
-If the user installed `--pack zellij`, parallel commands are available: `zwork`, `zdev`, `zai`, `zai-single`, `zai-triple`, `zfullstack`, `zmulti`, `zremote`, and `zk` (kill all). Do not assume Zellij is present.
+With teams enabled, a *named* subagent launches as a teammate. Prefer plain
+subagents for focused work that only needs a result back; reach for a team
+when teammates must talk to each other. Set the variable to `0` to disable.
 
 ---
 
@@ -326,7 +335,6 @@ lg           # Instead of: git log --oneline
 ### 5. Respect the Environment
 - Don't install AI plugins in nvim (intentionally excluded; ACP is a conscious non-goal)
 - AI agents run in adjacent tmux panes by design
-- Don't assume Zellij is installed — it's an opt-in pack
 - Don't write credentials or probe `~/.ssh`/`~/.aws` — the sandbox denies them
 - Keep configs in `~/.config/` following XDG conventions
 
@@ -407,7 +415,7 @@ If building AI agents that integrate with this environment:
 
 1. **Check for modern tools first** — Most users will have `rg`, `fd`, `bat`
 2. **Use the shell aliases** — They're faster and more user-friendly
-3. **Assume tmux, not Zellij** — Zellij is opt-in via `--pack zellij`
+3. **Assume tmux** — it is the only multiplexer shipped
 4. **Respect the sandbox** — On macOS, agents run under Seatbelt; don't expect host-level filesystem access
 5. **Read the palette, don't hardcode it** — Tokyo Night is the default, but the user may have applied another theme. The active one is named in `~/.config/tuidev/theme` and its colors live in `configs/themes/<name>/palette.toml`
 6. **Follow the engineering conventions** — When editing this repo's scripts, see [docs/engineering.md](docs/engineering.md): use the shared libs, follow the pack contract, never `cp` over user files
@@ -416,14 +424,14 @@ If building AI agents that integrate with this environment:
 
 ### Multi-agent symlink helper
 
-For downstream projects that want identical instructions across every AI agent (Claude, Cursor, Windsurf, Aider, Cline, etc.):
+`AGENTS.md` is the cross-vendor convention: Codex and OpenCode read it natively, Claude Code reads `CLAUDE.md`. For downstream projects that want one canonical file:
 
 ```bash
 cp templates/AGENTS_TEMPLATE.md ~/myproject/AGENTS.md
 ./scripts/setup_agent_configs.sh ~/myproject
 ```
 
-This creates `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `.aider.md`, ... as symlinks to the single canonical `AGENTS.md`.
+By default this creates only `CLAUDE.md` as a symlink to `AGENTS.md` (Codex and OpenCode need nothing). Pass `--all` to also create the legacy per-vendor files (`.cursorrules`, `.windsurfrules`, `.aider.md`, `.clinerules`, Copilot, Roo). If you want Claude-specific additions on top, replace the `CLAUDE.md` symlink with a real file whose first line is `@AGENTS.md`.
 
 ---
 

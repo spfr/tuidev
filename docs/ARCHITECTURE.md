@@ -27,7 +27,7 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Zellij is an optional pack (`--pack zellij`) for users who prefer its workspace model. tmux is always installed and is the primary session layer.
+tmux is always installed and is the only session layer; every layout is a script under `scripts/tmux/`.
 
 ---
 
@@ -54,7 +54,6 @@ Any terminal works. Ghostty is configured out of the box with macos-option-as-al
 └─────────────────────────────────────────┘
 ```
 
-**Zellij (optional pack)** ships layout KDLs and the `z*` launchers for users who want manual workspace layouts. Install with `./install.sh --pack zellij`.
 
 ### Layer 3: Applications
 
@@ -125,7 +124,6 @@ Tier 1 is always available on macOS (no install). Tier 2 ships with the `sandbox
 │   30-sandbox.sh     Podman, policy files       │
 │   40-ui.sh          Ghostty, Hammerspoon       │
 │   90-extras.sh      optional tools             │
-│   pack-zellij.sh    Zellij + layouts           │
 │                                                │
 │   Each script is idempotent and pack-scoped.   │
 └────────────────────────────────────────────────┘
@@ -172,9 +170,8 @@ tuidev/                                          ~/
 │   ├── starship/      ──────────────────────►   │   ├── starship.toml
 │   ├── ghostty/       ──────────────────────►   │   ├── ghostty/
 │   ├── sandbox/       ──────────────────────►   │   └── sandbox/
-│   ├── claude/        ──────────────────────►   └── .claude.json
+│   ├── claude/        ──────────────────────►   └── .claude/settings.json
 │   ├── opencode/      ──────────────────────►
-│   └── zellij/ (pack) ──────────────────────►       .config/zellij/ (opt-in)
 └── install.sh ── scripts/install/*.sh ──────►   copies configs, installs packages
 ```
 
@@ -199,7 +196,6 @@ tuidev/
 │   ├── ssh/                    # remote pack
 │   ├── sandbox/                # Seatbelt .sb + Containerfile
 │   ├── themes/                 # one palette.toml per theme
-│   └── zellij/                 # opt-in pack
 ├── scripts/
 │   ├── lib/                    # shared helpers: ui, brew, profile,
 │   │                           #   manifest, migrate, config_write + tests
@@ -285,4 +281,3 @@ tuidev/
 - [profiles.md](profiles.md) — layered install matrix
 - [sandboxing.md](sandboxing.md) — Seatbelt / Podman tier details
 - [remote.md](remote.md) — mosh, Tailscale, iOS clients
-- [migration.md](migration.md) — moving from the old Zellij-first layout

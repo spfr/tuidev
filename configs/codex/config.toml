@@ -4,27 +4,42 @@
 # Shipped to ~/.codex/config.toml on install. Existing user files are
 # preserved (install.sh uses --adopt-existing for this path).
 #
+# Reference: https://learn.chatgpt.com/docs/config-file/config-reference
+#
 # Rationale for the defaults below:
+#   - model is left UNSET so the CLI follows its own recommended default
+#     (Codex retires model snapshots on a cadence; a pinned id goes stale).
+#     Pin one only if you need reproducibility across upgrades.
 #   - sandbox_mode = "workspace-write": agent can read freely, but writes
 #     are confined to the current project tree. Matches the Seatbelt
-#     strict profile used by `sbx` at the OS layer.
+#     strict profile used by `sbx` at the OS layer. (Seatbelt does not
+#     nest: under `cx` = `sbx -- codex`, Codex's own sandbox cannot apply
+#     and it falls back to approvals — sbx is then the boundary.)
 #   - approval_policy = "on-request": Codex asks for approval when a
 #     command falls outside the sandbox; nothing runs "silently broad."
-#   - network_access_during_exec = false: stops the agent from reaching
-#     the internet from a shell tool. LLM calls still go out; exec tools
-#     cannot. Matches the Claude Code "no shell-level egress" default.
-#   - disable_response_storage = true: don't persist responses on
-#     OpenAI's side; this is for users who prefer local-only transcripts.
+#     (`untrusted` is unsupported upstream; `on-failure` is deprecated.)
+#   - network_access = false: stops the agent from reaching the internet
+#     from a shell tool. LLM calls still go out; exec tools cannot.
 #
 # Override any of these in a project-local .codex/config.toml; project
 # values win over user values.
 # ============================================================================
 
-model = "gpt-5-codex"
+# model = "gpt-5.6-terra"            # pin only if you want reproducibility
+# model_reasoning_effort = "medium"  # minimal | low | medium | high | xhigh
 
 # Safe default: workspace-write + on-request approval.
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
+
+# Terminal-only workflow: no editor URI scheme for `codex @` references.
+# Allowed: vscode | vscode-insiders | windsurf | cursor | none
+file_opener = "none"
+
+# Web search: disabled | cached | indexed | live (cached is the upstream default).
+web_search = "cached"
+
+# ---- tables below; every top-level key must stay above this line ----
 
 [sandbox_workspace_write]
 # Stay inside the project tree by default. Codex can still read anywhere
@@ -39,13 +54,19 @@ exclude_slash_tmp = false
 [history]
 persistence = "save-all"
 
-# Don't retain response bodies on the provider side.
-disable_response_storage = true
+# Terminal notifications (OSC 9 / bell) while the pane is unfocused — cmux,
+# Ghostty and tmux surface them. `true` = all event types; the reference
+# also accepts an array of event names if you want to narrow it.
+[tui]
+notifications = true
+notification_condition = "unfocused"   # unfocused | always
+notification_method = "auto"           # auto | osc9 | bel
 
-# File opener for `codex @`-style references. Neovim matches the rest of
-# tuidev; override if you prefer a GUI editor.
-file_opener = "nvim"
-
-# Notification: wire to the same notify.sh helper Claude Code uses.
-# Commented out by default so Codex users opt in explicitly.
+# External notifier: wire to the same notify.sh helper Claude Code uses.
+# Commented out by default so Codex users opt in explicitly. (Only fires
+# for agent-turn-complete; it receives a JSON payload as the last arg.)
 # notify = ["notify.sh", "Codex CLI"]
+
+# Codex reads AGENTS.md natively and ignores CLAUDE.md. Uncomment to let it
+# fall back to CLAUDE.md in directories that have no AGENTS.md:
+# project_doc_fallback_filenames = ["CLAUDE.md"]

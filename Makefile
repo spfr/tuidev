@@ -13,7 +13,8 @@
         check check-minimal check-desktop check-remote \
         lint validate-configs validate \
         sbx-test sandbox-up sandbox-down \
-        adopt migrate fix-completions clean \
+        adopt fix-completions clean \
+        container-runtime container-build container-test container-clean \
         docker-build docker-test docker-clean \
         brew-upgrade ci-test \
         quick-dev quick-ai quick-agents quick-worktrees quick-lazygit quick-sysinfo \
@@ -82,7 +83,7 @@ update-migrations: ## Run pending one-shot migrations
 update-all: ## Non-interactive: packages + configs + repo
 	@./scripts/update.sh --all
 
-update-sandbox-image: ## Rebuild the Podman sandbox image (if --pack sandbox-container)
+update-sandbox-image: ## Rebuild the agent-sandbox image (if --pack sandbox-container)
 	@./scripts/update.sh --sandbox-image
 
 update-security: ## Audit Tailscale + SSH perms + Seatbelt profile drift
@@ -153,12 +154,11 @@ sbx-test: ## Smoke-test the Seatbelt wrapper: deny ~/.ssh, allow project
 	@echo -e "2. ${YELLOW}sbx -- cat ~/.ssh/id_ed25519${NC}  (should FAIL — sandbox blocks credentials)"
 	@! sbx -- cat ~/.ssh/id_ed25519 2>/dev/null && echo -e "   ${GREEN}PASS${NC} (correctly denied)" || echo -e "   ${RED}FAIL${NC} (should have been denied)"
 
-sandbox-up: ## Start the Podman sandbox VM (Tier 2; requires --pack sandbox-container)
-	@command -v podman >/dev/null 2>&1 || { echo "podman not installed. Run ./install.sh --pack sandbox-container"; exit 1; }
-	@podman machine start || podman machine init --now
+sandbox-up: ## Start the Tier 2 container backend (Apple container → podman → docker)
+	@./scripts/container.sh up
 
-sandbox-down: ## Stop the Podman sandbox VM
-	@command -v podman >/dev/null 2>&1 && podman machine stop || true
+sandbox-down: ## Stop the Tier 2 container backend
+	@./scripts/container.sh down || true
 
 # ----------------------------------------------------------------------------
 # Migration helpers
@@ -168,18 +168,6 @@ adopt: ## Convert existing dotfiles to tuidev managed-block form (one-time)
 	@echo -e "${BLUE}Adopting existing dotfiles into managed-block format...${NC}"
 	@./scripts/update.sh --configs
 
-migrate: ## Guided migration from the old zellij-first setup
-	@echo -e "${BLUE}tuidev migration helper${NC}"
-	@echo ""
-	@echo -e "${YELLOW}1.${NC} Your ai/dev/work/etc. commands now launch tmux (not zellij)."
-	@echo -e "${YELLOW}2.${NC} If you want zellij back: ${GREEN}./install.sh --pack zellij${NC}"
-	@echo -e "   The z* variants (zai, zdev, zwork, ...) activate automatically."
-	@echo -e "${YELLOW}3.${NC} Your ~/.zshrc is no longer overwritten; config drift is managed."
-	@echo -e "   Run: ${GREEN}make update-configs${NC} to re-apply the tuidev block."
-	@echo -e "${YELLOW}4.${NC} Backups live in ~/.config/tuidev/backups/."
-	@echo ""
-	@echo -e "See ${GREEN}docs/migration.md${NC} for the full guide."
-
 fix-completions: ## Fix insecure zsh completion directories
 	@./scripts/fix_completions.sh
 
@@ -188,17 +176,26 @@ clean: ## Remove test results and transient files
 	@echo -e "${GREEN}cleaned${NC}"
 
 # ----------------------------------------------------------------------------
-# Docker (CI / Linux parity smoke test)
+# Containers (Linux parity smoke test). Runtime order: Apple `container`
+# (macOS 26+) → podman → docker. Force one with TUIDEV_CONTAINER_RUNTIME=…
 # ----------------------------------------------------------------------------
 
-docker-build: ## Build the Ubuntu-based test image
-	@docker build -t mactui-test .
+container-runtime: ## Print which container runtime the targets below will use
+	@./scripts/container.sh runtime
 
-docker-test: docker-build ## Run the core-tagged tests inside Docker
-	@docker run --rm mactui-test
+container-build: ## Build the Alpine test image
+	@./scripts/container.sh build
 
-docker-clean: ## Remove the test image
-	@docker rmi mactui-test 2>/dev/null || true
+container-test: ## Run the core-tagged tests inside a container
+	@./scripts/container.sh test
+
+container-clean: ## Remove the test image
+	@./scripts/container.sh clean
+
+# Back-compat aliases (older docs / muscle memory).
+docker-build: container-build
+docker-test: container-test
+docker-clean: container-clean
 
 # ----------------------------------------------------------------------------
 # Quick launchers (attach-or-create sessions)

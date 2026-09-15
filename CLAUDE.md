@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-macOS TUI Development Setup — an opinionated, terminal-first developer environment for AI-powered workflows. **tmux is the primary multiplexer** (durable sessions survive disconnects, narrow terminals, and mobile reattaches); **Zellij is an opt-in pack** installed via `--pack zellij`. Nvim stays lightweight (no in-editor AI plugins); AI CLIs (claude, codex, opencode) are opt-in via `--pack ai-clis` and run in external panes for maximum speed and multi-agent collaboration.
+macOS TUI Development Setup — an opinionated, terminal-first developer environment for AI-powered workflows. **tmux is the only multiplexer** (durable sessions survive disconnects, narrow terminals, and mobile reattaches; Claude Code's agent-team split panes, Herdr, bosun and cmux all build on or beside it). Nvim stays lightweight (no in-editor AI plugins); AI CLIs (claude, codex, opencode) are opt-in via `--pack ai-clis` and run in external panes for maximum speed and multi-agent collaboration.
 
 Installation is layered — pick a profile (`minimal`, `desktop`, `remote`) or compose packs directly (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack NAME`). See `docs/profiles.md`.
 
@@ -28,7 +28,7 @@ make update-packages      # Brew packages for active profile
 make update-configs       # Re-apply managed blocks and pack-owned configs
 make update-migrations    # Run pending one-shot migrations (once per machine)
 make update-all           # Non-interactive: packages + configs + repo
-make update-sandbox-image # Rebuild Podman image (requires --pack sandbox-container)
+make update-sandbox-image # Rebuild the agent-sandbox image (requires --pack sandbox-container)
 make update-security      # Audit Tailscale + SSH + Seatbelt drift
 
 # Tests and health (profile-aware)
@@ -43,20 +43,21 @@ make test-all             # Every tag including ui
 
 # Lint and validate
 make lint                 # shellcheck install/scripts/lib/tmux/install packs/bin
-make validate-configs     # KDL, TOML, Lua, JSON syntax
+make validate-configs     # TOML, Lua, JSON syntax
 
 # Sandbox
 make sbx-test             # Smoke-test Seatbelt: deny ~/.ssh, allow project writes
-make sandbox-up           # Start Podman VM (Tier 2; --pack sandbox-container)
+make sandbox-up           # Start the Tier 2 backend: Apple container → podman → docker
 make sandbox-down
 
 # Migration helpers
 make adopt                # Convert existing dotfiles to managed-block form
-make migrate              # Print migration guide from the old zellij-first setup
 
-# Docker (Linux parity CI)
-make docker-build
-make docker-test
+# Linux parity test in a container (runtime: Apple container → podman → docker;
+# force one with TUIDEV_CONTAINER_RUNTIME=…). docker-* names still work as aliases.
+make container-runtime
+make container-build
+make container-test
 
 # Quick launchers
 make quick-dev            # tmux dev layout (nvim | agent | runner)
@@ -78,9 +79,6 @@ All install commands support `--dry-run` for previewing mutations.
 configs/
 ├── nvim/                    # LazyVim setup; ai.lua is intentionally empty
 ├── tmux/tmux.conf           # Primary multiplexer (Tokyo Night)
-├── zellij/                  # Opt-in pack (install via --pack zellij)
-│   ├── config.kdl
-│   └── layouts/             # 7 KDL workspace layouts
 ├── zsh/.zshrc               # Shell config, written as managed block
 ├── starship/starship.toml
 ├── ghostty/config
@@ -104,6 +102,7 @@ scripts/
 ├── theme.sh                 # list | show | apply — palette-driven theming
 ├── fix_completions.sh
 ├── setup_agent_configs.sh   # AI-agent symlink generator
+├── container.sh             # make container-*/sandbox-* entry point (runtime-agnostic)
 ├── notify.sh
 ├── lib/
 │   ├── ui.sh                # Shared printing / prompt helpers
@@ -112,6 +111,7 @@ scripts/
 │   ├── manifest.sh          # Append-only record of what we installed
 │   ├── migrate.sh           # One-shot migration runner + state file
 │   ├── config_write.sh      # Managed-block writer (preserves user edits)
+│   ├── container.sh         # Runtime picker: Apple container → podman → docker
 │   └── test_*.sh            # Unit tests: config_write, profile, contract,
 │                            #   theme, migrations (all run by CI `lib-tests`)
 ├── migrations/              # Timestamped one-shot scripts, run once per machine
@@ -122,11 +122,10 @@ scripts/
 │   ├── ui.sh                # Ghostty, Hammerspoon, Rectangle, etc.
 │   ├── extras.sh            # atuin, broot, dust, duf, hyperfine, tokei, ...
 │   └── packs/
-│       ├── zellij.sh        # Opt-in zellij pack
 │       ├── yazi.sh          # Opt-in file manager
 │       ├── nnn.sh
 │       ├── monitoring.sh    # lazydocker, k9s, bottom
-│       ├── sandbox-container.sh  # Podman machine (Tier 2)
+│       ├── sandbox-container.sh  # Tier 2: Apple container / podman / docker
 │       ├── mosh.sh          # mosh alone, without the full --remote pack
 │       ├── fnm.sh           # Fast Node Manager
 │       ├── cmux.sh          # macOS GUI terminal for parallel agents
@@ -151,7 +150,7 @@ scripts/
 ## Key Design Decisions
 
 1. **AI runs externally.** `configs/nvim/lua/plugins/ai.lua` is intentionally empty — AI tools run in adjacent tmux panes, not in-editor. ACP is a conscious non-goal.
-2. **tmux-primary; Zellij optional pack.** The ergonomic commands (`work`, `dev`, `ai`, ...) dispatch to tmux via reproducible layout scripts. Zellij wrappers are namespaced `z*` and only activate once `--pack zellij` is installed.
+2. **tmux only.** The ergonomic commands (`work`, `dev`, `ai`, ...) dispatch to tmux via reproducible layout scripts. Zellij was dropped in 2.3.0: nothing in the agent toolchain targets it, and every layout it offered exists as a tmux script.
 3. **Sandbox-ready.** `sbx` (Seatbelt) wraps any command; the AI-CLI wrappers (`cc`/`cx`/`oc`, from the opt-in `--pack ai-clis`) auto-route through it on macOS when both the CLI and `sbx` are on `PATH`. `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc` are denied in every shipped profile. Escape hatch: `CC_NO_SANDBOX=1`.
 4. **Rust-based CLI tools.** ripgrep, fd, starship, zoxide, eza, bat, delta for performance.
 5. **One palette, applied everywhere.** Tokyo Night is the default; `scripts/theme.sh apply NAME` re-themes tmux, Ghostty and Starship from a single `configs/themes/<name>/palette.toml`. Neovim is deliberately out of scope (LazyVim owns its colorscheme). See [docs/theming.md](docs/theming.md).
@@ -176,7 +175,6 @@ Bare `tmux` opens a single pane. Use the shell wrappers or the scripts directly 
 - `layout-multi.sh` — 3 windows: dev / monitor / git
 - `layout-remote.sh` — minimal nvim + shell for narrow terminals
 
-Zellij layouts (KDL) still live under `configs/zellij/layouts/` and are installed verbatim when the user runs `--pack zellij`.
 
 ## Shell Functions (from .zshrc)
 
@@ -205,11 +203,6 @@ All wrappers are attach-or-create, accept an optional name, and default to a lay
 - `tk [name]` — kill named session
 - `tka` — kill all sessions (`tmux kill-server`)
 
-### Zellij wrappers (activated when `--pack zellij` installs `zellij` on `PATH`)
-
-- `zwork`, `zdev`, `zai`, `zai-single`, `zai-triple`, `zfullstack`, `zmulti`, `zremote`
-- `zk` — kill all zellij sessions
-
 ## AI CLI Tools (opt-in — `--pack ai-clis`)
 
 The core install is CLI-agnostic; AI CLIs live in one opt-in pack
@@ -219,9 +212,9 @@ functions (not plain aliases) that auto-route through `sbx` when both the CLI an
 
 | Tool | Function | Config | Purpose |
 |------|----------|--------|---------|
-| Claude Code | `cc` | `configs/claude/settings.json` | Anthropic's official CLI (primary) |
-| Codex CLI | `cx` | `configs/codex/config.toml` | OpenAI; `sandbox_mode=workspace-write`, `approval_policy=on-request` |
-| OpenCode | `oc` | `configs/opencode/opencode.json` | Open-source, multi-model |
+| Claude Code | `cc` | `configs/claude/settings.json` → `~/.claude/settings.json` | Anthropic's official CLI (primary); notify hooks, credential `deny` rules, agent teams on |
+| Codex CLI | `cx` | `configs/codex/config.toml` | OpenAI; model unpinned (follows CLI default), `sandbox_mode=workspace-write`, `approval_policy=on-request` |
+| OpenCode | `oc` | `configs/opencode/opencode.json` + `tui.json` | Open-source, multi-model (`anthropic/claude-sonnet-5` default) |
 
 Gemini CLI is deprecated upstream (successor: Antigravity, `agy`) and is not
 shipped — the pack stays CLI-agnostic; add your own wrapper if you use one.
@@ -248,8 +241,8 @@ See `docs/sandboxing.md` for profile internals and customization.
 - `check-paths` — no hardcoded `/Users/NAME` or `/home/NAME` leaked into configs, docs, `bin/`, `uninstall.sh`, or the `Makefile`; also fails on mDNS `user@host.local` forms
 - `required-files` — every file `install.sh` references must exist (tmux, sandbox profiles, codex config, sbx, lib, docs)
 - `seatbelt-profiles` (macOS runner) — each `.sb` parses under `sandbox-exec -n` and `bin/sbx --dry-run` runs
-- `lib-tests` — `test_config_write.sh`, `test_profile.sh`, `test_contract.sh`, `test_theme.sh`, `test_migrations.sh` under `scripts/lib/`
-- `docker-core` — Ubuntu image runs `test_suite.sh --tag core`
+- `lib-tests` — `test_config_write.sh`, `test_profile.sh`, `test_contract.sh`, `test_theme.sh`, `test_migrations.sh`, `test_container.sh` under `scripts/lib/`
+- `docker-core` — Alpine image runs `test_suite.sh --tag core` (CI pins `TUIDEV_CONTAINER_RUNTIME=docker`; locally `make container-test` picks Apple container or podman first). Every tool is an apk package: one layer, no compiling, no downloads from GitHub
 - `check-docs` — every `docs/...` link in README exists
 - `summary` — aggregates the job results into one required status
 

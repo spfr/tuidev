@@ -20,7 +20,7 @@ Thank you for your interest. This document captures the conventions this repo fo
 3. **Test your changes:**
    ```bash
    make ci-test           # lint + validate-configs + core tests (what CI gates on)
-   make docker-test       # Linux smoke test in a clean container
+   make container-test    # Linux smoke test in a clean container (Apple container → podman → docker)
    ```
 
    Or run the pieces individually:

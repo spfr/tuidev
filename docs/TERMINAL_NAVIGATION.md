@@ -105,41 +105,10 @@ cat -v         # then press keys; Ctrl+c to exit
 
 ---
 
-## Zellij (opt-in pack)
-
-If you installed the Zellij pack (`./install.sh --pack zellij`), its key model is different from tmux.
-
-### Zellij modes
-
-| Mode | Enter | Exit | Purpose |
-|------|-------|------|---------|
-| **Normal** | default | — | `Alt+h/j/k/l` between panes |
-| **Locked** | `Ctrl+g` | `Ctrl+g` | pass every key to the terminal |
-| **Pane** | `Alt+p` | `Esc` | manage panes |
-| **Tab** | `Ctrl+t` | `Esc` | manage tabs |
-| **Scroll** | `Ctrl+s` | `Esc` | scroll / search |
-
-### Prefix key conflict
-
-Zellij's default `Ctrl+g` lock mode plus the tab/pane mode prefixes (`Ctrl+t`, `Alt+p`) can clash with app bindings (git `Ctrl+g`, shell tab-completion on some setups). Options:
-
-- Press `Ctrl+g` to enter Locked Mode when you need all keys to pass through.
-- Or remap in `~/.config/zellij/config.kdl` (see [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md)).
-
-### Zellij shell wrappers
-
-Installed only with the pack:
-
-```bash
-zwork / zdev / zai / zai-triple / zfullstack / zmulti / zremote
-```
-
----
-
 ## Troubleshooting Workflow
 
 1. Look at the status bar — which multiplexer / mode are you in?
-2. Try `Esc` to exit any mode (Zellij) or the prefix (tmux).
+2. Try `Esc` to leave the prefix (tmux).
 3. Verify Ghostty: `cat ~/.config/ghostty/config`
 4. Verify tmux: `cat ~/.config/tmux/tmux.conf`
 5. Still stuck? [FAQ.md](FAQ.md) or open an issue with `tmux -V`, `tmux info`, and a `cat -v` trace.
@@ -149,5 +118,4 @@ zwork / zdev / zai / zai-triple / zfullstack / zmulti / zremote
 ## See Also
 
 - [CHEATSHEET.md](CHEATSHEET.md) — full keybinding reference
-- [ZELLIJ_TROUBLESHOOTING.md](ZELLIJ_TROUBLESHOOTING.md) — for the opt-in Zellij pack
 - [remote.md](remote.md) — keyboard quirks when SSHing from iOS clients

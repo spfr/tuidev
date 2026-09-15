@@ -53,48 +53,6 @@ done
 echo ""
 
 # ============================================================================
-# 2. Validate Zellij KDL Configs
-# ============================================================================
-echo "--- Zellij KDL Configs ---"
-
-# Check main config
-if [[ -f "$REPO_DIR/configs/zellij/config.kdl" ]]; then
-    # Basic KDL validation - check for balanced braces
-    open_braces=$(grep -o '{' "$REPO_DIR/configs/zellij/config.kdl" | wc -l)
-    close_braces=$(grep -o '}' "$REPO_DIR/configs/zellij/config.kdl" | wc -l)
-    if [[ "$open_braces" -eq "$close_braces" ]]; then
-        log_pass "config.kdl - braces balanced ($open_braces pairs)"
-    else
-        log_fail "config.kdl - unbalanced braces (open: $open_braces, close: $close_braces)"
-    fi
-else
-    log_fail "config.kdl - file not found"
-fi
-
-# Check layouts
-for layout in "$REPO_DIR"/configs/zellij/layouts/*.kdl; do
-    if [[ -f "$layout" ]]; then
-        name=$(basename "$layout")
-        open_braces=$(grep -o '{' "$layout" | wc -l)
-        close_braces=$(grep -o '}' "$layout" | wc -l)
-
-        if [[ "$open_braces" -eq "$close_braces" ]]; then
-            # Check for common KDL issues
-            if grep -qE 'tab.*focus\s+true\s*\{' "$layout" 2>/dev/null; then
-                log_fail "$name - invalid KDL: 'focus true' should be inside block"
-            elif grep -qE '^\s*focus\s+true\s*$' "$layout" 2>/dev/null; then
-                log_pass "$name - valid KDL ($open_braces blocks)"
-            else
-                log_pass "$name - valid KDL ($open_braces blocks)"
-            fi
-        else
-            log_fail "$name - unbalanced braces (open: $open_braces, close: $close_braces)"
-        fi
-    fi
-done
-echo ""
-
-# ============================================================================
 # 3. Validate TOML Configs
 # ============================================================================
 echo "--- TOML Configs ---"
@@ -156,6 +114,7 @@ echo "--- JSON Configs (AI Tools) ---"
 
 json_files=(
     "configs/opencode/opencode.json"
+    "configs/opencode/tui.json"
     "configs/claude/settings.json"
 )
 
@@ -340,10 +299,6 @@ required_files=(
     "uninstall.sh"
     "Makefile"
     "configs/zsh/.zshrc"
-    "configs/zellij/config.kdl"
-    "configs/zellij/layouts/dual.kdl"
-    "configs/zellij/layouts/single.kdl"
-    "configs/zellij/layouts/triple.kdl"
     "configs/nvim/init.lua"
     "configs/starship/starship.toml"
     "configs/herdr/config.toml"
@@ -354,7 +309,6 @@ required_files=(
     "scripts/health_check.sh"
     "scripts/notify.sh"
     "configs/ssh/config"
-    "configs/zellij/layouts/remote.kdl"
     "configs/tmux/tmux.conf"
 )
 

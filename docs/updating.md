@@ -1,8 +1,7 @@
 # Updating an Installed tuidev
 
 How an existing install moves forward, and what the installer records so it can
-be undone. For the one-time zellij-to-tmux command changes see
-[migration.md](migration.md); for what each profile installs see
+be undone. For what each profile installs see
 [profiles.md](profiles.md).
 
 ## The three kinds of change

@@ -60,7 +60,7 @@ jobs:
           sudo apt-get install -y python3 lua5.4 jq
       - name: validate JSON
         run: |
-          for f in configs/claude/settings.json configs/opencode/opencode.json; do
+          for f in configs/claude/settings.json configs/opencode/opencode.json configs/opencode/tui.json; do
             [[ -f "$f" ]] && jq empty "$f" && echo "✓ $f"
           done
       - name: validate TOML
@@ -149,6 +149,8 @@ jobs:
             configs/ssh/config
             configs/claude/settings.json
             configs/codex/config.toml
+            configs/opencode/opencode.json
+            configs/opencode/tui.json
             configs/sandbox/profiles/strict.sb
             configs/sandbox/profiles/standard.sb
             configs/sandbox/profiles/off.sb
@@ -217,22 +219,27 @@ jobs:
       - run: bash scripts/lib/test_contract.sh
       - run: bash scripts/lib/test_theme.sh
       - run: bash scripts/lib/test_migrations.sh
+      - run: bash scripts/lib/test_container.sh
 
   # ---------------------------------------------------------------------------
-  # Docker Ubuntu smoke test for the core pack. UI tests are skipped here.
+  # Alpine container smoke test for the core pack. UI tests are skipped here.
   # ---------------------------------------------------------------------------
   docker-core:
     name: docker core-tag test
     runs-on: ubuntu-latest
+    # The runner ships podman too; pin docker so the job tests what its name says.
+    env:
+      TUIDEV_CONTAINER_RUNTIME: docker
     steps:
       - uses: actions/checkout@v6
+      # Same entry point developers use locally.
       - name: build
-        run: docker build -t mactui-test .
+        run: ./scripts/container.sh build
       - name: run core tests
-        run: docker run --rm mactui-test bash -c "./scripts/test_suite.sh --tag core"
+        run: ./scripts/container.sh test bash -c "./scripts/test_suite.sh --tag core"
       - name: cleanup
         if: always()
-        run: docker rmi mactui-test || true
+        run: ./scripts/container.sh clean
 
   # ---------------------------------------------------------------------------
   # Doc link + presence check.

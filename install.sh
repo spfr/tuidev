@@ -23,7 +23,7 @@
 #                Hammerspoon (macOS only)
 #   --extras     atuin, dust, broot, bandwhich, duf, hyperfine, tokei, ...
 #
-#   --pack NAME  optional pack (repeatable): zellij, yazi, nnn,
+#   --pack NAME  optional pack (repeatable): yazi, nnn,
 #                monitoring, sandbox-container, mosh, cmux, bosun, herdr,
 #                fnm, ai-clis (cc/cx/oc wrappers + AI CLI configs)
 #

@@ -13,7 +13,7 @@ Brief description of the changes.
 
 - [ ] `make lint` passes
 - [ ] `make test` passes
-- [ ] `make docker-test` passes (for installation changes)
+- [ ] `make container-test` passes (for installation changes)
 - [ ] Manually tested on macOS
 
 ## Checklist

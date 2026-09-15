@@ -4,9 +4,7 @@ Top recommendations for connecting to your Mac from iPhone.
 
 > **Multiplexer note:** tuidev is tmux-first. The examples below use the shell
 > wrappers (`work`, `dev`, `ai`, `agents`, `tls`, ...) and `tmux attach` — all
-> ship with the default install. If you installed the Zellij pack
-> (`./install.sh --pack zellij`), equivalent `z*` wrappers (`zwork`, `zai`, ...)
-> and `zellij attach` also work. Use whichever you have.
+> ship with the default install.
 
 > **Just steering an agent? You may not need SSH at all.** The AI CLIs now ship
 > native remote control — drive a local Claude Code session from `claude.ai/code`
@@ -64,7 +62,7 @@ Top recommendations for connecting to your Mac from iPhone.
 
 **Pros:**
 - ✅ Full zsh shell
-- ✅ Supports tmux/zellij perfectly
+- ✅ Supports tmux perfectly
 - ✅ Native mosh support (great with Tailscale)
 - ✅ iCloud sync
 - ✅ Customizable keyboard
@@ -200,7 +198,7 @@ ai ai-dev     # attach-or-create nvim + 2 agent panes, session name "ai-dev"
 
 **For Most Users:** Termius
 - Best balance of features and usability
-- Great for tmux sessions (and Zellij, if installed)
+- Great for tmux sessions
 - Excellent SSH key management
 
 **For AI Agent Workflows:** Moshi (+ native Remote Control)
@@ -296,8 +294,6 @@ ai ai-dev                # nvim + 2 agent panes
 Ctrl+a d
 ```
 
-If you installed `--pack zellij`, equivalents are `zls`, `zwork ai-dev`,
-`zai ai-dev`, and detach is `Ctrl+o d`.
 
 #### Copy/Paste in Termius
 
@@ -322,15 +318,7 @@ remote       # minimal: nvim + single terminal, fits narrow windows
 
 ### 2. Simplified Multiplexer UI
 
-tmux already uses a minimal status line in the shipped config. If you
-installed `--pack zellij`, edit `~/.config/zellij/config.kdl`:
-
-```kdl
-ui {
-    simplified_ui true
-    pane_frames true
-}
-```
+tmux already uses a minimal status line in the shipped config.
 
 ### 3. Use Larger Fonts
 
@@ -376,12 +364,6 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
 1. Host settings → Advanced → Protocol: Mosh
 2. Install on Mac: `brew install mosh-server`
 
-### Issue: Keys Don't Work in Zellij
-
-**Solution:** In Termius:
-- Settings → Keyboard → Show Ctrl keys: On
-- Settings → Keyboard → Custom Esc key: On
-
 ### Issue: Can't Type Special Characters
 
 **Solution:**
@@ -417,33 +399,6 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
    sudo launchctl unload /System/Library/LaunchDaemons/ssh.plist
    sudo launchctl load /System/Library/LaunchDaemons/ssh.plist
    ```
-
----
-
-## Alternative: Web-Based Access
-
-### Zellij Web Interface (requires `--pack zellij`)
-
-Zellij has built-in web support:
-
-```bash
-# On Mac, start web server
-zellij web --port 8080
-
-# On iPhone, open Safari
-http://your-mac-ip:8080
-```
-
-tmux has no equivalent built-in web server; for tmux-over-browser, use a
-separate tool like [ttyd](https://github.com/tsl0922/ttyd).
-
-**Pros:**
-- No app needed
-- Works in any browser
-
-**Cons:**
-- Less responsive than native app
-- Requires opening port (security risk)
 
 ---
 

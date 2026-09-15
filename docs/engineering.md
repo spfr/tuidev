@@ -113,7 +113,7 @@ User home files are shared territory. `install_config` writes a fenced region:
 - Re-running rewrites only the block; `update.sh --configs` detects drift and
   re-applies.
 - Use `--adopt-existing` for formats where `#` isn't a comment (e.g. KDL —
-  see `packs/zellij.sh`): drop the file in only when absent, never inject markers.
+  use `install_config --adopt-existing`): drop the file in only when absent, never inject markers.
 - Backups land in `~/.config/tuidev/backups/` before any overwrite.
 
 ## Verification gates
@@ -124,7 +124,7 @@ Run before every commit; CI (`.github/workflows/ci.yml`) enforces the same:
 make lint              # shellcheck — install.sh, scripts/**, bin/sbx
 make validate-configs  # JSON / TOML / Lua / KDL syntax; .zshrc via zsh -n
 make test-core         # core-tagged contract + behavior tests
-make docker-test       # Linux smoke test in a clean container (parity)
+make container-test    # Linux smoke test in a clean container (Apple container → podman → docker)
 ```
 
 Notes:

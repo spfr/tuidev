@@ -1,29 +1,46 @@
 {
   "permissions": {
+    "defaultMode": "default",
     "allow": [
-      "Bash(git:*)",
-      "Bash(gh:*)",
-      "Bash(tmux:*)",
-      "Bash(sbx:*)",
-      "Bash(make:*)",
-      "Bash(rg:*)",
-      "Bash(fd:*)",
-      "Bash(fzf:*)",
-      "Bash(jq:*)",
-      "Bash(yq:*)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(tmux *)",
+      "Bash(sbx *)",
+      "Bash(make *)",
+      "Bash(rg *)",
+      "Bash(fd *)",
+      "Bash(fzf *)",
+      "Bash(jq *)",
+      "Bash(yq *)",
       "Bash(lazygit)",
-      "Bash(shellcheck:*)"
+      "Bash(shellcheck *)"
     ],
-    "deny": []
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.netrc)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.docker/**)",
+      "Read(~/.kube/**)",
+      "Read(~/Library/Keychains/**)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env)",
+      "Edit(./.env.*)"
+    ]
   },
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "MCP_CONNECTION_NONBLOCKING": "true"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "teammateMode": "auto",
+  "attribution": {
+    "commit": ""
   },
   "hooks": {
     "Notification": [
       {
-        "matcher": "",
+        "matcher": "permission_prompt|idle_prompt",
         "hooks": [
           {
             "type": "command",
@@ -34,8 +51,6 @@
     ],
     "Stop": [
       {
-        "matcher": "",
-        "if": "agent_type != 'teammate'",
         "hooks": [
           {
             "type": "command",
@@ -46,7 +61,6 @@
     ],
     "TeammateIdle": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
@@ -57,7 +71,6 @@
     ],
     "PermissionDenied": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
@@ -66,6 +79,5 @@
         ]
       }
     ]
-  },
-  "projects": {}
+  }
 }

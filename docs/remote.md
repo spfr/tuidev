@@ -113,7 +113,7 @@ The setup ships:
 
 Session state persists across server reboots, SSH disconnects, and client changes. `tmux attach` from any client reconnects. A dead network doesn't kill your work; it interrupts your view of it.
 
-Narrow-terminal tip: the `remote` wrapper (part of the tmux inversion, see [`migration.md`](migration.md)) uses `scripts/layout-remote.sh` for a two-pane layout that fits phone-sized terminals.
+Narrow-terminal tip: the `remote` wrapper uses `scripts/layout-remote.sh` for a two-pane layout that fits phone-sized terminals.
 
 ```bash
 remote myproject

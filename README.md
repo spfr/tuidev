@@ -13,7 +13,7 @@ A small, opinionated set of configs + install scripts for an AI-assisted coding 
 
 1. **One session, one pane, one task.** Your work has to survive disconnects, narrow terminals, and mobile reattaches. tmux is the durability layer; splits are a local bonus, not the story.
 2. **Sandbox-ready.** `sbx` runs any command inside macOS Seatbelt; install `--pack ai-clis` and your AI CLIs route through it automatically. Credentials (`~/.ssh`, `~/.aws`, keychain) are locked out even if the agent is compromised.
-3. **Layered install.** Pick a profile (`minimal`, `desktop`, `remote`) or compose packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack zellij`, ...). Your `~/.zshrc` is never overwritten — edits outside the tuidev-managed block survive forever. macOS is the daily driver; `minimal` and `remote` also install on Debian/Ubuntu, falling back to `apt` where Homebrew has no build (arm64 boards like a Raspberry Pi included).
+3. **Layered install.** Pick a profile (`minimal`, `desktop`, `remote`) or compose packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack NAME`, ...). Your `~/.zshrc` is never overwritten — edits outside the tuidev-managed block survive forever. macOS is the daily driver; `minimal` and `remote` also install on Debian/Ubuntu, falling back to `apt` where Homebrew has no build (arm64 boards like a Raspberry Pi included).
 
 ## Quick start
 
@@ -39,7 +39,7 @@ sbx -- some-cmd                   # run anything under Seatbelt
 | `desktop` | core + ui + sandbox            | **Default** — local macOS laptop/desktop  |
 | `remote`  | core + remote + sandbox        | Headless machines, Tailscale nodes        |
 
-Compose your own: `./install.sh --core --sandbox --pack zellij`. Full matrix in [docs/profiles.md](docs/profiles.md).
+Compose your own: `./install.sh --core --sandbox --pack ai-clis`. Full matrix in [docs/profiles.md](docs/profiles.md).
 
 ## Session commands (tmux-first)
 
@@ -59,7 +59,6 @@ All commands are attach-or-create and accept an optional session name:
 | `remote [name]`  | minimal nvim + shell for narrow terminals        |
 | `tls` / `tk` / `tka` | list / kill named / kill all tmux sessions |
 
-**Coming from the old Zellij-first setup?** See [docs/migration.md](docs/migration.md). The `z*` namespace (zdev, zwork, zai, ...) activates automatically once you install `--pack zellij`.
 
 ## Sandboxed agents
 
@@ -79,7 +78,7 @@ Three profiles are shipped: **strict** (agent runs, LLM APIs work, package insta
 
 Full details, including customization and troubleshooting: [docs/sandboxing.md](docs/sandboxing.md).
 
-Tier 2 — Podman-backed microVMs — is available behind `./install.sh --pack sandbox-container` when you need kernel-namespace isolation. Docker Desktop / OrbStack are deliberately **not** used (not FOSS).
+Tier 2 — a VM-backed container per agent — is available behind `./install.sh --pack sandbox-container` when you need kernel isolation. Runtime order is Apple's native `container` (macOS 26+) → Podman → Docker; the first one present wins, and nothing is installed if you already have one. Docker Desktop / OrbStack are deliberately **not** used (not FOSS).
 
 ## Core tools
 
@@ -97,7 +96,7 @@ Tier 2 — Podman-backed microVMs — is available behind `./install.sh --pack s
 | [jq](https://stedolan.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | JSON / YAML |
 | [eza](https://github.com/eza-community/eza) / [bat](https://github.com/sharkdp/bat) | `ls` / `cat` replacements |
 
-Optional: `--pack zellij` (alternative multiplexer), `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Podman), `--pack fnm` (fast Node manager), `--pack ai-clis` (cc/cx/oc wrappers + AI CLI configs), `--pack cmux` / `--pack bosun` / `--pack herdr` (parallel-agent and fleet tools — see [docs/agent-workflows.md](docs/agent-workflows.md)), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
+Optional: `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Apple container / Podman / Docker), `--pack fnm` (fast Node manager), `--pack ai-clis` (cc/cx/oc wrappers + AI CLI configs), `--pack cmux` / `--pack bosun` / `--pack herdr` (parallel-agent and fleet tools — see [docs/agent-workflows.md](docs/agent-workflows.md)), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
 
 ## AI CLIs (opt-in — `--pack ai-clis`)
 
@@ -151,7 +150,6 @@ Running several agents at once? `worktrees -n 3 --cmd cc` gives each one its own
 | [docs/profiles.md](docs/profiles.md) | Every profile and pack, tool matrix |
 | [docs/sandboxing.md](docs/sandboxing.md) | Seatbelt profiles, escape hatches, Tier 2 pointer |
 | [docs/remote.md](docs/remote.md) | Tailscale + tmux + mosh workflow |
-| [docs/migration.md](docs/migration.md) | Upgrading from the old Zellij-first setup |
 | [docs/updating.md](docs/updating.md) | Migrations, the install manifest, and how updates work |
 | [docs/agent-workflows.md](docs/agent-workflows.md) | Fleet attention, Herdr, cmux, bosun, remote control |
 | [docs/agent-primer.md](docs/agent-primer.md) | Copy-paste brief to teach any agentic CLI the environment |
@@ -163,13 +161,13 @@ Running several agents at once? `worktrees -n 3 --cmd cc` gives each one its own
 | [AGENTS.md](AGENTS.md) | Universal instructions for AI coding agents |
 | [CLAUDE.md](CLAUDE.md) | Claude Code–specific guidance for this repo |
 
-Additional references live in `docs/`: CHEATSHEET, ARCHITECTURE, NEOVIM_QUICKSTART, TERMINAL_NAVIGATION, FAQ, IPHONE_SSH_CLIENTS, ZELLIJ_TROUBLESHOOTING.
+Additional references live in `docs/`: CHEATSHEET, ARCHITECTURE, NEOVIM_QUICKSTART, TERMINAL_NAVIGATION, FAQ, IPHONE_SSH_CLIENTS.
 
 ## Safety and non-destructiveness
 
 - `~/.zshrc` is written as a managed block (`# >>> tuidev managed (...) >>>`). User edits outside the block survive forever.
 - `~/.config/nvim` is **backed up** (timestamped) before new config lands — never `rm -rf`'d.
-- AI CLI settings (`~/.claude.json`, `~/.config/opencode/opencode.json`, `~/.codex/config.toml`) are `--adopt-existing` by default: if present, they are left alone.
+- AI CLI settings (`~/.claude/settings.json`, `~/.config/opencode/opencode.json`, `~/.codex/config.toml`) are `--adopt-existing` by default: if present, they are left alone.
 - Backups live in `~/.config/tuidev/backups/`.
 - `--dry-run` on any install or update command shows every mutation without performing it.
 - Every install records what it actually placed in `~/.config/tuidev/manifest`, so `./uninstall.sh` removes only what tuidev installed — a `ripgrep` you already had survives.

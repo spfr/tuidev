@@ -1,7 +1,7 @@
 # AI Agent Instructions
 
 > Copy this file to your project and customize for your specific needs.
-> Compatible with: Claude Code, Codex CLI, OpenCode, Antigravity, Cursor, Windsurf, Aider, etc.
+> Read natively by Codex CLI and OpenCode; Claude Code via `CLAUDE.md` (symlink or `@AGENTS.md` import). Other tools: `scripts/setup_agent_configs.sh --all`.
 
 ---
 

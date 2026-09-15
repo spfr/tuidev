@@ -50,7 +50,7 @@ _TUIDEV_MANIFEST_LOADED=1
 # Record kinds this lib knows about. Documented here so consumers (uninstall)
 # and producers (install packs) share one vocabulary.
 #   profile  the profile name the install resolved to
-#   pack     a pack that ran (core, ui, zellij, …)
+#   pack     a pack that ran (core, ui, herdr, …)
 #   formula  a Homebrew formula we installed (not one already present)
 #   cask     a Homebrew cask we installed
 #   block    a managed block we wrote: `block <id> <path>`

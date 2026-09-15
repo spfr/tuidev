@@ -2,10 +2,12 @@
 #
 # Optional pack: sandbox-container (Tier 2)
 #
-# Installs Podman, initializes its VM (macOS), builds the tuidev/agent-sandbox
-# container image, and drops the sbx-container helper onto PATH. Intended for
-# running AI agents inside a rootless container for stronger isolation than
-# bare host execution.
+# Picks a container runtime in tuidev's order — Apple `container` (macOS 26+,
+# native, nothing to install beyond Apple's pkg) → Podman → Docker — brings its
+# VM/service up, builds the tuidev/agent-sandbox image, and drops the
+# sbx-container helper onto PATH. Intended for running AI agents inside a
+# container for stronger isolation than bare host execution. Podman is only
+# installed when no runtime is present at all.
 #
 # Entrypoint: sandbox_container_install
 # Invoked via: ./install.sh --pack sandbox-container
@@ -18,6 +20,25 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 . "$SCRIPT_DIR/../../lib/ui.sh"
 # shellcheck source=../../lib/brew.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/brew.sh"
+# shellcheck source=../../lib/container.sh disable=SC1091
+. "$SCRIPT_DIR/../../lib/container.sh"
+
+RUNTIME=""
+
+# --- Resolve the runtime; install podman only if nothing is present ---------
+_sbx_resolve_runtime() {
+    if RUNTIME="$(tuidev_container_runtime)"; then
+        print_success "container runtime: $(tuidev_container_label "$RUNTIME")"
+        return 0
+    fi
+    if is_macos; then
+        print_info "Apple's native 'container' CLI (macOS 26+) is preferred and needs no VM manager."
+        print_info "  Install the signed pkg from https://github.com/apple/container/releases, then re-run this pack."
+        print_info "  Falling back to Podman now so the pack still works."
+    fi
+    _sbx_install_podman
+    RUNTIME="$(tuidev_container_runtime)" || die "no container runtime after podman install"
+}
 
 # --- Install podman on the host OS ------------------------------------------
 _sbx_install_podman() {
@@ -50,10 +71,30 @@ _sbx_install_podman() {
     print_success "podman installed"
 }
 
-# --- Initialize and start the podman machine (macOS mostly) -----------------
+# --- Bring the runtime's VM / service up -------------------------------------
 _sbx_init_machine() {
-    # Only macOS (and some Linux setups) need a VM. On native Linux, podman
-    # runs directly — `podman machine` is a no-op in that case.
+    case "$RUNTIME" in
+        container)
+            if container system status >/dev/null 2>&1; then
+                print_success "container services already running"
+            else
+                print_step "Starting Apple container services..."
+                run_cmd container system start || die "container system start failed"
+                print_success "container services started"
+            fi
+            return 0
+            ;;
+        docker)
+            if docker info >/dev/null 2>&1; then
+                print_success "docker daemon reachable"
+            else
+                print_warning "docker daemon not reachable — start Docker before building"
+            fi
+            return 0
+            ;;
+    esac
+    # podman: only macOS (and some Linux setups) need a VM. On native Linux,
+    # podman runs directly — `podman machine` is a no-op in that case.
     if ! command_exists podman; then
         return 0
     fi
@@ -84,16 +125,11 @@ _sbx_build_image() {
         return 0
     fi
 
-    if ! command_exists podman; then
-        print_warning "podman not on PATH — skipping image build"
-        return 0
-    fi
+    [[ -n "$RUNTIME" ]] || { print_warning "no container runtime — skipping image build"; return 0; }
 
-    print_step "Building tuidev/agent-sandbox image..."
-    (
-        cd "$REPO_ROOT" && \
-        run_cmd podman build -t tuidev/agent-sandbox -f "$containerfile" .
-    ) || die "Failed to build tuidev/agent-sandbox image"
+    print_step "Building tuidev/agent-sandbox image with $(tuidev_container_label "$RUNTIME")..."
+    run_cmd tuidev_container_build "$RUNTIME" tuidev/agent-sandbox "$containerfile" "$REPO_ROOT" \
+        || die "Failed to build tuidev/agent-sandbox image"
     print_success "tuidev/agent-sandbox image built"
 }
 
@@ -121,13 +157,13 @@ _sbx_install_helper() {
 sandbox_container_install() {
     print_header "Pack: sandbox-container (Tier 2)"
 
-    _sbx_install_podman
+    _sbx_resolve_runtime
     _sbx_init_machine
     _sbx_build_image
     _sbx_install_helper
 
-    print_info "Podman allocates a VM (on macOS). Stop it when idle: 'podman machine stop'"
-    print_info "Start it back up with: 'podman machine start'"
+    print_info "Runtime: $(tuidev_container_label "$RUNTIME"). Stop it when idle: 'make sandbox-down'; start: 'make sandbox-up'."
+    print_info "Force another runtime with TUIDEV_CONTAINER_RUNTIME=container|podman|docker."
     print_success "sandbox-container pack complete"
 }
 

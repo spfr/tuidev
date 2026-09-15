@@ -379,8 +379,7 @@ tunnel() {
 # Session Wrappers — tmux-first
 # ============================================================================
 # The default ergonomic commands (work/dev/ai/...) launch tmux via the
-# reproducible layout helpers under $TUIDEV_REPO/scripts/tmux/. Zellij is
-# opt-in: install `--pack zellij` to activate the z* variants below.
+# reproducible layout helpers under $TUIDEV_REPO/scripts/tmux/.
 #
 # Every wrapper accepts an optional session name; default is the layout's
 # name or the current directory's basename. All are attach-or-create.
@@ -442,23 +441,6 @@ tk()  {
 tka() { tmux kill-server 2>/dev/null && echo "killed all tmux sessions"; }
 
 # ============================================================================
-# Zellij wrappers (opt-in, activated when zellij is on PATH)
-# ============================================================================
-# Installed via `./install.sh --pack zellij`. Namespaced under z* to avoid
-# colliding with the tmux-first defaults above.
-
-if command -v zellij >/dev/null 2>&1; then
-  zdev()       { zellij --session "${1:-zdev}"       --layout dev; }
-  zwork()      { zellij --session "${1:-$(basename "$PWD")}"; }
-  zai()        { zellij --session "${1:-zai}"        --layout dual; }
-  zai-single() { zellij --session "${1:-zai-single}" --layout single; }
-  zai-triple() { zellij --session "${1:-zai-triple}" --layout triple; }
-  zfullstack() { zellij --session "${1:-zfullstack}" --layout fullstack; }
-  zmulti()     { zellij --session "${1:-zmulti}"     --layout multi-agent; }
-  zremote()    { zellij --session "${1:-zremote}"    --layout remote; }
-  zk()         { zellij kill-all-sessions 2>/dev/null; }
-fi
-
 # ============================================================================
 # Update helpers
 # ============================================================================
@@ -497,7 +479,7 @@ ts-ip() {
   fi
 }
 
-# Remote access dashboard - SSH, Tailscale, and Zellij status
+# Remote access dashboard - SSH, Tailscale, and tmux status
 remote-status() {
   echo "Remote Access Status"
   echo "===================="
@@ -547,17 +529,6 @@ remote-status() {
   fi
   echo ""
 
-  # Zellij sessions (opt-in via --pack zellij)
-  if command -v zellij &>/dev/null; then
-    echo "Zellij Sessions:"
-    local zsessions
-    zsessions=$(zellij list-sessions 2>/dev/null)
-    if [[ -n "$zsessions" ]]; then
-      echo "$zsessions" | sed 's/^/  /'
-    else
-      echo "  no active sessions"
-    fi
-  fi
 }
 
 # ============================================================================
@@ -633,7 +604,7 @@ bindkey '^[[B' history-search-forward   # Down arrow
 # Show system info on shell start (optional)
 # echo "🚀 TUI Development Environment Ready"
 # echo "  Terminal: Ghostty | Shell: zsh | Editor: nvim"
-# echo "  Multiplexer: zellij | Tools: fzf, ripgrep, bat, eza"
+# echo "  Multiplexer: tmux | Tools: fzf, ripgrep, bat, eza"
 # echo ""
 
 # ============================================================================

@@ -7,7 +7,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [2.3.0] - 2026-09-15
+
+Opinionated and current. tmux is the only multiplexer, the AI-CLI configs
+match the September 2026 docs, containers prefer Apple's native runtime, and
+the Linux parity image builds in seconds instead of tens of minutes.
+
+### Removed
+
+- **The Zellij pack.** tmux is the only multiplexer: Claude Code's agent-team
+  split panes, Herdr, bosun and cmux all target or sit beside tmux, and every
+  Zellij layout already existed as a tmux script. Gone: `--pack zellij`,
+  `configs/zellij/` (config + 7 KDL layouts), the `z*` shell wrappers, the KDL
+  validator, `scripts/clean-zellij.sh`, `docs/ZELLIJ_TROUBLESHOOTING.md`,
+  `docs/migration.md` and `make migrate` (the 2.0 zellij→tmux guide), and the
+  Ghostty `ctrl+p` pass-through that existed for Zellij. Migration
+  `202609151300_remove_zellij_pack` backs up and removes `~/.config/zellij`
+  only where the manifest shows tuidev installed it, drops `zellij` from the
+  recorded `extra_packs`, and leaves the brew formula for you to remove.
+- The repo's own tracked copies of the per-vendor instruction symlinks
+  (`.cursorrules`, `.windsurfrules`, `.aider.md`, `.clinerules`, Roo, Copilot,
+  and the Codex `instructions.md` that Codex never read).
+
+### Changed
+
+- **Ghostty on macOS 27:** shipped `macos-titlebar-style` is now `transparent`.
+  The `tabs` style collapses the tab strip on macOS 27 with stable 1.3.1
+  (ghostty-org/ghostty#13070; fix #13069 is on the tip channel until 1.4.0).
+  Opting back into titlebar tabs via `auto-update-channel = tip` is documented
+  in the config and `docs/FAQ.md`.
+- **Claude Code settings refreshed against the Sept 2026 docs:** permission
+  rules use the canonical `Bash(git *)` form, credential directories and
+  `.env*` get `permissions.deny` rules (so `Read`/`Edit` honor the same boundary
+  `sbx` enforces in the kernel), `teammateMode = "auto"` (tmux panes per
+  teammate when already inside tmux), `attribution.commit = ""` (no
+  `Co-Authored-By` trailer), `Notification` hook scoped to
+  `permission_prompt|idle_prompt`. Dropped the undocumented `projects`,
+  `MCP_CONNECTION_NONBLOCKING`, and the `if` filter on `Stop`.
+- **Codex config:** `model` is no longer pinned (`gpt-5-codex` is retired
+  upstream; the CLI's own default tracks the current lineup),
+  `file_opener = "none"` (`nvim` was never a valid value),
+  `disable_response_storage` removed (no such key), `web_search = "cached"`,
+  and `[tui]` notifications for turn-complete / approval-requested.
+- **OpenCode config:** model `anthropic/claude-sonnet-5`; the deprecated `theme` and
+  `tui` keys moved out and the legacy `tools` boolean map folded into `permission` — TUI settings now ship in a sibling
+  `configs/opencode/tui.json` the pack installs alongside `opencode.json`;
+  `permission` gains `external_directory` / `doom_loop`; `share = "manual"`.
+- `cc` steps aside for Claude Code's built-in sandbox: Seatbelt does not nest,
+  so when `~/.claude/settings.json` has `sandbox.enabled = true` the wrapper
+  calls `claude` directly instead of through `sbx`. `docs/sandboxing.md` gains
+  a "pick one" comparison.
+- `AGENTS.md` documents which CLI reads which instruction file (Claude Code →
+  `CLAUDE.md`; Codex / OpenCode → `AGENTS.md`) and the current agent-teams UX
+  (agent panel, `teammateMode`). `setup_agent_configs.sh` no longer creates a
+  Codex `instructions.md` symlink — Codex reads `AGENTS.md` natively.
+- `setup_agent_configs.sh` now creates only `CLAUDE.md` by default; the legacy
+  per-vendor files (Cursor, Windsurf, Aider, Cline, Roo, Copilot) moved behind
+  `--all`, and the repo's own copies of those symlinks were removed.
+
+- **Container runtime order: Apple `container` → Podman → Docker.** New
+  `scripts/lib/container.sh` picks the first runtime present (override with
+  `TUIDEV_CONTAINER_RUNTIME`) and shims the CLI differences; `make
+  container-build/test/clean` (the `docker-*` names remain as aliases),
+  `make sandbox-up/down`, `make update-sandbox-image`, and the
+  `sandbox-container` pack all go through it. The pack no longer installs
+  Podman when a runtime already exists, and on macOS 26+ without one it points
+  at Apple's signed pkg before falling back to Podman. Unit-tested by
+  `scripts/lib/test_container.sh` (CI `lib-tests`).
+- **Test image rebuilt for speed: Alpine, one package layer, no compiling.**
+  The old `Dockerfile` (Ubuntu 22.04) ran `cargo install` for six Rust tools,
+  which took tens of minutes on an arm64 builder. Every tool the core suite
+  probes is an Alpine package (neovim, ripgrep, fd, bat, fzf, zoxide, delta,
+  eza, starship, zellij, bottom, lazygit, yq-go, gh, shellcheck, httpie), so
+  the toolchain is a single cached `apk add` layer; no rustup, no
+  build-essential, no GitHub downloads, and lazygit is native for the running
+  architecture (the old image always pulled the x86_64 tarball). The repo is
+  copied last so edits only rebuild the final layer, the entrypoint is the real
+  `scripts/test_suite.sh --tag core` instead of an inline ad-hoc script, and a
+  `.dockerignore` keeps `.git` and screenshots out of the context. Apple's
+  builder VM is sized to the host (`TUIDEV_BUILDER_CPUS` /
+  `TUIDEV_BUILDER_MEMORY`, default half the cores / 4g) instead of its 2-CPU
+  default. The Debian/Ubuntu apt installer path is validated on a real Debian
+  box, not by this image.
+
 ### Fixed
+
+- `--pack ai-clis` installed Claude Code settings to `~/.claude.json`, which is
+  the CLI's *state* file (OAuth, onboarding, per-project state), so the shipped
+  hooks and permissions were never read. It now targets
+  `~/.claude/settings.json`; migration `202609151200_claude_settings_path`
+  backs up the legacy keys to `~/.config/tuidev/backups/` on machines that got
+  the old path (leaving `~/.claude.json` untouched) and lets the pack install
+  the current file, and `uninstall.sh` no longer removes `~/.claude.json`.
 
 - `scripts/lib/migrate.sh` no longer honors `XDG_CONFIG_HOME` for its state
   paths — every other tuidev state file lives literally under

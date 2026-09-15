@@ -39,6 +39,8 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/config_write.sh"
 # shellcheck source=lib/profile.sh disable=SC1091
 . "$SCRIPT_DIR/lib/profile.sh"
+# shellcheck source=lib/container.sh disable=SC1091
+. "$SCRIPT_DIR/lib/container.sh"
 # shellcheck source=lib/migrate.sh disable=SC1091
 . "$SCRIPT_DIR/lib/migrate.sh"
 # shellcheck source=lib/manifest.sh disable=SC1091
@@ -917,8 +919,9 @@ run_sandbox_image_mode() {
         return 0
     fi
 
-    if ! command -v podman >/dev/null 2>&1; then
-        print_warning "podman not found — install the sandbox pack first"
+    local rt
+    if ! rt="$(tuidev_container_runtime)"; then
+        print_warning "no container runtime (Apple container / podman / docker) — install the sandbox-container pack first"
         return 0
     fi
 
@@ -928,13 +931,14 @@ run_sandbox_image_mode() {
     local dockerfile="${TUIDEV_SANDBOX_DOCKERFILE:-$REPO_DIR/Dockerfile}"
 
     if [[ "$MODE" == "check" ]]; then
-        print_info "Would pull $base and rebuild $image from $dockerfile"
+        print_info "Would pull $base and rebuild $image from $dockerfile via $(tuidev_container_label "$rt")"
         return 0
     fi
 
-    run_cmd podman pull "$base"
+    run_cmd tuidev_container_up "$rt"
+    run_cmd tuidev_container_pull "$rt" "$base"
     if [[ -f "$dockerfile" ]]; then
-        run_cmd podman build -t "$image" -f "$dockerfile" "$REPO_DIR"
+        run_cmd tuidev_container_build "$rt" "$image" "$dockerfile" "$REPO_DIR"
     else
         print_warning "Dockerfile not found at $dockerfile — skipping rebuild"
     fi

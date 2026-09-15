@@ -1,0 +1,5 @@
+.git
+test_results
+*.log
+docs/screenshots
+.github

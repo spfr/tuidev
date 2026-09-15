@@ -41,14 +41,24 @@ _ai_clis_install_fragment() {
 
 # Adopt the shipped AI CLI configs — present only if the user has none.
 _ai_clis_install_configs() {
-    [[ -f "$REPO_ROOT/configs/claude/settings.json" ]] &&
-        install_config "$HOME/.claude.json" \
+    # Claude Code reads settings from ~/.claude/settings.json. (~/.claude.json
+    # is the CLI's own state file — never write settings there.)
+    if [[ -f "$REPO_ROOT/configs/claude/settings.json" ]]; then
+        [[ "${DRY_RUN:-false}" == true ]] || mkdir -p "$HOME/.claude"
+        install_config "$HOME/.claude/settings.json" \
             "$REPO_ROOT/configs/claude/settings.json" --adopt-existing
+    fi
 
     if [[ -f "$REPO_ROOT/configs/opencode/opencode.json" ]]; then
         [[ "${DRY_RUN:-false}" == true ]] || mkdir -p "$HOME/.config/opencode"
         install_config "$HOME/.config/opencode/opencode.json" \
             "$REPO_ROOT/configs/opencode/opencode.json" --adopt-existing
+        # TUI settings (theme, scroll, attention) moved out of opencode.json
+        # upstream into a sibling tui.json.
+        if [[ -f "$REPO_ROOT/configs/opencode/tui.json" ]]; then
+            install_config "$HOME/.config/opencode/tui.json" \
+                "$REPO_ROOT/configs/opencode/tui.json" --adopt-existing
+        fi
     fi
 
     if [[ -f "$REPO_ROOT/configs/codex/config.toml" ]]; then

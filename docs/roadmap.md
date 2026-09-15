@@ -53,9 +53,11 @@ The likely long-term successor is Apple's **containerization framework**
 (the `container` CLI / `Containerization.framework` introduced for macOS 26),
 which gives per-container lightweight VMs with real kernel isolation instead
 of a single shared-kernel profile file. It is heavier (a VM boot per
-container) and newer, which is exactly why it isn't Tier 1 yet — the
-project already has a heavier tier for people who want VM isolation today:
-Podman machine, via `--pack sandbox-container`.
+container) and newer, which is exactly why it isn't Tier 1 yet. It *is* the
+preferred Tier 2 backend as of September 2026: `--pack sandbox-container` and
+`make container-test` pick Apple's `container` CLI first, then Podman, then
+Docker (`scripts/lib/container.sh`), so a Mac on macOS 26+ needs no VM
+manager at all.
 
 **This repo's posture:** `bin/sbx` is the insulation layer, by design.
 Scripts, wrappers, and docs never call `sandbox-exec` directly; they call
@@ -104,8 +106,8 @@ they are *why* (a)–(c) above don't require rewrites:
   future migration.
 - **Drift-detecting updates, growing toward one-shot migrations.**
   `scripts/update.sh` already separates package updates from config-drift
-  detection per profile. `make migrate` exists today for the Zellij→tmux
-  transition; the pattern (detect drift → offer a scripted, reversible
+  detection per profile, and one-shot migrations already carried the
+  Zellij→tmux transition; the pattern (detect drift → offer a scripted, reversible
   migration) generalizes to future transitions instead of asking users to
   hand-edit dotfiles again.
 - **Manifest-driven uninstall.** `uninstall.sh` already reads
