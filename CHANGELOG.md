@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- zsh: the `alias ssh='TERM=xterm-256color ssh'` "Ghostty SSH fix". It shadowed Ghostty's own `ssh` wrapper (the `ssh-terminfo` shell-integration feature already copies `xterm-ghostty` terminfo to remote hosts), so every hop lost truecolor and the automatic terminfo install.
+
 ---
 
 ## [2.3.0] - 2026-09-15

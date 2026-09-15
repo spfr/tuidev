@@ -546,11 +546,6 @@ fi
 # iTerm2 integration (if using iTerm)
 test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
 
-# Ghostty SSH fix
-if [[ -n "$GHOSTTY_RESOURCES_DIR" ]]; then
-  alias ssh='TERM=xterm-256color ssh'
-fi
-
 # tabtab source for electron-forge - if exists (will use the actual path when available)
 # This is generated dynamically, the path below is just an example
 # [[ -f "$HOME/.npm/_npx/*/node_modules/tabtab/.completions/electron-forge.zsh" ]] && . "$HOME/.npm/_npx/*/node_modules/tabtab/.completions/electron-forge.zsh"
