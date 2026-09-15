@@ -23,6 +23,10 @@ firebase-debug.log
 .env.local
 *.local
 
+# Machine-local notes, scripts and agent instructions (never public)
+.local/
+CLAUDE.local.md
+
 # Backup files
 *.backup
 *.bak

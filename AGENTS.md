@@ -168,6 +168,7 @@ When creating or modifying projects with this setup:
 ```
 ~/.zshrc                         # Shell config (managed block; user edits outside survive)
 ~/.zshrc.local                   # Personal customizations (gitignored)
+.local/                          # Machine-local notes/scripts/instructions in a checkout (gitignored)
 ~/.config/nvim/                  # Neovim (LazyVim)
 ~/.config/tmux/tmux.conf         # Primary multiplexer
 ~/.config/starship.toml          # Shell prompt
