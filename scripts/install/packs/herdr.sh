@@ -47,12 +47,24 @@ _herdr_install_config() {
     install_config "$dest" "$src" --adopt-existing
 }
 
+# Herdr ≥ 0.9 keeps a running server alive across client upgrades; tell the
+# user how to update the binary and to refresh the agent hooks afterwards.
+_herdr_upgrade_hint() {
+    if command_exists brew && brew list --formula herdr >/dev/null 2>&1; then
+        print_info "Upgrade: brew upgrade herdr (or make update-packages)."
+    else
+        print_info "Upgrade: herdr update (direct install; --handoff keeps panes alive)."
+    fi
+    print_info "After an upgrade: herdr integration status → reinstall anything 'outdated'."
+}
+
 herdr_install() {
     print_header "Pack: herdr"
 
     if command_exists herdr; then
         _herdr_install_config
         print_info "Run 'herdr' to attach. tmux wrappers (work/dev/ai) are unchanged."
+        _herdr_upgrade_hint
         print_success "herdr (already present)"
         return 0
     fi
@@ -73,6 +85,8 @@ herdr_install() {
         _herdr_install_config
         print_info "tmux stays the default for work/dev/ai. Herdr is opt-in: run 'herdr'."
         print_info "Prefix is ctrl+b (tmux is ctrl+a). See docs/agent-workflows.md."
+        print_info "Optional: herdr integration install claude  (agent state hooks)."
+        print_info "Remote nodes: herdr machine add HOST --label NAME (saved sidebar entry)."
         print_success "herdr pack complete"
         return 0
     fi

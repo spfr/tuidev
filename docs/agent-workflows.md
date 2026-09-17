@@ -121,7 +121,9 @@ blocked instead of firing keystrokes.
 ```bash
 ./install.sh --pack herdr
 herdr                 # attach to the local server
-herdr --remote workbox  # thin local client over SSH (Host from your SSH config)
+herdr --remote workbox  # one-off thin client over SSH (Host from your SSH config)
+herdr machine add workbox --label "Build box"   # save it: one sidebar, many machines
+herdr --machine workbox agent list             # scriptable, no TUI, no `ssh -- herdr`
 ```
 
 **Trade-off:** Herdr is a second multiplexer. tmux remains the default for
@@ -136,8 +138,23 @@ TUI. Agent skill (documented, not auto-installed):
 `npx skills add herdrdev/herdr --skill herdr -g`.
 
 Integrations (optional, after install): `herdr integration install claude`
-adds native session restore where supported. Upstream:
-<https://herdr.dev/docs/>.
+adds native lifecycle hooks and session restore where supported. Herdr
+releases bump the hook version; after every upgrade run
+`herdr integration status` and reinstall whatever reports `outdated`.
+Prefer `herdr --skill` (release-matched) over the `npx skills add` copy.
+Upstream: <https://herdr.dev/docs/>.
+
+**Upgrading (0.9+): update the client, leave the server.** The TUI now runs
+in each client, so a newer client keeps talking to a running compatible
+server and `herdr status` just reports `server_binary_stale: yes`. Agents keep
+running. Restart a server (`herdr server stop`, then attach) only when you
+need a server-side fix, ideally when its agents are idle; `herdr update
+--handoff` / `herdr --remote workbox --handoff` is the experimental live path
+that carries pane processes across. Homebrew installs update through
+`brew upgrade herdr` (or `make update-packages`); `herdr update` is for the
+direct-installer binary on a Linux node. Keep exactly one `herdr` on a node —
+a stale copy earlier on `PATH` (say `/usr/local/bin` from an old install) is
+what a non-interactive `ssh node herdr …` will find.
 
 On a Linux node without Homebrew, the pack prints Herdr's official installer
 command for you to run — it never pipes a remote script to a shell. Distro
@@ -163,11 +180,21 @@ herdr server              # headless; clients attach with `herdr`
 #       HostName devbox.example.com
 #       User your-username
 
-herdr --remote workbox    # thin client TUI (needs a real terminal)
-ssh workbox -- herdr agent list   # scriptable; agents use this, not the TUI
-herdr agent list          # who is working / blocked / done
-herdr status              # local client + server
+herdr machine add workbox --label "workbox"   # interactive once: checks/installs the
+                                             # remote server, saves the profile
+herdr                     # the sidebar now lists Local + workbox; switch, split, prompt
+herdr --machine workbox agent list   # scriptable; agents use this, not the TUI
+herdr --remote workbox    # still works for a one-off attach (no saved profile)
+herdr agent list          # who is working / blocked / done (local)
+herdr status              # local client + server, and whether a restart is pending
+herdr machine list        # saved machines (--json for scripts)
 ```
+
+`machine add` never copies your config, plugins or secrets to the node; it
+only checks the remote binary and server and asks before installing or
+replacing anything. Non-interactive reconnects never install or answer
+prompts, so run the first `machine add` from a real terminal. Passphrase keys
+need `ssh-add` first, because the background reconnects cannot prompt.
 
 **Integrations say `not found` but the CLIs are installed.** Herdr scans the
 *server process* PATH, not your interactive shell. `brew services start herdr`
@@ -191,11 +218,15 @@ lifecycle hooks. `agy` is not the same slot as Herdr's `antigravity-cli`.
 3. **Detach, don't kill.** `prefix+q` leaves agents running. `herdr server stop`
    is how you actually end the herd.
 4. **Sleep-proof work lives on the always-on node.** Laptop Herdr dies with the
-   lid; `herdr --remote workbox` does not.
+   lid; a saved machine (`herdr machine add`) or `herdr --remote workbox` does not.
 5. **Never nest.** If `HERDR_ENV=1`, use `herdr agent list` / the socket API.
 6. **Done means verified.** Lint → tests → `make check` before you trust "done".
 7. **tmux still wins for one durable task** (`work` / `dev` / `ai`). Herdr wins
    when the question is *which agent needs you*.
+8. **Upgrade clients freely, servers deliberately.** A stale server is not a
+   bug; restart it when its agents are idle, or use `--handoff`.
+9. **Reinstall integrations after upgrades.** `herdr integration status` →
+   reinstall anything `outdated`, or agent states silently stop updating.
 
 ## Parallel agents on the desk — cmux (`--pack cmux`)
 

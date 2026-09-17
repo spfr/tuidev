@@ -49,10 +49,13 @@ tmux attach -t main
 herdr
 ```
 
-From the Mac, a thin Herdr client can attach without opening a remote shell first:
+From the Mac, a thin Herdr client can attach without opening a remote shell first,
+or you can save the node once and get it in the sidebar next to Local:
 
 ```bash
-herdr --remote workbox
+herdr --remote workbox                         # one-off attach
+herdr machine add workbox --label "workbox"    # saved machine (Herdr ≥ 0.9)
+herdr --machine workbox agent list             # scriptable from the Mac
 ```
 
 `workbox` / `devbox` are placeholders. Real hostnames, mDNS names, and accounts

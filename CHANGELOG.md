@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [2.3.1] - 2026-09-17
+
+Herdr 0.9.x fleet practices and one zsh fix.
+
+### Changed
+- **Herdr docs and pack hints track Herdr 0.9.x.** 0.9.0 moved the TUI into
+  each client and 0.9.1 added `herdr --machine <label> <cmd>`, so the
+  fleet docs (`agent-workflows.md`, `remote.md`, `CHEATSHEET.md`,
+  `agent-primer.md`, `AGENTS.md`) now show `herdr machine add` as the way to
+  keep an always-on node in the sidebar and `herdr --machine NODE agent list`
+  instead of `ssh node -- herdr agent list`. New practices: upgrade the client
+  and leave a compatible server running (`herdr status` reports
+  `server_binary_stale`), restart servers only when agents are idle or with
+  `--handoff`, keep one `herdr` binary per node, and re-run
+  `herdr integration status` after every upgrade. The pack prints the matching
+  upgrade path (`brew upgrade herdr` vs `herdr update`) and the integration
+  reminder.
+
 ### Removed
 - zsh: the `alias ssh='TERM=xterm-256color ssh'` "Ghostty SSH fix". It shadowed Ghostty's own `ssh` wrapper (the `ssh-terminfo` shell-integration feature already copies `xterm-ghostty` terminfo to remote hosts), so every hop lost truecolor and the automatic terminfo install.
 

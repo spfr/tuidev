@@ -16,7 +16,7 @@ Three things are true at once in mid-2026:
 - **tmux** is 20 years old, boring, and durable. It has no concept of agent
   state, but it does not need to — that's not its job.
 - **[Herdr](https://herdr.dev/)** (`--pack herdr`, currently pre-1.0 at
-  ~v0.8.x) adds the layer tmux lacks: it *knows* which pane is an agent and
+  ~v0.9.x) adds the layer tmux lacks: it *knows* which pane is an agent and
   whether that agent is working, blocked, or done, exposed over a CLI and a
   local socket API. It's a second multiplexer, not a tmux replacement — see
   [`agent-workflows.md`](agent-workflows.md).
@@ -125,7 +125,7 @@ they are *why* (a)–(c) above don't require rewrites:
 | Project | Status | Adopt when | Hold because |
 |---|---|---|---|
 | **Superlogical** | Pre-product, beta waitlist only | A public binary exists, has been usable daily for a real project for ~3 months, and its durable-session model doesn't require abandoning tmux for local work | No artifact to integrate against yet; anything built today would target a moving, undocumented API |
-| **Herdr → 1.0** | `--pack herdr`, currently ~v0.8.x | Already adopted as opt-in. Treat its socket API as semi-stable once herdr ships 1.0 and it has held for ~6 months of point releases without a breaking API change | Pre-1.0 software can and does break its own API; the pack stays opt-in, not default, until then |
+| **Herdr → 1.0** | `--pack herdr`, currently ~v0.9.x (multi-machine sidebar, client/server decoupled since 0.9.0) | Already adopted as opt-in. Treat its socket API as semi-stable once herdr ships 1.0 and it has held for ~6 months of point releases without a breaking API change | Pre-1.0 software can and does break its own API; the pack stays opt-in, not default, until then |
 | **Apple containerization framework as Tier 1 sandbox** | Available on macOS 26, VM-per-container | It ships a stable CLI story with acceptable cold-start latency for a per-command sandbox, and `bin/sbx` can wrap it with the same `strict/standard/off` contract | Today it means a VM boot per invocation — wrong latency shape for "sandbox every `cc` call"; Seatbelt via `sbx` is unchanged |
 | **omarchy-style executable theme/plugin pipelines** | Adopting the single-palette *pattern*, not their plugin runtime | Never wholesale — see the cautionary note in [`inspiration.md`](inspiration.md) | Executable theme/plugin systems are a supply-chain surface (see `basecamp/omarchy` discussion #5946 on hardening against exactly this); this repo's theming stays static config files, not scripts fetched and run at theme-switch time |
 | **Tailcat (tailscale.com/tailcat)** | New open-source CLI: accountless, encrypted point-to-point connections — no tailnet, no login flow | An agent or CI job needs to reach a machine for one task without joining the tailnet, and tailcat has a few months of releases behind it; would slot into `--remote` as an *addition* for ephemeral peers | The remote pack's model is a persistent personal fleet — a tailnet with identity is the right shape for that; tailcat solves the adjacent problem (short-lived, accountless links), not this one |

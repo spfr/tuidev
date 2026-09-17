@@ -111,11 +111,22 @@ CC_NO_SANDBOX=1 cc               # env-var bypass honored by the wrappers
 
 ```bash
 herdr                    # attach locally (first attach starts the server)
-herdr --remote workbox   # thin client over SSH (placeholder host)
+herdr machine add workbox --label "workbox"   # save an SSH node (interactive once)
+herdr --machine workbox agent list            # drive a saved node, no TUI
+herdr --machine workbox agent wait --state blocked   # block until an agent needs you
+herdr --machine workbox agent prompt <id> "run the tests"   # steer without attaching
+herdr --remote workbox   # one-off thin client over SSH (placeholder host)
 herdr server             # headless server; clients attach with `herdr`
 herdr agent list         # who is working / blocked / done — scriptable
-herdr status             # local client + server health
+herdr status             # client + server versions, restart_needed / server_binary_stale
+herdr integration status # after every upgrade: reinstall anything `outdated`
+herdr --skill            # release-matched skill text for the agent
 ```
+
+Upgrading: `brew upgrade herdr` (Mac) or `herdr update` (direct install on a
+node). The new client keeps using a running compatible server; restart the
+server only when you need a server-side fix (`herdr server stop`, then attach),
+or try `herdr update --handoff`.
 
 Prefix is `ctrl+b` (tmux is `ctrl+a`). Installs via Homebrew only; with no
 formula the pack prints the official installer command rather than piping a

@@ -92,6 +92,7 @@ agents          # Launch claude + codex in 2 tmux panes
 
 # Fleet runtime (opt-in: ./install.sh --pack herdr)
 herdr           # attach to the local Herdr server (prefix ctrl+b)
+herdr --machine NODE agent list   # drive a saved SSH node without the TUI
 ```
 
 ---

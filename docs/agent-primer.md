@@ -40,7 +40,8 @@ SCRIPTABLE TOOLS worth reaching for in Bash (installed, fast, non-interactive):
 
 DON'T script the TUIs — lazygit, btm/bottom, lazydocker, k9s, yazi, fzf, atuin,
   and the Herdr UI are interactive apps for the human, not you. Use git/gh,
-  kubectl, `git diff`, `herdr agent list` / `herdr status` instead.
+  kubectl, `git diff`, `herdr agent list` / `herdr status` (or
+  `herdr --machine <node> agent list` for a saved SSH node) instead.
 
 HERDR — if HERDR_ENV=1 you are already inside a Herdr pane; do not run `herdr`
   again (nested launches are blocked). Prefix ctrl+b is Herdr; this setup's tmux
