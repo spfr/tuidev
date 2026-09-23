@@ -82,7 +82,11 @@ _orchestration_writable() {
 # that link is gone, put the user's own file back.
 _orchestration_restore_backup() {
     local dest="$1"
-    [[ -f "$dest.bak" && ! -L "$dest.bak" && ! -e "$dest" && ! -L "$dest" ]] || return 0
+    [[ -f "$dest.bak" && ! -L "$dest.bak" ]] || return 0
+    # A dry run leaves the legacy link in place: preview the restore anyway.
+    if [[ -e "$dest" || -L "$dest" ]]; then
+        [[ "${DRY_RUN:-false}" == true ]] && _orchestration_is_legacy_link "$dest" || return 0
+    fi
     run_cmd mv "$dest.bak" "$dest"
     print_info "restored your $dest from before agents-orchestration"
 }
@@ -92,7 +96,8 @@ _orchestration_restore_backup() {
 # so, instead of silently loading it twice.
 _orchestration_warn_plain_copy() {
     local file="$1" outside
-    [[ -f "$file" ]] || return 0
+    # A link left in place (a dry run) is not the user's text.
+    [[ -f "$file" && ! -L "$file" ]] || return 0
     outside="$(sed "/tuidev managed ($ORCHESTRATION_BLOCK) >>>/,/tuidev managed ($ORCHESTRATION_BLOCK) <<</d" "$file")"
     if grep -qF "The main thread is the orchestrator:" <<<"$outside"; then
         print_warning "$file holds the orchestration policy as plain text (an agents-orchestration copy?): delete it there, or it loads twice"
