@@ -5,7 +5,340 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.0] - 2026-09-23
+
+A repositioning release. Five months of shell history showed the real
+workflow: `claude` and `codex` in a terminal tab, a GUI editor for review,
+and tmux durability used only on always-on remote nodes — never the ten
+layout wrappers. 3.0 moves tmux and Neovim from core to optional packs,
+deletes the `cc`/`cx` wrappers and every tmux layout script, and turns on
+the AI CLIs' own native sandboxes by default so plain `claude` and `codex`
+are safe without a wrapper. `sbx` stays as a general-purpose Seatbelt tool.
+The correctness and hardening work queued for 2.4.0 ships in this release
+too (folded into the sections below).
+
+### Breaking
+- **tmux and Neovim are optional packs now**, not part of core:
+  `--pack tmux` (formulae, the `tuidev-tmux` managed block, TPM bootstrap)
+  and `--pack nvim` (formula, the LazyVim config, `--upgrade-shipped` per
+  file). `minimal` no longer installs either. `remote` still gets tmux
+  (`core + remote + sandbox + --pack tmux`); `desktop` gets neither by
+  default — add `--pack nvim --pack tmux` yourself, or let migration
+  `202609231200_v3_optional_nvim_tmux` carry over a tree tuidev already
+  owns.
+- **Every tmux layout is gone**: `work`, `dev`, `ai`, `ai-single`,
+  `ai-triple`, `fullstack`, `multi`, `remote`, `agents`, `worktrees`, plus
+  `tk`/`tka`, `scripts/tmux/`, and the `test-layouts` / `quick-dev` /
+  `quick-ai` / `quick-agents` / `quick-worktrees` Make targets. `.zshrc`
+  keeps a plain `t [NAME]` (attach-or-create) and `tls` (list). For
+  parallel agents, use `claude -w NAME` (worktrees under
+  `.claude/worktrees/`) or a subagent with `isolation: worktree`.
+- **The `cc` and `cx` wrappers are gone**, along with
+  `configs/zsh/ai-clis.zsh`. Plain `claude` and `codex` are sandboxed by
+  their own **native** sandboxes: `configs/claude/settings.json` now ships
+  `sandbox.enabled = true` (with `autoAllowBashIfSandboxed`,
+  `excludedCommands` for `docker`/`gh`, and `filesystem.denyRead` for the
+  CLIs' own token files), and `configs/codex/config.toml` keeps
+  `sandbox_mode = "workspace-write"` with `approval_policy = "on-request"`.
+  `sbx` remains, unchanged in spirit, as a general Seatbelt wrapper for
+  anything (`sbx -- ./script.sh`), including an optional kernel-level mode
+  for Codex (`sbx -- codex -s danger-full-access -a on-request`). Codex's
+  `workspace-write` limits writes and network but not reads, so use that
+  mode for credential-sensitive Codex work. An unmodified 2.x
+  `~/.claude/settings.json` is upgraded by `./scripts/update.sh --configs`;
+  a user-edited one is left as-is (`--upgrade-shipped` keeps your edits):
+  merge the sandbox block yourself, see
+  [docs/sandboxing.md](docs/sandboxing.md). Until one of those happens,
+  plain `claude` runs unsandboxed.
+- **`bosun`, `yazi` and `nnn` packs are removed.** Installed binaries are
+  left alone. Migration `202609231210_v3_drop_tui_packs` drops them from
+  your recorded profile.
+- **`EDITOR` no longer defaults to `nvim`.** It now prefers a GUI editor
+  locally (`code --wait`, then `cursor --wait`), and otherwise (always over
+  SSH) takes the first of `nvim`, `vim`, `vi`, `nano` that exists, leaving
+  `EDITOR` alone if none does. Override in `~/.zshrc.local`.
+- **`core` no longer installs `tmux`, `neovim`, `lazygit` or `httpie`.**
+  `lazygit` and `httpie` moved to `--extras`.
+- **Upgrade with `./scripts/update.sh --configs`** (`make
+  update-configs`): it runs the three migrations
+  (`202609231200_v3_optional_nvim_tmux`, `202609231210_v3_drop_tui_packs`,
+  `202609231220_v3_drop_ai_wrappers`, which backs up and removes
+  `$TUIDEV_STATE_DIR/shell.d/ai-clis.zsh`) and then re-applies every
+  recorded pack's configs: the `tuidev-tmux` block, the Neovim config and
+  `nvim.zsh`, the sandboxed Claude settings. `./install.sh` alone runs the
+  migrations but only the packs named on its command line. See
+  [docs/updating.md](docs/updating.md).
+
+### Fixed
+- **Interactive CLIs under `sbx`.** The Seatbelt profiles denied the agent's
+  own terminal (`/dev/tty*`, tty ioctls, listing `/dev`), so `sbx -- claude`
+  could not enter raw mode: keys
+  arrived as literal escape codes and Ctrl+C could not quit. Present since
+  2.0. The profiles now allow exactly the terminal devices, plus listening
+  on Claude Code's `/tmp/cc-socks/` message socket.
+- **Neovim config reaches existing machines.** It was copied once at install
+  and never updated, so config fixes (like this release's LazyVim cleanup)
+  never arrived. The install now deploys it file by file with
+  `--upgrade-shipped` (`configs/nvim/shipped.sha256`, keyed by relative path):
+  unmodified files upgrade with a backup, edited ones are kept, your own files
+  are untouched. Only a tree tuidev owns is managed (absent, or its `init.lua`
+  is ours / recorded): your own Neovim config is never mixed with our specs.
+  `lazy.nvim` luarocks support is off (nothing needs it). In 3.0 this
+  mechanism moved from `core` into the new `--pack nvim`.
+- **fzf key bindings** load only with a terminal, so agent tool shells and
+  `ssh host cmd` no longer print `can't change option: zle`.
+- **tmux theme vs. tmux-continuum:** `theme.sh` appended its block after TPM's
+  `run` line, which reset `status-right` and silently stopped continuum's
+  autosave. The theme now goes into `~/.config/tmux/theme.conf`, which
+  `tmux.conf` sources above the TPM block. In 3.0 both the managed block and
+  the TPM bootstrap moved from `install.sh` into the new `--pack tmux`.
+- **`sbx` under the AI CLIs:** `strict` and `standard` now allow writes to the
+  CLIs' own state (`~/.claude`, `~/.claude.json*`,
+  `~/.local/{share,state}/claude`, `~/.cache/claude`, `~/.codex`,
+  `~/.local/share/opencode`, `~/.cache/opencode`) and name resolution through
+  the mDNSResponder socket, but not to the files that steer a CLI from
+  outside the sandbox (see Security).
+- **Shipped configs reach existing installs:** `install_config
+  --upgrade-shipped HASHFILE` replaces a Seatbelt profile,
+  `~/.claude/settings.json` or `~/.codex/config.toml` only when it is
+  byte-identical to a version tuidev shipped (listed in each source dir's
+  `shipped.sha256`), after a backup. A file you edited is kept, with a `diff`
+  hint. Before, `--adopt-existing` left the tightened Claude settings off
+  every existing install.
+- **Git defaults** honor `[include]`d files (`git config --global --includes`),
+  so tuidev no longer appends a key that overrides one you set in an include.
+- **TPM bootstrap can't hang the installer:** the clone and `install_plugins`
+  run with `GIT_TERMINAL_PROMPT=0`, stdin from `/dev/null` and a 120 s
+  watchdog; any failure only warns.
+- The cached shell init scripts are written to a temp file and moved into
+  place, so a shell starting in parallel never sources a half-written cache.
+- The `.env` deny rules in the shipped Claude settings match at any depth
+  (`Read(**/.env)`, `Read(**/.env.*)`, and the same for `Edit`), not only in
+  the project root.
+- CI's Seatbelt parse step fails on any profile, not just the last, and also
+  parses each one with `ALLOW_HERDR=1`.
+- **Ghostty:** dropped the `term = ghostty` override (TERM is the default
+  `xterm-ghostty` again; tmux gets RGB and extended keys via
+  `terminal-features`), and `scrollback-limit` is now in bytes (50 MB).
+- **Claude Code hooks** call `$HOME/.local/bin/notify.sh` by absolute path.
+- `update.sh` runs under macOS's stock bash 3.2.
+- The ssh config sets `IgnoreUnknown UseKeychain`, so the same file works with
+  Linux OpenSSH.
+- eza aliases use `--icons=auto`; a bare `--icons` swallowed the next word
+  (`ls DIR` failed for agents that capture aliases).
+
+### Changed
+- **`--pack cmux`** installs the cask from Homebrew's own repository and no
+  longer adds the `manaflow-ai/cmux` tap, which Homebrew now ignores unless
+  you trust it. Remove an old one with `brew untap manaflow-ai/cmux`.
+- **Native sandboxes are the default for the AI CLIs.**
+  `configs/claude/settings.json` ships `sandbox.enabled = true`
+  (`autoAllowBashIfSandboxed`, `excludedCommands` for `docker`/`gh`,
+  `filesystem.denyRead` for the CLIs' own token files); Claude Code's
+  `Read`/`Edit` deny rules merge into it automatically.
+  `configs/codex/config.toml` keeps `sandbox_mode = "workspace-write"` /
+  `approval_policy = "on-request"`, and `file_opener` is now `"vscode"`
+  (alternatives in a comment: `cursor`, `vscode-insiders`, `windsurf`,
+  `none`). `--pack ai-clis` no longer installs a shell wrapper; it only
+  adopts/upgrades the two settings files.
+- **`sbx` is now the general-purpose tool, not an AI-CLI wrapper.** Run
+  anything under it directly (`sbx -- ./script.sh`), including an optional
+  kernel-level mode for Codex (`sbx -- codex -s danger-full-access -a
+  on-request`). Never run `sbx` around a CLI whose native sandbox is also
+  on — Seatbelt doesn't nest: Claude Code under `sbx` is
+  `sbx -- claude --settings '{"sandbox":{"enabled":false}}'`, and still needs `CLAUDE_CODE_OAUTH_TOKEN` (the
+  Keychain is denied).
+- **`EDITOR` picks a GUI editor first.** Locally: `code --wait` if VS Code's
+  `code` is on `PATH`, else `cursor --wait`. Otherwise, and always over SSH,
+  the first of `nvim`, `vim`, `vi`, `nano` that exists (Debian minimal and
+  Raspberry Pi OS Lite have only `vi`). Override in `~/.zshrc.local`.
+- **`oc` (OpenCode) is a plain `command opencode`**, no longer routed through
+  `sbx` via the `ai-clis` dispatcher (which no longer exists).
+- **`core` formulae:** `bat eza fd fzf gh git git-delta jq ripgrep
+  shellcheck starship yq zoxide` plus the zsh plugins, and the Ghostty cask
+  on macOS. `tmux`, `neovim`, `lazygit` and `httpie` moved out (to the new
+  `nvim`/`tmux` packs and `--extras`).
+- **OpenCode is fully optional, split out of `--pack ai-clis` into its own
+  `--pack opencode`.** `--pack ai-clis` covers Claude Code (primary) and
+  Codex (secondary), adopting `~/.claude/settings.json` and
+  `~/.codex/config.toml`. `--pack opencode`
+  (`scripts/install/packs/opencode.sh`) installs `configs/zsh/opencode.zsh`,
+  which puts `~/.opencode/bin` on `PATH` and defines `oc`, and adopts
+  `opencode.json` + `tui.json`. It prints OpenCode's official installer
+  instead of running it.
+- **One package path:** new `scripts/lib/pkg.sh` (`pkg_install`: Homebrew →
+  apt-get → dnf → pacman, with per-distro name mapping; system managers run
+  only as root or via `sudo -n`, otherwise the command is printed). Every pack
+  uses it, replacing core's apt-only fallback.
+- **One pack-discovery path:** new `scripts/lib/packs.sh` (`pack_script`,
+  `pack_entrypoint`, `pack_run`, `pack_array`) shared by install, update,
+  uninstall, health check and the test suite. Package arrays are only
+  `<PACK>_FORMULAE` / `<PACK>_CASKS`; the other historical spellings are gone.
+- **One state dir:** `TUIDEV_STATE_DIR` (`${XDG_CONFIG_HOME:-~/.config}/tuidev`),
+  defined once in `ui.sh`. New profile helpers `tuidev_profile_write`,
+  `tuidev_profile_add_pack` and `tuidev_profile_remove_pack`.
+- `--pack NAME` is validated before anything runs. Packs warn and continue on
+  failure instead of dying.
+- **Uninstall** removes only manifest-recorded paths (plus the git keys tuidev
+  set, while they still hold its value), backs up every config it removes,
+  and never deletes a whole CLI home, so auth and session state survive.
+  Installs that predate the manifest get only the safe subset.
+- **Git defaults** (`scripts/lib/gitconfig.sh`), set only where you have no
+  value — `[include]`d files count — by install *and* `update.sh --configs`, so
+  existing machines get new defaults too: `init.defaultBranch main`,
+  `merge.conflictStyle zdiff3` (git 2.35 or later), `diff.algorithm histogram`,
+  `diff.colorMoved`, `diff.renames`, `rerere`, `rebase.autoSquash/autoStash/updateRefs`,
+  `push.autoSetupRemote`, `push.followTags`, `fetch.prune`, `branch.sort`,
+  `tag.sort`, `column.ui`, `commit.verbose`, `help.autocorrect prompt`, and delta
+  as pager (not side-by-side: agent panes are narrow). `git maintenance start`
+  is printed as a tip.
+- **brew packages** whose command is already on PATH from elsewhere (e.g. the
+  `tldr` formula for tealdeer) are left alone instead of failing on a conflict;
+  macOS system copies (`/usr/bin/git`, `/usr/bin/jq`) don't count.
+- **tmux:** `prefix g` opens lazygit in a popup, bell monitoring flags agent
+  windows, `detach-on-destroy off`, and Claude Code's documented tmux block
+  (`allow-passthrough`, `extended-keys` in csi-u form, `extkeys`). In 3.0
+  this config moved from `install.sh` into the new `--pack tmux`.
+- **Claude Code settings:** a read-only `allow` list (`gh pr/run view|list`,
+  `rg`, `jq`, `shellcheck`); `ask` for `git push`, `gh pr merge` and `gh api`;
+  no `Stop` hook; `attribution.pr` is empty too.
+- **notify.sh** picks the first channel that works: Herdr toast → tmux status
+  line → macOS banner → `notify-send` → ntfy (when `NTFY_URL` is set) →
+  silent.
+- The wrappers set `HERDR_AGENT` inside a Herdr pane (`HERDR_ENV=1`), so
+  Herdr still recognizes a sandboxed agent.
+- `setup_agent_configs.sh` creates nothing by default: Claude Code v2.1.277+
+  reads `AGENTS.md` when no `CLAUDE.md` exists. `--all` adds the `CLAUDE.md`
+  symlink and the legacy per-vendor files.
+- `bosun` installed from the `yetidevworks/bosun` Homebrew tap. Removed in
+  3.0 (see Breaking above).
+- **Shell startup went from about 320 ms to about 70 ms:** tool init scripts
+  are cached and regenerate when the binary changes, jenv loads lazily, and
+  compinit runs a full check at most once a day. atuin runs with
+  `--disable-up-arrow` (Up recalls prefix history; `Ctrl+R` opens atuin).
+- **Lean configs:** Ghostty and Starship keep only non-defaults; Ghostty
+  prompts before a program reads the clipboard (`clipboard-read = ask`).
+  LazyVim drops the telescope and neo-tree overrides (snacks picker and
+  explorer; `<leader>gg` is lazygit via snacks).
+- **Hammerspoon** uses Hyper (`Ctrl+Alt+Cmd`) for every binding, leaving
+  `Ctrl+Alt` to Rectangle: `Hyper+V` opens Maccy, `Hyper+E` opens Ghostty
+  running nvim.
+- The lazydocker alias is `lzd`; `ld` shadowed the linker.
+- **Codex config:** the commented example model pin is `gpt-6-sol`, effort
+  levels `low | medium | high | xhigh | max | ultra`, and the `notify`
+  example uses a `bash -c` shim. **OpenCode config:** dropped the redundant
+  `instructions: ["CLAUDE.md"]`.
+- **Docs restructured, one owner per topic:** README is the index;
+  `AGENTS.md` is agent-facing (verify commands, engineering rules, sandbox
+  boundary); `CLAUDE.md` imports it with `@AGENTS.md`; the terminal-navigation
+  guide merged into `CHEATSHEET.md`; the iPhone client guide was cut down into
+  `remote.md`; `ARCHITECTURE.md` was replaced by the architecture section of
+  `engineering.md`; `inspiration.md` merged into `VISION.md` (now principles
+  and non-goals) and `CONTRIBUTING.md`; `agent-primer.md` merged into
+  `templates/AGENTS_TEMPLATE.md`.
+
+### Added
+- **`--pack nvim`** (`scripts/install/packs/nvim.sh`): `neovim`, plus the
+  LazyVim config deployed exactly as `core` used to (per-file
+  `--upgrade-shipped`, only while tuidev owns the tree).
+- **`--pack tmux`** (`scripts/install/packs/tmux.sh`): `tmux`, the
+  `tuidev-tmux` managed block, and the TPM bootstrap (tmux-resurrect,
+  tmux-continuum) — moved out of `install.sh`'s cross-cutting section.
+  Included by the `remote` profile: `update.sh`, `health_check.sh` and
+  `test_suite.sh` treat `profile=remote` as including it even when
+  `extra_packs` doesn't list it (`tuidev_extra_packs` in
+  `scripts/lib/profile.sh`). Re-run by `update.sh --configs`, it creates
+  `tmux.conf` or refreshes the `tuidev-tmux` block but never appends one to
+  a `tmux.conf` of your own; `./install.sh --pack tmux` does. `t NAME`
+  switches the client when run inside tmux instead of failing to nest.
+- Migration `202609231200_v3_optional_nvim_tmux`: adds `nvim` and/or `tmux`
+  to `extra_packs` when tuidev already owns the config it finds (and `tmux`
+  on every `remote` profile), so an existing install keeps working exactly
+  as before.
+- Migration `202609231210_v3_drop_tui_packs`: drops `bosun`, `yazi` and
+  `nnn` from `extra_packs` (tools stay installed).
+- Migration `202609231220_v3_drop_ai_wrappers`: backs up and removes
+  `$TUIDEV_STATE_DIR/shell.d/ai-clis.zsh`, so `cc`/`cx` disappear, and says
+  whether `~/.claude/settings.json` has the `sandbox` block yet (and if not,
+  whether `update.sh --configs` upgrades it or you merge it by hand).
+- Migration `202609221800_split_opencode_pack`: on a machine with `ai-clis`
+  recorded and OpenCode installed, adds `opencode` to `extra_packs` so the next
+  `update.sh --configs` keeps `oc` working. `~/.config/opencode` is never
+  touched.
+- Migration `202609222000_tmux_theme_file`: moves an existing `tuidev-theme`
+  block out of `tmux.conf` into `theme.conf`, after a backup. A `tmux.conf`
+  that is your own (no `tuidev-tmux` block) also gets a commented
+  `source-file -q ~/.config/tmux/theme.conf` line above TPM's `run` line (or
+  at the end), so the theme keeps applying.
+- `make test-lib` and `make check-links` (`scripts/check_links.sh` checks
+  every relative link in every tracked `.md`); `make ci-test` runs them plus
+  lint and validate-configs. `scripts/lib/test_pkg.sh`.
+- `sbx --allow-herdr` / `SBX_ALLOW_HERDR=1`.
+- `scripts/validate_configs.sh --strict` (a missing validator fails).
+- CI: a macOS job (Seatbelt profiles, `sbx` smoke test, lib tests under bash
+  3.2, desktop dry-run), plus minimal and remote dry-runs, a
+  documentation-links job over all Markdown, and a summary job that fails on
+  any failure. The shellcheck file list lives in the Makefile.
+
+### Removed
+- **The `cc` / `cx` wrappers, `configs/zsh/ai-clis.zsh`, and every tmux
+  layout** (`work`, `dev`, `ai`, `ai-single`, `ai-triple`, `fullstack`,
+  `multi`, `remote`, `agents`, `worktrees`, `tk`, `tka`, `scripts/tmux/`,
+  and the `test-layouts` / `quick-*` Make targets). See Breaking above for
+  the replacements.
+- **`bosun`, `yazi` and `nnn` packs.** Binaries already installed are left
+  alone.
+- **Hammerspoon** is no longer part of the ui pack (cask and `init.lua`).
+  Its hotkeys duplicated Spotlight, Ghostty's quick terminal and Rectangle,
+  and the config never loaded anyway: since 2.0 it was a managed block whose
+  `#` markers are not Lua comments. Existing installs keep the app and
+  `~/.hammerspoon/`; remove them with
+  `brew uninstall --cask hammerspoon && rm -r ~/.hammerspoon`.
+- The `ta` / `tdev` / `tai` / `tai-triple` aliases (deprecated since 2.0).
+- `update.sh --sandbox-image` and `make update-sandbox-image`. The
+  `sandbox-container` pack provides a runtime only.
+- The CI `script-syntax` job (shellcheck already parses every file).
+- Hammerspoon's `Ctrl+Alt` window-snapping bindings, which collided with
+  Rectangle.
+- `docs/ARCHITECTURE.md`, `docs/TERMINAL_NAVIGATION.md`,
+  `docs/IPHONE_SSH_CLIENTS.md`, `docs/inspiration.md`,
+  `docs/agent-primer.md`, and `docs/screenshots/` (unreferenced images from
+  the Zellij era).
+
+### Security
+- **The credential deny list** (Seatbelt and Claude `permissions.deny`) now
+  also covers `~/.config/gcloud`, `~/.azure`, `~/.npmrc`, `~/.pypirc`,
+  `~/.cargo/credentials[.toml]`, `~/.terraform.d`, `~/.git-credentials`,
+  `~/.config/op` (1Password CLI), `~/.password-store`, `~/.vault-token`,
+  `~/.pgpass`, `~/.config/git/credentials`, `~/.config/containers/auth.json`
+  and `~/.gem/credentials`.
+- **No persistent escape through the CLIs' state dirs:** under `strict` and
+  `standard` a sandboxed agent can't write Claude's `settings.json`,
+  `settings.local.json`, `CLAUDE.md`, `keybindings.json`, `hooks/`,
+  `commands/`, `agents/`, `skills/` or `plugins/`, Codex's `config.toml`,
+  `*.config.toml`, `rules/` or `packages/`, `~/.local/share/claude/versions/`,
+  `~/.config/opencode/`, or rename the `~/.claude`, `~/.codex` and
+  `~/.local/share/claude` directories. Each of these runs or is loaded
+  unsandboxed later. Update and configure the CLIs outside `sbx`.
+  `~/.claude.json` stays writable (Claude rewrites it on every start), a
+  documented residual risk.
+- Claude's native sandbox is controlled only by your user-level
+  `~/.claude/settings.json`; a cloned repo's `./.claude/settings*.json` can
+  weaken it (see below) but never disable the read-only rules `sbx` also
+  enforces. `sandboxing.md` gives the tested native-sandbox block (no
+  unsandboxed fallback, token files denied) and the project-level settings
+  that can weaken it. In 3.0 this block ships enabled by default (see
+  Breaking above), superseding the `cc`-wrapper opt-in described here.
+- **The Herdr socket** (which can spawn panes outside the sandbox) is closed
+  under `strict` unless `--allow-herdr` is passed. `standard` still opens it.
+- Claude Code asks before `git push`, `gh pr merge` and `gh api`, and no
+  longer auto-allows `git *`, `gh *`, `make *` or `tmux *`.
+- Documented: `gh` can't authenticate under `sbx` under either profile; on
+  macOS, Claude Code under `sbx` needs `claude setup-token` +
+  `CLAUDE_CODE_OAUTH_TOKEN`, because the Keychain is denied; and
+  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` keeps credentials out of subprocess
+  environments.
+- GitHub Actions are pinned to commit SHAs and kept current by Dependabot.
 
 ---
 
@@ -150,7 +483,7 @@ overlays.
   official installer command rather than piping a remote script to a shell. tmux
   wrappers (`work` / `dev` / `ai`) are unchanged. Prefix `ctrl+b` vs tmux
   `ctrl+a`.
-- **[`docs/inspiration.md`](docs/inspiration.md)** — Omarchy/Omacosy practices
+- **`docs/inspiration.md`** — Omarchy/Omacosy practices
   we steal vs desktop systems we refuse; the `.local` split.
 - Shipped SSH snippet `Include`s `~/.ssh/config.local*` (glob; missing file is
   ignored). Generic `Host always-on` / `workbox` examples only.
@@ -251,7 +584,7 @@ overlays.
 - [`docs/agent-workflows.md`](docs/agent-workflows.md) is a control-plane guide
   (attention queue, machine roles, decision table, verification-as-done).
 - Agent primer: Herdr nesting, don't script the Herdr TUI, done means verified.
-- [`docs/inspiration.md`](docs/inspiration.md) now distinguishes adopted vs
+- `docs/inspiration.md` now distinguishes adopted vs
   watched practices (manifest-driven uninstall, in-progress theming pipeline),
   adds an omarchy executable-theme supply-chain caution, and OpenClaw 2.0
   lessons.
@@ -440,7 +773,7 @@ product rationale, especially the "2026 Amendments" section.
 
 Existing users: on next update, `make update` will show drift on your
 shell dotfiles. Run `make adopt` to convert them to managed-block form.
-See [docs/migration.md](docs/migration.md) for the full cutover guide.
+The full cutover guide, `docs/migration.md`, was removed in 2.3.0.
 
 ---
 

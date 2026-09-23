@@ -18,11 +18,11 @@ FROM alpine:3.22
 # Distro packages only. `yq-go` is the Go yq the configs expect (Alpine's
 # plain `yq` name is not packaged; Debian's is the incompatible Python one).
 RUN apk add --no-cache \
-      bash zsh sudo git github-cli curl ca-certificates ncurses tmux \
-      neovim ripgrep fd bat fzf zoxide delta eza starship bottom lazygit \
-      jq yq-go lua5.4 shellcheck httpie \
+      bash zsh sudo git github-cli curl ca-certificates ncurses \
+      ripgrep fd bat fzf zoxide delta eza starship bottom \
+      jq yq-go shellcheck \
     # Fail the build, not the test run, if a package stops providing its binary.
-    && for t in nvim rg fd bat fzf zoxide delta eza starship btm lazygit jq yq gh shellcheck http tmux zsh; do \
+    && for t in rg fd bat fzf zoxide delta eza starship btm jq yq gh shellcheck zsh; do \
          command -v "$t" >/dev/null || { echo "missing: $t" >&2; exit 1; }; done
 
 # Unprivileged test user (passwordless sudo: the apt/apk fallback path uses it).
@@ -37,11 +37,9 @@ WORKDIR /home/testuser/tuidev
 ENV TERM=xterm-256color
 
 # Minimal installed-config shape the core tests expect.
-RUN mkdir -p ~/.config/nvim ~/.config/tmux ~/.local/bin \
+RUN mkdir -p ~/.config ~/.local/bin \
     && cp configs/zsh/.zshrc ~/.zshrc \
     && cp configs/starship/starship.toml ~/.config/starship.toml \
-    && cp configs/tmux/tmux.conf ~/.config/tmux/tmux.conf \
-    && cp -r configs/nvim/. ~/.config/nvim/ \
     && git config --global core.pager delta \
     && chmod +x scripts/*.sh
 

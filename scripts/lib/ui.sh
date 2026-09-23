@@ -1,12 +1,13 @@
 #!/bin/bash
-# scripts/lib/ui.sh - shared UI helpers for install/update/health scripts.
+# scripts/lib/ui.sh - the base lib every tuidev script sources: printing,
+# dry-run guarding, platform probes, and the one tuidev state-dir path.
 #
 # Source this file; it defines color constants and print_* helpers. Safe to
 # source multiple times (idempotent).
 #
 #   . "$(dirname "${BASH_SOURCE[0]}")/lib/ui.sh"
 #
-# All helpers respect TUIDEV_NO_COLOR=1 for non-TTY / CI output.
+# All helpers respect TUIDEV_NO_COLOR=1 / NO_COLOR for non-TTY / CI output.
 
 if [[ -n "${_TUIDEV_UI_LOADED:-}" ]]; then
     return 0
@@ -39,6 +40,13 @@ fi
 # Global dry-run toggle; callers set DRY_RUN=true|false.
 : "${DRY_RUN:=false}"
 
+# Where tuidev keeps its own state: profile, manifest, env, migrations, theme,
+# backups, sandbox profiles, shell.d fragments. The ONE definition — every
+# script derives its state paths from this, so XDG_CONFIG_HOME is honored
+# everywhere or nowhere. Deliberately not exported: a child process with a
+# different HOME recomputes it.
+: "${TUIDEV_STATE_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}"
+
 print_header() {
     echo ""
     echo -e "${PURPLE}============================================================================${NC}"
@@ -62,23 +70,32 @@ run_cmd() {
     fi
 }
 
-# Shell-form variant for pipelines: `run_sh 'brew list | grep foo'`.
-run_sh() {
-    if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${YELLOW}[DRY RUN]${NC} sh -c: $*"
-    else
-        bash -c "$*"
-    fi
-}
-
 command_exists() { command -v "$1" >/dev/null 2>&1; }
-
-app_installed() {
-    [[ -d "/Applications/$1.app" ]] || [[ -d "$HOME/Applications/$1.app" ]]
-}
 
 is_macos() { [[ "$(uname)" == "Darwin" ]]; }
 is_linux() { [[ "$(uname)" == "Linux" ]]; }
+
+# _stat_fmt GNU_FORMAT BSD_FORMAT PATH — one stat field, portably. GNU first:
+# BSD stat rejects -c outright, whereas GNU `stat -f` means "filesystem
+# status" and would succeed with the wrong answer.
+_stat_fmt() {
+    stat -c "$1" "$3" 2>/dev/null || stat -f "$2" "$3" 2>/dev/null
+}
+
+# file_mode PATH — octal permission bits, e.g. "700". Empty + non-zero if absent.
+file_mode()  { _stat_fmt '%a' '%Lp' "$1"; }
+
+# file_owner PATH — owning user name.
+file_owner() { _stat_fmt '%U' '%Su' "$1"; }
+
+# file_sha256 PATH — hex SHA-256 of a file (shasum on macOS, sha256sum on Linux).
+file_sha256() {
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+    else
+        sha256sum "$1" | cut -d' ' -f1
+    fi
+}
 
 die() {
     print_error "$1"

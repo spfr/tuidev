@@ -9,17 +9,18 @@
 #   - When executed directly, call the entrypoint function.
 #
 # Scope of 'extras':
-#   Quality-of-life CLI tools — shell history, disk viz, network monitors,
-#   benchmarking, code stats, man-page helpers. All Homebrew formulae. No
-#   casks, no configs.
+#   Quality-of-life CLI tools — a git TUI, an HTTP client, shell history, disk
+#   viz, network monitors, benchmarking, code stats, man-page helpers.
+#   Homebrew formula names, installed through scripts/lib/pkg.sh. No casks, no
+#   configs.
 
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/ui.sh disable=SC1091
 . "$SCRIPT_DIR/../lib/ui.sh"
-# shellcheck source=../lib/brew.sh disable=SC1091
-. "$SCRIPT_DIR/../lib/brew.sh"
+# shellcheck source=../lib/pkg.sh disable=SC1091
+. "$SCRIPT_DIR/../lib/pkg.sh"
 
 # Formula list (Homebrew). Alphabetized for drift-diff friendliness.
 EXTRAS_FORMULAE=(
@@ -30,7 +31,9 @@ EXTRAS_FORMULAE=(
     dust
     fastfetch
     glow
+    httpie
     hyperfine
+    lazygit
     ncdu
     procs
     sd
@@ -41,24 +44,9 @@ EXTRAS_FORMULAE=(
 
 extras_install() {
     print_header "Pack: extras"
-
-    # extras are never required (see health_check.sh). On a Linux box without
-    # Homebrew — e.g. aarch64, which brew does not support — skip gracefully
-    # instead of killing the whole install.
-    if ! command_exists brew; then
-        if is_macos; then
-            die "Homebrew is required on macOS; install from https://brew.sh"
-        fi
-        print_warning "extras pack needs Homebrew, which is not installed."
-        print_info "These are optional quality-of-life tools; core is unaffected."
-        print_info "Install them from your distribution instead, e.g.:"
-        print_info "    sudo apt-get install -y ${EXTRAS_FORMULAE[*]}"
-        print_info "(names and availability vary by release; skip what apt lacks)"
-        return 0
-    fi
-
-    brew_update_once
-    brew_install_formulae "${EXTRAS_FORMULAE[@]}"
+    # Never required (see health_check.sh): whatever the package manager lacks
+    # is listed with a pointer and skipped.
+    pkg_install "${EXTRAS_FORMULAE[@]}" || print_info "extras are optional; core is unaffected."
     print_success "extras pack complete"
 }
 

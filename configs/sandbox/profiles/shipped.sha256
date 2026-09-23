@@ -1,0 +1,15 @@
+# SHA-256 of every Seatbelt profile version tuidev has ever shipped.
+# scripts/install/sandbox.sh replaces an installed profile only when it is an
+# unmodified copy of one of these (backup first); a profile you edited in
+# place is left alone. test_contract.sh fails if a current .sb is not listed:
+# after editing a profile, append `<name> $(shasum -a 256 <file> | cut -d' ' -f1)`.
+strict 72eca52dbe7acf0af20c58e20434415e8f176d0129c0195cc62c50ab022887b2
+strict b1d0d7ec40064ad5ec3c50c72034c0e16eb1bc084c5acc81def474d544d698f0
+strict 4e5c9d6a9e2f5dde38e7928841664f1f844a25f32ab9d4ae6efeec7aa39bb7c2
+strict 2ffb334f9caad586bc875e78ef52d02eeb09f08f92e75407961f04bbcd4cca22
+standard 216c7694a054033f2d8e35e288c4bb0090106b4bdba4575dea3d4c67dabc4c6c
+standard 43fdf579de572d0a3a77a836d2d4fb92916825a3b89998e91f7ff8dfbe5d24cd
+standard 027ed408f3d63ae3b084cd26b493be2e8b7b4ce5fb94b5bc242aae7c4e38feb1
+off f9e00d3e026b9cf24b29bc062b34bb02cd61d353016e69d318c2812681f2900a
+strict d82358bc714348df4bde2d8e837d8077208efb2d96182389ed7e34a763c34df1
+standard e9481b90e67b8adba1d2b7adf752e311a187284a9463b6d32708d547c7d8cb0e

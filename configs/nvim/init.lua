@@ -97,6 +97,9 @@ require("lazy").setup({
     version = false, -- Always use latest git commit
   },
   install = { colorscheme = { "tokyonight", "habamax" } },
+  -- No plugin in this config needs luarocks; skip the hererocks bootstrap
+  -- (and the :checkhealth error it reports when absent).
+  rocks = { enabled = false },
   checker = {
     enabled = true,
     notify = false, -- Don't spam notifications

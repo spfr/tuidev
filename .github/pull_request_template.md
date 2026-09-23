@@ -1,33 +1,30 @@
 ## Description
 
-Brief description of the changes.
+What changed and why.
 
 ## Type of Change
 
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
+- [ ] Bug fix
+- [ ] New feature or pack
+- [ ] Breaking change (public command, config path, or behavior)
+- [ ] Documentation
 
-## Testing Done
+## Verification
 
-- [ ] `make lint` passes
-- [ ] `make test` passes
-- [ ] `make container-test` passes (for installation changes)
-- [ ] Manually tested on macOS
+- [ ] `make ci-test` passes (lint, validate-configs, check-links, test-lib)
+- [ ] `make test-core` passes locally
+- [ ] Installer changes: `./install.sh --profile <p> --dry-run` reviewed (on macOS, also under `/bin/bash`)
+- [ ] Container changes: `make container-test` passes
+- [ ] Tested on: macOS / Linux (circle what applies)
 
 ## Checklist
 
-- [ ] My code follows the project's style guidelines
-- [ ] I have updated documentation as needed
-- [ ] I have added tests if applicable
-- [ ] No hardcoded paths (uses `$HOME` variables)
-- [ ] No sensitive data committed
-
-## Screenshots (if applicable)
-
-Add screenshots for UI changes.
+- [ ] Follows [docs/engineering.md](../docs/engineering.md) (shared libs, pack contract, managed blocks, bash 3.2)
+- [ ] Removing or renaming an installed artifact ships a migration
+- [ ] The owning doc and `CHANGELOG.md` are updated
+- [ ] No hardcoded home paths, real hostnames, IPs or secrets
+- [ ] Conventional commit messages, no `Co-Authored-By` trailers
 
 ## Related Issues
 
-Closes #(issue number)
+Closes #

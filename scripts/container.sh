@@ -26,7 +26,7 @@ need_runtime() {
     local rt
     rt="$(tuidev_container_runtime)" || {
         echo "no container runtime found. Preference order: Apple container (macOS 26+," >&2
-        echo "https://github.com/apple/container/releases) → podman (brew install --cask podman) → docker" >&2
+        echo "https://github.com/apple/container/releases) → podman (brew install podman) → docker" >&2
         exit 1
     }
     printf '%s\n' "$rt"

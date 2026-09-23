@@ -13,19 +13,20 @@
 # Profiles (select a pack set):
 #   minimal   → core
 #   desktop   → core + ui + sandbox          (macOS laptop/desktop default)
-#   remote    → core + remote + sandbox      (headless/Tailscale node)
+#   remote    → core + remote + sandbox + --pack tmux   (headless/Tailscale node)
 #
 # Packs (compose your own):
-#   --core       essential CLI tools (tmux, nvim, ripgrep, fd, starship, ...)
+#   --core       the shell for agent CLIs (ripgrep, fd, fzf, starship, delta, ...)
 #   --remote     tailscale + mosh + SSH config
 #   --sandbox    Seatbelt profiles + sbx wrapper (macOS only)
-#   --ui         GUI apps: Ghostty, Rectangle, Stats, Maccy, Hidden Bar,
-#                Hammerspoon (macOS only)
-#   --extras     atuin, dust, broot, bandwhich, duf, hyperfine, tokei, ...
+#   --ui         GUI apps: Ghostty, Rectangle, Stats, Maccy, Hidden Bar
+#                (macOS only)
+#   --extras     lazygit, httpie, atuin, dust, broot, hyperfine, tokei, ...
 #
-#   --pack NAME  optional pack (repeatable): yazi, nnn,
-#                monitoring, sandbox-container, mosh, cmux, bosun, herdr,
-#                fnm, ai-clis (cc/cx/oc wrappers + AI CLI configs)
+#   --pack NAME  optional pack (repeatable): ai-clis (Claude Code + Codex
+#                configs, native sandboxes on), opencode, nvim (Neovim +
+#                LazyVim), tmux (durable sessions + TPM), herdr, cmux,
+#                sandbox-container, mosh, fnm, monitoring
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files
@@ -50,8 +51,12 @@ TUIDEV_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$TUIDEV_REPO/scripts/lib/config_write.sh"
 # shellcheck source=scripts/lib/manifest.sh disable=SC1091
 . "$TUIDEV_REPO/scripts/lib/manifest.sh"
+# shellcheck source=scripts/lib/gitconfig.sh disable=SC1091
+. "$TUIDEV_REPO/scripts/lib/gitconfig.sh"
 # shellcheck source=scripts/lib/migrate.sh disable=SC1091
 . "$TUIDEV_REPO/scripts/lib/migrate.sh"
+# shellcheck source=scripts/lib/packs.sh disable=SC1091
+. "$TUIDEV_REPO/scripts/lib/packs.sh"
 
 # Is this a machine tuidev has never touched? Captured HERE, before a single
 # byte is written: the profile manifest is rewritten on every run, so asking
@@ -61,9 +66,9 @@ TUIDEV_FRESH_INSTALL=false
 # shellcheck disable=SC2119  # STATE_DIR arg is optional; the default is wanted
 tuidev_is_fresh_install && TUIDEV_FRESH_INSTALL=true
 
-# Bookkeeping, not chatter: from here on, every brew install and every config
-# write that goes through the shared libs appends a line to
-# ~/.config/tuidev/manifest. uninstall.sh reads it to remove exactly what this
+# Bookkeeping, not chatter: from here on, every package install and every
+# config write that goes through the shared libs appends a line to
+# $TUIDEV_STATE_DIR/manifest. uninstall.sh reads it to remove exactly what this
 # machine got. Silent by design; nothing below prints because of it.
 tuidev_manifest_enable
 
@@ -80,7 +85,7 @@ PACKS_EXTRAS=false
 EXTRA_PACKS=()
 WRITE_MODE="managed-block"   # or "adopt-existing"
 
-usage() { sed -n '2,38p' "$0"; }
+usage() { sed -n '2,40p' "$0"; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -103,7 +108,10 @@ done
 case "$PROFILE" in
     minimal) PACKS_CORE=true ;;
     desktop) PACKS_CORE=true; PACKS_UI=true; PACKS_SANDBOX=true ;;
-    remote)  PACKS_CORE=true; PACKS_REMOTE=true; PACKS_SANDBOX=true ;;
+    remote)  PACKS_CORE=true; PACKS_REMOTE=true; PACKS_SANDBOX=true
+             # Durable sessions are what a remote node is for (--pack tmux).
+             case " ${EXTRA_PACKS[*]} " in *" tmux "*) ;; *) EXTRA_PACKS+=(tmux) ;; esac
+             ;;
     "")      # no profile — require at least one explicit pack flag
              if ! $PACKS_CORE && ! $PACKS_REMOTE && ! $PACKS_SANDBOX \
                 && ! $PACKS_UI && ! $PACKS_EXTRAS && [[ ${#EXTRA_PACKS[@]} -eq 0 ]]; then
@@ -121,6 +129,12 @@ case "$PROFILE" in
     *) die "unknown profile: $PROFILE  (use minimal|desktop|remote)" ;;
 esac
 
+# Reject a mistyped pack name up front, not halfway through the install.
+for pack in "${EXTRA_PACKS[@]}"; do
+    tuidev_is_valid_pack "$pack" \
+        || die "unknown --pack: $pack  (valid: ${TUIDEV_VALID_PACKS[*]})"
+done
+
 # ----------------------------------------------------------------------------
 # Pre-flight
 # ----------------------------------------------------------------------------
@@ -135,9 +149,9 @@ fi
 if ! command_exists brew; then
     if is_macos; then
         print_warning "Homebrew not found. Install from https://brew.sh first."
-        print_info "Some packs will fail without brew. Continuing in preview mode."
+        print_info "Packages will be skipped with a warning; configs are still written."
     else
-        print_warning "Homebrew recommended on Linux for parity; skipping-unfriendly tools will warn."
+        print_info "no Homebrew: packages come from apt-get/dnf/pacman (root or passwordless sudo)."
     fi
 fi
 
@@ -182,39 +196,20 @@ _apply_install_migrations
 # Pack dispatch
 # ----------------------------------------------------------------------------
 
-run_pack() {
-    local script="$1"
-    local fn="$2"
-    if [[ -f "$TUIDEV_REPO/scripts/install/$script" ]]; then
-        # shellcheck disable=SC1090
-        . "$TUIDEV_REPO/scripts/install/$script"
-        "$fn"
-        tuidev_manifest_record pack "${script%.sh}"
-    else
-        print_warning "pack missing: scripts/install/$script"
-    fi
+# Source the pack, run its entrypoint, record it (scripts/lib/packs.sh).
+_run_pack() {
+    pack_run "$1"
+    tuidev_manifest_record pack "$1"
 }
 
-run_optional_pack() {
-    local name="$1"
-    local script="packs/$name.sh"
-    local fn="${name//-/_}_install"
-    [[ -f "$TUIDEV_REPO/scripts/install/$script" ]] \
-        || die "unknown --pack: $name  (no scripts/install/$script)"
-    # shellcheck disable=SC1090
-    . "$TUIDEV_REPO/scripts/install/$script"
-    "$fn"
-    tuidev_manifest_record pack "$name"
-}
-
-$PACKS_CORE    && run_pack core.sh    core_install
-$PACKS_REMOTE  && run_pack remote.sh  remote_install
-$PACKS_SANDBOX && run_pack sandbox.sh sandbox_install
-$PACKS_UI      && run_pack ui.sh      ui_install
-$PACKS_EXTRAS  && run_pack extras.sh  extras_install
+$PACKS_CORE    && _run_pack core
+$PACKS_REMOTE  && _run_pack remote
+$PACKS_SANDBOX && _run_pack sandbox
+$PACKS_UI      && _run_pack ui
+$PACKS_EXTRAS  && _run_pack extras
 
 for pack in "${EXTRA_PACKS[@]}"; do
-    run_optional_pack "$pack"
+    _run_pack "$pack"
 done
 
 # ----------------------------------------------------------------------------
@@ -225,7 +220,7 @@ done
 # or are fundamental to the shell experience. Packs install *tools*; this
 # section writes *settings*.
 
-print_header "Configuring shell and editor"
+print_header "Configuring the shell"
 
 # Helper: write a cross-cutting config according to WRITE_MODE.
 #   managed-block  (default) wrap repo content in tuidev managed markers.
@@ -244,75 +239,17 @@ _install_cross_cutting() {
     esac
 }
 
-# Bootstrap TPM (tmux plugin manager) so tmux-resurrect / tmux-continuum — the
-# durability layer — actually load. Idempotent and non-fatal; only runs once
-# tmux.conf is in place. Skipped under --dry-run.
-_bootstrap_tmux_plugins() {
-    command_exists tmux || return 0
-    command_exists git  || return 0
-    local tpm_dir="$HOME/.config/tmux/plugins/tpm"
-    if [[ -d "$tpm_dir/.git" ]]; then
-        print_success "tpm (already present)"
-    else
-        print_step "installing TPM (tmux plugin manager)"
-        run_cmd git clone --depth 1 https://github.com/tmux-plugins/tpm "$tpm_dir" \
-            || { print_warning "tpm clone failed (continuing)"; return 0; }
-    fi
-    if [[ "$DRY_RUN" == true ]]; then
-        print_info "[DRY RUN] would run: $tpm_dir/bin/install_plugins"
-    elif [[ -x "$tpm_dir/bin/install_plugins" ]]; then
-        print_step "installing tmux plugins (resurrect, continuum)"
-        "$tpm_dir/bin/install_plugins" >/dev/null 2>&1 \
-            || print_warning "tmux plugin install failed (open tmux and press 'prefix + I' to retry)"
-    fi
-}
-
 _install_cross_cutting "$HOME/.zshrc"                  "$TUIDEV_REPO/configs/zsh/.zshrc"                   tuidev-zshrc
 _install_cross_cutting "$HOME/.config/starship.toml"   "$TUIDEV_REPO/configs/starship/starship.toml"       tuidev-starship
-_install_cross_cutting "$HOME/.config/tmux/tmux.conf"  "$TUIDEV_REPO/configs/tmux/tmux.conf"               tuidev-tmux
 
-# TPM bootstrap runs after tmux.conf is in place; tmux ships with --core.
-$PACKS_CORE && _bootstrap_tmux_plugins
+# tmux.conf (and TPM) belong to `--pack tmux`, Neovim's config to `--pack nvim`,
+# and the Claude Code / Codex configs to `--pack ai-clis`; none is written here.
 
-# --- Neovim (LazyVim). Non-destructive: backup-then-copy, never rm -rf.
-#     Honors WRITE_MODE=adopt-existing by leaving any existing nvim config
-#     completely untouched. Otherwise: skip if unchanged, else backup+copy.
-if [[ -d "$TUIDEV_REPO/configs/nvim" ]] && command_exists nvim; then
-    nvim_dest="$HOME/.config/nvim"
-    if [[ "$WRITE_MODE" == "adopt-existing" && -d "$nvim_dest" ]]; then
-        print_info "adopt-existing: leaving $nvim_dest untouched"
-    elif [[ -d "$nvim_dest" ]] && diff -qr "$TUIDEV_REPO/configs/nvim" "$nvim_dest" >/dev/null 2>&1; then
-        print_success "nvim config up to date (no changes)"
-    else
-        [[ -d "$nvim_dest" ]] && tuidev_backup "$nvim_dest" nvim >/dev/null
-        if [[ "$DRY_RUN" == true ]]; then
-            print_info "[DRY RUN] would copy configs/nvim -> $nvim_dest"
-        else
-            mkdir -p "$nvim_dest"
-            cp -R "$TUIDEV_REPO/configs/nvim/." "$nvim_dest/"
-            tuidev_manifest_record dir "$nvim_dest"
-            print_success "nvim (LazyVim) config installed"
-        fi
-    fi
-fi
+# --- Git defaults ---
 
-# AI CLI wrappers + configs live in the opt-in `--pack ai-clis` (kept out of the
-# core terminal-tools bundle); they are not written here.
+tuidev_git_defaults
 
-# --- Git: delta pager (only if delta installed) ---
-if command_exists delta && $PACKS_CORE; then
-    print_step "configuring git with delta"
-    run_cmd git config --global core.pager "delta"
-    run_cmd git config --global interactive.diffFilter "delta --color-only"
-    run_cmd git config --global delta.navigate "true"
-    run_cmd git config --global delta.line-numbers "true"
-    run_cmd git config --global delta.side-by-side "true"
-    run_cmd git config --global merge.conflictstyle "diff3"
-    print_success "git configured with delta"
-fi
-
-# --- Local bin for installed helpers (sbx, notify, etc.) ---
-[[ "$DRY_RUN" == true ]] || mkdir -p "$HOME/.local/bin"
+# --- Local bin helpers ---
 if [[ -f "$TUIDEV_REPO/scripts/notify.sh" ]]; then
     install_config "$HOME/.local/bin/notify.sh" "$TUIDEV_REPO/scripts/notify.sh" \
         --overwrite
@@ -361,7 +298,7 @@ fi
 # itself is written by scripts/theme.sh. Without this step every prompt warns
 # "Could not find color palette: tuidev" until a theme is applied. Respect an
 # already-chosen theme; only seed the default on machines with no theme state.
-if [[ "$DRY_RUN" != true && ! -f "$HOME/.config/tuidev/theme" ]]; then
+if [[ "$DRY_RUN" != true && ! -f "$TUIDEV_STATE_DIR/theme" ]]; then
     if ! "$TUIDEV_REPO/scripts/theme.sh" apply tokyo-night; then
         print_warning "could not apply the default theme; run: make theme NAME=tokyo-night"
     fi
@@ -371,55 +308,47 @@ fi
 # Profile manifest
 # ----------------------------------------------------------------------------
 
-if [[ "$DRY_RUN" != true ]]; then
-    mkdir -p "$HOME/.config/tuidev"
-    # Installs are additive: merge with any existing profile record so a
-    # pack-only run (./install.sh --pack NAME) doesn't erase what earlier
-    # runs installed. Groups only ever flip to true; extra_packs is a union;
-    # the profile name is kept unless --profile was passed this run.
-    MERGED_PACKS="${EXTRA_PACKS[*]}"
-    if [[ -f "$HOME/.config/tuidev/profile" ]]; then
-        while IFS='=' read -r _k _v; do
-            case "$_k" in
-                profile) [[ -z "$PROFILE" && "$_v" != custom ]] && PROFILE="$_v" ;;
-                core)    [[ "$_v" == true ]] && PACKS_CORE=true ;;
-                remote)  [[ "$_v" == true ]] && PACKS_REMOTE=true ;;
-                sandbox) [[ "$_v" == true ]] && PACKS_SANDBOX=true ;;
-                ui)      [[ "$_v" == true ]] && PACKS_UI=true ;;
-                extras)  [[ "$_v" == true ]] && PACKS_EXTRAS=true ;;
-                extra_packs)
-                    for _p in $_v; do
-                        case " $MERGED_PACKS " in
-                            *" $_p "*) ;;
-                            *) MERGED_PACKS="${MERGED_PACKS:+$MERGED_PACKS }$_p" ;;
-                        esac
-                    done ;;
-            esac
-        done < "$HOME/.config/tuidev/profile"
-    fi
-    {
-        echo "profile=${PROFILE:-custom}"
-        echo "core=$PACKS_CORE"
-        echo "remote=$PACKS_REMOTE"
-        echo "sandbox=$PACKS_SANDBOX"
-        echo "ui=$PACKS_UI"
-        echo "extras=$PACKS_EXTRAS"
-        echo "extra_packs=$MERGED_PACKS"
-        echo "installed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        echo "repo=$TUIDEV_REPO"
-    } > "$HOME/.config/tuidev/profile"
-    print_success "profile manifest written: $HOME/.config/tuidev/profile"
+# Installs are additive: merge with any existing record so a pack-only run
+# (./install.sh --pack NAME) doesn't erase what earlier runs installed. Groups
+# only ever flip to true; extra_packs is a union; the recorded profile name is
+# kept unless --profile was passed this run.
+# shellcheck disable=SC2034  # profile.sh globals, read by tuidev_profile_write
+_write_profile() {
+    load_tuidev_profile || true   # resets the globals when there is no record
+    TUIDEV_PROFILE_NAME="${PROFILE:-${TUIDEV_PROFILE_NAME:-custom}}"
+    $PACKS_CORE    && TUIDEV_PACK_CORE=true
+    $PACKS_REMOTE  && TUIDEV_PACK_REMOTE=true
+    $PACKS_SANDBOX && TUIDEV_PACK_SANDBOX=true
+    $PACKS_UI      && TUIDEV_PACK_UI=true
+    $PACKS_EXTRAS  && TUIDEV_PACK_EXTRAS=true
+    local p
+    for p in "${EXTRA_PACKS[@]}"; do
+        case " $TUIDEV_EXTRA_PACKS " in
+            *" $p "*) ;;
+            *) TUIDEV_EXTRA_PACKS="${TUIDEV_EXTRA_PACKS:+$TUIDEV_EXTRA_PACKS }$p" ;;
+        esac
+    done
+    TUIDEV_PROFILE_INSTALLED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    TUIDEV_PROFILE_REPO="$TUIDEV_REPO"
+    tuidev_profile_write
+    print_success "profile manifest written: $TUIDEV_PROFILE_FILE_DEFAULT"
+}
 
-    # Shell-sourceable env file: the zsh wrappers read this to locate the
-    # repo for tmux layout scripts, sandbox profiles, etc.
+# Shell-sourceable env file: the zsh helpers (tui-update, …) read this to
+# locate the repo.
+_write_env() {
     {
         echo "# Auto-generated by install.sh — do not edit by hand."
         echo "export TUIDEV_REPO=\"$TUIDEV_REPO\""
-        echo "export TUIDEV_PROFILE=\"${PROFILE:-custom}\""
-    } > "$HOME/.config/tuidev/env"
-    print_success "shell env written: $HOME/.config/tuidev/env"
+        echo "export TUIDEV_PROFILE=\"$TUIDEV_PROFILE_NAME\""
+    } > "$TUIDEV_ENV_FILE_DEFAULT"
+    print_success "shell env written: $TUIDEV_ENV_FILE_DEFAULT"
+}
 
-    tuidev_manifest_record profile "${PROFILE:-custom}"
+if [[ "$DRY_RUN" != true ]]; then
+    _write_profile
+    _write_env
+    tuidev_manifest_record profile "$TUIDEV_PROFILE_NAME"
 fi
 
 # ----------------------------------------------------------------------------
@@ -427,21 +356,17 @@ fi
 # ----------------------------------------------------------------------------
 
 print_header "Installation Complete"
-cat <<EOF
-${GREEN}Next steps:${NC}
+printf '%b\n' "${GREEN}Next steps:${NC}
   1. Restart your shell:  ${YELLOW}exec zsh -l${NC}
-  2. Try a session:       ${YELLOW}work myproject${NC}     (bare tmux session)
-                          ${YELLOW}dev${NC}                 (nvim | agent | runner)
-                          ${YELLOW}ai${NC}                  (nvim | 2 work panes)
-  3. AI CLIs (opt-in):    ${YELLOW}./install.sh --pack ai-clis${NC}  (cc/cx/oc + sbx routing)
+  2. Agent CLI configs:   ${YELLOW}./install.sh --pack ai-clis${NC}  (Claude Code + Codex, native sandboxes on)
+  3. Run an agent:        ${YELLOW}claude${NC}  or  ${YELLOW}codex${NC}  in a project, next to your editor
   4. Verify health:       ${YELLOW}make check${NC}
 
 ${CYAN}Docs:${NC}
-  docs/profiles.md         what each profile installs
-  docs/sandboxing.md       Seatbelt details and escape hatches
+  docs/profiles.md         what each profile and pack installs
+  docs/sandboxing.md       native sandboxes, sbx, escape hatches
   docs/remote.md           Tailscale + tmux + mosh workflow
-  docs/agent-workflows.md  AI CLIs, Herdr, remote control, cmux, bosun
+  docs/agent-workflows.md  AI CLIs, editors, worktrees, Herdr, cmux
 
-${CYAN}Your profile manifest:${NC} ~/.config/tuidev/profile
-${CYAN}What was installed:${NC}    ~/.config/tuidev/manifest  (read by ./uninstall.sh)
-EOF
+${CYAN}Your profile manifest:${NC} $TUIDEV_PROFILE_FILE_DEFAULT
+${CYAN}What was installed:${NC}    $TUIDEV_MANIFEST_FILE  (read by ./uninstall.sh)"

@@ -1,0 +1,10 @@
+# SHA-256 of every configs/codex/config.toml version tuidev has ever shipped.
+# The ai-clis pack replaces ~/.codex/config.toml only when it is an
+# unmodified copy of one of these (backup first); a file you edited is left
+# alone. test_contract.sh fails if the current file is not listed: after
+# editing it, append `config $(shasum -a 256 config.toml | cut -d' ' -f1)`.
+config 36d3725ce795b47ba26059e65bfed387b9b0cce5ab795d5404b21285907bc936
+config b3b766213b0c09990cb533872ca302cf4f7c124f4b3c14af065d54325f173ae3
+config 289b306c7a11a006496dc54993fb227d0fdfd1fb261c2ba473232ada968f2c2d
+config c940a8064ddaaa9e06dc656dadd209e2b994eb3c8b53b4bf7c63297cb8f3bfde
+config 126e7a2e315bf05d80e6277972e2e987e8b0af6721247657551c3dec7859ee30

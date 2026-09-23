@@ -13,16 +13,15 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../lib/ui.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/ui.sh"
-# shellcheck source=../../lib/brew.sh disable=SC1091
-. "$SCRIPT_DIR/../../lib/brew.sh"
+# shellcheck source=../../lib/pkg.sh disable=SC1091
+. "$SCRIPT_DIR/../../lib/pkg.sh"
 
 MONITORING_FORMULAE=(lazydocker k9s bottom)
 
 monitoring_install() {
     print_header "Pack: monitoring"
-    command_exists brew || die "Homebrew is required. Install it first: https://brew.sh"
 
-    brew_install_formulae "${MONITORING_FORMULAE[@]}"
+    pkg_install "${MONITORING_FORMULAE[@]}" || print_warning "monitoring: not everything installed (continuing)"
 
     print_info "bottom installs as 'btm' on your PATH."
     print_info "lazydocker requires a running Docker (or Podman) daemon."

@@ -78,10 +78,43 @@ brew_update_once() {
     _TUIDEV_BREW_UPDATED=1
 }
 
+# The command a formula puts on PATH, when it differs from the formula name.
+# Empty for formulae that ship no command (zsh plugins).
+tuidev_formula_binary() {
+    case "$1" in
+        ripgrep)   echo rg ;;
+        neovim)    echo nvim ;;
+        git-delta) echo delta ;;
+        httpie)    echo http ;;
+        tealdeer)  echo tldr ;;
+        bottom)    echo btm ;;
+        zsh-autosuggestions|zsh-completions|zsh-syntax-highlighting) echo "" ;;
+        *)         echo "$1" ;;
+    esac
+}
+
+# _brew_cmd_provided CMD — CMD is on PATH from a non-system source (another
+# formula, a manual install). macOS system copies in /usr/bin and friends —
+# Apple's git shim, /usr/bin/jq — don't count: the pack wants the brew build.
+_brew_cmd_provided() {
+    local p
+    p="$(command -v "$1")" || return 1
+    if is_macos; then
+        case "$p" in /usr/bin/*|/bin/*|/usr/sbin/*|/sbin/*) return 1 ;; esac
+    fi
+    return 0
+}
+
 brew_install_formula() {
-    local f="$1"
+    local f="$1" bin
+    bin="$(tuidev_formula_binary "$f")"
     if brew_has_formula "$f"; then
         print_success "$f (already present)"
+    elif [[ -n "$bin" ]] && _brew_cmd_provided "$bin"; then
+        # Something else already provides the command (another formula such
+        # as `tldr` for tealdeer, a system package, a manual install). Leave
+        # it: installing would conflict or shadow what the user chose.
+        print_success "$f (\`$bin\` already provided by $(command -v "$bin"))"
     else
         print_step "installing $f"
         if run_cmd brew install "$f"; then

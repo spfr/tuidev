@@ -1,107 +1,153 @@
 # Sandboxing
 
-## Why a sandbox
+An AI coding agent is a non-deterministic process with a shell. Permission prompts help, but a confused or prompt-injected agent can still read `~/.ssh`, copy a token out of `~/.aws`, or reach a host you never meant it to. tuidev ships sandboxed by default, and gives you a general-purpose tool for everything the default doesn't cover.
 
-Running AI coding agents (Claude Code, Codex, OpenCode) locally means handing a non-deterministic process broad shell access to your machine. Even with permission prompts, it is easy for a confused or prompt-injected agent to read `~/.ssh`, exfiltrate a token from `~/.aws`, or reach out to an unexpected host. A sandbox is a thin, always-on safety net that constrains what the agent can do — even if the agent itself decides to misbehave.
+## Native sandboxes: the default
 
-## Tier 1 default: Seatbelt
+Plain `claude` and plain `codex` run inside their own native sandboxes, with no wrapper needed. The two confine different things (below): Claude Code's keeps its Bash tool away from your credentials, Codex's limits writes and network but not reads. `--pack ai-clis` ships the settings that turn them on:
 
-Tier 1 is **macOS-native**, **zero-install**, and **FOSS**: we wrap Apple's built-in `sandbox-exec` (Seatbelt) with a small CLI called `sbx`. There is no daemon, no VM, no container runtime. The cost is a limitation on network filtering (see the matrix below). For stronger isolation, see the Tier 2 pointer at the end.
+```json
+"sandbox": {
+  "enabled": true,
+  "autoAllowBashIfSandboxed": true,
+  "allowUnsandboxedCommands": false,
+  "excludedCommands": ["docker *", "docker-compose *", "gh *"],
+  "filesystem": {
+    "denyRead": ["~/.claude/.credentials.json", "~/.codex/auth.json"]
+  }
+}
+```
 
-Claude Code and Codex ship their own native sandboxing (Seatbelt on macOS, bubblewrap on Linux); `sbx` is a uniform-UX wrapper so every agent invocation goes through the same policy file, regardless of tool. The agent CLIs' own sandbox flags remain canonical for their own concerns.
+in `~/.claude/settings.json`, and `sandbox_mode = "workspace-write"` plus `approval_policy = "on-request"` in `~/.codex/config.toml`, with network off by default.
 
-## `sbx` vs. Claude Code's built-in sandbox — pick one
+**Claude Code's native sandbox** (`sandbox.enabled`, `/sandbox` to see what's in effect) confines the Bash tool and its children; `Read` and `Edit` follow permission rules instead, and the shipped `Read(...)` deny rules (credential paths, `.env*`) merge into the sandbox's own `denyRead`. So the [credential paths](#credentials-denied-under-strict-and-standard) are denied to Bash (by the sandbox) and to `Read` (by the deny rules); an `Edit` outside the project still asks first. The first request to a new domain prompts; allow it once or add it under `sandbox.network.allowedDomains`.
 
-Seatbelt profiles do not nest. A process already running under `sandbox-exec` cannot apply a second profile (`sandbox_apply: Operation not permitted`), and Claude Code's built-in Bash sandbox (`/sandbox`, `sandbox.enabled` in `~/.claude/settings.json`) *is* `sandbox-exec`. So for Claude Code it is one or the other:
+- **`allowUnsandboxedCommands: false`** removes the escape hatch that lets the agent retry a failing command outside the sandbox.
+- **`excludedCommands`** run outside the sandbox but still go through your permission rules. `docker` doesn't work under Seatbelt, and `gh` needs its token from `~/.config/gh`.
+- **Project settings can widen this:** arrays merge across scopes, so a repo's `filesystem.allowRead` of `~/.ssh` re-opens your keys to Bash, and a project's `sandbox.enabled: false` wins over your user setting. Check `.claude/settings*.json` in repos you clone.
+- **Existing hand-edited `~/.claude/settings.json` is never overwritten** (it's `--upgrade-shipped`, not clobbered). An unmodified pre-3.0 copy is upgraded by `./scripts/update.sh --configs`; if you edited yours, merge the `sandbox` block in yourself. Until then, plain `claude` runs unsandboxed.
 
-| | `sbx -- claude` (tuidev default) | Claude's native sandbox (`sandbox.enabled`) |
-|---|---|---|
-| What is confined | The whole CLI process: every tool, every child, the CLI's own file reads | Only the Bash tool and its children; `Read`/`Edit` are governed by permission rules, not the kernel |
-| Credential dirs | Kernel-denied by the profile | Denied only if you list them under `sandbox.credentials` or `permissions.deny` |
-| Network | Port-level only (Seatbelt limitation) | Per-domain allowlist through Claude's proxy |
-| Prompts | Unchanged; Claude still asks per its permission mode | `autoAllowBashIfSandboxed` skips prompts for sandboxed commands |
+**Codex's native sandbox** (`workspace-write`) restricts writes and network, **not reads**: writes are limited to the workspace, network is off unless you widen it, and `approval_policy = "on-request"` means Codex asks before anything outside that boundary. Codex and the commands it runs can still read `~/.ssh`, `~/.aws` and the rest of your home directory. For credential-sensitive Codex work, run it under `sbx` instead: `sbx -- codex -s danger-full-access -a on-request` denies the credential paths at the kernel level (see below).
 
-The shipped `cc` wrapper resolves the conflict automatically: when `~/.claude/settings.json` has `"sandbox": {"enabled": true}` it calls `claude` directly instead of through `sbx`, so Claude's own sandbox can apply. Flip it back by disabling the native sandbox. The shipped `configs/claude/settings.json` does not enable the native sandbox; it adds `permissions.deny` rules for the same credential directories `sbx` blocks, so the `Read` tool honors the boundary even when you run `CC_NO_SANDBOX=1 cc`. Codex's `sandbox_mode = "workspace-write"` has the same nesting constraint under `cx`; Codex detects it and falls back to approval-only mode, which is the intended layering.
-
-## Profile matrix
-
-| Profile    | Filesystem reads       | Filesystem writes         | Network (enforced at kernel) | Use when |
-|------------|------------------------|---------------------------|------------------------------|----------|
-| `strict`   | `$HOME` minus creds, system, Homebrew | Project tree + `/tmp` only | TCP :443 out, DNS, loopback  | Default for agent runs. LLM API calls work; package installs don't. |
-| `standard` | Same as strict         | Same as strict            | + TCP :80, :22, :9418        | Agent needs `npm ci`, `pip install`, `git push`, etc. |
-| `off`      | unrestricted           | unrestricted              | unrestricted                 | Escape hatch. Trusted tool, or profiles are misbehaving. |
-
-**Honest limitation (Tier 1 only):** Apple's Seatbelt does not support per-hostname network rules — only `*` or `localhost` at the socket layer. The "allow LLM providers, block everything else" design goal is *not* kernel-enforced at Tier 1; only port-level filtering is. If that matters, use `--pack sandbox-container` (Tier 2).
-
-## Usage
+**These are also Seatbelt on macOS, so they don't nest with `sbx`.** A process already under `sandbox-exec` can't apply a second profile (`sandbox_apply: Operation not permitted`), so pick one boundary per process tree. With the shipped settings, a bare `sbx -- claude` breaks Claude Code's Bash tool: every command fails to start its own sandbox. To run Claude Code under `sbx`, turn its native sandbox off for that run:
 
 ```bash
-sbx -- cc                              # Claude Code under the default (strict) profile
+sbx -- claude --settings '{"sandbox":{"enabled":false}}'
+```
+
+`--settings` takes a file path or an inline JSON string and loads it on top of your settings files, so only that run changes. Do this only when you want `sbx`'s whole-process profile instead of the native one; otherwise just run `claude`.
+
+**Claude Code login and `sbx`.** On macOS, Claude Code keeps its login in the Keychain, which `sbx` denies (opening it would expose every Keychain item). Plain `claude`, sandboxed by its native settings, keeps working because nothing wraps the process and the Keychain stays reachable. `sbx -- claude` doesn't have that luxury: create a long-lived token once, outside the sandbox, and hand it over through the environment:
+
+```bash
+claude setup-token                               # prints a token
+echo 'export CLAUDE_CODE_OAUTH_TOKEN=...' >> ~/.zshrc.local
+```
+
+Treat that token like a password. Also consider setting `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`: it strips credentials from the environment that Claude Code's subprocesses (the Bash tool, hooks) inherit, so a command the agent runs can't read the token back. It is not set in the shipped `settings.json`. Add it under `env` there, or export it.
+
+## `sbx`: the general-purpose tool
+
+`sbx` (from `--sandbox`, part of the `desktop` and `remote` profiles) wraps macOS's built-in `sandbox-exec`. It needs no daemon, VM or container runtime. It is a policy file applied to one process tree — and it isn't AI-CLI-specific: use it to confine any command.
+
+```bash
+sbx -- ./script.sh                     # any binary, under strict (the default profile)
+sbx -- claude --settings '{"sandbox":{"enabled":false}}'   # Claude Code under sbx instead of its native sandbox
+sbx -- codex -s danger-full-access -a on-request   # optional kernel-level mode for Codex
 sbx --profile standard -- npm ci       # wider network for package installs
-sbx --profile off -- some-tool         # escape hatch: no sandbox at all
-sbx --project ~/code/api -- make test  # override the project dir (default: $PWD)
-sbx --dry-run -- make test             # print the sandbox-exec command, don't run
-sbx --help                             # full option list
+sbx --profile off -- some-tool         # no sandbox
+sbx --project ~/code/api -- make test  # choose the writable project dir (default: $PWD)
+sbx --dry-run -- make test             # print the sandbox-exec command
+make sbx-test                          # check that the project is readable and ~/.ssh is denied
 ```
 
-The `cc` / `cx` / `oc` shell functions (installed by `--pack ai-clis`) auto-route through `sbx` automatically when both are on `PATH`. Without `sbx` they call the CLI directly; without the pack, wrap manually: `sbx -- claude`.
+`sbx -- codex -s danger-full-access -a on-request` turns Codex's own sandbox off and makes `sbx` the single boundary, at the kernel level, while Codex still asks before acting (`-a on-request`). Unlike `workspace-write`, it denies the credential paths. The Claude Code line above does the same for `claude`.
 
-## Escape hatch
+`sbx` executes a **binary**, not a shell function or alias. `oc` is a zsh function (`configs/zsh/opencode.zsh`), so `sbx -- oc` fails: name the real binary, `sbx -- opencode`.
 
-Two ways to bypass the sandbox when you need to:
+Escape hatch, one run at a time: `sbx --profile off -- CMD` runs CMD with no sandbox at all. (For `claude` that is the same as plain `claude`, whose native sandbox then applies.)
 
-```bash
-sbx --profile off -- <cmd>   # explicit, one-shot
-CC_NO_SANDBOX=1 cc           # honored by the agent wrappers (added in a later phase)
+## Profiles
+
+| | `strict` (default) | `standard` | `off` |
+|---|---|---|---|
+| Reads | `$HOME` except credentials; system, Homebrew, Xcode paths | same | everything |
+| Writes | Project dir, `/tmp`, `/private/var/folders`, the AI CLIs' state dirs | same | everything |
+| Network | Outbound TCP 443, DNS (UDP 53 and the mDNSResponder socket), loopback | adds TCP 80, 22, 9418 | everything |
+| herdr socket | Only with `--allow-herdr` / `SBX_ALLOW_HERDR=1` | Always open | open |
+| Use for | Agent runs: LLM APIs and HTTPS git work | `npm ci`, `pip install`, git over ssh | A trusted tool, or debugging a profile |
+
+**The AI CLIs' state dirs** are writable so the CLIs can save sessions, logs and caches: `~/.claude`, `~/.claude.json*`, `~/.local/share/claude`, `~/.local/state/claude`, `~/.cache/claude`, `~/.codex`, `~/.local/share/opencode` and `~/.cache/opencode`.
+
+**Except what steers a CLI outside the sandbox.** Settings, hooks and binaries are loaded by later sessions, including unsandboxed ones, so an agent that could edit them would escape on your next run. Under `strict` and `standard` these stay read-only:
+
+```
+~/.claude/settings.json  ~/.claude/settings.local.json  ~/.claude/CLAUDE.md
+~/.claude/keybindings.json  ~/.claude/{hooks,commands,agents,skills,plugins}/
+~/.codex/config.toml  ~/.codex/*.config.toml  ~/.codex/{rules,packages}/
+~/.local/share/claude/versions/  ~/.config/opencode/
+the ~/.claude, ~/.codex and ~/.local/share/claude directories themselves (no rename-and-swap)
 ```
 
-Both are documented, auditable, and leave the command running with your full host privileges. Use deliberately.
+So **update and configure the CLIs outside `sbx`**: `claude update`, `/config` changes that save to your settings, plugin installs, Codex trusting a new project (it writes `config.toml`) and the CLIs' self-updates all fail inside it. Run them from a plain shell.
 
-## What's locked down
+**Residual risk: `~/.claude.json` stays writable.** Claude Code rewrites it on every start, so it can't be locked. It also holds user-scope MCP servers, so a sandboxed agent could register a server that runs the next time you start Claude outside `sbx`. Check `claude mcp list` if in doubt. And don't run `sbx` with `$HOME` itself as the project dir: that makes every other dotfile writable.
 
-Even with `strict` or `standard`, these directories are **explicitly denied** for both read and write:
+**The herdr socket** is closed under `strict` unless you opt in. Anything that can reach it can drive Herdr, and Herdr spawns panes *outside* the sandbox. Use `sbx --allow-herdr` only for agents you trust to orchestrate other agents. The allow covers `~/.config/herdr/` (the default socket and `sessions/<name>/herdr.sock`). A `HERDR_SOCKET_PATH` outside that directory is denied again.
+
+**The network limit is honest but coarse.** Seatbelt filters by port, not hostname, so "LLM providers only" is not kernel-enforced. If you need per-host egress rules, use Tier 2.
+
+### Credentials: denied under strict and standard
+
+Reads and writes are both denied:
 
 ```
-~/.ssh
-~/.aws
-~/.gnupg
-~/Library/Keychains
-~/.config/gh
-~/.docker
-~/.kube
-~/.netrc
+~/.ssh  ~/.aws  ~/.gnupg  ~/Library/Keychains  ~/.config/gh  ~/.config/gcloud
+~/.config/op (1Password CLI)  ~/.azure  ~/.docker  ~/.kube  ~/.terraform.d
+~/.password-store  ~/.netrc  ~/.git-credentials  ~/.npmrc  ~/.pypirc
+~/.cargo/credentials[.toml]  ~/.vault-token  ~/.pgpass  ~/.config/git/credentials
+~/.config/containers/auth.json (podman)  ~/.gem/credentials
 ```
 
-If you need one of these (e.g., the agent legitimately needs to push via SSH), step up to `--profile off` or the Tier 2 pack for that invocation — don't poke holes in the shipped profile.
+The shipped `configs/claude/settings.json` adds matching `permissions.deny` rules, plus `.env` / `.env.*` anywhere in the project (`Read(**/.env)` and friends), so Claude Code's `Read` tool (and `Edit`, for `.env*`) respects the same boundary whether or not you're also running under `sbx`. Codex has no equivalent: under `workspace-write` it can read these paths.
+
+Consequences to plan for:
+
+- **`gh` doesn't work under `sbx`.** Its token lives in the denied `~/.config/gh`, so it reports that you are not logged in. `--profile standard` widens the network, not credential access. For `gh`-heavy work, run `sbx --profile off -- gh ...`, or use plain `claude`, whose native sandbox lists `gh *` in `excludedCommands` instead.
+- **SSH keys are unreadable.** `~/.ssh` is denied, so a `git push` that needs your key fails inside `sbx`. Push from your own shell.
 
 ## Customizing
 
-Drop a replacement profile at `~/.config/tuidev/sandbox/<name>.sb` and `sbx` will prefer it over the shipped copy. Lookup order (first hit wins):
+`sbx` looks up `<profile>.sb` in this order, and the first match wins:
 
-1. `$TUIDEV_SANDBOX_DIR/<name>.sb` (for ad-hoc overrides)
-2. `~/.config/tuidev/sandbox/<name>.sb`
-3. `<repo>/configs/sandbox/profiles/<name>.sb`
+1. `$TUIDEV_SANDBOX_DIR/<profile>.sb`
+2. `~/.config/tuidev/sandbox/<profile>.sb` (`$XDG_CONFIG_HOME` is honored). This is where `--sandbox` installs the profiles.
+3. `<repo>/configs/sandbox/profiles/<profile>.sb`
 
-The shipped profiles are deliberately verbose; copy one and edit rather than writing from scratch. Seatbelt syntax is TinyScheme; `;` is the comment character. Parameters are passed as `-D NAME=value`; the wrapper supplies `PROJECT_DIR` and `HOME_DIR` automatically.
+To change a policy, copy a profile and edit it rather than writing one from scratch. The syntax is TinyScheme (`;` starts a comment). `sbx` passes `PROJECT_DIR`, `HOME_DIR` and, for `--allow-herdr`, `ALLOW_HERDR`.
 
-## Tier 2 pointer
+**Upgrades replace a profile only if you haven't edited it.** An installed profile that is byte-identical to any version tuidev shipped (fingerprinted in `configs/sandbox/profiles/shipped.sha256`) is backed up and replaced, so policy fixes reach you. One you edited is kept, and the installer prints the `diff` command to compare it with the shipped version. `make update-security` shows the same diff.
 
-When per-host egress rules, kernel-namespace isolation, or a truly disposable filesystem matter, reach for the Tier 2 pack: `./install.sh --pack sandbox-container`. It uses whichever runtime is present, in this order: Apple's native `container` CLI (macOS 26+, Containerization.framework, one lightweight VM per container) → Podman → Docker. Force one with `TUIDEV_CONTAINER_RUNTIME`. `make sandbox-up` / `make sandbox-down` start and stop the backend regardless of which one you have.
+## Tier 2: containers
+
+`./install.sh --pack sandbox-container` provides a container runtime for work that needs kernel-namespace isolation, per-host egress rules or a disposable filesystem. It picks the first runtime present, in this order:
+
+1. Apple `container` (macOS 26+, one lightweight VM per container)
+2. Podman
+3. Docker
+
+If none is present, it installs Podman and points you at Apple's signed package. Force a runtime with `TUIDEV_CONTAINER_RUNTIME=container|podman|docker`. `make sandbox-up` and `make sandbox-down` start and stop it. The pack provides the runtime only. Run your agent in a container image or devcontainer of your choice. Docker Desktop and OrbStack are never installed, because they aren't FOSS.
 
 ## Troubleshooting
 
-- **`sandbox-exec: invalid data type of path filter; expected pattern, got boolean`** — a `(param "…")` reference in the profile is unset. Make sure `sbx` is passing `-D` for every parameter the profile uses.
-- **`Operation not permitted` from a tool inside the sandbox** — Seatbelt is denying a syscall. Read the system log to find the specific rule that tripped:
+- **`Operation not permitted`** from a tool inside `sbx`: Seatbelt denied an operation. Watch the log in another terminal and re-run the command:
   ```bash
   log stream --predicate 'sender == "sandboxd"' --info --debug
   ```
-  Re-run the command in another terminal and watch for the deny line; it will name the operation and path.
-- **Network call mysteriously fails** — remember Tier 1 only filters by port. If a tool needs anything other than 443 (strict) or 443/80/22/9418 (standard), either widen the profile locally or switch to `--profile off` for that command.
-- **Profile edits have no effect** — check the lookup order above; a stale copy in `~/.config/tuidev/sandbox/` will shadow the repo version.
+- **`invalid data type of path filter; expected pattern, got boolean`**: a custom profile references a `(param "…")` that `sbx` doesn't pass.
+- **A network call fails**: `strict` allows only port 443. Try `--profile standard`.
+- **Profile edits have no effect**: an earlier entry in the lookup order shadows your copy, or your copy predates the one you edited.
 
 ## Non-goals
 
-- **Kernel exploits:** Seatbelt is a policy layer on top of the same kernel. If the kernel is compromised, the sandbox is too.
-- **Linux namespaces:** different model, different guarantees. Not covered here.
-- **VM-level isolation:** that's Tier 2.
-- **Keylogger / clipboard protection:** the sandbox controls the process's view of files and sockets, not input devices or the pasteboard.
+Kernel exploits (Seatbelt is policy on a shared kernel), Linux namespaces (use Tier 2), and input or clipboard protection (the sandbox governs files and sockets, not the keyboard or pasteboard).

@@ -3,21 +3,24 @@
 ;; Purpose:
 ;;   Run an AI coding agent (or any untrusted-ish command) with broad access
 ;;   inside the current project tree, but with credentials and network sharply
-;;   restricted. This is the default profile for `sbx` and the zsh wrappers
-;;   around `cc` / `cx` / `oc` (from --pack ai-clis).
+;;   restricted. This is the default profile for `sbx` (e.g.
+;;   `sbx -- ./script.sh`, or `sbx -- codex -s danger-full-access`).
 ;;
-;; Parameters (both required, passed via `sandbox-exec -D NAME=value`):
-;;   PROJECT_DIR — absolute path of the project working tree. The ONLY
-;;                 location outside of /tmp where writes are permitted.
-;;   HOME_DIR    — absolute path of $HOME. Seatbelt does not auto-populate
-;;                 environment variables, so the wrapper passes this in.
+;; Parameters (passed via `sandbox-exec -D NAME=value`):
+;;   PROJECT_DIR  — required. Absolute path of the project working tree.
+;;   HOME_DIR     — required. Absolute path of $HOME. Seatbelt does not
+;;                  auto-populate environment variables, so sbx passes it in.
+;;   ALLOW_HERDR  — optional. "1" opens the herdr control socket (see the end
+;;                  of this file). sbx sets it for --allow-herdr only.
 ;;
 ;; Risk model:
 ;;   - Agent-level broad READ access to $HOME (so it can read ~/.config,
 ;;     dotfiles, etc.) EXCEPT the hard-coded credential directories listed
 ;;     below, which are explicitly denied regardless of other rules.
-;;   - Write access is limited to PROJECT_DIR and the OS temp dirs. The agent
-;;     cannot scribble over the rest of $HOME.
+;;   - Write access is limited to PROJECT_DIR, the OS temp dirs, and the AI
+;;     CLIs' own state directories (sessions, auth, logs). The agent cannot
+;;     scribble over the rest of $HOME, nor over the CLIs' settings, hooks,
+;;     plugins and binaries (see "except the files that steer a CLI" below).
 ;;   - Network is default-deny with an allowlist scoped to the major LLM
 ;;     provider endpoints plus loopback. Package registries, GitHub, etc. are
 ;;     NOT reachable from strict — use the standard profile for those.
@@ -25,7 +28,7 @@
 ;; Non-goals:
 ;;   This profile does not protect against kernel exploits, sandbox-exec
 ;;   escapes, or side-channels. For stronger isolation use the Tier 2
-;;   Podman-based container pack.
+;;   container pack (--pack sandbox-container).
 ;;
 ;; Syntax notes:
 ;;   Seatbelt uses TinyScheme-style S-expressions. `;` starts a comment.
@@ -47,6 +50,19 @@
 (allow sysctl-read)
 (allow mach-lookup)
 (allow iokit-open)
+
+;; --- The CLI's own terminal ---
+;; An interactive agent (Claude Code, Codex) puts its controlling terminal in
+;; raw mode and asks it for key/mouse reporting; without these it gets "not a
+;; tty", cannot decode keys, and even Ctrl+C arrives as literal "^[[99;5u".
+;; Only terminal devices: /dev/tty (the controlling tty), the pseudo-terminal
+;; ttys* nodes, and /dev/ptmx for tools that open a pty of their own.
+(allow file-read* file-write* file-ioctl
+  (literal "/dev/tty")
+  (regex #"^/dev/ttys[0-9]+$")
+  (literal "/dev/ptmx"))
+;; Listing /dev (names only) is how ttyname() resolves the tty path.
+(allow file-read* (literal "/dev"))
 
 ;; --- File reads: system / toolchain / homebrew ---
 (allow file-read*
@@ -71,20 +87,7 @@
 (allow file-read*
   (subpath (param "HOME_DIR")))
 
-;; --- CREDENTIAL LOCKOUT (deny after the broad HOME read above) ---
-;; These directories are off-limits for both read and write, even if they
-;; live inside a path the agent could otherwise reach.
-(deny file-read* file-write*
-  (subpath (string-append (param "HOME_DIR") "/.ssh"))
-  (subpath (string-append (param "HOME_DIR") "/.aws"))
-  (subpath (string-append (param "HOME_DIR") "/.gnupg"))
-  (subpath (string-append (param "HOME_DIR") "/Library/Keychains"))
-  (subpath (string-append (param "HOME_DIR") "/.config/gh"))
-  (subpath (string-append (param "HOME_DIR") "/.docker"))
-  (subpath (string-append (param "HOME_DIR") "/.kube"))
-  (literal (string-append (param "HOME_DIR") "/.netrc")))
-
-;; --- File writes: project tree + temp dirs only ---
+;; --- File writes: project tree + temp dirs ---
 (allow file-write*
   (subpath (param "PROJECT_DIR"))
   (subpath "/private/tmp")
@@ -96,6 +99,60 @@
 (allow file-read*
   (subpath (param "PROJECT_DIR")))
 
+;; --- File writes: AI CLI state (and nothing else in $HOME) ---
+;; The CLIs keep sessions, auth, logs, locks and caches here; without
+;; write access they fail on start (EPERM appending to ~/.claude.json).
+;;   Claude Code  ~/.claude/, ~/.claude.json (+ siblings it writes next to it),
+;;                ~/.local/share/claude (native install; versions/ is not),
+;;                ~/.local/state/claude (locks), ~/.cache/claude (staging)
+;;   Codex        ~/.codex/ (CODEX_HOME: auth, sessions, logs; not config)
+;;   OpenCode     ~/.local/share/opencode (data, auth, logs), ~/.cache/opencode
+;; Deliberately NOT writable: ~/.local/bin (sbx, notify.sh and the CLI
+;; launchers live there; a writable PATH dir is a sandbox escape). Run
+;; `claude update` outside sbx: auto-updates cannot write from inside it.
+(allow file-write*
+  (subpath (string-append (param "HOME_DIR") "/.claude"))
+  (prefix  (string-append (param "HOME_DIR") "/.claude.json"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.local/state/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.cache/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.codex"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/opencode"))
+  (subpath (string-append (param "HOME_DIR") "/.cache/opencode")))
+
+;; --- ...except the files that steer a CLI from OUTSIDE this sandbox ---
+;; Settings, hooks, commands, agents, skills, plugins, global memory and the
+;; CLI binaries are loaded or run by later sessions, including unsandboxed ones
+;; (the CLI's native sandbox, a plain shell). An agent that could edit them
+;; would escape on the next run (settings.json can turn the native sandbox
+;; off), so they stay read-only here: update, configure and install
+;; plugins for the CLIs outside sbx. The directory roots are listed too, so the
+;; agent cannot rename ~/.claude away, edit the copy and move it back.
+;; Residual risk: ~/.claude.json stays writable (Claude Code rewrites it on
+;; every start). It holds user-scope MCP servers and per-project state, so an
+;; agent could register an MCP server that runs the next time you start Claude
+;; outside sbx; check `claude mcp list` if in doubt. A PROJECT_DIR of $HOME
+;; itself makes every other dotfile writable too; don't run sbx from there.
+(deny file-write*
+  (literal (string-append (param "HOME_DIR") "/.claude"))
+  (literal (string-append (param "HOME_DIR") "/.claude/settings.json"))
+  (literal (string-append (param "HOME_DIR") "/.claude/settings.local.json"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/hooks"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/commands"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/agents"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/skills"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/plugins"))
+  (literal (string-append (param "HOME_DIR") "/.claude/CLAUDE.md"))
+  (literal (string-append (param "HOME_DIR") "/.claude/keybindings.json"))
+  (literal (string-append (param "HOME_DIR") "/.codex"))
+  (literal (string-append (param "HOME_DIR") "/.codex/config.toml"))
+  (regex (string-append "^" (param "HOME_DIR") "/\\.codex/[^/]+\\.config\\.toml$"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/rules"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/packages"))
+  (literal (string-append (param "HOME_DIR") "/.local/share/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/claude/versions"))
+  (subpath (string-append (param "HOME_DIR") "/.config/opencode")))
+
 ;; --- Network ---
 ;; IMPORTANT: Apple's Seatbelt (sandbox-exec) enforces network rules at the
 ;; socket layer. It supports host filters of `*` or `localhost` only — there
@@ -106,8 +163,8 @@
 ;;
 ;; If you need true host-level enforcement, use:
 ;;   sbx --profile off -- your-tool   (and rely on the tool's own controls)
-;; or the Tier 2 Podman-based pack which runs the agent inside a network
-;; namespace with proper egress rules.
+;; or the Tier 2 container pack (--pack sandbox-container), which runs the
+;; agent inside a network namespace with proper egress rules.
 (allow network-outbound (remote tcp "localhost:*"))
 (allow network-outbound (remote tcp "*:443"))
 (allow network-outbound (remote udp "*:53"))
@@ -115,14 +172,54 @@
 
 ;; Local IPC (unix sockets) for tooling that shells out to daemons.
 (allow network-outbound (literal "/private/var/run/syslog"))
+;; Name resolution: macOS resolves hostnames through mDNSResponder over this
+;; unix socket, not UDP 53. Without it getaddrinfo fails and no CLI can reach
+;; its API from inside the sandbox.
+(allow network-outbound (literal "/private/var/run/mDNSResponder"))
 
-;; herdr control socket (--pack herdr). Under (deny default) an AF_UNIX connect
-;; is blocked, so a sandboxed agent could not run `herdr agent list` / `herdr
-;; status` — the very API docs/agent-primer.md tells agents to use. Scoped to
-;; herdr's own config dir rather than a blanket unix-socket allow:
+;; Claude Code's cross-session message socket: a session may LISTEN on its own
+;; /tmp/cc-socks/<pid>.sock so other sessions can reach it. Connecting out to
+;; other sessions stays denied: a sandboxed agent must not drive an
+;; unsandboxed one (same reasoning as the herdr socket below).
+(allow network-bind network-inbound (subpath "/private/tmp/cc-socks"))
+
+;; herdr control socket (--pack herdr) — OPT-IN ONLY. Whoever can reach the
+;; socket can drive herdr, and herdr spawns panes OUTSIDE this sandbox, so an
+;; open socket is a sandbox escape. sbx passes ALLOW_HERDR=1 only for
+;; `sbx --allow-herdr` (or SBX_ALLOW_HERDR=1); without it a sandboxed agent
+;; cannot run `herdr agent list` / `herdr pane ...`. Scoped to herdr's dir:
 ;;   default session  ~/.config/herdr/herdr.sock
 ;;   named sessions   ~/.config/herdr/sessions/<name>/herdr.sock
-;; If HERDR_SOCKET_PATH points somewhere else, that path is NOT covered — move
-;; the socket back under ~/.config/herdr or run `sbx --profile off`.
-(allow network-outbound
-  (subpath (string-append (param "HOME_DIR") "/.config/herdr")))
+;; A HERDR_SOCKET_PATH elsewhere is NOT covered.
+(if (param "ALLOW_HERDR")
+  (allow network-outbound
+    (subpath (string-append (param "HOME_DIR") "/.config/herdr"))))
+
+;; --- CREDENTIAL LOCKOUT (last, so it wins over every allow above) ---
+;; Seatbelt applies the last matching rule. Keeping the lockout at the end means
+;; no allow can reopen these, even when PROJECT_DIR is $HOME itself. Keep this
+;; list in sync with standard.sb and configs/claude/settings.json (deny).
+(deny file-read* file-write*
+  (subpath (string-append (param "HOME_DIR") "/.ssh"))
+  (subpath (string-append (param "HOME_DIR") "/.aws"))
+  (subpath (string-append (param "HOME_DIR") "/.gnupg"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Keychains"))
+  (subpath (string-append (param "HOME_DIR") "/.config/gh"))
+  (subpath (string-append (param "HOME_DIR") "/.config/gcloud"))
+  (subpath (string-append (param "HOME_DIR") "/.config/op"))
+  (subpath (string-append (param "HOME_DIR") "/.azure"))
+  (subpath (string-append (param "HOME_DIR") "/.docker"))
+  (subpath (string-append (param "HOME_DIR") "/.kube"))
+  (subpath (string-append (param "HOME_DIR") "/.terraform.d"))
+  (subpath (string-append (param "HOME_DIR") "/.password-store"))
+  (literal (string-append (param "HOME_DIR") "/.netrc"))
+  (literal (string-append (param "HOME_DIR") "/.git-credentials"))
+  (literal (string-append (param "HOME_DIR") "/.npmrc"))
+  (literal (string-append (param "HOME_DIR") "/.pypirc"))
+  (literal (string-append (param "HOME_DIR") "/.cargo/credentials"))
+  (literal (string-append (param "HOME_DIR") "/.cargo/credentials.toml"))
+  (literal (string-append (param "HOME_DIR") "/.vault-token"))
+  (literal (string-append (param "HOME_DIR") "/.pgpass"))
+  (literal (string-append (param "HOME_DIR") "/.config/git/credentials"))
+  (literal (string-append (param "HOME_DIR") "/.config/containers/auth.json"))
+  (literal (string-append (param "HOME_DIR") "/.gem/credentials")))

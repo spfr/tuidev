@@ -1,381 +1,178 @@
 # Cheatsheet
 
-tmux-first reference for sessions, keybindings, and daily commands. Print this.
+Commands, keys and layouts in one place. Run `make help` for every Makefile target and `<command> --help` for any script.
 
----
+## tmux (`--pack tmux`)
 
-## Sessions (tmux)
+tmux is optional now (in the `remote` profile, or add it yourself with `--pack tmux`). `.zshrc` ships one attach-or-create helper:
 
-All wrappers create **named sessions** with attach-or-create semantics.
-Default name is the current directory basename.
+| Command | Default name | Effect |
+|---------|--------------|--------|
+| `t [NAME]` | `main` | Attach to a tmux session, creating it if it doesn't exist. Inside tmux it switches client instead of nesting. |
+| `tls` | | List sessions |
 
-| Command              | What it does                                                    |
-|----------------------|------------------------------------------------------------------|
-| `work [name]`        | Bare tmux session — one pane                                     |
-| `dev [name]`         | 3-column: nvim (55%) \| agent (25%) \| runner (20%)              |
-| `ai [name]`          | nvim (60%) + 2 stacked agent panes (40%)                         |
-| `ai-single [name]`   | nvim + 1 agent pane                                              |
-| `ai-triple [name]`   | nvim (55%) + 3 stacked agent panes (45%)                         |
-| `fullstack [name]`   | 5-tab full-stack layout                                          |
-| `multi [name]`       | Dev + Monitor + Git tabs                                         |
-| `remote [name]`      | Minimal remote layout (nvim + terminal)                          |
-| `agents [name]`      | claude + codex in 2 panes (needs --pack ai-clis)                 |
-| `worktrees [name]`   | One git worktree per agent, one window each — default `<repo>-wt` |
-| `tls`                | List sessions                                                    |
-| `tk [name]`          | Kill named session                                               |
-| `tka`                | Kill all sessions (`tmux kill-server`)                           |
+tmux turns `.` and `:` in session names into `_`.
 
-> Legacy `ta` / `tdev` / `tai` / `tai-triple` still work but emit a one-time deprecation notice. Use the canonical names above.
+## tmux keys (`--pack tmux`)
 
----
+Prefix: `Ctrl+a`. Press it, release, then press the key. Press `Ctrl+a Ctrl+a` to send a literal `Ctrl+a`, for example to jump to the start of a shell line.
 
-## Best usage patterns
+| Keys | Action |
+|------|--------|
+| `\|` / `-` | Split right / split below (in the current directory) |
+| `h` `j` `k` `l` | Focus left / down / up / right |
+| `H` `J` `K` `L` | Resize by 5 cells |
+| `o` / `z` / `x` | Next pane / zoom toggle / kill pane |
+| `Space` | Cycle pane layouts |
+| `c` / `n` / `p` / `1`–`9` | New window / next / previous / window N (windows start at 1) |
+| `,` / `$` | Rename window / session |
+| `s` / `w` | Session tree / window tree |
+| `d` | Detach (the session keeps running) |
+| `g` | lazygit in a 90% popup, in the pane's directory |
+| `r` | Reload `~/.config/tmux/tmux.conf` |
+| `Ctrl+s` / `Ctrl+r` | Save / restore sessions (tmux-resurrect; continuum also saves every 15 min) |
+| `I` | Install TPM plugins |
+| `?` | List every binding |
 
-Quick answers to "what do I actually run, day to day."
+Copy mode (vi keys): `Ctrl+a [` enters it. `v` starts a selection, `Ctrl+v` toggles rectangle mode, `y` copies to the system clipboard (pbcopy, wl-copy or xclip, with OSC 52 over SSH), `/` and `?` search, `n` and `N` jump between matches, and `q` exits. A mouse drag copies too.
 
-| Situation | Do this |
-|-----------|---------|
-| Start work | `work` / `dev` / `ai` / `agents` — attach-or-create, pick the layout you need |
-| See what's running | `tls` |
-| Clean up | `tk NAME` (one session) or `tka` (kill server) |
-| Parallel agents | `worktrees -n 3 --cmd cc`, then `worktrees --clean` when merged — see [Worktree-per-agent](#worktree-per-agent-worktrees) above |
-| Run an AI CLI | `cc` (sbx-wrapped, `strict` profile, by default) |
-| One-shot sandbox bypass | `CC_NO_SANDBOX=1 cc` |
-| Need network (npm, git push, PyPI) | `sbx --profile standard -- <cmd>` |
-| See/change theme | `make theme-list`, `make theme NAME=...` — fresh installs ship themed as of 2.2.0 |
-| Check for updates | `make update-check` (weekly is plenty) |
-| Apply updates | `make update-all` — migrations run automatically, no separate step |
-| Something feels off | `make check` after any failed install step, manual config edit, or unexpected error |
-| Working from a remote box | Tailscale hostname + a named tmux session + `remote` for narrow terminals; personal hostnames only in `~/.ssh/config.local` (gitignored), never in this repo |
+A window whose agent rings the bell, or has new activity, is flagged in the status bar. Killing a session's last window moves you to another session instead of exiting tmux.
 
----
+## Shell
 
-## tmux Keybindings
+| Keys | Action |
+|------|--------|
+| `Up` / `Down` | History entries that start with what you have typed |
+| `Ctrl+r` | atuin history search (zsh's own search if atuin is absent) |
+| `Ctrl+t` / `Alt+c` | fzf: insert a file / cd into a directory |
+| `Ctrl+a`* / `Ctrl+e` | Start / end of line (*press `Ctrl+a` twice inside tmux) |
+| `Ctrl+u` / `Ctrl+k` / `Ctrl+w` | Delete to start / to end / previous word |
+| `Alt+b` / `Alt+f` | Word back / forward (Option acts as Alt in Ghostty) |
 
-**Prefix:** `Ctrl-a` — press, release, then the key.
+Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi mode.
 
-### Panes
+### Aliases and functions
 
-| Chord              | Action                        |
-|--------------------|-------------------------------|
-| `C-a \|`           | Split vertically (pane right) |
-| `C-a -`            | Split horizontally (pane below) |
-| `C-a h / j / k / l`| Focus left / down / up / right |
-| `C-a H / J / K / L`| Resize pane by 5 cells         |
-| `C-a z`            | Zoom pane (toggle fullscreen)  |
-| `C-a x`            | Kill pane                      |
+| Command | Runs |
+|---------|------|
+| `v`, `vi`, `vim` | `nvim` with `--pack nvim`; without it, `vi` and `vim` are the system commands and `v` is undefined |
+| `ls`, `ll`, `la`, `lt`, `tree` | `eza --icons=auto` (long, all, tree variants with git status) |
+| `cat` | `bat` |
+| `cd` | `z` (zoxide) in interactive shells; `zi` picks interactively |
+| `lg` | `lazygit` |
+| `gs` `ga` `gc` `gp` `gl` `gd` `gco` `gb` | `git status` / `add` / `commit` / `push` / `pull` / `diff` / `checkout` / `branch` |
+| `lzd` | `lazydocker` (`--pack monitoring`) |
+| `top`, `bottom` | `btm` (`--pack monitoring`) |
+| `md`, `mdp FILE` | glow (`--extras`) |
+| `help CMD` | `tldr` (`--extras`) |
+| `sys`, `loc` | fastfetch / tokei (`--extras`) |
+| `fcd`, `fif TEXT`, `fshow` | fzf: cd into a directory / grep files / browse commits |
+| `mkcd DIR`, `serve`, `bench CMD` | mkdir+cd / `python3 -m http.server` / hyperfine |
+| `ts-status`, `ts-ip`, `remote-status` | Tailscale and SSH status |
+| `tui-update`, `tui-check` | `scripts/update.sh` / `update.sh --check` |
+| `reload`, `zshconfig` | Re-source / edit `~/.zshrc` |
 
-### Windows & sessions
-
-| Chord              | Action                        |
-|--------------------|-------------------------------|
-| `C-a c`            | New window                    |
-| `C-a 1` … `C-a 9`  | Switch to window N            |
-| `C-a ,`            | Rename window                 |
-| `C-a $`            | Rename session                |
-| `C-a d`            | Detach                        |
-| `C-a r`            | Reload `~/.config/tmux/tmux.conf` |
-
-### Copy mode (vi keys)
-
-| Chord              | Action                        |
-|--------------------|-------------------------------|
-| `C-a [`            | Enter copy mode               |
-| `v`                | Begin selection               |
-| `C-v`              | Toggle rectangle selection    |
-| `y`                | Yank to clipboard (pbcopy)    |
-| `/` then text      | Search forward                |
-| `?` then text      | Search backward               |
-| `n` / `N`          | Next / previous match         |
-| `q` or `Esc`       | Exit copy mode                |
-
----
+`sd`, `procs`, `dust` and `duf` keep their own names: they are never aliased over `sed`, `ps`, `du` or `df`, because their flags differ. Personal aliases go in `~/.zshrc.local`.
 
 ## AI CLIs
 
-| Alias | Tool           | Purpose                       |
-|-------|----------------|-------------------------------|
-| `cc`  | Claude Code    | Anthropic, primary            |
-| `cx`  | Codex CLI      | OpenAI                        |
-| `oc`  | OpenCode       | Open-source, multi-model      |
-
-Aliases ship in the opt-in `--pack ai-clis`; all three auto-route through `sbx`
-(`strict` profile) when `--pack sandbox` is present. Escape hatches:
+| Command | Runs | Pack |
+|---------|------|------|
+| `claude` | Claude Code, sandboxed by its own native settings | |
+| `claude -w NAME` | Claude Code in its own worktree (`.claude/worktrees/NAME`) | |
+| `codex` | Codex, sandboxed by its own native settings | |
+| `oc` | `command opencode` | `opencode` |
 
 ```bash
-sbx --profile off -- cc          # explicit one-shot bypass
-CC_NO_SANDBOX=1 cc               # env-var bypass honored by the wrappers
+claude --teammate-mode in-process       # agent team in one terminal instead of tmux panes
 ```
 
-### Fleet attention — Herdr (opt-in `--pack herdr`)
-
-```bash
-herdr                    # attach locally (first attach starts the server)
-herdr machine add workbox --label "workbox"   # save an SSH node (interactive once)
-herdr --machine workbox agent list            # drive a saved node, no TUI
-herdr --machine workbox agent wait --state blocked   # block until an agent needs you
-herdr --machine workbox agent prompt <id> "run the tests"   # steer without attaching
-herdr --remote workbox   # one-off thin client over SSH (placeholder host)
-herdr server             # headless server; clients attach with `herdr`
-herdr agent list         # who is working / blocked / done — scriptable
-herdr status             # client + server versions, restart_needed / server_binary_stale
-herdr integration status # after every upgrade: reinstall anything `outdated`
-herdr --skill            # release-matched skill text for the agent
-```
-
-Upgrading: `brew upgrade herdr` (Mac) or `herdr update` (direct install on a
-node). The new client keeps using a running compatible server; restart the
-server only when you need a server-side fix (`herdr server stop`, then attach),
-or try `herdr update --handoff`.
-
-Prefix is `ctrl+b` (tmux is `ctrl+a`). Installs via Homebrew only; with no
-formula the pack prints the official installer command rather than piping a
-remote script into your shell. tmux stays the default for `work` / `dev` / `ai`.
-
-> **Never nest.** If `HERDR_ENV=1` you are already inside a Herdr pane — use
-> `herdr agent list` or the socket API, not the TUI. Agents should never script
-> the TUI. See [`agent-workflows.md`](agent-workflows.md).
-
-### Claude agent teams
-
-```bash
-ai myproject                     # tmux layout (nvim + 2 agents)
-cc                               # inside tmux → one pane per teammate (teammateMode=auto)
-cc --teammate-mode in-process    # one terminal; arrow keys / Enter in the agent panel
-```
-
----
-
-## Worktree-per-agent (`worktrees`)
-
-One git worktree per agent, one tmux window per worktree, so parallel agents
-never fight over the index or each other's half-finished edits. Window `main`
-stays on the original repo for review and merging.
-
-```bash
-worktrees                          # 2 worktrees (agent/1, agent/2), session "<repo>-wt"
-worktrees feat -n 3 --cmd cc       # session "feat", 3 agents each running cc
-worktrees -n 2 --cmd codex --branch-prefix wip/
-worktrees --base develop -n 2      # branch off develop instead of current HEAD
-worktrees --list                   # path, branch, dirty?, commits ahead
-worktrees --clean                  # remove only clean, fully-merged worktrees
-make quick-worktrees N=3 CMD=cc    # same thing from the Makefile
-```
-
-| Flag                | Meaning                                                |
-|---------------------|--------------------------------------------------------|
-| `-n N`              | Number of worktrees/agents (default 2, max 8)          |
-| `--branch-prefix P` | Branch prefix (default `agent/` → `agent/1`, `agent/2`)|
-| `--base REF`        | Branch off `REF` (default: current branch)             |
-| `--cmd CMD`         | Command to run in each worktree window (default: shell)|
-| `--list`            | Status of this repo's agent worktrees                  |
-| `--clean`           | Remove clean + fully-merged worktrees, keep the rest — "merged" is relative to the current branch (or `--base`) |
-
-Worktrees live at `../<repo>-wt/<branch>` (slashes become dashes), never inside
-the repo. The default session name is `<repo>-wt`, so two different repos get
-two different sessions. Re-running attaches and reuses existing worktrees.
-`--clean` **never** removes a worktree with uncommitted changes or with commits
-not yet in the base branch — it prints what is blocking so you can merge or
-cherry-pick first. It judges merged-ness against the main checkout's *current*
-branch unless you pass `--base REF`, so run it from the branch the agents forked
-off; work merged somewhere else reads as unmerged and is kept (the safe
-direction, but surprising if you switched branches in between).
-
-> **A worktree isolates git state only.** Ports collide (give each worktree its
-> own `PORT`), `node_modules` / `.venv` / `target` are not shared or copied
-> (each worktree needs its own install), gitignored files like `.env` do not
-> follow the worktree (copy or symlink them in), and one shared dev database or
-> cloud project is still shared.
-
----
+`claude` and `codex` are no longer routed through wrapper functions — plain binaries, confined by the sandbox settings each CLI ships with. Details: [sandboxing.md](sandboxing.md). Setup, agent teams and the instruction files each CLI reads: [agent-workflows.md](agent-workflows.md).
 
 ## Sandbox (`sbx`)
 
-| Invocation                           | Effect                                          |
-|--------------------------------------|-------------------------------------------------|
-| `sbx -- <cmd>`                       | Run under default `strict` profile              |
-| `sbx --profile standard -- <cmd>`    | Adds :80, :22, :9418 (for `npm ci`, `git push`) |
-| `sbx --profile off -- <cmd>`         | No sandbox — documented escape hatch            |
-| `sbx --project <dir> -- <cmd>`       | Override project root (default: `$PWD`)         |
-| `sbx --dry-run -- <cmd>`             | Print the `sandbox-exec` command, don't run     |
-| `CC_NO_SANDBOX=1 cc`                 | Bypass via env var                              |
+`sbx` is a general-purpose Seatbelt wrapper, not tied to any AI CLI — use it to sandbox any command.
 
-Credentials stay denied in every profile: `~/.ssh`, `~/.aws`,
-`~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`,
-`~/.kube`, `~/.netrc`. See [`sandboxing.md`](sandboxing.md).
+| Invocation | Effect |
+|------------|--------|
+| `sbx -- CMD` | Run a binary under `strict`: TCP 443, DNS and loopback only |
+| `sbx --profile standard -- CMD` | Also TCP 80, 22 and 9418 (package mirrors, git over ssh) |
+| `sbx --profile off -- CMD` | No sandbox |
+| `sbx --project DIR -- CMD` | Writable project directory (default: `$PWD`) |
+| `sbx --allow-herdr -- CMD` | `strict`, plus access to the herdr socket |
+| `sbx --dry-run -- CMD` | Print the `sandbox-exec` command without running it |
+| `make sbx-test` | Check that the project is readable and `~/.ssh` is denied |
 
----
+`sbx` runs binaries, not shell functions (`sbx -- opencode`, not `sbx -- oc`). Seatbelt doesn't nest, so plain `claude` already runs under its native sandbox; to run it under `sbx` instead, turn that off for the run: `sbx -- claude --settings '{"sandbox":{"enabled":false}}'`. Details: [sandboxing.md](sandboxing.md).
+
+## Herdr (`--pack herdr`)
+
+```bash
+herdr                                   # attach locally (starts the server)
+herdr machine add workbox --label workbox   # save an SSH node (interactive, once)
+herdr --machine workbox agent list      # agents on a saved node: working / blocked / done
+herdr --remote workbox                  # one-off thin client over SSH
+herdr status                            # versions; server_binary_stale means restart when idle
+herdr integration status                # after every upgrade: reinstall anything outdated
+```
+
+Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
+
+## macOS hotkeys (desktop profile)
+
+Rectangle owns `Ctrl+Alt` plus arrows and letters for window snapping (its "Recommended" layout).
+
+| Keys | Action |
+|------|--------|
+| `Ctrl+Alt+←` / `→` / `↑` / `↓` | Snap window to a half |
+| `Ctrl+Alt+Return` | Maximize |
+| `Cmd+Shift+C` | Maccy clipboard history |
+| ``Ctrl+` `` | Ghostty quick terminal (global) |
+
+Ghostty keeps its macOS defaults (`Cmd+T`, `Cmd+D`, and so on) and adds `Ctrl+Shift+T/W/D/N/C/V` for Linux habits.
+
+## Neovim (`--pack nvim`)
+
+| Keys | Action |
+|------|--------|
+| `Space Space` / `Space f f` | Find files |
+| `Space /` | Grep the project |
+| `Space ,` / `Space f r` | Buffers / recent files |
+| `Space e` | File explorer |
+| `Space g g` | lazygit |
+| `g d` / `g r` / `K` | Definition / references / hover |
+| `Space c a` / `Space c r` / `Space c f` | Code action / rename / format |
+| `Ctrl+/` | Floating terminal |
+
+The full guide is in [nvim.md](nvim.md).
 
 ## Theming
 
-One palette (`configs/themes/<name>/palette.toml`) drives tmux, Ghostty and
-Starship. Neovim is out of scope — LazyVim owns its colorscheme.
-
 ```bash
-./scripts/theme.sh list                 # available themes, active marked with *
-./scripts/theme.sh show tokyo-night     # print the palette (swatches on a TTY)
-./scripts/theme.sh apply catppuccin-mocha
-./scripts/theme.sh apply tokyo-night --dry-run
-make theme-list                         # same as `theme.sh list`
-make theme NAME=catppuccin-mocha        # same as `theme.sh apply` (default: tokyo-night)
+make theme-list                   # themes; * marks the active one
+make theme NAME=catppuccin-mocha  # apply (the default is tokyo-night)
+scripts/theme.sh show tokyo-night # palette swatches
+scripts/theme.sh apply tokyo-night --dry-run
 ```
 
-Shipped: `tokyo-night` (default), `catppuccin-mocha`. Apply writes
-`tuidev-theme` managed blocks — your edits outside the markers survive — and
-reloads a running tmux server so open panes re-theme immediately.
-
-A fresh `./install.sh` run auto-applies `tokyo-night` at the end, so a stock
-install ships pre-themed with no manual step. Use `theme.sh apply` /
-`make theme NAME=...` to switch themes afterward.
-
-Two things that make `apply` skip starship rather than corrupt it: the
-`tuidev-starship` block must already exist (run `./install.sh` first), and
-`palette = "tuidev"` must sit at the **top level** of `~/.config/starship.toml`,
-above the first `[table]`. It prints the exact fix in both cases. The theme
-block is always moved back to the end of a file if something else was appended
-after it, since the last definition wins.
-
-Adding a theme: copy a `palette.toml`, keep all 26 contract keys. See
-[`theming.md`](theming.md).
-
----
-
-## Updating & migrations
-
-```bash
-make update-check         # preview: packages, pending migrations, config drift
-make update               # interactive menu
-make update-packages      # brew upgrade, scoped to your active packs
-make update-configs       # pending migrations, then re-apply managed blocks
-make update-migrations    # only the one-shot migrations
-make update-all           # non-interactive: packages + configs + repo
-make update-security      # audit Tailscale + SSH perms + Seatbelt drift
-```
-
-Every mode honors `--dry-run` on `./scripts/update.sh`. Migrations are
-timestamped scripts in `scripts/migrations/`, run **at most once per machine**;
-applied ids land in `~/.config/tuidev/migrations`. A failure stops the run and
-stays unrecorded, so the next update retries it.
-
-`~/.config/tuidev/manifest` records what was actually installed (one
-`<kind> <value>` per line — `grep '^formula '` it). `./uninstall.sh` purges only
-those records, so a `ripgrep` you had before this repo survives. See
-[`updating.md`](updating.md).
-
----
-
-## Remote & always-on nodes
-
-```bash
-tailscale up && tailscale status   # bring the node onto the tailnet
-ssh devbox                         # placeholder host — see below
-tmux attach -t main                # your session survived the disconnect
-work myproject                     # or create a fresh named session
-```
-
-Detach with `C-a d`; the session keeps running. mosh for flaky links
-(`--pack mosh`). iOS clients: Blink, Moshi.
-
-A cheap always-on box (Raspberry Pi, NUC, VM) is a node, not a second product.
-`--profile remote` installs there; on Debian/arm64 the core pack falls back to
-`apt-get` because Homebrew has no build for it, skipping what your release
-doesn't package and printing the upstream install command instead.
-
-> `devbox` / `workbox` are **placeholders**. Real hostnames, mDNS names, and
-> usernames go in `~/.ssh/config.local` — never in this repo. The shipped SSH
-> snippet `Include`s `~/.ssh/config.local*` unconditionally.
-
-Full setup: [`remote.md`](remote.md). Fleet control: [`agent-workflows.md`](agent-workflows.md).
-
----
-
-## Neovim (LazyVim)
-
-Leader is `Space`. Press `Space` and wait — which-key shows the menu.
-
-| Chord          | Action                                   |
-|----------------|------------------------------------------|
-| `<leader>ff`   | Find files                               |
-| `<leader>fg`   | Live grep                                |
-| `<leader>fr`   | Recent files                             |
-| `<leader>fb`   | Switch buffer                            |
-| `<leader>e`    | Toggle file explorer                     |
-| `<leader>gg`   | Open lazygit                             |
-| `<leader>ca`   | Code actions                             |
-| `<leader>cr`   | Rename symbol                            |
-| `<leader>cf`   | Format                                   |
-| `<leader>qq`   | Quit all                                 |
-| `gd` / `gr`    | Go to definition / references            |
-| `K`            | Hover docs                               |
-| `[d` / `]d`    | Prev / next diagnostic                   |
-| `Ctrl-/`       | Toggle floating terminal                 |
-
-Full nvim intro: [`NEOVIM_QUICKSTART.md`](NEOVIM_QUICKSTART.md).
-
----
-
-## Modern CLI replacements
-
-| Command | Replaces | Notes                                    |
-|---------|----------|------------------------------------------|
-| `eza`   | `ls`     | `ls`/`ll`/`la`/`lt` aliased with icons + git |
-| `bat`   | `cat`    | Syntax highlighting, paging              |
-| `rg`    | `grep`   | `rg "pat" -A 3 -B 3`, `--type js`        |
-| `fd`    | `find`   | `fd -e js`, `fd -t d`, `fd -H`           |
-| `fzf`   | —        | `Ctrl-T` files, `Ctrl-R` history, `Alt-C` cd |
-| `zoxide`| `cd`     | `z partial-name`, `zi` interactive       |
-| `btm`   | `top`    | aliased as `top` and `bottom`            |
-| `http`  | `curl`   | HTTPie with pretty output                |
-
----
-
-## Git & lazygit
-
-```bash
-lg            # open lazygit
-gs            # git status
-ga / gc       # git add / commit
-gp / gl       # git push / pull
-gd            # git diff
-gco / gb      # git checkout / branch
-```
-
-Inside lazygit:
-
-| Key        | Action                  |
-|------------|-------------------------|
-| `1` … `5`  | Jump to panel           |
-| `Space`    | Stage / unstage         |
-| `a`        | Stage all               |
-| `c`        | Commit                  |
-| `P`        | Push                    |
-| `p`        | Pull                    |
-| `e`        | Edit file               |
-| `d`        | Discard                 |
-| `?`        | Help                    |
-| `q`        | Quit                    |
-
----
+Themes are written to tmux (`~/.config/tmux/theme.conf`, when `--pack tmux` is installed), Ghostty and Starship. The details are in [theming.md](theming.md).
 
 ## Makefile
 
-The Makefile covers install, update, health checks, linting, and Docker
-testing. Run `make help` for the authoritative list. Frequent targets:
-
 ```bash
-make install            # interactive (desktop on macOS, minimal on Linux)
-make install-dry PROFILE=desktop   # preview every mutation, change nothing
-make check              # health check against the installed profile
-make test               # tests for the active profile   (test-core / test-ui / test-all)
-make lint               # shellcheck install/scripts/lib/tmux/packs/bin
-make validate-configs   # KDL / TOML / Lua / JSON syntax
-make ci-test            # what CI runs: core tests + lint
-make update             # interactive, profile-aware update
-make sbx-test           # verify sandbox blocks creds, allows project writes
-make theme NAME=…       # re-theme tmux / Ghostty / Starship
-make quick-worktrees    # one worktree + tmux window per agent (N=, CMD=)
-make help               # authoritative target list
+make install-dry PROFILE=desktop   # preview an install
+make check                         # health check for the installed profile
+make test                          # tests for the installed profile (test-core / test-ui / test-all)
+make update-check / make update    # preview / apply updates (update-all is non-interactive)
+make update-migrations             # pending one-shot migrations only
+make update-security               # Tailscale, SSH permissions, Seatbelt drift
+make lint                          # shellcheck every shell script
+make validate-configs              # JSON / TOML / Lua / shell syntax
+make test-lib                      # unit harnesses
+make check-links                   # relative links in every tracked .md
+make ci-test                       # lint + validate + links + unit tests
+make container-test                # core-tag tests in an Alpine container
+make sandbox-up / sandbox-down     # Tier 2 container runtime
 ```
 
----
-
+Updates and migrations are covered in [updating.md](updating.md).

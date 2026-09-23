@@ -1,8 +1,9 @@
 # ============================================================================
 # Codex CLI — tuidev opinionated defaults
 # ============================================================================
-# Shipped to ~/.codex/config.toml on install. Existing user files are
-# preserved (install.sh uses --adopt-existing for this path).
+# Shipped to ~/.codex/config.toml by --pack ai-clis (--upgrade-shipped): an
+# unmodified copy of an earlier release is upgraded (backup first); a file you
+# edited is never overwritten.
 #
 # Reference: https://learn.chatgpt.com/docs/config-file/config-reference
 #
@@ -11,30 +12,33 @@
 #     (Codex retires model snapshots on a cadence; a pinned id goes stale).
 #     Pin one only if you need reproducibility across upgrades.
 #   - sandbox_mode = "workspace-write": agent can read freely, but writes
-#     are confined to the current project tree. Matches the Seatbelt
-#     strict profile used by `sbx` at the OS layer. (Seatbelt does not
-#     nest: under `cx` = `sbx -- codex`, Codex's own sandbox cannot apply
-#     and it falls back to approvals — sbx is then the boundary.)
+#     are confined to the current project tree. This is Codex's own sandbox
+#     (Seatbelt on macOS, bubblewrap on Linux), and it is on whenever you run
+#     plain `codex`. Seatbelt does not nest, so Codex's sandbox cannot apply
+#     inside sbx; for sbx as the single, kernel-level boundary instead, run
+#     `sbx -- codex -s danger-full-access -a on-request` (approvals stay on).
 #   - approval_policy = "on-request": Codex asks for approval when a
 #     command falls outside the sandbox; nothing runs "silently broad."
 #     (`untrusted` is unsupported upstream; `on-failure` is deprecated.)
 #   - network_access = false: stops the agent from reaching the internet
-#     from a shell tool. LLM calls still go out; exec tools cannot.
+#     from a shell tool. LLM calls still go out; exec tools cannot. Part of
+#     Codex's sandbox, so under sbx it yields to sbx's own network policy
+#     (strict: outbound TCP 443 + DNS only).
 #
 # Override any of these in a project-local .codex/config.toml; project
 # values win over user values.
 # ============================================================================
 
-# model = "gpt-5.6-terra"            # pin only if you want reproducibility
-# model_reasoning_effort = "medium"  # minimal | low | medium | high | xhigh
+# model = "gpt-6-sol"                # pin only if you want reproducibility
+# model_reasoning_effort = "medium"  # low | medium | high | xhigh | max | ultra (per model)
 
 # Safe default: workspace-write + on-request approval.
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
 
-# Terminal-only workflow: no editor URI scheme for `codex @` references.
-# Allowed: vscode | vscode-insiders | windsurf | cursor | none
-file_opener = "none"
+# Editor that file references in Codex output open in (a GUI editor next to
+# the terminal). Alternatives: cursor | vscode-insiders | windsurf | none
+file_opener = "vscode"
 
 # Web search: disabled | cached | indexed | live (cached is the upstream default).
 web_search = "cached"
@@ -63,10 +67,19 @@ notification_condition = "unfocused"   # unfocused | always
 notification_method = "auto"           # auto | osc9 | bel
 
 # External notifier: wire to the same notify.sh helper Claude Code uses.
-# Commented out by default so Codex users opt in explicitly. (Only fires
-# for agent-turn-complete; it receives a JSON payload as the last arg.)
-# notify = ["notify.sh", "Codex CLI"]
+# Commented out by default so Codex users opt in explicitly. It fires only for
+# agent-turn-complete, and Codex appends the event JSON as one extra argument;
+# the `bash -c` shim below receives that JSON as $1 and drops it, so
+# notify.sh gets a clean title/message. (notify is argv, not a shell string,
+# which is why $HOME needs the shim to expand.)
+# notify = ["bash", "-c", "exec \"$HOME/.local/bin/notify.sh\" 'Codex CLI' 'Turn complete' 'Done'", "codex-notify"]
 
 # Codex reads AGENTS.md natively and ignores CLAUDE.md. Uncomment to let it
 # fall back to CLAUDE.md in directories that have no AGENTS.md:
 # project_doc_fallback_filenames = ["CLAUDE.md"]
+
+# Profiles (Codex >= 0.134): one file per profile, overlaid on this one with
+# `codex --profile NAME`. Top-level keys only, no [profiles.NAME] table.
+# Example ~/.codex/review.config.toml:
+#   model_reasoning_effort = "high"
+#   web_search = "disabled"

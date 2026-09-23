@@ -6,6 +6,7 @@
 # real ~/.config/tuidev is never touched.
 
 set -e
+unset XDG_CONFIG_HOME   # state paths below assume $HOME/.config/tuidev
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -13,6 +14,8 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 export TUIDEV_NO_COLOR=1
+# Never resolve state from the developer's real HOME.
+TUIDEV_STATE_DIR="$tmp/state"   # not exported: child migrations derive it from their own HOME
 export TUIDEV_MIGRATIONS_DIR="$tmp/migrations"
 export TUIDEV_MIGRATIONS_STATE="$tmp/state/migrations"
 export TUIDEV_MANIFEST_FILE="$tmp/state/manifest"
@@ -154,6 +157,9 @@ printf 'legacy helper\n' > "$reg_home/.local/bin/ai-workflow.sh"
 # shellcheck disable=SC2030
 (
     export HOME="$reg_home"
+    # ui.sh resolved TUIDEV_STATE_DIR from the real HOME when it was sourced;
+    # without this the check reads the developer's own ~/.config/tuidev.
+    export TUIDEV_STATE_DIR="$reg_home/.config/tuidev"
     export TUIDEV_MIGRATIONS_STATE="$reg_home/.config/tuidev/migrations"
     export TUIDEV_MIGRATIONS_DIR="$SCRIPT_DIR/../migrations"
     tuidev_is_fresh_install && { echo "FAIL: existing install read as fresh"; exit 1; }
@@ -223,6 +229,91 @@ HOME="$fake_home" TUIDEV_NO_COLOR=1 \
     bash "$SCRIPT_DIR/../migrations/202608310900_prune_pre2_orphans.sh" >/dev/null \
     || fail "prune migration is not re-runnable"
 pass "prune migration is re-runnable"
+
+# 14b. The opencode split carries the pack over only when OpenCode is in use.
+oc_home="$tmp/oc-home"; oc_bin="$tmp/oc-bin"
+mkdir -p "$oc_home/.config/tuidev" "$oc_bin"
+printf '#!/bin/sh\n' > "$oc_bin/opencode"; chmod +x "$oc_bin/opencode"
+oc_mig="$SCRIPT_DIR/../migrations/202609221800_split_opencode_pack.sh"
+oc_packs() { grep '^extra_packs=' "$oc_home/.config/tuidev/profile" | cut -d= -f2-; }
+
+printf 'profile=remote\nextra_packs=ai-clis herdr\n' > "$oc_home/.config/tuidev/profile"
+HOME="$oc_home" PATH="/usr/bin:/bin" bash "$oc_mig" >/dev/null || fail "opencode migration failed (absent)"
+[[ "$(oc_packs)" == "ai-clis herdr" ]] || fail "opencode added without the CLI: $(oc_packs)"
+
+printf 'extra_packs=herdr\n' > "$oc_home/.config/tuidev/profile"
+HOME="$oc_home" PATH="$oc_bin:/usr/bin:/bin" bash "$oc_mig" >/dev/null || fail "opencode migration failed (no ai-clis)"
+[[ "$(oc_packs)" == "herdr" ]] || fail "opencode added without ai-clis: $(oc_packs)"
+
+printf 'extra_packs=ai-clis herdr\n' > "$oc_home/.config/tuidev/profile"
+HOME="$oc_home" PATH="$oc_bin:/usr/bin:/bin" bash "$oc_mig" >/dev/null || fail "opencode migration failed"
+HOME="$oc_home" PATH="$oc_bin:/usr/bin:/bin" bash "$oc_mig" >/dev/null || fail "opencode migration not re-runnable"
+[[ "$(oc_packs)" == "ai-clis herdr opencode" ]] || fail "opencode not carried over once: $(oc_packs)"
+pass "opencode split migration: opt-in kept, carried over once when in use"
+
+# 14c. 3.0: nvim / tmux are carried into extra_packs only where tuidev set them up.
+v3_home="$tmp/v3-home"
+v3_mig="$SCRIPT_DIR/../migrations/202609231200_v3_optional_nvim_tmux.sh"
+v3_packs() { grep '^extra_packs=' "$v3_home/.config/tuidev/profile" | cut -d= -f2-; }
+mkdir -p "$v3_home/.config/tuidev" "$v3_home/.config/nvim" "$v3_home/.config/tmux"
+
+printf 'profile=desktop\nextra_packs=herdr\n' > "$v3_home/.config/tuidev/profile"
+echo "-- my own config" > "$v3_home/.config/nvim/init.lua"
+echo "set -g mouse on"  > "$v3_home/.config/tmux/tmux.conf"
+HOME="$v3_home" bash "$v3_mig" >/dev/null || fail "v3 nvim/tmux migration failed (user-owned)"
+[[ "$(v3_packs)" == "herdr" ]] || fail "user-owned nvim/tmux carried over: $(v3_packs)"
+
+# A remote node records tmux (its profile includes the pack) even with a
+# tmux.conf of its own; the user's Neovim config still stays out.
+printf 'profile=remote\nextra_packs=herdr\n' > "$v3_home/.config/tuidev/profile"
+HOME="$v3_home" bash "$v3_mig" >/dev/null || fail "v3 nvim/tmux migration failed (remote)"
+[[ "$(v3_packs)" == "herdr tmux" ]] || fail "remote profile did not carry tmux: $(v3_packs)"
+grep -qx 'set -g mouse on' "$v3_home/.config/tmux/tmux.conf" || fail "remote: tmux.conf touched"
+printf 'profile=remote\nextra_packs=herdr\n' > "$v3_home/.config/tuidev/profile"
+
+cp "$SCRIPT_DIR/../../configs/nvim/init.lua" "$v3_home/.config/nvim/init.lua"
+printf '%s\n' "# >>> tuidev managed (tuidev-tmux) >>>" "set -g mouse on" \
+    "# <<< tuidev managed (tuidev-tmux) <<<" > "$v3_home/.config/tmux/tmux.conf"
+HOME="$v3_home" bash "$v3_mig" >/dev/null || fail "v3 nvim/tmux migration failed"
+HOME="$v3_home" bash "$v3_mig" >/dev/null || fail "v3 nvim/tmux migration not re-runnable"
+[[ "$(v3_packs)" == "herdr nvim tmux" ]] || fail "nvim/tmux not carried over once: $(v3_packs)"
+pass "v3 nvim/tmux migration: carries over tuidev-owned setups once, leaves the user's alone"
+
+# 14d. 3.0: bosun, yazi and nnn leave extra_packs; everything else stays.
+drop_mig="$SCRIPT_DIR/../migrations/202609231210_v3_drop_tui_packs.sh"
+printf 'profile=desktop\nextra_packs=yazi herdr bosun nnn fnm\n' > "$v3_home/.config/tuidev/profile"
+HOME="$v3_home" bash "$drop_mig" >/dev/null || fail "drop-packs migration failed"
+HOME="$v3_home" bash "$drop_mig" >/dev/null || fail "drop-packs migration not re-runnable"
+[[ "$(v3_packs)" == "herdr fnm" ]] || fail "removed packs not dropped: $(v3_packs)"
+grep -qx 'profile=desktop' "$v3_home/.config/tuidev/profile" || fail "drop-packs touched other lines"
+pass "v3 drop-packs migration removes bosun/yazi/nnn only, idempotently"
+
+# 14e. 3.0: the cc/cx fragment is backed up and removed; nothing else is touched.
+wrap_mig="$SCRIPT_DIR/../migrations/202609231220_v3_drop_ai_wrappers.sh"
+mkdir -p "$v3_home/.config/tuidev/shell.d"
+echo "cc() { :; }" > "$v3_home/.config/tuidev/shell.d/ai-clis.zsh"
+echo "oc() { :; }" > "$v3_home/.config/tuidev/shell.d/opencode.zsh"
+HOME="$v3_home" bash "$wrap_mig" >/dev/null || fail "drop-wrappers migration failed"
+HOME="$v3_home" bash "$wrap_mig" >/dev/null || fail "drop-wrappers migration not re-runnable"
+[[ ! -e "$v3_home/.config/tuidev/shell.d/ai-clis.zsh" ]] || fail "ai-clis.zsh not removed"
+[[ -f "$v3_home/.config/tuidev/shell.d/opencode.zsh" ]]  || fail "opencode.zsh was touched"
+find "$v3_home/.config/tuidev/backups" -name 'ai-clis.zsh.*' | grep -q . || fail "ai-clis.zsh not backed up"
+pass "v3 drop-wrappers migration removes the cc/cx fragment with a backup, idempotently"
+
+# 14f. …and claims the native sandbox only when settings.json has the block.
+mkdir -p "$v3_home/.claude"
+echo '{"model":"x"}' > "$v3_home/.claude/settings.json"
+echo "cc() { :; }" > "$v3_home/.config/tuidev/shell.d/ai-clis.zsh"
+out="$(HOME="$v3_home" bash "$wrap_mig" 2>&1)" || fail "drop-wrappers migration failed (no sandbox)"
+[[ "$out" == *"Merge the sandbox block"* && "$out" != *"turns on its native sandbox"* ]] \
+    || fail "user settings without sandbox: $out"
+cp "$SCRIPT_DIR/../../configs/claude/settings.json" "$v3_home/.claude/settings.json"
+echo "cc() { :; }" > "$v3_home/.config/tuidev/shell.d/ai-clis.zsh"
+out="$(HOME="$v3_home" bash "$wrap_mig" 2>&1)" || fail "drop-wrappers migration failed (sandbox)"
+[[ "$out" == *"turns on its native sandbox"* ]] || fail "settings with sandbox: $out"
+cmp -s "$SCRIPT_DIR/../../configs/claude/settings.json" "$v3_home/.claude/settings.json" \
+    || fail "drop-wrappers migration touched settings.json"
+pass "v3 drop-wrappers migration reports the Claude sandbox state truthfully"
 
 # ---------------------------------------------------------------------------
 # manifest.sh

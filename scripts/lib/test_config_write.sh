@@ -73,6 +73,14 @@ install_config "$tmp/dst" "$tmp/src" --overwrite >/dev/null
 # behavior contract of install_config and verified by read-back above.
 pass "install_config overwrite"
 
+# 8b. --overwrite on an identical file neither copies nor backs up
+cp "$tmp/src" "$tmp/same"
+before="$(find "$TUIDEV_BACKUP_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')"
+install_config "$tmp/same" "$tmp/src" --overwrite >/dev/null
+after="$(find "$TUIDEV_BACKUP_DIR" -type f 2>/dev/null | wc -l | tr -d ' ')"
+[[ "$before" == "$after" ]] || fail "identical --overwrite made a backup"
+pass "install_config overwrite skips identical files"
+
 # 9. Dry-run mutates nothing
 echo "unchanged" > "$tmp/dry"
 DRY_RUN=true write_managed_block "$tmp/dry" "dryid" "should not appear" >/dev/null
@@ -102,6 +110,45 @@ got="$(read_managed_block "$tmp/rb" "readid")"
 [[ "$got" == "line-a"$'\n'"line-b" ]] || fail "read_managed_block content mismatch: got <$got>"
 read_managed_block "$tmp/rb" "nope" >/dev/null && fail "read_managed_block should fail on missing block"
 pass "read_managed_block round-trip and absence"
+
+# 11. --upgrade-shipped: absent -> placed; an unmodified shipped copy ->
+#     upgraded with a backup; a user-edited copy -> kept; hashes are keyed by
+#     name, so another file's shipped hash does not count.
+mkdir -p "$tmp/up"
+printf 'v1\n' > "$tmp/up/old"
+printf 'v2\n' > "$tmp/up/cfg.json"
+{ echo "# comment"; echo "cfg $(file_sha256 "$tmp/up/old")"; } > "$tmp/up/shipped.sha256"
+install_config "$tmp/up/new/cfg.json" "$tmp/up/cfg.json" --upgrade-shipped "$tmp/up/shipped.sha256" >/dev/null
+cmp -s "$tmp/up/new/cfg.json" "$tmp/up/cfg.json" || fail "upgrade-shipped did not place an absent file"
+cp "$tmp/up/old" "$tmp/up/dst.json"
+install_config "$tmp/up/dst.json" "$tmp/up/cfg.json" --upgrade-shipped "$tmp/up/shipped.sha256" >/dev/null
+cmp -s "$tmp/up/dst.json" "$tmp/up/cfg.json" || fail "upgrade-shipped kept an unmodified shipped copy"
+ls "$tmp/backups"/dst.json.* >/dev/null 2>&1 || fail "upgrade-shipped replaced without a backup"
+printf 'v1\nmy edit\n' > "$tmp/up/edited.json"
+out="$(install_config "$tmp/up/edited.json" "$tmp/up/cfg.json" --upgrade-shipped "$tmp/up/shipped.sha256")"
+grep -qF "my edit" "$tmp/up/edited.json" || fail "upgrade-shipped clobbered a user edit"
+grep -qF "diff $tmp/up/edited.json $tmp/up/cfg.json" <<< "$out" || fail "upgrade-shipped printed no diff hint"
+cp "$tmp/up/old" "$tmp/up/other.json"
+printf 'v2\n' > "$tmp/up/other-src.json"
+install_config "$tmp/up/other.json" "$tmp/up/other-src.json" --upgrade-shipped "$tmp/up/shipped.sha256" >/dev/null
+[[ "$(cat "$tmp/up/other.json")" == v1 ]] || fail "upgrade-shipped matched another file's hash"
+pass "install_config --upgrade-shipped: place, upgrade unmodified, keep edited"
+
+# 12. --shipped-name keys a tree by relative path: two files share a basename
+#     (init.lua), and only the one whose key matches the hash is upgraded.
+mkdir -p "$tmp/tree/src/lua" "$tmp/tree/dst/lua"
+printf 'new root\n' > "$tmp/tree/src/init.lua"
+printf 'new nested\n' > "$tmp/tree/src/lua/init.lua"
+printf 'old\n' > "$tmp/tree/dst/init.lua"
+printf 'old\n' > "$tmp/tree/dst/lua/init.lua"
+printf 'lua/init.lua %s\n' "$(file_sha256 "$tmp/tree/dst/lua/init.lua")" > "$tmp/tree/shipped.sha256"
+install_config "$tmp/tree/dst/init.lua" "$tmp/tree/src/init.lua" \
+    --upgrade-shipped "$tmp/tree/shipped.sha256" --shipped-name init.lua >/dev/null
+install_config "$tmp/tree/dst/lua/init.lua" "$tmp/tree/src/lua/init.lua" \
+    --upgrade-shipped "$tmp/tree/shipped.sha256" --shipped-name lua/init.lua >/dev/null
+[[ "$(cat "$tmp/tree/dst/init.lua")" == old ]] || fail "--shipped-name matched another path's hash"
+[[ "$(cat "$tmp/tree/dst/lua/init.lua")" == "new nested" ]] || fail "--shipped-name did not upgrade its own key"
+pass "install_config --shipped-name keys by relative path"
 
 echo ""
 echo "All config_write tests passed."

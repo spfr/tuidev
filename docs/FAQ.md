@@ -1,331 +1,85 @@
-# Frequently Asked Questions
+# FAQ
 
-> Common questions and fixes for the TUI Development Setup.
+Troubleshooting, one question at a time. Each topic's full reference is in its own doc: [profiles](profiles.md), [sandboxing](sandboxing.md), [agent workflows](agent-workflows.md), [remote](remote.md), [updating](updating.md).
 
----
+## Install and update
 
-## Installation
+**Does it work on Intel Macs?** Yes. Homebrew's prefix (`/opt/homebrew` or `/usr/local`) is detected at shell start.
 
-### Q: Does this work on Intel Macs?
+**Does it work on Linux?** `minimal` and `remote` do. Without Homebrew, packages come from `apt-get`, `dnf` or `pacman`, and Debian/Ubuntu (arm64 boards such as a Raspberry Pi included) is the tested path. Anything the distro doesn't package, such as `starship` or `eza` on older Debian releases, is skipped with a link to the upstream install page. On Debian, `fdfind` and `batcat` are symlinked to `fd` and `bat` in `~/.local/bin`. The `ui` pack, Ghostty and Seatbelt (`sbx`) are macOS-only.
 
-**Yes.** The setup detects Apple Silicon (`/opt/homebrew`) vs Intel (`/usr/local`) and configures paths automatically.
+**apt wants a password and the installer didn't prompt.** By design: system package managers run only as root or through `sudo -n`. The installer prints the exact command to run yourself.
 
-### Q: Can I use this on Linux?
+**`--pack foo` fails immediately.** `--pack` names are checked before anything runs. `core`, `remote`, `sandbox`, `ui` and `extras` are flags (`--sandbox`), not `--pack` names. The valid pack names are listed in [profiles.md](profiles.md#optional-packs).
 
-**Yes, for the remote/server profile.** CLI tools, tmux, Nvim, and the sandbox Tier 2 (Podman) all work on Linux. Skip macOS-only packs:
+**The installer stopped halfway. How do I retry?** Re-run the same command. Every step is idempotent. `--dry-run` shows what it would do. A pack that fails to install a tool warns and continues. A failed migration stops the run before any pack runs.
 
-```bash
-./install.sh --profile remote
-```
+**Where are my backups?** `~/.config/tuidev/backups/` (or `$XDG_CONFIG_HOME/tuidev/backups/`). tuidev backs up a file there before it overwrites or removes it, and keeps the most recent copies of each.
 
-Seatbelt (Tier 1 sandbox), Ghostty, Hammerspoon, and Rectangle are macOS-only and ship in the `ui` pack.
+**How do I undo everything?** Run `./uninstall.sh`, or `--dry-run` it first. It removes only what `~/.config/tuidev/manifest` records: the managed blocks, `~/.local/bin` helpers, the git defaults tuidev set (while they still hold tuidev's value) and, if you agree, the configs and Homebrew packages tuidev installed. CLI auth and session state are never touched. See [updating.md](updating.md#uninstall).
 
-`--core` uses Homebrew when it is present and falls back to `apt-get` when it is
-not — which is what makes `minimal` / `remote` work on arm64 Debian (a Raspberry
-Pi, say), where Homebrew has no build at all. Core probes each package against
-your release rather than assuming, so the split adapts as distros move. At the
-time of writing, Debian 12 bookworm's apt supplied 14 of the 20 core tools;
-`eza`, `starship`, `lazygit`, `git-delta`, `zsh-completions` and `yq` were
-skipped with a link to each project's install page. (Debian's `yq`
-is a different program — a Python jq wrapper — so core deliberately declines it.)
-Debian renames two binaries; core symlinks `fdfind` → `fd` and `batcat` → `bat`
-into `~/.local/bin` so the aliases and docs work unchanged. If apt needs a
-password and passwordless `sudo` isn't set up, core prints the exact command to
-run instead of hanging on a prompt. `--pack herdr` installs Herdr only when
-Homebrew has the formula; without brew it prints the official installer command
-(`curl -fsSL https://herdr.dev/install.sh | sh`, binary lands in `~/.local/bin`)
-for you to run yourself, then re-run the pack to get the config. Bind real hostnames in
-`~/.ssh/config.local`, not in this repo. See [inspiration.md](inspiration.md)
-and [agent-workflows.md](agent-workflows.md).
+**Something broke after an update.** Run `make check`, then `make update-check` to see config drift and pending migrations. A failed migration is not recorded, so the next `make update-migrations` retries it.
 
-For the 5 tools apt can't supply on arm64 Debian (`eza`, `starship`,
-`lazygit`, `git-delta`, `zsh-completions` — a Raspberry Pi, say), the
-recommended pattern is the same manual one used for the Herdr fallback above:
-grab the `aarch64`/`arm64` binary asset from each project's GitHub Releases
-page and drop it straight into `~/.local/bin`, no pipe-to-shell needed. Note
-that `~/.local/bin` only lands on `PATH` for interactive shells (`.zshrc`) —
-a non-interactive SSH session (e.g. a script run via `ssh host 'cmd'`) won't
-see it; see [agent-workflows.md](agent-workflows.md) for that distinction.
+## Shell and terminal
 
-### Q: How do I install a minimal profile?
+**`work`, `dev`, `ai`, `ai-triple` and the other tmux layouts are gone.** 3.0 dropped every tmux-wrapper function and its ten layouts, along with `tk`/`tka` and `make test-layouts`. tmux itself is now optional (`--pack tmux`), not baked into any profile except `remote`. `.zshrc` keeps only a small attach-or-create helper: `t [NAME]` (default session name `main`) and `tls` to list sessions. See [remote.md](remote.md#connect-and-re-attach).
 
-```bash
-./install.sh --profile minimal
-```
+**`ld` no longer opens lazydocker.** It is `lzd` now. An `ld` alias shadowed the linker for builds and agents.
 
-Just the core: Nvim, tmux, zsh, Starship, and the modern CLI tools. Add packs one at a time with `--pack NAME`. See [profiles.md](profiles.md) for the matrix.
+**Up arrow doesn't open atuin.** By design: Up recalls history entries that start with what you have typed. `Ctrl+r` opens atuin.
 
-### Q: How do I add a specific pack to an existing install?
+**The shell is slow to start.** A stock shell starts in about 70 ms. Measure it with `time zsh -i -c exit`. Tool init scripts (starship, zoxide, atuin, fzf) are cached in `~/.cache/zsh/init-*.zsh` and regenerate when the tool's binary changes. jenv and nvm load lazily, on first use. Look in `~/.zshrc.local` for anything that sources `nvm.sh` or runs `eval "$(tool init)"` eagerly. After installing new completions, run `rm ~/.cache/zsh/zcompdump-*`.
 
-```bash
-./install.sh --sandbox                # Seatbelt profiles + the `sbx` wrapper (Tier 1)
-./install.sh --pack sandbox-container # VM-backed isolation (Tier 2): Apple container → podman → docker
-./install.sh --pack ai-clis           # cc/cx/oc wrappers + adopt-existing CLI configs
-```
+**Word jumps, Home or End print garbage.** In Ghostty, Option acts as Alt (`macos-option-as-alt = true`), so `Alt+b` / `Alt+f` move by word, and the shipped `.zshrc` binds Home, End and Delete. In iTerm2, set Preferences → Profiles → Keys → Left/Right Option key to `Esc+`. To see what a key actually sends, run `cat -v` and press it.
 
-Packs are idempotent. On a machine that already has tuidev, re-running
-`install.sh` applies any pending one-shot migrations before the packs run — see
-[updating.md](updating.md).
+**Keys work in plain zsh but not inside tmux.** Only relevant with `--pack tmux` installed. Check `echo $TERM`: it should be `tmux-256color` inside tmux and `xterm-ghostty` (or `xterm-*`) outside. Shift+Enter and modified keys depend on `extended-keys`: run `tmux show -s extended-keys`. Reload with `Ctrl+a r`, or restart the tmux server after a tmux upgrade.
 
-### Q: The installer failed. How do I retry?
+**Ghostty tabs broke on macOS 27.** Stable Ghostty 1.3.1 collapses the titlebar tab strip (ghostty-org/ghostty#13070). The shipped config keeps the default `transparent` titlebar, which works. For titlebar tabs, add `auto-update-channel = tip` and `macos-titlebar-style = tabs` to `~/.config/ghostty/config`, outside the managed block, then restart Ghostty.
 
-```bash
-./install.sh --dry-run --profile desktop   # see what it would do
-./install.sh --profile desktop             # run for real
-```
+**Where do my own aliases and SSH hosts go?** In `~/.zshrc.local` and `~/.ssh/config.local`. Both are sourced or included, and never overwritten. Keep personal hosts out of the repo.
 
-Backups land at `~/.config-backup-TIMESTAMP/`.
+## tmux
 
-### Q: How do I update everything?
+tmux is optional now (`--pack tmux`), bundled automatically by the `remote` profile. These only apply once it's installed.
 
-```bash
-make update            # interactive
-make update-all        # non-interactive
-make update-check      # preview only
-```
+**The theme didn't apply to tmux.** Themes live in `~/.config/tmux/theme.conf`, which the shipped `tmux.conf` sources above its plugin block. If your managed `tmux.conf` predates the theme-file split, run `make update-configs`, then `make theme NAME=...` again.
 
----
+**tmux-continuum stopped auto-saving.** Older configs appended the theme below the TPM line, which reset `status-right` after continuum hooked it. Migration `202609222000_tmux_theme_file` moves that block into `theme.conf`. Run `make update-migrations`, then `make update-configs`.
 
-## Shell & Terminal
+**Agent-team teammates don't open as panes.** Split panes need `claude` to run inside tmux (the shipped `teammateMode` is `auto`), which means `--pack tmux` installed and a session already attached. Outside tmux, teammates run in-process. See [agent-workflows.md](agent-workflows.md#agent-teams).
 
-### Q: Why is my shell slow to start?
+## Sandbox
 
-1. **nvm** — we lazy-load it; remove any manual `nvm.sh` source in `~/.zshrc.local`.
-2. **Too many plugins** — audit what's sourced.
-3. **Slow completions** — `compinit -C` caches.
+**Do I still need `sbx` if I run plain `claude` or `codex`?** Usually not: their own native sandboxes are on by default (`sandbox.enabled` in `~/.claude/settings.json`, `sandbox_mode = "workspace-write"` in `~/.codex/config.toml`). They differ, though: Claude Code's denies the credential paths to its Bash tool, while Codex's `workspace-write` limits writes and network but not reads. For credential-sensitive Codex work, use `sbx -- codex -s danger-full-access -a on-request`. `sbx` is also the general-purpose wrapper for anything else you want confined. Never wrap a CLI whose native sandbox is on with `sbx` — Seatbelt doesn't nest; turn the native one off for that run (`sbx -- claude --settings '{"sandbox":{"enabled":false}}'`).
 
-Measure:
+**Claude Code asks me to log in.** Under the native sandbox (the shipped default) the Keychain works normally, so this shouldn't happen. If you instead run Claude Code under `sbx` (`sbx -- claude --settings '{"sandbox":{"enabled":false}}'`), the Keychain is denied inside `sbx`; run `claude setup-token` once and export the result as `CLAUDE_CODE_OAUTH_TOKEN` in `~/.zshrc.local`. See [sandboxing.md](sandboxing.md#native-sandboxes-the-default).
 
-```bash
-time zsh -i -c exit
-```
+**`gh` says I'm not logged in.** `~/.config/gh` is on the credential deny list under every `sbx` profile, and `--profile standard` does not change that. Under the native sandbox, `gh *` is in `excludedCommands`, so it runs outside the sandbox and just needs your normal permission approval. Under `sbx`, run `sbx --profile off -- gh ...`.
 
-### Q: Ghostty tabs broke after upgrading to macOS 27
+**`npm install`, `pip install` or `git push` over ssh fails.** `strict` allows only TCP 443. Use `sbx --profile standard -- CMD`, which adds ports 80, 22 and 9418.
 
-Stable Ghostty 1.3.1 predates macOS 27: with `macos-titlebar-style = tabs` the
-tab strip collapses into a tiny box beside the `+` button. The fix
-(ghostty-org/ghostty#13069) is on the tip channel only until 1.4.0 ships. Two
-ways out:
+**Codex or Claude Code reports `sandbox_apply: Operation not permitted`.** Seatbelt profiles don't nest. This happens if you run `sbx -- codex` or `sbx -- claude` without telling the CLI to step aside: pass `-s danger-full-access -a on-request` to Codex, or `--settings '{"sandbox":{"enabled":false}}'` to Claude Code, so `sbx` is the only sandbox. Otherwise just run plain `codex` or `claude`: their own sandboxes are the default and need no `sbx` at all.
 
-1. **Stay on stable** — the shipped config now defaults to
-   `macos-titlebar-style = transparent`, whose native tab bar lays out
-   correctly. `make update-configs` re-applies it; restart Ghostty.
-2. **Get titlebar tabs back** — add `auto-update-channel = tip` to
-   `~/.config/ghostty/config` (outside the managed block), set
-   `macos-titlebar-style = tabs`, fully quit and relaunch, accept the update.
-   Or swap casks: `brew uninstall --cask ghostty && brew install --cask ghostty@tip`.
-   Known cosmetic leftover on 27: the tab strip renders in the system glass
-   material rather than the terminal background (#14103).
+**The sandbox blocks something legitimate.** For `sbx`, copy the profile into `~/.config/tuidev/sandbox/<name>.sb` and edit it: that copy takes precedence over the shipped one. To find the rule that fired, see the [sandboxing troubleshooting](sandboxing.md#troubleshooting). For the native sandboxes, adjust `excludedCommands` / `allowedDomains` in `~/.claude/settings.json` or `approval_policy` in `~/.codex/config.toml`. Don't punch holes in the credential deny list.
 
-Tracking issue for the public-release status: ghostty-org/ghostty#13070.
+**How do I turn the sandbox off?** For `claude`/`codex`, set `sandbox.enabled: false` in `~/.claude/settings.json` or `sandbox_mode = "danger-full-access"` / `approval_policy = "never"` in `~/.codex/config.toml`, from your own shell. For `sbx`: `sbx --profile off -- CMD`, or don't install `--sandbox`.
 
-### Q: How do I add my own aliases?
+## AI CLIs
 
-Edit `~/.zshrc.local`. Sourced last, never overwritten.
+`--pack ai-clis` adopts/upgrades `~/.claude/settings.json` and `~/.codex/config.toml`, which turn on the native sandboxes; it doesn't install `claude` or `codex` themselves. `oc` (OpenCode) needs `--pack opencode`.
 
-### Q: Where do personal SSH hosts / LAN names go?
+**`claude` or `codex` not found.** They update themselves and aren't installed by tuidev. Follow each CLI's own install instructions, then open a new shell so `--pack ai-clis`'s settings apply.
 
-Not in this repo. Put `Host` stanzas in `~/.ssh/config.local`. The shipped SSH
-snippet `Include`s `~/.ssh/config.local*` (glob, so a missing file is ignored).
-The block opens with `Match all` so the `Include` is unconditional: it is
-appended to whatever `~/.ssh/config` you already had, and without that reset a
-trailing `Host` stanza of yours would scope the `Include` to just that host.
-Because the block is appended, your own stanzas are read first and win on
-conflicts (ssh takes the first value for each option).
-You can also put hosts *outside* the tuidev managed block in `~/.ssh/config`.
-The gitignore already drops `*.local` files in a clone. Published docs use
-generic names (`devbox`, `workbox`, `always-on`) only.
-
-### Q: The `z` command doesn't work
-
-`z` is zoxide. It learns from your `cd` history:
-
-```bash
-cd ~/projects/myapp       # teach it once
-z myapp                   # jump there forever
-```
-
----
-
-## Sessions & tmux
-
-### Q: How do I launch a session?
-
-All launchers create a **named** session; calling them again reattaches.
-
-```bash
-work myproject        # bare session
-dev                   # nvim | agent | runner (3 columns)
-ai                    # nvim + 2 agent panes
-ai-triple             # nvim + 3 agent panes
-agents                # claude + codex, one per pane
-remote                # minimal layout for mosh/SSH
-```
-
-Management: `tls` (list), `tk NAME` (kill one), `tka` (kill server).
-
-### Q: Where did the old `ai` command go?
-
-It still works — it runs tmux. Same for `dev`, `ai-triple`, `fullstack` (where applicable), `remote`. The `t*` aliases (`ta`, `tdev`, `tai`, ...) remain available as the explicit tmux-named counterparts.
-
-
-### Q: tmux colors look wrong / config not loading
-
-tmux 3.2+ auto-reads `~/.config/tmux/tmux.conf`. Older versions:
-
-```bash
-tmux -V                                              # check version
-ln -s ~/.config/tmux/tmux.conf ~/.tmux.conf          # fallback for <3.2
-```
-
-### Q: Claude agent teams split-pane mode?
-
-Agent teams are still experimental; the shipped `configs/claude/settings.json`
-enables them (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) and sets
-`"teammateMode": "auto"`, which opens one tmux pane per teammate whenever `cc`
-already runs inside tmux and stays in-process otherwise:
-
-```bash
-ai myproject          # tmux layout first …
-cc                    # … then teammates get their own panes
-cc --teammate-mode in-process   # one session only
-```
-
-In-process mode works in any terminal (arrow keys select a teammate in the
-agent panel, Enter opens it). Split panes need tmux or iTerm2 — not Ghostty's
-native splits. Side effect worth knowing: with teams enabled, a *named*
-subagent launches as a teammate; set the variable to `0` to get plain
-subagents back.
-
----
-
-## Sandboxing
-
-### Q: How do I turn off the sandbox?
-
-Just call the CLI directly without `sbx`:
-
-```bash
-cc                    # raw, no sandbox
-sbx -- cc             # Seatbelt (Tier 1)
-```
-
-There's no global on/off — sandboxing is per-invocation.
-
-### Q: Seatbelt vs Podman — which tier?
-
-| Tier | Tool | OS | Good for |
-|------|------|----|----|
-| 1 | Seatbelt (`sandbox-exec`) | macOS | default; scoped FS, network allowed |
-| 2 | Podman (rootless) | macOS + Linux | stricter; network off, read-only host |
-
-Full details and the policy file layout: [sandboxing.md](sandboxing.md).
-
-### Q: The sandbox blocked something I need
-
-Either switch tiers (`sbx --tier 1 -- ...`) or edit the policy at `~/.config/sandbox/<profile>.sb` (Seatbelt) or the `Containerfile` (Podman). Don't run agents unsandboxed as a workaround — scope the policy instead.
-
----
+**Which instruction file does each CLI read?** See the table in [agent-workflows.md](agent-workflows.md#instruction-files).
 
 ## Neovim
 
-### Q: Why is there no AI plugin in Neovim?
+Neovim is optional now (`--pack nvim`).
 
-**By design.** Nvim stays fast; AI agents run in adjacent tmux panes (ideally sandboxed via `sbx`). Multiple agents in parallel with no editor overhead.
+**Plugins are broken.** Run `rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim`, then start `nvim`. LazyVim reinstalls everything.
 
-### Q: Neovim plugins broken
+**The LSP doesn't work.** Run `:LspInfo`, then `:Mason` to install the missing server, then `:checkhealth`.
 
-```bash
-rm -rf ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim
-nvim       # LazyVim reinstalls everything
-```
+## Getting help
 
-### Q: LSP isn't working for my language
-
-```vim
-:LspInfo
-:Mason         " search language, press i to install
-```
-
-### Q: How do I add custom plugins?
-
-Create `~/.config/nvim/lua/plugins/custom.lua`:
-
-```lua
-return {
-  { "tpope/vim-surround" },
-}
-```
-
----
-
-## AI CLI Tools
-
-### Q: Which AI tool should I use?
-
-| Tool | Alias | Best for |
-|------|-------|----------|
-| Claude Code | `cc` | complex tasks, large context, agent teams |
-| Codex | `cx` | OpenAI-flavored workflows |
-| OpenCode | `oc` | open-source, multi-model |
-
-Aliases come from the opt-in `--pack ai-clis`. (Gemini CLI is deprecated upstream — successor: Antigravity, `agy`; add your own wrapper if you use it.) Run multiple in parallel via `ai` or `agents`. The wrappers already route through `sbx`; see [sandboxing.md](sandboxing.md#sbx-vs-claude-codes-built-in-sandbox--pick-one) before enabling Claude's own `/sandbox` — Seatbelt does not nest, so it is one or the other.
-
----
-
-## Git
-
-### Q: Delta diff colors look wrong
-
-Delta picks up the terminal theme. Ensure Ghostty (or your terminal) is on Tokyo Night.
-
-### Q: lazygit keybindings?
-
-Press `?` inside lazygit. Main ones: `Space` stage, `c` commit, `P` push, `p` pull.
-
----
-
-## Troubleshooting
-
-### Q: Command not found
-
-```bash
-source ~/.zshrc
-brew list | grep <tool>
-brew install <tool>
-```
-
-### Q: Something broke after an update
-
-```bash
-make check
-make test
-make validate-configs
-```
-
-### Q: How do I reset everything?
-
-```bash
-cp -r ~/.config-backup-TIMESTAMP/* ~/       # restore
-./install.sh --profile desktop              # or reinstall
-```
-
----
-
-## Remote Access
-
-### Q: How do I work from my phone / iPad?
-
-See [remote.md](remote.md) — Tailscale, mosh, iOS SSH clients, and named tmux sessions for iffy connections.
-
-```bash
-remote myproject      # minimal layout, optimized for mobile
-```
-
----
-
-## Getting Help
-
-- Full docs: `ls docs/`
-- Tool-specific: `<tool> --help`, `tldr <tool>`
-- Report issues on GitHub with: `sw_vers`, `make check` output, relevant logs.
+Open an issue that includes your tuidev version (`git describe --tags`), your OS version, your profile and packs (`cat ~/.config/tuidev/profile`) and the output of `make check`. Report security issues through [SECURITY.md](../SECURITY.md).

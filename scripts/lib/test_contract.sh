@@ -23,12 +23,10 @@ INSTALL_IDS="$(grep -hE -- '--managed-block' "$REPO_DIR/install.sh" "$REPO_DIR/s
     | awk '{print $2}' | sort -u)"
 
 for id in $INSTALL_IDS; do
-    # Skip IDs that are only written by pack scripts (not cross-cutting).
-    # For now, tuidev-sandbox-path is written by scripts/install/sandbox.sh
-    # and isn't in the cross-cutting drift list — that's intentional
-    # (it's a pure PATH export, not a repo-backed config).
+    # Pack-owned blocks (Ghostty, SSH) are re-applied by re-running their
+    # pack, not by update.sh's cross-cutting drift list.
     case "$id" in
-        tuidev-sandbox-path|tuidev-ghostty|tuidev-hammerspoon|tuidev-remote) continue ;;
+        tuidev-ghostty|tuidev-remote) continue ;;
     esac
     if ! grep -qF "|$id\"" "$REPO_DIR/scripts/update.sh"; then
         fail "install.sh writes managed-block '$id' but update.sh MANAGED_BLOCKS doesn't list it"
@@ -36,14 +34,16 @@ for id in $INSTALL_IDS; do
 done
 pass "managed-block IDs are consistent between installer and updater"
 
-# 2. Seatbelt paths: update.sh security audit must point at the same paths
-#    the installer uses (configs/sandbox/profiles, ~/.config/tuidev/sandbox).
+# 2. Seatbelt paths: update.sh's security audit must compare the same source
+#    and destination the sandbox pack installs.
 if ! grep -qF 'configs/sandbox/profiles' "$REPO_DIR/scripts/update.sh"; then
     fail "update.sh should audit configs/sandbox/profiles (what install.sh writes)"
 fi
-if ! grep -qF '/tuidev/sandbox' "$REPO_DIR/scripts/update.sh"; then
-    fail "update.sh should audit ~/.config/tuidev/sandbox (where install.sh deploys)"
-fi
+for f in scripts/update.sh scripts/install/sandbox.sh; do
+    # shellcheck disable=SC2016  # the literal variable name is what we grep for
+    grep -qF '$TUIDEV_STATE_DIR/sandbox' "$REPO_DIR/$f" \
+        || fail "$f should use \$TUIDEV_STATE_DIR/sandbox for the installed profiles"
+done
 pass "Seatbelt audit paths match installer"
 
 # 3. Every pack name advertised in README/docs must have a script.
@@ -64,6 +64,53 @@ for pack in $DOCS_PACKS; do
     fi
 done
 pass "every documented --pack NAME has a script"
+
+# 4. TUIDEV_VALID_PACKS and scripts/install/packs/ agree, and every pack
+#    defines the entrypoint packs.sh will call.
+# shellcheck source=./packs.sh disable=SC1091
+. "$SCRIPT_DIR/packs.sh"
+for pack in "${TUIDEV_BUILTIN_PACKS[@]}" "${TUIDEV_VALID_PACKS[@]}"; do
+    script="$(pack_script "$pack")" || fail "pack '$pack' has no script"
+    grep -qE "^$(pack_entrypoint "$pack")\(\)" "$script" \
+        || fail "$script does not define $(pack_entrypoint "$pack")()"
+done
+for script in "$REPO_DIR"/scripts/install/packs/*.sh; do
+    tuidev_is_valid_pack "$(basename "$script" .sh)" \
+        || fail "$script is not registered in TUIDEV_VALID_PACKS (scripts/lib/profile.sh)"
+done
+pass "every pack is registered, has a script, and defines its entrypoint"
+
+# Every shipped config the installer upgrades-if-unmodified (install_config
+# --upgrade-shipped) is fingerprinted, so it can tell an unmodified old copy
+# (upgrade it) from one the user edited (leave it alone). Each hash file lists
+# `<basename without extension> <sha256>` for every version ever shipped.
+# shellcheck source=./ui.sh disable=SC1091
+. "$SCRIPT_DIR/ui.sh"
+check_fingerprinted() {
+    local shipped="$1" src name; shift
+    [[ -f "$shipped" ]] || fail "missing ${shipped#"$REPO_DIR"/}"
+    for src in "$@"; do
+        name="$(basename "$src")"; name="${name%.*}"
+        grep -qx "$name $(file_sha256 "$src")" "$shipped" \
+            || fail "${src#"$REPO_DIR"/} changed but its hash is not in ${shipped#"$REPO_DIR"/} (append: $name $(file_sha256 "$src"))"
+    done
+}
+check_fingerprinted "$REPO_DIR/configs/sandbox/profiles/shipped.sha256" "$REPO_DIR"/configs/sandbox/profiles/*.sb
+check_fingerprinted "$REPO_DIR/configs/claude/shipped.sha256" "$REPO_DIR/configs/claude/settings.json"
+check_fingerprinted "$REPO_DIR/configs/codex/shipped.sha256"  "$REPO_DIR/configs/codex/config.toml"
+# nvim is a tree: keyed by path relative to configs/nvim (two init.lua files).
+nvim_root="$REPO_DIR/configs/nvim"
+while IFS= read -r src; do
+    rel="${src#"$nvim_root"/}"
+    [[ "$rel" == shipped.sha256 ]] && continue
+    grep -qx "$rel $(file_sha256 "$src")" "$nvim_root/shipped.sha256" \
+        || fail "configs/nvim/$rel changed but its hash is not in configs/nvim/shipped.sha256 (append: $rel $(file_sha256 "$src"))"
+done < <(find "$nvim_root" -type f -not -name '.*')
+# And every --upgrade-shipped call site points at one of those hash files.
+while IFS= read -r ref; do
+    [[ -f "$REPO_DIR/$ref" ]] || fail "--upgrade-shipped names $ref, which does not exist"
+done < <(grep -rhoE 'configs/[a-z/]+/shipped\.sha256' "$REPO_DIR/scripts/install" | sort -u)
+pass "every shipped-config version is fingerprinted (sandbox, claude, codex, nvim)"
 
 echo ""
 echo "All cross-file contract tests passed."

@@ -23,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/../../lib/brew.sh"
 
 # Homebrew formula(e) this pack installs — declared so `update.sh --packages`
-# can discover and upgrade it (see scripts/update.sh `pack_formulae`).
+# can discover and upgrade it (see scripts/lib/packs.sh `pack_array`).
 FNM_FORMULAE=(fnm)
 
 # Resolve the fnm binary even if it was just installed and isn't on PATH yet in
@@ -65,16 +65,13 @@ _fnm_ensure_node() {
 fnm_install() {
     print_header "Pack: fnm"
 
-    if command_exists brew; then
-        brew_update_once
-        brew_install_formulae "${FNM_FORMULAE[@]}"
-    elif is_linux; then
-        print_warning "Homebrew not found. Install fnm via the official script:"
+    if ! command_exists brew; then
+        print_warning "Homebrew not found. Install fnm yourself, then re-run this pack:"
         print_info "    https://github.com/Schniz/fnm#installation"
         return 0
-    else
-        die "Homebrew is required; install from https://brew.sh"
     fi
+    brew_update_once
+    brew_install_formulae "${FNM_FORMULAE[@]}"
 
     _fnm_ensure_node "$(_fnm_bin)"
 

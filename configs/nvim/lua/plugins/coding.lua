@@ -32,8 +32,6 @@ return {
           },
         },
         documentation = {
-          auto_show = true,
-          auto_show_delay_ms = 200,
           window = { border = "rounded" },
         },
       },
@@ -46,143 +44,47 @@ return {
   {
     "neovim/nvim-lspconfig",
     opts = {
-      inlay_hints = { enabled = true },
       codelens = { enabled = true },
       diagnostics = {
-        virtual_text = {
-          prefix = "icons",
-          spacing = 4,
-        },
-        severity_sort = true,
+        virtual_text = { prefix = "icons" },
         float = {
           border = "rounded",
-          source = "always",
+          source = true,
         },
       },
     },
   },
 
   -- =========================================================================
-  -- Treesitter enhancements
+  -- Treesitter: parsers beyond LazyVim's defaults and the enabled lang extras
+  -- (LazyVim appends this list to its own)
   -- =========================================================================
   {
     "nvim-treesitter/nvim-treesitter",
     opts = {
       ensure_installed = {
-        "bash",
-        "c",
         "cpp",
         "css",
-        "diff",
-        "dockerfile",
-        "go",
-        "gomod",
-        "gosum",
         "graphql",
-        "html",
-        "javascript",
-        "jsdoc",
-        "json",
-        "jsonc",
-        "lua",
-        "luadoc",
-        "luap",
-        "markdown",
-        "markdown_inline",
-        "python",
-        "query",
-        "regex",
-        "rust",
         "scss",
         "sql",
         "svelte",
-        "terraform",
-        "toml",
-        "tsx",
-        "typescript",
-        "vim",
-        "vimdoc",
-        "xml",
-        "yaml",
-      },
-      highlight = { enable = true },
-      indent = { enable = true },
-      incremental_selection = {
-        enable = true,
-        keymaps = {
-          init_selection = "<C-space>",
-          node_incremental = "<C-space>",
-          scope_incremental = false,
-          node_decremental = "<bs>",
-        },
       },
     },
   },
 
   -- =========================================================================
-  -- Formatting customization
+  -- Formatting: only where we differ from LazyVim and its extras. LazyVim
+  -- formats on save itself (toggle with <leader>uf); never set format_on_save.
   -- =========================================================================
   {
     "stevearc/conform.nvim",
     opts = {
       formatters_by_ft = {
-        lua = { "stylua" },
         python = { "black", "isort" },
-        javascript = { "prettier" },
-        typescript = { "prettier" },
-        javascriptreact = { "prettier" },
-        typescriptreact = { "prettier" },
-        css = { "prettier" },
-        html = { "prettier" },
-        json = { "prettier" },
-        yaml = { "prettier" },
-        markdown = { "prettier" },
-        graphql = { "prettier" },
         rust = { "rustfmt" },
         go = { "goimports", "gofmt" },
-        sh = { "shfmt" },
-        terraform = { "terraform_fmt" },
       },
-      format_on_save = {
-        timeout_ms = 3000,
-        lsp_fallback = true,
-      },
-    },
-  },
-
-  -- =========================================================================
-  -- Comments enhancement
-  -- =========================================================================
-  {
-    "folke/todo-comments.nvim",
-    opts = {
-      signs = true,
-      keywords = {
-        FIX = { icon = " ", color = "error", alt = { "FIXME", "BUG", "ISSUE" } },
-        TODO = { icon = " ", color = "info" },
-        HACK = { icon = " ", color = "warning" },
-        WARN = { icon = " ", color = "warning", alt = { "WARNING" } },
-        PERF = { icon = "󰅒 ", color = "default", alt = { "OPTIM", "PERFORMANCE" } },
-        NOTE = { icon = "󰍨 ", color = "hint", alt = { "INFO" } },
-        TEST = { icon = "⏲ ", color = "test", alt = { "TESTING" } },
-      },
-    },
-  },
-
-  -- =========================================================================
-  -- Better diagnostics UI
-  -- =========================================================================
-  {
-    "folke/trouble.nvim",
-    opts = {
-      use_diagnostic_signs = true,
-    },
-    keys = {
-      { "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", desc = "Diagnostics (Trouble)" },
-      { "<leader>xX", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", desc = "Buffer Diagnostics (Trouble)" },
-      { "<leader>cs", "<cmd>Trouble symbols toggle focus=false<cr>", desc = "Symbols (Trouble)" },
-      { "<leader>xL", "<cmd>Trouble loclist toggle<cr>", desc = "Location List (Trouble)" },
-      { "<leader>xQ", "<cmd>Trouble qflist toggle<cr>", desc = "Quickfix List (Trouble)" },
     },
   },
 }

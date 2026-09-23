@@ -4,14 +4,8 @@
 -- ============================================================================
 
 return {
-  -- Disable Mason auto-install to prevent startup delays
-  -- Run :MasonInstall manually when you need new LSP servers
-  {
-    "williamboman/mason-lspconfig.nvim",
-    opts = {
-      automatic_installation = false,
-    },
-  },
+  -- Don't auto-install debug adapters (dap.core enables it); run
+  -- :MasonInstall when you need one.
   {
     "jay-babu/mason-nvim-dap.nvim",
     opts = {

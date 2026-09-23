@@ -1,317 +1,143 @@
 # Agent Workflows
 
-How to run and drive AI coding agents with this setup — locally, in parallel,
-across machines, and from your phone. The CLIs themselves are opt-in
-(`./install.sh --pack ai-clis`); the core setup stays CLI-agnostic.
+How to run AI coding agents with tuidev: one at a time, in parallel, across machines, and from your phone. The core install is CLI-agnostic. The CLI integrations are opt-in packs.
 
-The throughline is unchanged from [`VISION.md`](../VISION.md): **tmux is the
-durability layer.** Everything here either runs *inside* tmux, sits *beside*
-it as an optional runtime, or is a client that attaches to work that already
-lives on a machine.
+**Your editor is a GUI; the terminal runs agents.** Open a Ghostty tab, run `claude` or `codex` in it, and review the diff in VS Code or Cursor. tmux and Herdr are for sessions that must survive on an always-on node, not required for everyday work on your laptop.
 
 ## Control plane
 
-Look at agents only when they need you. A fleet is an **attention queue**, not
-a wall of panes.
+A fleet of agents is an **attention queue**, not a wall of panes. Look at an agent only when it needs you.
 
-| Role | Tool | When |
-|------|------|------|
-| One task, durable, SSH/mosh, muscle memory | **tmux** (`work` / `dev` / `ai`) | Default. Prefix `Ctrl+a`. |
-| Fleet attention (`working` / `blocked` / `done`) | **Herdr** (`--pack herdr`) | Many agents, many repos. Prefix `Ctrl+b`. |
-| Pick / restart tmux agent sessions | **bosun** (`--pack bosun`) | Stays on a private `tmux -L bosun` socket. |
-| Desk-only GPU parallel panes | **cmux** (`--pack cmux`) | macOS GUI. Not the remote story. |
-| Steer one Claude/Codex from a phone | **Native CLI remote control** | No SSH just to talk to the agent. |
-| Session around *all* work (local + remote + CI) | **[Superlogical](https://www.superlogical.com/)** | Watch-list. No pack until a beta ships. |
+| Need | Tool |
+|------|------|
+| A quick local session | A Ghostty tab: `claude` or `codex` |
+| One durable task over SSH/mosh | **tmux** (`--pack tmux`): `t [NAME]` (prefix `Ctrl+a`) |
+| Parallel agents on one repo | **Worktrees**: `claude -w NAME`, or a subagent with `isolation: worktree` |
+| Many agents: which one is blocked? | **Herdr** (`--pack herdr`, prefix `Ctrl+b`) |
+| Desk-only GUI with parallel panes | **cmux** (`--pack cmux`, macOS; doesn't survive SSH) |
+| Steer one agent from your phone | The CLI's native **remote control** |
 
-Do not collapse these. tmux does not know agent state. Herdr does not replace
-`work` / `dev` / `ai`. cmux does not survive SSH. Superlogical is not
-installable yet.
+These tools don't replace each other. tmux doesn't know agent state, Herdr doesn't replace a Ghostty tab, and cmux isn't the remote story. Work that must survive a laptop lid belongs on an always-on node (see [remote.md](remote.md)).
 
-### Machine roles
+## Editor integration
 
-- **Mac (control plane)** — Ghostty, Seatbelt (`sbx`), local Herdr server,
-  tmux layouts. This is where you sit.
-- **Always-on Linux node** — any cheap box that stays awake (a Raspberry Pi,
-  NUC, or VM). Pattern: `ssh user@devbox` then `tmux attach` or `herdr`, or
-  `herdr --remote workbox` from the Mac. Bind real hostnames only in
-  `~/.ssh/config.local` or `~/.zshrc.local` — never in this repo. See
-  [`remote.md`](remote.md) and [`inspiration.md`](inspiration.md).
+Run the agent in a terminal tab next to your editor, not inside it:
 
-Laptop sleep must not kill work that should keep running. Put that herd on
-the always-on node.
+- **Claude Code's `/ide` command** connects a running session to VS Code or Cursor: diffs and file selections show in the editor instead of the terminal. Run it from inside a `claude` session.
+- **Codex's `file_opener` setting** (`configs/codex/config.toml`, shipped as `vscode`) controls which editor Codex links to when it prints a file reference. Alternatives are commented in the shipped config: `cursor`, `vscode-insiders`, `windsurf`, `none`.
 
-## Driving one agent remotely — native remote control
+## AI CLIs
 
-The agent CLIs ship their own remote control, so you no longer need SSH just
-to *steer* an agent from your phone.
+| CLI | Pack | Shipped config (adopted, never overwritten) |
+|-----|------|----------------------------------------------|
+| Claude Code (primary) | `ai-clis` | `configs/claude/settings.json` → `~/.claude/settings.json` |
+| Codex (secondary) | `ai-clis` | `configs/codex/config.toml` → `~/.codex/config.toml` |
+| OpenCode (optional) | `opencode` | `configs/opencode/{opencode,tui}.json` → `~/.config/opencode/` |
 
-- **Claude Code Remote Control** — connects `claude.ai/code` and the Claude iOS /
-  Android apps to a Claude Code session running on your machine. Your code never
-  leaves the machine; only chat messages and tool results cross an encrypted
-  bridge. Requires Claude Code ≥ v2.1.51 and a Pro / Max / Team / Enterprise
-  plan (API keys are not supported). Docs:
-  <https://code.claude.com/docs/en/remote-control>
-- **Codex / others** — third-party mobile control layers cover Codex and more:
-  [Tactic Remote](https://clauderc.com/) (Claude / Codex / Amp) and
-  [QuivrHQ/247-claude-code-remote](https://github.com/QuivrHQ/247-claude-code-remote)
-  (Tailscale + Fly.io).
+The packs install configs, not the CLIs. The CLIs update themselves, and `--pack opencode` prints OpenCode's official installer command. `oc` runs `command opencode` directly. Claude Code and Codex run as plain `claude` and `codex`, sandboxed by the native settings each CLI ships with — see [sandboxing.md](sandboxing.md). Gemini CLI is deprecated upstream (its successor is Antigravity, `agy`) and isn't shipped. To use it, add your own wrapper in `~/.zshrc.local`.
 
-**When to use which:**
+**Shipped Claude Code policy:**
 
-| Goal | Reach for |
-|------|-----------|
-| Steer one agent from your phone, low friction | Native Remote Control |
-| Full terminal: edit files, run anything, non-agent work | SSH + tmux ([`remote.md`](remote.md)) |
-| Fleet of agents, who is blocked? | Herdr (below) |
-| Survive flaky/cellular networks | mosh wrapping tmux ([`remote.md`](remote.md)) |
+- Permissions: read-only commands are allowed (`gh pr view/list`, `gh run view/list`, `rg`, `jq`, `shellcheck`). `git push`, `gh pr merge` and `gh api` always ask. Credential paths and `.env*` are denied.
+- `sandbox.enabled` is `true`: Claude Code's native sandbox confines the Bash tool and its children by default. See [sandboxing.md](sandboxing.md) for what it confines and how to adjust it.
+- `attribution` is empty (no `Co-Authored-By`). Agent teams are on.
+- Notification hooks cover permission prompts, idle prompts, idle teammates and auto-mode denials. There is no `Stop` hook.
 
-Remote Control replaces the *"SSH in just to talk to Claude"* case. It does
-**not** replace the durable backbone.
+**Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off by default, `file_opener = "vscode"`, and an unpinned model. See [sandboxing.md](sandboxing.md) for how this native sandbox relates to `sbx`.
 
-## One-task durability — tmux panes
+### Instruction files
 
-The shipped, zero-extra-install way:
+| CLI | Reads natively | To share one file |
+|-----|----------------|-------------------|
+| Claude Code | `CLAUDE.md` (managed → `~/.claude/CLAUDE.md` → project → `CLAUDE.local.md`) and `.claude/rules/*.md`. Reads `AGENTS.md` when the project has no `CLAUDE.md` (v2.1.277+). | Put `@AGENTS.md` on the first line of `CLAUDE.md` |
+| Codex | `AGENTS.md` (`~/.codex/AGENTS.md`, then repo root down to the cwd; 32 KiB cap) | `project_doc_fallback_filenames = ["CLAUDE.md"]` |
+| OpenCode | The nearest `AGENTS.md`. Falls back to `CLAUDE.md` when no `AGENTS.md` exists. | Nothing needed |
 
-```bash
-agents [name]     # claude | codex, two columns (needs --pack ai-clis)
-ai [name]         # nvim + 2 agent panes
-ai-triple [name]  # nvim + 3 agent panes
-```
+Start a project's instructions from [templates/AGENTS_TEMPLATE.md](../templates/AGENTS_TEMPLATE.md). `scripts/setup_agent_configs.sh PROJECT` creates nothing by default. With `--all`, it adds a `CLAUDE.md` symlink (for older Claude Code, or sessions that can't read `AGENTS.md`) and the legacy per-vendor files (`.cursorrules`, `.windsurfrules`, `.aider.md`, `.clinerules`, Roo, Copilot). It never overwrites a file. Keep each instruction file short, because every one loads into context at session start.
 
-These survive disconnects, reattach over SSH, and work identically on Linux.
+### Agent teams
+
+The shipped settings enable Claude Code's experimental agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) with `"teammateMode": "auto"`:
+
+- **Inside tmux** (`--pack tmux`), each teammate gets its own tmux pane. Run `claude` from inside a tmux session.
+- **Elsewhere**, teammates run in-process. The agent panel below the prompt lists them: arrow keys select, Enter opens, `x` stops. Force this mode with `claude --teammate-mode in-process`.
+
+Split panes need tmux or iTerm2. Ghostty's native splits don't work for this. With teams enabled, a *named* subagent launches as a teammate. Use plain subagents for focused work that only needs to return a result, and a team when teammates must talk to each other. Set the variable to `0` to turn teams off.
 
 ## Worktree-per-agent
 
-For genuinely parallel agents, give each one its own checkout. A tmux pane per
-agent isolates the *terminal*; a worktree per agent isolates the *git state* —
-without it, two agents editing at once collide on the index, on each other's
-half-staged files, and on the branch that HEAD points at.
+A terminal tab or pane per agent isolates the terminal. A **worktree** per agent isolates git state. Without one, parallel agents collide on the index, on each other's half-staged files, and on `HEAD`.
+
+**Claude Code does this natively. Reach for it first:**
+
+- `claude -w NAME` (`--worktree`) starts a session in a new worktree under `.claude/worktrees/NAME`.
+- A subagent with `isolation: worktree` in its frontmatter runs in its own worktree.
+
+Both keep the checkout inside the repo, which is where `sbx` and the native sandboxes allow writes.
+
+**For other CLIs**, there's no tuidev wrapper: use `git worktree add` directly.
 
 ```bash
-worktrees feat -n 3 --cmd cc     # 3 worktrees, 3 windows, cc in each
-worktrees --list                 # path / branch / dirty? / commits ahead
-worktrees --clean                # reap the ones that landed
+git worktree add ../repo-agent-1 -b agent/1   # one worktree, one branch
+git worktree list                             # path, branch, HEAD
+git worktree remove ../repo-agent-1            # after merging, once it's clean
 ```
 
-Worktrees live at `../<repo>-wt/agent-1`, `agent-2`, ... on branches `agent/1`,
-`agent/2`, ... Window `main` stays on the original repo: review each branch
-there and `git merge agent/2` what you want to keep. `--clean` then removes the
-merged worktrees and refuses any that still hold uncommitted changes or
-unmerged commits, naming what blocks each one.
+**A worktree isolates git state only.** Ports collide, so give each worktree its own `PORT`. `node_modules`, `.venv` and `target` are neither shared nor copied. Gitignored files such as `.env` don't follow the worktree. A shared dev database is still shared. Use worktrees for genuinely independent tasks. When tasks touch the same files, one worktree and sequential agents are faster than merging the collisions.
 
-**A worktree isolates git state only.** Ports collide — give each worktree its
-own `PORT` or run one server at a time. `node_modules` / `.venv` / `target` are
-neither shared nor copied, so each worktree needs its own install. Gitignored
-files such as `.env` do not follow the worktree; copy or symlink them in. One
-shared dev database or cloud project is still shared.
+## Remote control from a phone
 
-Use this when tasks are genuinely independent (separate features, competing
-implementations of the same task). For tasks that touch the same files, one
-worktree and sequential agents is faster than merging the collisions.
+The CLIs now ship their own remote control, so you don't need SSH just to *steer* an agent.
+
+- **Claude Code Remote Control** connects `claude.ai/code` and the Claude mobile apps to a session running on your machine. Code stays local. See <https://code.claude.com/docs/en/remote-control> for plan requirements.
+- **Codex and others**: third-party layers such as [Tactic Remote](https://clauderc.com/).
+
+For a full terminal (editing files, non-agent work, a flaky network), use SSH or mosh plus tmux, covered in [remote.md](remote.md).
 
 ## Fleet attention — Herdr (`--pack herdr`)
 
-[Herdr](https://herdr.dev/) is a Rust runtime for coding-agent fleets. A
-background server owns real terminal processes. Clients attach, detach, and
-render. Herdr detects agents in panes and marks each `working`, `blocked`,
-`done`, or `idle`. The CLI and a local socket API are the same surface — agents
-can split panes, start each other, and wait until another agent is genuinely
-blocked instead of firing keystrokes.
+[Herdr](https://herdr.dev/) is an agent runtime. A server owns the terminal processes, clients attach and detach, and each pane holding an agent is marked `working`, `blocked`, `done` or `idle`. The CLI and a local socket API are the same surface, so agents can split panes, start each other, and wait on a blocked peer instead of sending keystrokes.
 
 ```bash
 ./install.sh --pack herdr
-herdr                 # attach to the local server
-herdr --remote workbox  # one-off thin client over SSH (Host from your SSH config)
-herdr machine add workbox --label "Build box"   # save it: one sidebar, many machines
-herdr --machine workbox agent list             # scriptable, no TUI, no `ssh -- herdr`
+herdr                                         # attach; the first attach starts the server
+herdr machine add workbox --label workbox     # save an SSH node (interactive, once)
+herdr --machine workbox agent list            # scriptable, no TUI
 ```
 
-**Trade-off:** Herdr is a second multiplexer. tmux remains the default for
-`work` / `dev` / `ai`. Use Herdr when the bottleneck is *which agent needs
-you*, not *how do I keep this pane alive*. Prefix is `ctrl+b`; this setup's
-tmux prefix is `ctrl+a`, so they do not clash if you use both.
+Herdr is a second multiplexer. tmux (`--pack tmux`) is the default for a durable local session. Reach for Herdr when the question is *which agent needs me*, not *how do I keep this pane alive*. Its prefix is `Ctrl+b`, so it doesn't clash with tmux's `Ctrl+a`.
 
-If `HERDR_ENV=1`, you are already inside a Herdr pane. Do not run `herdr`
-again from that pane — nested launches are blocked by design. Drive Herdr
-with the CLI (`herdr agent list`, `herdr status`) instead of scripting the
-TUI. Agent skill (documented, not auto-installed):
-`npx skills add herdrdev/herdr --skill herdr -g`.
+Practices:
 
-Integrations (optional, after install): `herdr integration install claude`
-adds native lifecycle hooks and session restore where supported. Herdr
-releases bump the hook version; after every upgrade run
-`herdr integration status` and reinstall whatever reports `outdated`.
-Prefer `herdr --skill` (release-matched) over the `npx skills add` copy.
-Upstream: <https://herdr.dev/docs/>.
+1. **Never nest.** When `HERDR_ENV=1`, you are inside a Herdr pane. Use `herdr agent list` or the socket API, never the TUI.
+2. **The sidebar is the queue.** Don't tab through panes looking for a prompt.
+3. **Detach, don't kill.** `Ctrl+b q` leaves agents running. `herdr server stop` ends the herd.
+4. **Sleep-proof work lives on an always-on node**, whether a saved machine (`herdr machine add`) or `herdr --remote NODE`.
+5. **Upgrade clients freely, and servers deliberately.** A newer client keeps using a running compatible server (`herdr status` reports `server_binary_stale`). Restart a server when its agents are idle, or try `herdr update --handoff`. Homebrew installs upgrade with `brew upgrade herdr` (or `make update-packages`). Keep exactly one `herdr` binary on each node.
+6. **Reinstall integrations after upgrades.** Run `herdr integration install claude` (or `codex`, …) once, then `herdr integration status` after every upgrade, and reinstall anything reported `outdated`.
+7. **Start the server from a login shell.** Integrations read the *server's* `PATH`. A server started by `brew services`, or by a non-interactive `ssh host herdr server`, gets a stripped `PATH` and reports the CLIs as `not found`. On Linux, use a systemd user unit with `ExecStart=/bin/bash -lc 'exec herdr server'`.
 
-**Upgrading (0.9+): update the client, leave the server.** The TUI now runs
-in each client, so a newer client keeps talking to a running compatible
-server and `herdr status` just reports `server_binary_stale: yes`. Agents keep
-running. Restart a server (`herdr server stop`, then attach) only when you
-need a server-side fix, ideally when its agents are idle; `herdr update
---handoff` / `herdr --remote workbox --handoff` is the experimental live path
-that carries pane processes across. Homebrew installs update through
-`brew upgrade herdr` (or `make update-packages`); `herdr update` is for the
-direct-installer binary on a Linux node. Keep exactly one `herdr` on a node —
-a stale copy earlier on `PATH` (say `/usr/local/bin` from an old install) is
-what a non-interactive `ssh node herdr …` will find.
+`herdr machine add` checks and, after asking, installs the remote server. It never copies your config or secrets. Passphrase-protected keys need `ssh-add` first. Under `sbx --profile strict`, an agent reaches the Herdr socket only with `--allow-herdr` (see [sandboxing.md](sandboxing.md#profiles)). Inside a Herdr pane, `HERDR_ENV=1` is already set, and `sbx` hides the wrapped process from Herdr's detection unless you pass `--allow-herdr`. Herdr's docs: <https://herdr.dev/docs/>.
 
-On a Linux node without Homebrew, the pack prints Herdr's official installer
-command for you to run — it never pipes a remote script to a shell. Distro
-tmux/git/rg are enough for the durability path; `--core` fills in the rest via
-its apt fallback where the release packages it.
+## Desk and session tools
 
-### First fleet (generic)
+**cmux** (`--pack cmux`, macOS 14+) is a Ghostty-based GUI terminal for running agents side by side, with notification rings, a built-in browser and Claude Code teams integration. You give up tmux's durability, SSH reattach and Linux parity, so treat it as a desktop complement.
 
-Personal hosts stay in `~/.ssh/config.local`. The shipped SSH snippet already
-`Include`s that file (glob, so a missing file is ignored).
+**Superlogical** (<https://www.superlogical.com/>) is on the watch-list. There is no pack until a public release exists (see [roadmap.md](roadmap.md)).
 
-```bash
-# Mac — once
-./install.sh --profile desktop --pack herdr --pack ai-clis
-herdr server              # headless; clients attach with `herdr`
-# Detach a client: prefix then q  (ctrl+b, then q). The server keeps running.
+## Notifications
 
-# Always-on node — herdr on PATH (official installer if no brew)
-# ~/.local/bin must be on PATH for *non-interactive* SSH too (~/.profile).
+Don't watch panes. `~/.local/bin/notify.sh` (from `scripts/notify.sh`) is called by the Claude Code hooks, and optionally by Codex's `notify`. It uses the first channel that works:
 
-# ~/.ssh/config.local  (never commit this)
-#   Host workbox
-#       HostName devbox.example.com
-#       User your-username
+1. A Herdr toast, inside a Herdr pane
+2. The tmux status line, inside tmux
+3. A macOS banner (`osascript`)
+4. `notify-send`, on a Linux desktop
+5. An [ntfy](https://ntfy.sh) push, when `NTFY_URL` is set (for example `export NTFY_URL=https://ntfy.sh/your-topic` in `~/.zshrc.local`)
+6. Nothing: it stays silent and always exits 0
 
-herdr machine add workbox --label "workbox"   # interactive once: checks/installs the
-                                             # remote server, saves the profile
-herdr                     # the sidebar now lists Local + workbox; switch, split, prompt
-herdr --machine workbox agent list   # scriptable; agents use this, not the TUI
-herdr --remote workbox    # still works for a one-off attach (no saved profile)
-herdr agent list          # who is working / blocked / done (local)
-herdr status              # local client + server, and whether a restart is pending
-herdr machine list        # saved machines (--json for scripts)
-```
+tmux also flags any window whose agent rings the bell.
 
-`machine add` never copies your config, plugins or secrets to the node; it
-only checks the remote binary and server and asks before installing or
-replacing anything. Non-interactive reconnects never install or answer
-prompts, so run the first `machine add` from a real terminal. Passphrase keys
-need `ssh-add` first, because the background reconnects cannot prompt.
+## Done means verified
 
-**Integrations say `not found` but the CLIs are installed.** Herdr scans the
-*server process* PATH, not your interactive shell. `brew services start herdr`
-and a non-interactive `ssh host herdr server` inherit a stripped PATH
-(`/usr/bin:/bin` on macOS). Start the server from a login shell instead:
-
-```bash
-# macOS — prefer an attach that starts the server, or a login-shell LaunchAgent
-herdr                 # from Ghostty/zsh; first attach starts the server with your PATH
-# Linux node — systemd user unit with: ExecStart=/bin/bash -lc 'exec herdr server'
-```
-
-Then `herdr integration install claude` (and `codex` / `grok` / …) for native
-lifecycle hooks. `agy` is not the same slot as Herdr's `antigravity-cli`.
-
-**Practices that stay true in 2027:**
-
-1. **One workspace per repo or task.** Split panes for an agent vs a runner;
-   do not pile unrelated jobs in one workspace.
-2. **The sidebar is the queue.** Do not tab through panes looking for a prompt.
-3. **Detach, don't kill.** `prefix+q` leaves agents running. `herdr server stop`
-   is how you actually end the herd.
-4. **Sleep-proof work lives on the always-on node.** Laptop Herdr dies with the
-   lid; a saved machine (`herdr machine add`) or `herdr --remote workbox` does not.
-5. **Never nest.** If `HERDR_ENV=1`, use `herdr agent list` / the socket API.
-6. **Done means verified.** Lint → tests → `make check` before you trust "done".
-7. **tmux still wins for one durable task** (`work` / `dev` / `ai`). Herdr wins
-   when the question is *which agent needs you*.
-8. **Upgrade clients freely, servers deliberately.** A stale server is not a
-   bug; restart it when its agents are idle, or use `--handoff`.
-9. **Reinstall integrations after upgrades.** `herdr integration status` →
-   reinstall anything `outdated`, or agent states silently stop updating.
-
-## Parallel agents on the desk — cmux (`--pack cmux`)
-
-[cmux](https://github.com/manaflow-ai/cmux) is a Ghostty-based, GPU-accelerated
-macOS terminal built specifically for running coding agents side by side:
-vertical tabs, notification rings (OSC 9/99/777 and Claude Code hooks), a
-built-in browser with Playwright-equivalent automation, and Claude Code Teams
-integration. It works with claude, codex, opencode, and any CLI.
-
-```bash
-./install.sh --pack cmux     # brew tap manaflow-ai/cmux + cask (macOS 14+)
-```
-
-**Trade-off:** cmux is a native macOS GUI app. You gain a slick parallel-agent
-UX; you give up tmux's session durability, SSH-reattach, mobile access, and
-Linux parity. Treat it as a desktop *complement*, not a replacement.
-
-## tmux session picker — bosun (`--pack bosun`)
-
-[bosun](https://github.com/yetidevworks/bosun) (Rust + ratatui) lists, previews,
-creates, and manages tmux sessions running Claude Code, Codex, or a plain shell
-from one TUI — lifecycle controls (attach / rename / restart / kill), and push
-notifications from tmux via control mode. It runs its sessions on a dedicated
-`tmux -L bosun` socket, so it never touches your main tmux state.
-
-```bash
-./install.sh --pack bosun     # via Homebrew formula if available, else cargo
-```
-
-Because bosun stays inside the terminal and drives tmux, it fits the
-tmux-primary thesis — orchestration that survives disconnects and works over
-SSH. It does not detect agent state the way Herdr does.
-
-## Horizon — Superlogical
-
-[Superlogical](https://www.superlogical.com/) (Hashimoto, Pearkes, and others)
-is building a multiplexer for *all* work: interactive sessions, agents,
-background jobs, and production, with web and native clients. There is no
-public binary yet. When a beta exists and it remains excellent at being a
-multiplexer, this repo will add `--pack superlogical` the same way it added
-Herdr. Until then: tmux + Herdr.
-
-## Execution is unverified until the ladder ran
-
-An agent that says "done" is not done. Verify cheapest-first:
-
-1. Lint / syntax (`make lint`, `make validate-configs`)
-2. Targeted tests (`make test-core`)
-3. Health (`make check`, `make sbx-test` on macOS)
-4. CI
-
-See [`engineering.md`](engineering.md). Parallel implementors get **isolated
-git worktrees** — do not share a dirty index. Herdr can open worktrees from
-the sidebar; that is optional, not required.
-
-## Sandboxing
-
-The AI-CLI wrappers (`--pack ai-clis`) auto-route through `sbx` (Seatbelt) on
-macOS when `--pack sandbox` is present — `cc` / `cx` / `oc` are sandboxed by
-default. cmux, bosun, and Herdr launch those same wrappers, so the sandbox
-still applies. Linux nodes are a trusted host plus tmux/Herdr; kernel isolation
-there is `--pack sandbox-container`. See [`sandboxing.md`](sandboxing.md).
-
-**Herdr's socket under Seatbelt.** The profiles are `(deny default)`, which
-blocks AF_UNIX connects too — so a sandboxed agent could not reach the socket
-API the section above tells it to use. `strict.sb` and `standard.sb` therefore
-allow outbound connections to a subpath of `~/.config/herdr`, covering both
-`~/.config/herdr/herdr.sock` and `~/.config/herdr/sessions/<name>/herdr.sock`.
-Two honest caveats: if you point `HERDR_SOCKET_PATH` outside that directory the
-connect is denied again (move it back, or use `sbx --profile off`), and the
-allow is path-scoped only — anything that can reach that path can talk to the
-herdr server, which can spawn panes outside the sandbox.
-
-## Notifications — don't watch panes
-
-- Claude Code hooks can POST to [ntfy.sh](https://ntfy.sh) or any webhook when a
-  long task finishes — see [`configs/claude/settings.json`](../configs/claude/settings.json).
-- [`scripts/notify.sh`](../scripts/notify.sh) is the local macOS banner helper.
-- cmux and bosun consume terminal notification escape sequences.
-- Herdr's sidebar *is* the attention queue; pair it with ntfy when you are
-  away from the TUI.
-
-## Agents driving agents
-
-Herdr's CLI and socket API are the integration surface (spawn panes, wait on
-blocked peers). Do not send raw keystrokes into another agent's TUI and hope.
-Documented skill install is opt-in and global to *your* agent CLI — this
-repo does not write it for you. Upstream: <https://herdr.dev/docs/socket-api/>.
+An agent that says "done" isn't done until the checks pass. Verify the cheapest checks first: lint and syntax, then targeted tests, then health checks, then CI. For this repo, that is `make ci-test`, then `make check` (see [engineering.md](engineering.md#verification)).

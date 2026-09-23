@@ -1,6 +1,6 @@
 # Roadmap — 2027/2028 Readiness
 
-*Last updated: August 2026.*
+*Last updated: September 2026 (tuidev 3.0).*
 
 This is not a feature list. It is groundwork for a landscape that keeps
 moving faster than most tools can absorb — multiplexers, sandboxing, and
@@ -29,9 +29,11 @@ Three things are true at once in mid-2026:
   and Amplify Partners; promises an open-source release during development.
   As of this writing there is **no public binary**, only a beta waitlist.
 
-**This repo's posture:** tmux stays the durability substrate for every
-profile. Herdr stays an opt-in pack — it earns its `ctrl+b` prefix (deliberately
-distinct from tmux's `ctrl+a`) by solving *attention*, not *durability*.
+**This repo's posture:** tmux stays the durability layer when you choose it —
+`--pack tmux`, included by the `remote` profile for always-on nodes — rather
+than baked into every profile; a laptop session doesn't need it. Herdr stays
+an opt-in pack — it earns its `ctrl+b` prefix (deliberately distinct from
+tmux's `ctrl+a`) by solving *attention*, not *durability*.
 Superlogical stays a watch-list entry with zero code committed to it. A
 `--pack superlogical` is plausible once there is a public artifact that has
 held up under real use — see the adopt criteria below. Until then, adding
@@ -69,9 +71,11 @@ need to change for callers.
 
 ## c. Fleet-scale agents: three horizons, not one leap
 
-1. **Today — worktree-per-agent.** Parallel implementors work in isolated
-   git worktrees (see the `delegation` skill and `docs/engineering.md`).
-   This is cheap, needs no new tooling, and is already how this repo
+1. **Today — worktree-per-agent.** Parallel agents work in isolated git
+   worktrees: Claude Code's `claude -w` and subagent `isolation: worktree` (see
+   [`agent-workflows.md`](agent-workflows.md#worktree-per-agent)). Other CLIs
+   use plain `git worktree add` by hand — there's no CLI-agnostic wrapper for
+   it anymore. This is cheap, needs no new tooling, and is how this repo
    recommends running more than one agent against the same codebase.
 2. **Next — attention-state APIs.** Herdr's socket API
    (`herdr.dev/docs/socket-api/`) lets agents query and react to *other*
@@ -104,21 +108,23 @@ they are *why* (a)–(c) above don't require rewrites:
   writes `~/.zshrc`, SSH config, etc. inside `# >>> tuidev managed >>>`
   fences. User edits outside the fence survive every re-run and every
   future migration.
-- **Drift-detecting updates, growing toward one-shot migrations.**
-  `scripts/update.sh` already separates package updates from config-drift
-  detection per profile, and one-shot migrations already carried the
-  Zellij→tmux transition; the pattern (detect drift → offer a scripted, reversible
-  migration) generalizes to future transitions instead of asking users to
-  hand-edit dotfiles again.
-- **Manifest-driven uninstall.** `uninstall.sh` already reads
-  `~/.config/tuidev/` to know which packs and configs it owns before
-  touching anything, rather than guessing from what's on disk. This is the
-  same shape Omacosy uses (see [`inspiration.md`](inspiration.md)) and it's
-  what makes "cleanly remove one pack" tractable as the pack count grows.
-- **CLI-agnostic core.** AI CLIs (`claude`, `codex`, `opencode`) are an
-  opt-in pack behind a common `sbx`-routed wrapper shape (`cc`/`cx`/`oc`).
-  When a CLI is deprecated (as happened to Gemini CLI, succeeded by
-  Antigravity) or a new one appears, the core install doesn't move.
+- **Drift-detecting updates and one-shot migrations.** `scripts/update.sh`
+  separates package updates from config-drift detection per profile, and
+  timestamped migrations (`scripts/migrations/`) repair what past releases
+  left behind: a removed multiplexer pack, the OpenCode pack split, and the move of
+  the tmux theme into `theme.conf`. Future transitions ship as a migration
+  instead of asking users to hand-edit dotfiles.
+- **Manifest-driven uninstall.** `uninstall.sh` removes only what
+  `~/.config/tuidev/manifest` records, rather than guessing from what's on
+  disk, the same shape Omacosy uses. That's what makes "cleanly remove one
+  pack" tractable as the pack count grows.
+- **CLI-agnostic core.** AI CLIs (`claude`, `codex`, and the optional
+  `opencode`) run sandboxed by their own means: Claude Code and Codex by
+  their own native sandbox settings (`--pack ai-clis` adopts/upgrades
+  `~/.claude/settings.json` and `~/.codex/config.toml` to turn those on),
+  OpenCode by its own `--pack opencode`'s plain `oc` wrapper. When a CLI is
+  deprecated (as happened to Gemini CLI, succeeded by Antigravity) or a new
+  one appears, the core install doesn't move.
 
 ## e. Watch-list: adopt / hold criteria
 
@@ -126,8 +132,8 @@ they are *why* (a)–(c) above don't require rewrites:
 |---|---|---|---|
 | **Superlogical** | Pre-product, beta waitlist only | A public binary exists, has been usable daily for a real project for ~3 months, and its durable-session model doesn't require abandoning tmux for local work | No artifact to integrate against yet; anything built today would target a moving, undocumented API |
 | **Herdr → 1.0** | `--pack herdr`, currently ~v0.9.x (multi-machine sidebar, client/server decoupled since 0.9.0) | Already adopted as opt-in. Treat its socket API as semi-stable once herdr ships 1.0 and it has held for ~6 months of point releases without a breaking API change | Pre-1.0 software can and does break its own API; the pack stays opt-in, not default, until then |
-| **Apple containerization framework as Tier 1 sandbox** | Available on macOS 26, VM-per-container | It ships a stable CLI story with acceptable cold-start latency for a per-command sandbox, and `bin/sbx` can wrap it with the same `strict/standard/off` contract | Today it means a VM boot per invocation — wrong latency shape for "sandbox every `cc` call"; Seatbelt via `sbx` is unchanged |
-| **omarchy-style executable theme/plugin pipelines** | Adopting the single-palette *pattern*, not their plugin runtime | Never wholesale — see the cautionary note in [`inspiration.md`](inspiration.md) | Executable theme/plugin systems are a supply-chain surface (see `basecamp/omarchy` discussion #5946 on hardening against exactly this); this repo's theming stays static config files, not scripts fetched and run at theme-switch time |
+| **Apple containerization framework as Tier 1 sandbox** | Available on macOS 26, VM-per-container | It ships a stable CLI story with acceptable cold-start latency for a per-command sandbox, and `bin/sbx` can wrap it with the same `strict/standard/off` contract | Today it means a VM boot per invocation — wrong latency shape for "sandbox every `claude` call"; Seatbelt via `sbx` is unchanged |
+| **omarchy-style executable theme/plugin pipelines** | Adopting the single-palette *pattern*, not their plugin runtime | Never wholesale: see [`VISION.md`](../VISION.md#what-we-take-and-what-we-refuse) | Executable theme/plugin systems are a supply-chain surface (see `basecamp/omarchy` discussion #5946 on hardening against exactly this); this repo's theming stays static config files, not scripts fetched and run at theme-switch time |
 | **Tailcat (tailscale.com/tailcat)** | New open-source CLI: accountless, encrypted point-to-point connections — no tailnet, no login flow | An agent or CI job needs to reach a machine for one task without joining the tailnet, and tailcat has a few months of releases behind it; would slot into `--remote` as an *addition* for ephemeral peers | The remote pack's model is a persistent personal fleet — a tailnet with identity is the right shape for that; tailcat solves the adjacent problem (short-lived, accountless links), not this one |
 | **In-editor ACP agents in Neovim** | Mature enough to work, still not adopted | A concrete workflow need outweighs the "AI runs in external panes" principle — unlikely to change soon | Conscious non-goal, not a capability gap — see `VISION.md` |
 

@@ -3,7 +3,13 @@
 #
 # Provides:
 #   write_managed_block FILE BLOCK_ID CONTENT_OR_STDIN
-#   install_config     DEST  SOURCE [--overwrite|--adopt-existing|--managed-block BLOCK_ID]
+#   read_managed_block  FILE BLOCK_ID
+#   remove_managed_block FILE BLOCK_ID
+#   install_config     DEST  SOURCE [--overwrite|--adopt-existing|--managed-block BLOCK_ID
+#                                    |--upgrade-shipped HASHFILE [--shipped-name NAME]]
+#   tuidev_is_shipped  FILE  SOURCE HASHFILE [NAME]
+#   tuidev_block_begin / tuidev_block_end BLOCK_ID   the marker lines themselves
+#   tuidev_backup      PATH [PREFIX]
 #
 # The managed-block strategy wraps repo-owned content in paired markers:
 #   # >>> tuidev managed (BLOCK_ID) >>>
@@ -30,8 +36,13 @@ _TUIDEV_CFGW_LOADED=1
 
 # Where --overwrite and the install.sh nvim path park their backups, and how
 # many to keep. 10 covers a few months of active use without unbounded growth.
-: "${TUIDEV_BACKUP_DIR:=$HOME/.config/tuidev/backups}"
+: "${TUIDEV_BACKUP_DIR:=$TUIDEV_STATE_DIR/backups}"
 : "${TUIDEV_BACKUP_KEEP:=10}"
+
+# The marker format, defined once. Everything that reads or writes a managed
+# block (this lib, update.sh's duplication checks) builds markers here.
+tuidev_block_begin() { printf '# >>> tuidev managed (%s) >>>' "$1"; }
+tuidev_block_end()   { printf '# <<< tuidev managed (%s) <<<' "$1"; }
 
 # tuidev_backup PATH [PREFIX]
 # Copy PATH (file or dir) into $TUIDEV_BACKUP_DIR with a timestamped name.
@@ -78,8 +89,9 @@ write_managed_block() {
     local file="$1"
     local block_id="$2"
     local content="${3-}"
-    local begin="# >>> tuidev managed (${block_id}) >>>"
-    local end="# <<< tuidev managed (${block_id}) <<<"
+    local begin end
+    begin="$(tuidev_block_begin "$block_id")"
+    end="$(tuidev_block_end "$block_id")"
 
     [[ -z "$file" || -z "$block_id" ]] && {
         print_error "write_managed_block: FILE and BLOCK_ID required"
@@ -142,14 +154,24 @@ write_managed_block() {
 # install_config DEST SOURCE [flags]
 # Flags:
 #   --managed-block ID   (default) insert SOURCE content as managed block ID
-#   --overwrite          full-file replace (destructive, requires consent)
-#   --adopt-existing     if DEST already exists, do not touch it
-# On --overwrite, the existing DEST is backed up to ~/.config/tuidev/backups/.
+#   --overwrite          full-file replace (destructive, requires consent);
+#                        a no-op when DEST is already identical
+#   --adopt-existing     if DEST already exists, do not touch it; only a file
+#                        this call creates is recorded in the manifest
+#   --upgrade-shipped HASHFILE
+#                        --adopt-existing, except that a DEST byte-identical to
+#                        a version tuidev shipped earlier (see tuidev_is_shipped)
+#                        is ours to upgrade: it is backed up and replaced, so
+#                        fixes reach existing installs. A DEST the user edited is
+#                        kept, with a `diff` hint.
+#   --shipped-name NAME  the HASHFILE key when the basename is ambiguous (a
+#                        config tree such as nvim keys by relative path).
+# On --overwrite, a differing DEST is backed up to $TUIDEV_BACKUP_DIR first.
 install_config() {
     local dest="$1"; shift
     local source="$1"; shift
     local mode="managed-block"
-    local block_id=""
+    local block_id="" hash_file="" shipped_name=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -166,6 +188,15 @@ install_config() {
                 mode="adopt-existing"
                 shift
                 ;;
+            --upgrade-shipped)
+                mode="upgrade-shipped"
+                hash_file="$2"
+                shift 2
+                ;;
+            --shipped-name)
+                shipped_name="$2"
+                shift 2
+                ;;
             *)
                 print_error "install_config: unknown flag $1"
                 return 2
@@ -179,6 +210,21 @@ install_config() {
         managed-block)
             [[ -z "$block_id" ]] && { print_error "install_config: --managed-block needs ID"; return 2; }
             write_managed_block "$dest" "$block_id" "$(cat "$source")"
+            ;;
+        upgrade-shipped)
+            [[ -z "$hash_file" ]] && { print_error "install_config: --upgrade-shipped needs HASHFILE"; return 2; }
+            if [[ ! -e "$dest" ]]; then
+                install_config "$dest" "$source" --adopt-existing
+            elif [[ -f "$dest" ]] && cmp -s "$dest" "$source"; then
+                # Identical to what we ship: ours, so record it (this also
+                # rebuilds records on installs that predate the manifest).
+                tuidev_manifest_record file "$dest"
+                print_success "$dest (up to date)"
+            elif tuidev_is_shipped "$dest" "$source" "$hash_file" "$shipped_name"; then
+                install_config "$dest" "$source" --overwrite
+            else
+                print_info "keeping your edited $dest (compare: diff $dest $source)"
+            fi
             ;;
         adopt-existing)
             if [[ -e "$dest" ]]; then
@@ -195,7 +241,12 @@ install_config() {
             fi
             ;;
         overwrite)
-            if [[ -e "$dest" ]]; then
+            if [[ -f "$dest" ]] && cmp -s "$source" "$dest"; then
+                # Identical: nothing to back up or copy. Still recorded, so a
+                # re-run rebuilds a lost manifest.
+                tuidev_manifest_record file "$dest"
+                print_success "$dest (up to date)"
+            elif [[ -e "$dest" ]]; then
                 tuidev_backup "$dest" >/dev/null || true
                 if [[ "$DRY_RUN" == true ]]; then
                     print_info "[DRY RUN] would overwrite $dest with $source"
@@ -218,6 +269,23 @@ install_config() {
     esac
 }
 
+# tuidev_is_shipped FILE SOURCE HASHFILE [NAME]
+# True when FILE is byte-identical to some version of SOURCE that tuidev has
+# shipped. HASHFILE holds `<name> <sha256>` lines (`#` comments allowed), one
+# per version ever released, where <name> is NAME if given, else SOURCE's
+# basename without its extension (strict.sb -> strict, settings.json ->
+# settings). Keying by name keeps a copy of one shipped file from "upgrading"
+# into another.
+tuidev_is_shipped() {
+    local file="$1" source="$2" hash_file="$3" name="${4:-}"
+    [[ -f "$file" && -f "$hash_file" ]] || return 1
+    if [[ -z "$name" ]]; then
+        name="$(basename "$source")"
+        name="${name%.*}"
+    fi
+    grep -qx "$name $(file_sha256 "$file")" "$hash_file"
+}
+
 # read_managed_block FILE BLOCK_ID
 # Prints the block content (without markers) to stdout. Exit 0 if block is
 # present, 1 if absent. Used by update.sh for drift detection — single
@@ -225,8 +293,9 @@ install_config() {
 read_managed_block() {
     local file="$1"
     local block_id="$2"
-    local begin="# >>> tuidev managed (${block_id}) >>>"
-    local end="# <<< tuidev managed (${block_id}) <<<"
+    local begin end
+    begin="$(tuidev_block_begin "$block_id")"
+    end="$(tuidev_block_end "$block_id")"
 
     [[ -f "$file" ]] || return 1
     grep -qF "$begin" "$file" 2>/dev/null || return 1
@@ -243,8 +312,9 @@ read_managed_block() {
 remove_managed_block() {
     local file="$1"
     local block_id="$2"
-    local begin="# >>> tuidev managed (${block_id}) >>>"
-    local end="# <<< tuidev managed (${block_id}) <<<"
+    local begin end
+    begin="$(tuidev_block_begin "$block_id")"
+    end="$(tuidev_block_end "$block_id")"
 
     [[ -f "$file" ]] || return 0
     grep -qF "$begin" "$file" 2>/dev/null || return 0
@@ -263,4 +333,9 @@ remove_managed_block() {
     ' "$file" > "$tmp"
     mv "$tmp" "$file"
     print_success "removed managed block '${block_id}' from ${file}"
+    # Nothing but our block was in it: drop the now-empty file.
+    if ! grep -q '[^[:space:]]' "$file"; then
+        rm -f "$file"
+        print_info "removed ${file} (only held the tuidev block)"
+    fi
 }

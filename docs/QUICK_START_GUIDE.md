@@ -1,150 +1,106 @@
-# Quick Start Guide
+# Quick Start
 
-5-minute crash course: zero to a working tmux session with Nvim and AI agents.
-
----
+From a fresh clone to a sandboxed agent running next to your editor, in about ten minutes. For reference material, see [CHEATSHEET.md](CHEATSHEET.md).
 
 ## 1. Install
 
 ```bash
 git clone https://github.com/spfr/tuidev.git
 cd tuidev
+./install.sh --profile desktop --dry-run   # preview every change
 ./install.sh --profile desktop
-source ~/.zshrc
+exec zsh -l
 ```
 
-The `desktop` profile installs the core, remote, sandbox, and UI packs — everything a macOS developer needs. Other profiles:
+| Profile   | Packs                   | Use when                        |
+|-----------|-------------------------|----------------------------------|
+| `minimal` | core                    | Server, VM, CI runner            |
+| `desktop` | core + ui + sandbox     | Your Mac (recommended)           |
+| `remote`  | core + remote + sandbox + `--pack tmux` | A headless box you SSH into |
 
-| Profile | What you get | Use when |
-|---------|--------------|----------|
-| `minimal` | core only (Nvim, tmux, shell tooling) | headless box, slow disk |
-| `remote`  | core + remote (Tailscale, mosh, SSH) | VPS, Linux server |
-| `desktop` | core + remote + sandbox + UI | **recommended** for macOS |
-| `full`    | everything (+ extras pack) | kitchen sink |
+Add optional packs at any time: `./install.sh --pack ai-clis`. Re-running is safe. See [profiles.md](profiles.md) for every pack.
 
-Add a single pack on top with `--pack NAME` (e.g. `--pack ai-clis`). See [profiles.md](profiles.md) for the full matrix.
-
----
-
-## 2. Your First Session
-
-tmux is the session layer. All launchers create a **named** session and re-attach if it already exists.
+Check the result:
 
 ```bash
-work myproject        # bare tmux session named "myproject"
-dev                   # 3-column: nvim (55%) | agent (25%) | runner (20%)
-ai                    # nvim (60%) + 2 stacked agent panes (40%)
+make check      # health check against the installed profile
 ```
 
-Exit with `Ctrl+a d` (detach — session keeps running). Reattach by re-running the same launcher (`work myproject`) — launchers are attach-or-create.
+## 2. Your first session
 
-### All session launchers
+Open a Ghostty tab in your project and run an agent. `claude` and `codex` are sandboxed automatically by their own settings — no wrapper needed:
 
-| Command | Layout |
-|---------|--------|
-| `work [name]` | bare named session (default: `$PWD` basename) |
-| `dev [name]`  | nvim + agent + runner |
-| `ai [name]`   | nvim + 2 agents |
-| `ai-triple [name]` | nvim + 3 agents |
-| `agents [name]` | claude + codex, one per pane (needs --pack ai-clis) |
-| `remote [name]` | minimal layout for mosh/SSH |
-| `tls` | list sessions |
-| `tk [name]` | kill one session |
-| `tka` | kill all (tmux kill-server) |
+```bash
+claude    # or: codex
+```
 
----
+Work the agent produces, then review the diff in your editor — `/ide` inside a `claude` session connects it to VS Code or Cursor (see [agent-workflows.md](agent-workflows.md#editor-integration)).
 
-## 3. tmux Keys You Need
+If you installed `--pack tmux` (included in the `remote` profile), you also get a tiny attach-or-create helper for durable sessions over SSH:
 
-Prefix is `Ctrl+a`.
+```bash
+t myproject   # attach, or create a session named "myproject"
+tls           # list sessions
+```
+
+Detach with `Ctrl+a d`; the session keeps running. Full key table: [CHEATSHEET.md#tmux---pack-tmux](CHEATSHEET.md#tmux---pack-tmux) (only relevant once `--pack tmux` is installed).
+
+## 3. tmux keys (if you installed `--pack tmux`)
+
+The prefix is `Ctrl+a`: press it, release, then press the key. The full table is in [CHEATSHEET.md#tmux-keys---pack-tmux](CHEATSHEET.md#tmux-keys---pack-tmux); the essentials:
 
 | Keys | Action |
 |------|--------|
-| `Ctrl+a \|` | split pane vertically |
-| `Ctrl+a -` | split pane horizontally |
-| `Ctrl+a h/j/k/l` | move between panes |
-| `Ctrl+a d` | detach (session survives) |
-| `Ctrl+a [` | scroll/copy mode (`q` to exit) |
-| `Ctrl+a ?` | list every keybinding |
+| `Ctrl+a \|` / `Ctrl+a -` | Split right / split below |
+| `Ctrl+a h/j/k/l` | Move between panes |
+| `Ctrl+a d` | Detach |
+| `Ctrl+a ?` | List every binding |
 
-See [TERMINAL_NAVIGATION.md](TERMINAL_NAVIGATION.md) if arrow keys or Option-word-jump misbehave.
+## 4. Run an agent in the sandbox
 
----
-
-## 4. Run an AI Agent in a Sandbox
-
-AI tools write files and run commands. `sbx` runs *anything* under macOS Seatbelt so it can't reach your credentials:
+`claude` and `codex` are sandboxed automatically, by settings each CLI ships with and that `--pack ai-clis` turns on (`sandbox.enabled` for Claude Code, `sandbox_mode = "workspace-write"` for Codex). Just run them:
 
 ```bash
-sbx -- claude          # any command, strict profile
-sbx -- npm test
+./install.sh --pack ai-clis
+claude
+codex
 ```
 
-Install the opt-in AI-CLI pack and the wrappers route through `sbx` for you:
+**First run on macOS:** if you use Claude Code's native sandbox, the Keychain still works, since nothing wraps the process. If you instead wrap Claude Code in `sbx` (below), the Keychain is denied inside the sandbox: run `claude setup-token` once outside any sandbox, then export the token it prints as `CLAUDE_CODE_OAUTH_TOKEN` in `~/.zshrc.local`.
+
+`sbx` remains as a general-purpose alternative: a Seatbelt wrapper for any command, not only AI CLIs.
 
 ```bash
-./install.sh --pack ai-clis   # adds cc / cx / oc
-cc                     # = sbx -- claude   (Claude Code, sandboxed)
-cx                     # = sbx -- codex    (Codex CLI, sandboxed)
-oc                     # = sbx -- opencode (OpenCode, sandboxed)
+sbx -- claude --settings '{"sandbox":{"enabled":false}}'   # Claude Code under sbx instead of its native sandbox
+sbx -- codex -s danger-full-access -a on-request   # optional kernel-level mode for Codex
+sbx --profile standard -- npm ci      # adds TCP 80/22/9418 for package installs and git over ssh
 ```
 
-The pack doesn't install the CLIs themselves — they self-update. If `sbx` isn't on `PATH` (no `--sandbox`), the wrappers just call the CLI directly.
+Never run `sbx` around a CLI whose native sandbox is on — Seatbelt doesn't nest, so pick one boundary per process tree. The profiles, deny list and trade-offs are explained in [sandboxing.md](sandboxing.md).
 
-Need raw access for one command? Use an escape hatch rather than avoiding the wrappers:
+## 5. Neovim essentials (if you installed `--pack nvim`)
 
-```bash
-CC_NO_SANDBOX=1 cc            # bypass the sandbox for this invocation
-sbx --profile standard -- cc  # wider profile: GitHub, npm, PyPI, registries
-sbx --profile off -- cc       # full pass-through
-```
-
-On macOS, `sbx` uses Seatbelt (Tier 1) — no extra install. For stricter isolation (rootless container), see [sandboxing.md](sandboxing.md) for the Podman-based Tier 2 flow (`--pack sandbox-container`).
-
----
-
-## 5. Nvim Essentials
-
-Leader key is `Space`. Press and wait to see the menu.
+Neovim is optional now. Install it with `./install.sh --pack nvim`. The leader key is `Space`. Press it and wait: which-key shows the menu.
 
 | Keys | Action |
 |------|--------|
-| `Space f f` | find files |
-| `Space f g` | grep across project |
-| `Space e`   | file tree |
-| `g d`       | go to definition |
-| `K`         | hover docs |
+| `Space Space` / `Space f f` | Find files |
+| `Space /` | Grep the project |
+| `Space e` | File explorer |
+| `Space g g` | lazygit |
+| `g d` / `K` | Go to definition / hover docs |
 
-Full guide: [NEOVIM_QUICKSTART.md](NEOVIM_QUICKSTART.md).
+More: [nvim.md](nvim.md).
 
----
+## 6. A daily loop
 
-## 6. Daily Flow
+Open a Ghostty tab per project, run `claude` or `codex` in it, and keep your editor (VS Code, Cursor, or Neovim if you installed `--pack nvim`) open beside it. Review diffs in the editor as the agent works — `/ide` links a Claude Code session to it directly.
 
 ```bash
-# Morning
-work myproject         # reattach or create
-z myproject            # jump to project dir (zoxide)
-
-# While working
-# - edit in nvim pane
-# - talk to an agent in the sbx pane
-# - Ctrl+a o to rotate panes, Ctrl+a z to zoom
-
-# End of day
-# Ctrl+a d              # detach — session keeps running
+claude                   # sandboxed automatically, run it in the project directory
+# review diffs in VS Code / Cursor, or with /ide from inside the session
 ```
 
-Next morning: `work myproject` picks up exactly where you left off, even after a reboot of the remote host (as long as tmux server is still up).
+If you installed `--pack tmux`, `t myproject` gives you a session that survives a disconnect, and tmux-resurrect/tmux-continuum save and restore it automatically (continuum saves every 15 minutes).
 
----
-
-## Got Stuck?
-
-- Arrow keys or Option misbehaving → [TERMINAL_NAVIGATION.md](TERMINAL_NAVIGATION.md)
-- Remote access (phone, iPad, Tailscale) → [remote.md](remote.md)
-- Anything else → [FAQ.md](FAQ.md)
-
----
-
-**You're ready. Run `work` and start coding.**
+For parallel agents, see [agent-workflows.md](agent-workflows.md). To work from another machine or your phone, see [remote.md](remote.md). When something breaks, check [FAQ.md](FAQ.md).

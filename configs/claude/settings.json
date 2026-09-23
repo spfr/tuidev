@@ -2,18 +2,19 @@
   "permissions": {
     "defaultMode": "default",
     "allow": [
-      "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(tmux *)",
-      "Bash(sbx *)",
-      "Bash(make *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list *)",
       "Bash(rg *)",
-      "Bash(fd *)",
-      "Bash(fzf *)",
       "Bash(jq *)",
-      "Bash(yq *)",
-      "Bash(lazygit)",
       "Bash(shellcheck *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh api *)",
+      "Bash(rg *--pre*)"
     ],
     "deny": [
       "Read(~/.ssh/**)",
@@ -21,40 +22,63 @@
       "Read(~/.gnupg/**)",
       "Read(~/.netrc)",
       "Read(~/.config/gh/**)",
+      "Read(~/.config/gcloud/**)",
+      "Read(~/.config/op/**)",
+      "Read(~/.azure/**)",
       "Read(~/.docker/**)",
       "Read(~/.kube/**)",
+      "Read(~/.terraform.d/**)",
+      "Read(~/.password-store/**)",
+      "Read(~/.git-credentials)",
+      "Read(~/.npmrc)",
+      "Read(~/.pypirc)",
+      "Read(~/.cargo/credentials*)",
+      "Read(~/.vault-token)",
+      "Read(~/.pgpass)",
       "Read(~/Library/Keychains/**)",
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Edit(./.env)",
-      "Edit(./.env.*)"
+      "Read(~/.config/git/credentials)",
+      "Read(~/.config/containers/auth.json)",
+      "Read(~/.gem/credentials)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)"
     ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker *", "docker-compose *", "gh *"],
+    "filesystem": {
+      "denyRead": ["~/.claude/.credentials.json", "~/.codex/auth.json"]
+    }
   },
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "teammateMode": "auto",
   "attribution": {
-    "commit": ""
+    "commit": "",
+    "pr": ""
   },
   "hooks": {
     "Notification": [
       {
-        "matcher": "permission_prompt|idle_prompt",
+        "matcher": "permission_prompt",
         "hooks": [
           {
             "type": "command",
-            "command": "notify.sh 'Claude Code' 'Needs your input' 'Approval Required'"
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Needs your approval' 'Permission'"
           }
         ]
-      }
-    ],
-    "Stop": [
+      },
       {
+        "matcher": "idle_prompt|elicitation_dialog",
         "hooks": [
           {
             "type": "command",
-            "command": "notify.sh 'Claude Code' 'Task completed' 'Done'"
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Waiting for your input' 'Idle'"
           }
         ]
       }
@@ -64,7 +88,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "notify.sh 'Claude Code' 'Teammate idle' 'Agent Teams'"
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Teammate idle' 'Agent Teams'"
           }
         ]
       }
@@ -74,7 +98,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "notify.sh 'Claude Code' 'Permission denied — review and retry' 'Sandbox'"
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Auto mode denied a tool call' 'Auto mode'"
           }
         ]
       }

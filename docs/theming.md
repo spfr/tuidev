@@ -77,10 +77,10 @@ palettes do this, which is what makes them auditable.
 
 1. **Render to a staging directory.** All three snippets are generated into a
    temp dir and sanity-checked before anything in `$HOME` is touched, so a
-   broken palette cannot leave you half-themed. (This is omarchy's
+   broken palette cannot leave you half-themed. (This is Omarchy's
    stage-then-swap idea, scaled down to three files.)
-2. **Write managed blocks.** Each snippet goes into the installed config as a
-   fenced region, using the same writer as the rest of the installer
+2. **Write managed blocks.** Each snippet is written as a fenced region, using
+   the same writer as the rest of the installer
    (`scripts/lib/config_write.sh`):
 
    ```
@@ -91,25 +91,35 @@ palettes do this, which is what makes them auditable.
 
    Anything outside the markers is yours and survives. Re-applying rewrites the
    block in place — it never appends a second copy.
-3. **Keep the theme block last** (see below).
+3. **Keep the Ghostty and Starship blocks last** (see below).
 4. **Record the active theme** in `~/.config/tuidev/theme`, which is what the
    `*` in `theme.sh list` reads.
-5. **Reload live tmux.** If a tmux server is running, the freshly rendered
-   snippet is `source-file`d into it, so open panes re-theme immediately.
+5. **Reload live tmux.** If a tmux server is running, the whole `tmux.conf`
+   is re-sourced, so open panes re-theme immediately.
 
 | App | File | Block contents |
 |-----|------|----------------|
-| tmux | `~/.config/tmux/tmux.conf` | status bar, window status, pane borders, message and copy-mode styles |
+| tmux | `~/.config/tmux/theme.conf` (its own file) | status bar, window status, pane borders, message and copy-mode styles. `theme.sh` always renders this file, even without tmux installed — harmless, since nothing reads it until `~/.config/tmux/tmux.conf` sources it, which only happens once you install `--pack tmux` |
 | Ghostty | `~/.config/ghostty/config` | `background`, `foreground`, cursor, selection, `palette = 0..15` |
 | Starship | `~/.config/starship.toml` | a `[palettes.tuidev]` table |
+
+**Why tmux gets its own file:** the tail of `tmux.conf` belongs to TPM.
+Plugins such as tmux-continuum hook `status-right` when TPM runs, and a theme
+block after that line would reset it and silently stop continuum's autosave. So
+the shipped `tmux.conf` sources `theme.conf` *above* its TPM block (with
+`source-file -q`, so a missing file is fine). If `apply` finds an older managed
+`tmux.conf` that doesn't source it yet, it warns you to run
+`make update-configs`. It also removes a theme block left in `tmux.conf` by an
+earlier release, and migration `202609222000_tmux_theme_file` does the same on
+upgrade.
 
 Ghostty needs a config reload (its reload keybind, or restarting the app);
 Starship applies in new shells.
 
 ## Fresh installs ship pre-themed
 
-`./install.sh` now applies `tokyo-night` for you at the end of a fresh,
-non-dry-run install (the new "Default theme" step, right before the profile
+`./install.sh` applies `tokyo-night` for you at the end of a fresh,
+non-dry-run install (the "Default theme" step, right before the profile
 record is written) — as long as `~/.config/tuidev/theme` doesn't already exist.
 A stock install is themed with no manual step and no
 `Could not find color palette: tuidev` warning; `make theme NAME=...` is how
@@ -127,18 +137,18 @@ yourself, as described below).
 
 ## The starship refusal-gate
 
-The theme layers on top of the installed configs. Both target formats are
-last-write-wins and `install.sh` *appends* its own blocks when they are
-missing, which makes block order load-bearing.
+For Ghostty and Starship, the theme block sits in the same file as the
+installed config. Both formats are last-write-wins, and `install.sh` *appends*
+its own blocks when they are missing, which makes block order load-bearing.
 
 `apply` handles this for you, in two different ways because the two failure
 modes are not equally bad:
 
-- **tmux and Ghostty — repaired automatically.** If an install has landed its
-  `tuidev-tmux` / `tuidev-ghostty` block *below* the theme block, the shipped
-  colors would silently win. `apply` notices its block is no longer last,
-  removes it, and re-appends it at the end. The practical rule: **re-run
-  `make theme` after an install or update** and the theme wins again.
+- **Ghostty: repaired automatically.** If an install has landed its
+  `tuidev-ghostty` block *below* the theme block, the shipped colors would
+  silently win. `apply` notices its block is no longer last, removes it, and
+  re-appends it at the end. The practical rule: **re-run `make theme` after an
+  install or update** and the theme wins again.
 - **Starship — refused, not repaired.** TOML has no way to close a table, so
   every key appended after `[palettes.tuidev]` lands *inside* it. Writing the
   table into a `starship.toml` that `install.sh` has not populated yet would
@@ -164,7 +174,7 @@ to reference palette roles directly.
 
 ## Neovim is not themed by this pipeline
 
-Deliberately out of scope for v1: LazyVim's colorscheme is plugin-managed, and
+Deliberately out of scope: LazyVim's colorscheme is plugin-managed, and
 generating one from a 26-key palette would produce a worse result than the
 hand-tuned upstream themes. Switch it yourself in
 `configs/nvim/lua/plugins/` (or `~/.config/nvim/lua/plugins/`):

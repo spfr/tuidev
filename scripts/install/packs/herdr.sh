@@ -5,9 +5,8 @@
 # Installs herdr — an agent-aware terminal runtime (Rust). A background
 # server owns panes so agents keep running after detach; a sidebar marks
 # each detected agent working / blocked / done. The CLI and socket API are
-# the same surface agents drive. Unlike cmux (a GUI app) and bosun (a tmux
-# session picker), herdr is its own multiplexer. tmux stays the default for
-# `work` / `dev` / `ai`; this pack does not change those wrappers.
+# the same surface agents drive. Unlike cmux (a GUI app), herdr is its own
+# multiplexer, an alternative to --pack tmux for durable agent sessions.
 #
 # Prefix is ctrl+b (tmux in this setup is ctrl+a). See docs/agent-workflows.md.
 #
@@ -63,7 +62,7 @@ herdr_install() {
 
     if command_exists herdr; then
         _herdr_install_config
-        print_info "Run 'herdr' to attach. tmux wrappers (work/dev/ai) are unchanged."
+        print_info "Run 'herdr' to attach."
         _herdr_upgrade_hint
         print_success "herdr (already present)"
         return 0
@@ -72,8 +71,7 @@ herdr_install() {
     # Homebrew when it actually has the formula (`--formula` so a same-named
     # cask can't produce a false positive). We deliberately do NOT pipe a
     # remote script into a shell on the user's behalf; if brew can't do it we
-    # print the official command and let the user run it. Mirrors the
-    # graceful-degradation pattern in packs/bosun.sh.
+    # print the official command and let the user run it.
     if command_exists brew && brew info --formula herdr >/dev/null 2>&1; then
         brew_update_once
         brew_install_formulae "${HERDR_FORMULAE[@]}"
@@ -83,9 +81,11 @@ herdr_install() {
     # install by its outcome, not its exit status.
     if command_exists herdr || [[ "$DRY_RUN" == true ]]; then
         _herdr_install_config
-        print_info "tmux stays the default for work/dev/ai. Herdr is opt-in: run 'herdr'."
+        print_info "Run 'herdr' to attach."
         print_info "Prefix is ctrl+b (tmux is ctrl+a). See docs/agent-workflows.md."
         print_info "Optional: herdr integration install claude  (agent state hooks)."
+        print_info "Agents under sbx strict cannot reach herdr's socket;"
+        print_info "  sbx --allow-herdr opens it for agents you trust (herdr panes run unsandboxed)."
         print_info "Remote nodes: herdr machine add HOST --label NAME (saved sidebar entry)."
         print_success "herdr pack complete"
         return 0

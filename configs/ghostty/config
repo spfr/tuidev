@@ -1,21 +1,20 @@
 # ============================================================================
 # Ghostty Terminal Configuration (1.3.x; macOS 27 aware)
 # Optimized for AI development and multi-agent workflows
+# Only non-defaults live here: `ghostty +show-config --default --docs`
 # ============================================================================
 
-# Terminal Type
-term = ghostty
+# TERM stays at the default `xterm-ghostty`: tmux and every modern TUI detect
+# Ghostty's features from it, and ssh-terminfo/ssh-env (below) cover remotes.
 
 # ============================================================================
 # Font Configuration
 # ============================================================================
 
-# Use a programming font with ligatures
+# Programming ligatures (=>, !=, >=) are on by default; `font-feature = -calt`
+# turns them off.
 font-family = "JetBrains Mono"
 font-size = 14
-
-# Font features (ligatures enabled for operator readability: =>, !=, >=)
-font-feature = +calt
 
 # ============================================================================
 # Theme & Colors (Tokyo Night)
@@ -26,7 +25,6 @@ foreground = c0caf5
 
 # Cursor
 cursor-color = c0caf5
-cursor-style = block
 cursor-style-blink = true
 
 # Selection
@@ -62,43 +60,43 @@ window-padding-y = 8
 window-padding-balance = true
 
 # Window decorations
-window-decoration = true
+window-decoration = auto
 window-theme = dark
-
-# Window title
-title = "Ghostty"
 
 # ============================================================================
 # Shell Integration
 # ============================================================================
 
-shell-integration = detect
-shell-integration-features = cursor,sudo,title,ssh-env,ssh-terminfo
+# Adds to the defaults (cursor, title, path): sudo keeps TERM through sudo;
+# ssh-terminfo installs Ghostty's terminfo on remotes, and ssh-env falls back
+# to xterm-256color where that fails.
+shell-integration-features = sudo,ssh-env,ssh-terminfo
 
 # ============================================================================
 # Performance
 # ============================================================================
 
-# Improve rendering performance
 resize-overlay = never
 mouse-hide-while-typing = true
 
-# Large scrollback for AI agent output
-scrollback-limit = 100000
+# Large scrollback for AI agent output. The unit is bytes per surface (the
+# 1.3 default is 10 MB); tmux panes keep their own history-limit instead.
+scrollback-limit = 50000000
 
 # ============================================================================
 # Keybindings
 # ============================================================================
+# macOS defaults stay (cmd+t/w/d, cmd+shift+d, ctrl+tab, ...); these add the
+# ctrl+shift chords Linux users expect. Shift+Enter, Home and End need no
+# bindings: Ghostty encodes them natively, which Claude Code and tmux
+# (extended-keys) rely on.
 
 # Tab management
 keybind = ctrl+shift+t=new_tab
 keybind = ctrl+shift+w=close_surface
-keybind = ctrl+tab=next_tab
-keybind = ctrl+shift+tab=previous_tab
 
-# Split management
+# Split management (ctrl+alt+* is Rectangle's; down splits use cmd+shift+d)
 keybind = ctrl+shift+d=new_split:right
-keybind = ctrl+alt+d=new_split:down
 
 # Window management
 keybind = ctrl+shift+n=new_window
@@ -117,44 +115,26 @@ keybind = ctrl+shift+v=paste_from_clipboard
 keybind = ctrl+shift+up=scroll_page_up
 keybind = ctrl+shift+down=scroll_page_down
 
-# Special keybindings
-keybind = shift+enter=text:\x1b\r
-
 # Quick edit (open scrollback in editor)
 keybind = ctrl+shift+e=write_scrollback_file:open
 
 # Quick terminal (system-wide dropdown terminal)
 keybind = global:ctrl+grave_accent=toggle_quick_terminal
 
-# Home/End keys
-keybind = home=text:\x1b[1~
-keybind = end=text:\x1b[4~
-
 # ============================================================================
 # Clipboard
 # ============================================================================
 
-clipboard-read = allow
-clipboard-write = allow
-clipboard-trim-trailing-spaces = true
+# Programs may write the clipboard (OSC 52: nvim/tmux over ssh) by default;
+# reads prompt first so a remote program can't silently take its contents.
+clipboard-read = ask
 
 # ============================================================================
 # Miscellaneous
 # ============================================================================
 
-# Confirm before closing window with running programs
-confirm-close-surface = true
-
-# Clickable URLs (Cmd+click on macOS)
-link-url = true
-
 # Mouse
-mouse-scroll-multiplier = 3
 focus-follows-mouse = true
-
-# Bell behavior (no audio, visual attention via dock badge/title)
-# Options: audio, attention, title, border, no-audio, no-attention, no-title, no-border
-bell-features = no-audio
 
 # ============================================================================
 # Split Pane Settings (v1.3+)
@@ -162,12 +142,6 @@ bell-features = no-audio
 
 # Dim unfocused splits so active pane is obvious
 unfocused-split-opacity = 0.85
-
-# New splits inherit working directory
-split-inherit-working-directory = true
-
-# Native scrollbar
-scrollbar = system
 
 # ============================================================================
 # Notifications (v1.3+)
@@ -184,14 +158,12 @@ notify-on-command-finish-after = 10s
 # Option key behavior (useful for macOS)
 macos-option-as-alt = true
 
-# Titlebar / tabs. `tabs` (tab bar inside the titlebar) is broken on
-# macOS 27 with the stable 1.3.1 build: the tab strip collapses into a
-# tiny box beside the "+" button. The fix (ghostty-org/ghostty#13069,
-# tracked in #13070) ships only on the tip channel until 1.4.0. The
-# default `transparent` style lays tabs out correctly on every macOS
-# release, so it is the shipped default. To get titlebar tabs back on
-# macOS 27, switch to tip (auto-update-channel below) and set `tabs`.
-macos-titlebar-style = transparent
+# Titlebar / tabs: keep the default `transparent` style. `tabs` (tab bar
+# inside the titlebar) is broken on macOS 27 with the stable 1.3.1 build:
+# the tab strip collapses into a tiny box beside the "+" button. The fix
+# (ghostty-org/ghostty#13069, tracked in #13070) ships only on the tip
+# channel until 1.4.0. To get titlebar tabs back on macOS 27, switch to tip
+# (auto-update-channel below) and set `macos-titlebar-style = tabs`.
 
 # Auto-update. Set `auto-update-channel = tip` on macOS 27 if you want
 # the titlebar-tabs fix before 1.4.0 ships (restart Ghostty afterwards).

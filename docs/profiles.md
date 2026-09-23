@@ -1,137 +1,83 @@
-# Install Profiles
+# Profiles and Packs
 
-## Overview
-
-Profiles are pre-selected pack sets for common install shapes. They are shortcuts, not walls: every pack a profile enables can be added or omitted individually with `--pack NAME`. If a profile doesn't fit, compose packs directly. See [`VISION.md`](../VISION.md) for the architectural rationale and [`sandboxing.md`](sandboxing.md) for sandbox details.
-
-**Package managers.** macOS requires Homebrew. Linux uses Homebrew when it is installed and `apt-get` otherwise, so `minimal` and `remote` install on Debian/Ubuntu — including arm64 boards like a Raspberry Pi, where Homebrew has no build. Packages apt cannot supply for your release are skipped with a link to the upstream install page; the installer never pipes a remote install script into a shell for you. See the Linux question in [`FAQ.md`](FAQ.md) for what bookworm does and doesn't cover.
-
-## `minimal`
-
-**For:** remote servers, slim VMs, CI runners, anyone who only needs the terminal layer.
-
-**Command:**
+A **pack** is one install script. There are five built-in packs, each selected by its own flag (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`), and a set of optional packs, each selected with `--pack NAME`. A **profile** is a named set of built-in packs. Profiles are shortcuts, not walls: combine a profile with more flags, or skip profiles and compose packs directly.
 
 ```bash
-./install.sh --profile minimal
-# equivalent to:
-./install.sh --core
+./install.sh --profile desktop                      # a profile
+./install.sh --profile desktop --pack ai-clis        # a profile plus an optional pack
+./install.sh --core --sandbox --pack herdr           # no profile: built-in packs by flag
+./install.sh --pack nvim                             # add one pack to an existing install
 ```
 
-**Contents:**
+With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `minimal` on Linux. Unknown `--pack` names are rejected before anything runs. Re-running is safe. On an existing install, pending [migrations](updating.md#migrations) run before any pack. Every run is merged into `~/.config/tuidev/profile`, so a later `--pack` run keeps what you picked before.
 
-| Tool        | Purpose                                     |
-|-------------|---------------------------------------------|
-| zsh         | Login shell                                 |
-| starship    | Prompt                                      |
-| tmux        | Session multiplexer (durability layer)      |
-| neovim      | Editor                                      |
-| git, gh     | VCS + GitHub CLI                            |
-| ripgrep, fd | Search                                      |
-| fzf         | Fuzzy finder                                |
-| eza, bat    | `ls` / `cat` replacements                   |
-| zoxide      | Smarter `cd`                                |
-| httpie      | Friendly HTTP requests via `http`           |
+**Package managers.** macOS uses Homebrew, and the installer warns and skips packages if Homebrew is missing. On Linux, packs use Homebrew when it is installed, and otherwise `apt-get`, `dnf` or `pacman`, in that order (`scripts/lib/pkg.sh`). System package managers run only as root or through passwordless `sudo`. Otherwise the exact command is printed. A tool the distro doesn't package is skipped with a link to its upstream installer. tuidev never pipes a remote script into a shell for you.
 
-No GUI apps, no sandbox profiles, no remote stack, no AI CLIs (those are the
-opt-in `--pack ai-clis`).
+## Profiles
 
-## `desktop`
+| Profile   | Equivalent to                              | For |
+|-----------|---------------------------------------------|-----|
+| `minimal` | `--core`                                    | Servers, VMs, CI runners, anyone who wants only the terminal layer |
+| `desktop` | `--core --ui --sandbox`                     | A Mac with a display: the daily driver |
+| `remote`  | `--core --remote --sandbox --pack tmux`     | A headless machine or Tailscale node you SSH into |
 
-**For:** local macOS developer with a display. The daily-driver shape.
+| Component | minimal | desktop | remote |
+|-----------|:-------:|:-------:|:------:|
+| Shell, prompt, CLI tools (core) | ✓ | ✓ | ✓ |
+| Ghostty config, Rectangle, Stats, Maccy, Hidden Bar (ui) | | ✓ | |
+| `sbx` + Seatbelt profiles (sandbox, macOS) | | ✓ | ✓ |
+| Tailscale, mosh, SSH client and sshd config (remote) | | | ✓ |
+| tmux, the `tuidev-tmux` block, TPM (`--pack tmux`) | | | ✓ |
+| Neovim, LazyVim config (`--pack nvim`) | | | |
+| Optional packs (`--pack NAME`) | + | + | + |
 
-**Command:**
+Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pack tmux` and/or `--pack nvim` yourself. An existing install that already had them keeps them: see [updating.md](updating.md#migrations) for the migration that carries them into your profile.
 
-```bash
-./install.sh --profile desktop
-# equivalent to:
-./install.sh --core --ui --sandbox
-```
+## Built-in packs
 
-**What's added over `minimal`:**
+**`--core`** (`scripts/install/core.sh`)
+: `bat`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `jq`, `ripgrep`, `shellcheck`, `starship`, `yq`, `zoxide`, and the zsh plugins `zsh-autosuggestions`, `zsh-completions` and `zsh-syntax-highlighting`. On macOS it also installs the Ghostty app. The installer then writes the managed blocks for `~/.zshrc` and `~/.config/starship.toml`, and sets [git defaults](#git-defaults).
 
-| Tool              | Purpose                                          |
-|-------------------|--------------------------------------------------|
-| Ghostty config    | Preferred local terminal (tabs, splits, AppleScript) |
-| Rectangle         | Window snapping                                  |
-| Stats             | Menu-bar system monitor                          |
-| Maccy             | Clipboard history                                |
-| Hidden Bar        | Menu-bar declutter                               |
-| Hammerspoon       | macOS scripting / automation hooks               |
-| Seatbelt profiles | `sandbox-exec` policies under `configs/sandbox/` |
-| `sbx` wrapper     | Uniform UX for launching sandboxed agents        |
+**`--ui`** (macOS only)
+: The Ghostty config (as a managed block), and the Rectangle, Stats, Maccy and Hidden Bar casks. The hotkeys are in the [cheatsheet](CHEATSHEET.md#macos-hotkeys-desktop-profile).
 
-## `remote`
+**`--sandbox`** (macOS only)
+: `sbx` in `~/.local/bin` and the Seatbelt profiles in `~/.config/tuidev/sandbox/`. See [sandboxing.md](sandboxing.md).
 
-**For:** headless machine, Tailscale node, cloud dev box, anything you `ssh` into.
+**`--remote`**
+: Tailscale (a Homebrew cask on macOS; on Linux, a link to the official installer), mosh, the SSH client config as a managed block, and sshd hardening snippets (these are copied only when `/etc/ssh/sshd_config.d` is writable, and otherwise printed as `sudo` commands). See [remote.md](remote.md).
 
-**Command:**
+**`--extras`**
+: `atuin`, `bandwhich`, `broot`, `duf`, `dust`, `fastfetch`, `glow`, `httpie`, `hyperfine`, `lazygit`, `ncdu`, `procs`, `sd`, `tealdeer`, `tokei`. Every one is optional: whatever the package manager lacks is skipped.
 
-```bash
-./install.sh --profile remote
-# equivalent to:
-./install.sh --core --remote --sandbox
-```
+## Optional packs
 
-**What's added over `minimal`:**
+| Pack | Installs |
+|------|----------|
+| `--pack ai-clis` | Adopts/upgrades `~/.claude/settings.json` and `~/.codex/config.toml`, which turn on Claude Code's and Codex's native sandboxes. Does not install the CLIs, which update themselves. See [agent-workflows.md](agent-workflows.md) and [sandboxing.md](sandboxing.md). |
+| `--pack opencode` | `oc` wrapper for OpenCode, and adopts `opencode.json` + `tui.json`. Prints OpenCode's official installer command rather than running it. |
+| `--pack nvim` | `neovim`, and the LazyVim config in `configs/nvim/`, deployed file by file with `--upgrade-shipped`, only while tuidev owns the tree. See [nvim.md](nvim.md). |
+| `--pack tmux` | `tmux`, the `tuidev-tmux` managed block in `~/.config/tmux/tmux.conf`, and TPM (tmux-resurrect, tmux-continuum). Included by the `remote` profile. |
+| `--pack herdr` | [Herdr](https://herdr.dev/), an agent-aware runtime for fleet attention, installed through Homebrew. When Homebrew has no formula, the pack prints the official installer command instead. Adopts a Tokyo Night `~/.config/herdr/config.toml`. |
+| `--pack cmux` | [cmux](https://github.com/manaflow-ai/cmux), a macOS terminal app for parallel agents (macOS 14+). |
+| `--pack sandbox-container` | Tier 2 sandboxing: finds a container runtime (Apple `container`, then Podman, then Docker), installs Podman only when none exists, and starts it. See [sandboxing.md](sandboxing.md#tier-2-containers). |
+| `--pack mosh` | mosh on its own, without the rest of `--remote`. |
+| `--pack fnm` | fnm (Fast Node Manager), which `.zshrc` prefers over nvm when present. |
+| `--pack monitoring` | `lazydocker` (`lzd`), `k9s`, `bottom` (`btm`, aliased as `top`). |
 
-| Tool                | Purpose                                         |
-|---------------------|-------------------------------------------------|
-| tailscale           | Mesh VPN + Tailscale SSH                        |
-| mosh                | Optional: roaming / high-latency SSH            |
-| SSH config snippets | `~/.ssh/config` block for Tailscale hosts       |
-| sshd_config.d       | Hardening snippets for incoming SSH             |
-| Seatbelt profiles   | Agents sandboxed even without a display         |
+The canonical list of pack names is `TUIDEV_VALID_PACKS` in `scripts/lib/profile.sh`. Adding a pack is covered in [engineering.md](engineering.md#the-pack-contract).
 
-See [`remote.md`](remote.md) for the workflow.
+## Git defaults
 
-## Comparison Matrix
+When `git` is installed, the installer sets these global keys, but only the ones you haven't already set — including values from `[include]`d files. It records each one so that `uninstall.sh` can unset exactly what it set:
 
-| Component           | minimal | desktop | remote |
-|---------------------|:-------:|:-------:|:------:|
-| zsh + starship      | ✓       | ✓       | ✓      |
-| tmux                | ✓       | ✓       | ✓      |
-| neovim              | ✓       | ✓       | ✓      |
-| ripgrep / fd / fzf  | ✓       | ✓       | ✓      |
-| AI CLIs (`--pack ai-clis`) | +  | +       | +      |
-| Ghostty config      |         | ✓       |        |
-| Rectangle / Stats / Maccy / Hidden Bar |  | ✓ |    |
-| Hammerspoon         |         | ✓       |        |
-| Seatbelt + `sbx`    |         | ✓       | ✓      |
-| Tailscale           |         |         | ✓      |
-| mosh                |         |         | ✓      |
-| SSH hardening       |         |         | ✓      |
+`init.defaultBranch main`, `column.ui auto`, `branch.sort -committerdate`, `tag.sort version:refname`, `help.autocorrect prompt`, `commit.verbose`, `diff.algorithm histogram`, `diff.colorMoved default`, `diff.renames`, `merge.conflictStyle zdiff3` (git 2.35 or later), `rerere.enabled`, `rebase.autoSquash`, `rebase.autoStash`, `rebase.updateRefs`, `push.autoSetupRemote`, `push.followTags`, `fetch.prune`, and, when delta is installed, delta as the pager (`core.pager`, `interactive.diffFilter`) with navigation and line numbers. Delta is **not** set to side-by-side: agent panes are often around 80 columns wide. Toggle it per run with `git -c delta.side-by-side=true diff` or `delta -s`. For a large repo, run `git maintenance start` yourself: the installer only prints it as a tip.
 
-`✓` = included in the profile. `+` = not bundled, but addable to any profile as an
-opt-in pack (`--pack NAME`).
+## Picking a profile
 
-## Packs Available Outside Profiles
-
-Any of these can be added to any profile with `--pack NAME`:
-
-- `--pack yazi` — TUI file manager.
-- `--pack nnn` — Minimal TUI file manager.
-- `--pack monitoring` — `lazydocker`, `k9s`, `bottom` (`btm`).
-- `--pack sandbox-container` — VM-backed sandboxing (Tier 2): Apple container → Podman → Docker, first present wins.
-- `--pack mosh` — mosh on its own, without the full `--remote` pack.
-- `--pack fnm` — fnm (Fast Node Manager); the zsh config prefers it over nvm when present.
-- `--pack cmux` — [cmux](https://github.com/manaflow-ai/cmux), a macOS terminal for running AI agents in parallel (macOS 14+). See [`agent-workflows.md`](agent-workflows.md).
-- `--pack bosun` — [bosun](https://github.com/yetidevworks/bosun), a tmux-native AI-agent session orchestrator. See [`agent-workflows.md`](agent-workflows.md).
-- `--pack herdr` — [Herdr](https://herdr.dev/), an agent-aware runtime (sidebar states, CLI + socket API). Installs via Homebrew when a formula is available; otherwise it prints the official installer command (`curl -fsSL https://herdr.dev/install.sh | sh`, which drops the binary in `~/.local/bin`) for you to run — the pack never pipes a remote script into a shell on your behalf. tmux stays the default for `work` / `dev` / `ai`. See [`agent-workflows.md`](agent-workflows.md).
-- `--pack ai-clis` — AI coding-CLI integration: the `cc`/`cx`/`oc` shell wrappers (sbx auto-routing) + adopt-existing claude/codex/opencode configs. Kept out of the core terminal-tools bundle so the repo stays CLI-agnostic; pair with `--pack sandbox`. See [`agent-workflows.md`](agent-workflows.md).
-- `--extras` — `atuin`, `dust`, `broot`, `bandwhich`, `duf`, `hyperfine`, `tokei`.
-
-Example:
-
-```bash
-./install.sh --profile desktop --pack ai-clis --pack yazi
-```
-
-## Picking a Profile
-
-- Do you have a display and work locally on this Mac? → `desktop`.
-- Is this machine headless / only reached via SSH? → `remote`.
-- Is this a constrained server, VM, or CI runner? → `minimal`.
-- Do you need container-based sandboxing? → any profile `--pack sandbox-container`.
-- Want fleet attention (which agent is blocked)? → any profile `--pack herdr`.
-- Unsure? → `desktop` on your laptop, `remote` on everything you SSH into.
+- A Mac you work at: `desktop`.
+- A machine you only SSH into: `remote`.
+- A constrained server, VM or CI runner: `minimal`.
+- Running AI agents: add `--pack ai-clis`.
+- A terminal editor or a durable local tmux session: add `--pack nvim` / `--pack tmux`.
+- Many agents across machines: add `--pack herdr`.

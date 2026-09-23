@@ -9,8 +9,7 @@
 #   - When executed directly, call the entrypoint function.
 #
 # Scope of 'ui':
-#   Ghostty config, window/clipboard/menu-bar utilities, Hammerspoon. macOS
-#   only — no-op + print_warning on Linux. Brew install helpers come from
+#   Ghostty config and window/clipboard/menu-bar utilities. macOS only — no-op + print_warning on Linux. Brew install helpers come from
 #   scripts/lib/brew.sh.
 
 set -eo pipefail
@@ -25,12 +24,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-UI_CASKS_MACOS=(
+UI_CASKS=(
     rectangle
     stats
     maccy
     hiddenbar
-    hammerspoon
 )
 
 ui_install() {
@@ -41,9 +39,6 @@ ui_install() {
         return 0
     fi
 
-    command_exists brew || die "Homebrew is required; install from https://brew.sh"
-    brew_update_once
-
     # Ghostty config (terminal emulator).
     local ghostty_src="$REPO_ROOT/configs/ghostty/config"
     if [[ -f "$ghostty_src" ]]; then
@@ -53,14 +48,13 @@ ui_install() {
         print_warning "Ghostty config missing in repo: $ghostty_src"
     fi
 
-    # Desktop utility casks.
-    brew_install_casks "${UI_CASKS_MACOS[@]}"
-
-    # Hammerspoon init script (if repo ships one).
-    local hs_src="$REPO_ROOT/configs/hammerspoon/init.lua"
-    if [[ -f "$hs_src" ]]; then
-        print_step "installing Hammerspoon init.lua (managed block)"
-        install_config "$HOME/.hammerspoon/init.lua" "$hs_src" --managed-block tuidev-hammerspoon
+    # Desktop utility casks. Without Homebrew the configs above and below are
+    # still written; only the apps are skipped.
+    if command_exists brew; then
+        brew_update_once
+        brew_install_casks "${UI_CASKS[@]}"
+    else
+        print_warning "Homebrew not found — skipping apps: ${UI_CASKS[*]} (install from https://brew.sh)"
     fi
 
     print_success "ui pack complete"

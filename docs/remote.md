@@ -1,144 +1,88 @@
-# Remote Workflow
+# Remote and Mobile
 
-## Architecture
+The host runs the terminal, tmux, the editor and the agents. You connect from any client and re-attach. Work survives disconnects because tmux does. Tailscale, SSH, mosh and phone apps are only transport.
 
-The host provides terminal, tmux, editor, and SSH. You reconnect from any client and run `tmux attach`. The core workflow survives disconnects because tmux does — not because of any magic layer above it. Everything else (Tailscale, mosh, mobile clients) is transport; tmux is the durability layer. See [`VISION.md`](../VISION.md) §"Remote Access Strategy" for the rationale.
+> **Only need to steer an agent from your phone?** Claude Code's native Remote Control covers that without SSH (see [agent-workflows.md](agent-workflows.md#remote-control-from-a-phone)). This doc covers the full-terminal path underneath it.
 
-> **Just want to drive an agent from your phone?** The AI CLIs now ship native
-> remote control (Claude Code Remote Control; Codex via third-party layers) — you
-> can steer a local agent from `claude.ai/code` or the mobile app without an SSH
-> session. That covers the "talk to Claude on the go" case; this doc covers the
-> durable *full terminal* backbone underneath it. See
-> [`agent-workflows.md`](agent-workflows.md).
+## Setup
 
-## Primary Path: Tailscale SSH + tmux
-
-Bring the node online:
+On the machine you'll connect to:
 
 ```bash
-tailscale up
-tailscale status           # confirm node is listed
+./install.sh --profile remote     # or, on a Mac you also sit at: --profile desktop --remote --pack tmux
+tailscale up && tailscale status  # join the tailnet
 ```
 
-From a client on the same tailnet:
+`remote` = core + remote + sandbox + `--pack tmux`, so a single `--profile remote` install gets Tailscale, mosh, SSH and a durable tmux session together — you don't add `--pack tmux` yourself. `--remote` on its own installs Tailscale (a cask on macOS; on Linux it links to the official installer), mosh, the SSH client config as a managed block, and sshd hardening snippets: key-only auth, no root login, modern ciphers. The snippets are copied into `/etc/ssh/sshd_config.d/` only when that directory is writable. Otherwise the installer prints the `sudo cp` commands. On macOS, turn on Remote Login in System Settings → General → Sharing, or run `sudo systemsetup -setremotelogin on`.
+
+`remote-status` shows SSH, Tailscale and tmux at a glance. `ts-ip` prints the node's Tailscale address.
+
+## Connect and re-attach
 
 ```bash
-ssh devbox                 # or tailscale ssh devbox
-tmux attach -t main        # reattach to the default session
+ssh devbox                  # or: tailscale ssh devbox
+t myproject                 # attach-or-create a named tmux session
+# ...network drops, laptop sleeps...
+ssh devbox && t myproject
 ```
 
-Create a named session for a project (requires the updated tmux wrappers in `~/.zshrc`):
+Detach with `Ctrl+a d`. `tls` lists sessions on the box. tmux-continuum saves every 15 minutes and tmux-resurrect restores sessions when tmux starts, so sessions survive a reboot too. There's no prebuilt layout anymore — `t myproject` gives you a plain session, and you run your editor of choice (`nvim`, or split a second SSH session for it) inside it.
+
+**Why Tailscale SSH:** ACLs live in the tailnet rather than in `authorized_keys` files on every host, check mode can force re-authentication, access follows your identity provider, and a revoked device loses access immediately. Plain SSH still works as a fallback. Cloudflare and ngrok tunnels (the `tunnel` function) are a last resort, not the architecture.
+
+## mosh for flaky networks
+
+Use mosh on cellular, roaming Wi-Fi, or a laptop that sleeps a lot. It comes with `--remote`, or on its own with `--pack mosh`.
 
 ```bash
-work myproject             # creates/attaches tmux session "myproject"
-dev myproject              # 3-column dev layout: nvim | agent | runner
-ai myproject               # nvim + 2 agent panes
+mosh devbox -- tmux attach -t myproject
 ```
 
-Detach with `Ctrl+a d` (this setup's tmux prefix). The session keeps running. Reconnect from a different laptop, phone, or network and `tmux attach -t myproject` picks up exactly where you left off.
+mosh needs UDP 60000–61000 open on the server. Its scrollback is only partially synced, so use tmux copy mode (`Ctrl+a [`) for history. A server reboot kills mosh but not tmux: always run mosh around tmux.
 
-## Always-on Linux node
+## Always-on nodes
 
-Any cheap box that stays awake (Raspberry Pi, NUC, VM) is a **node**, not a
-second product. SSH in and attach:
+A cheap box that stays awake (a Raspberry Pi, NUC or VM) is a **node**, not a second product. Put work there that must outlive your laptop lid. `--profile remote` installs on Debian/Ubuntu without Homebrew (see [profiles.md](profiles.md)). Herdr adds a sidebar that spans machines:
 
 ```bash
-ssh user@devbox
-tmux attach -t main
-# or, with --pack herdr installed on that box:
-herdr
+herdr machine add workbox --label workbox   # once, interactively
+herdr --machine workbox agent list          # from the Mac, no TUI
+herdr --remote workbox                      # one-off thin client
 ```
 
-From the Mac, a thin Herdr client can attach without opening a remote shell first,
-or you can save the node once and get it in the sidebar next to Local:
+On a node, `~/.local/bin` must be on `PATH` for *non-interactive* SSH too, which means adding it to `~/.profile`, not only `.zshrc`. Fleet practices are in [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
 
-```bash
-herdr --remote workbox                         # one-off attach
-herdr machine add workbox --label "workbox"    # saved machine (Herdr ≥ 0.9)
-herdr --machine workbox agent list             # scriptable from the Mac
-```
+## Personal hosts stay local
 
-`workbox` / `devbox` are placeholders. Real hostnames, mDNS names, and accounts
-belong in `~/.ssh/config.local` (the shipped snippet `Include`s
-`~/.ssh/config.local*`, preceded by `Match all` so the include applies
-unconditionally even when appended after your own `Host` stanzas) or outside
-the tuidev managed block. See
-[`inspiration.md`](inspiration.md) and the first-fleet walkthrough in
-[`agent-workflows.md`](agent-workflows.md).
+`devbox` and `workbox` are placeholders. Real hostnames, Tailscale IPs and usernames go in `~/.ssh/config.local`. The shipped SSH block starts with `Match all` and then `Include ~/.ssh/config.local*`, so the include applies even when the block lands after your own `Host` stanzas, and a missing file is ignored. You can also put hosts outside the tuidev markers in `~/.ssh/config`. The shipped block keeps connections alive (`ServerAliveInterval 60`) and adds `IgnoreUnknown UseKeychain`, so the same file works with Linux OpenSSH.
 
-`--core` on Linux uses Homebrew when present and otherwise falls back to
-apt-get, probing per tool and printing official install commands for anything
-the release doesn't package (see [`profiles.md`](profiles.md)). `--pack herdr`
-installs Herdr only when Homebrew has the formula — otherwise it prints the
-official installer command for you to run.
+## iPhone and iPad
 
-## Why Tailscale SSH over Raw SSH
+| Client | Why pick it |
+|--------|-------------|
+| **Blink Shell** | Power users: native mosh, a full local shell, a customizable keyboard, iCloud sync |
+| **Moshi** | Agent-first: native mosh, an agent inbox, Live Activities and Apple Watch actions, voice input for prompts |
+| Termius | Cross-platform host and key sync, SFTP, snippets |
+| a-Shell / Prompt | Lightweight options for occasional local-network SSH |
 
-- ACL policy lives in the tailnet, not in `authorized_keys` files scattered across hosts.
-- Check mode can force re-auth / SSO for sensitive sessions.
-- Single-sign-on via your IdP; no key sprawl to rotate.
-- Device posture is part of the identity — a revoked node loses access immediately.
+Setup is the same for every client:
 
-Raw SSH still works and is fine as a fallback.
+1. Install Tailscale on the phone and sign in to the same tailnet.
+2. Generate an **Ed25519** key in the app, and append its public key to `~/.ssh/authorized_keys` on the host (`chmod 600` the file, `chmod 700 ~/.ssh`). The shipped sshd snippet disables password login.
+3. Add a host with the node's Tailscale name or `100.x` address (`ts-ip`), your user, port 22, and **mosh** as the protocol if the app offers it.
+4. Connect and run `t myproject`.
 
-## mosh — Optional Upgrade
+Tips:
 
-Use mosh when:
+- The prefix `Ctrl+a` comes from the app's extra key row. Map a snippet to `Ctrl+a d` to detach quickly.
+- Bigger fonts help on a phone screen; a single tmux pane reads better than a cramped split.
+- A Bluetooth keyboard makes every tmux and nvim binding usable.
+- *Connection refused:* check that Remote Login is on (`sudo systemsetup -getremotelogin`) and that the Mac isn't asleep.
+- *Laggy over cellular:* switch the host to mosh. *Keeps dropping:* the shipped keepalives help, and mosh plus tmux makes drops irrelevant.
 
-- You're on a mobile network or flaky Wi-Fi.
-- You roam between networks (coffee shop → home → tether).
-- You close the laptop lid frequently and want sessions to feel live on resume.
+## Anti-patterns
 
-Install:
-
-```bash
-./install.sh --pack mosh
-```
-
-Connect:
-
-```bash
-mosh devbox -- tmux attach -t main
-```
-
-Gotchas:
-
-- Scrollback is only partially synchronized. Keep real history in tmux's copy mode, not in the terminal scrollback.
-- mosh needs UDP 60000–61000 open on the server's firewall.
-- mosh does not survive server reboot; tmux does. Always wrap mosh around tmux.
-
-## tmux is the Durability Layer
-
-The setup ships:
-
-- `tmux-continuum` — auto-saves session state every 15 minutes.
-- `tmux-resurrect` — restores state on tmux start.
-
-Session state persists across server reboots, SSH disconnects, and client changes. `tmux attach` from any client reconnects. A dead network doesn't kill your work; it interrupts your view of it.
-
-Narrow-terminal tip: the `remote` wrapper uses `scripts/layout-remote.sh` for a two-pane layout that fits phone-sized terminals.
-
-```bash
-remote myproject
-```
-
-## Mobile (iOS / iPadOS)
-
-- **Blink Shell** — native iOS/iPadOS SSH + mosh client.
-- **Moshi** — iOS terminal purpose-built for AI agents: native mosh, an agent
-  inbox, Live Activities, Apple Watch actions, and voice input for prompts.
-- **Termius** — cross-platform SSH client with sync.
-
-All three work. Pick by UI preference and pricing model. See
-[`IPHONE_SSH_CLIENTS.md`](IPHONE_SSH_CLIENTS.md) for a fuller comparison.
-
-## Push Notifications (Optional)
-
-Claude Code hooks can POST to [ntfy.sh](https://ntfy.sh) (or any webhook) when a long agent task finishes, so you don't have to keep the session foregrounded on mobile. See [`configs/claude/settings.json`](../configs/claude/settings.json) for the hook schema; the Anthropic docs cover the event payload in full.
-
-## Anti-Patterns
-
-- Don't tunnel with Cloudflared by default. It's a fallback for when Tailscale genuinely isn't an option, not a primary transport.
-- Don't hand-roll SSH keys and `authorized_keys` rotation when Tailscale SSH already owns the ACL layer.
-- Don't rely on `screen`. tmux is the standard; tmux is what `tmux-continuum` / `tmux-resurrect` / the tmux wrappers target.
-- Don't run agents against the host filesystem over SSH without a sandbox. See [`sandboxing.md`](sandboxing.md).
+- Hand-rolled key rotation when Tailscale SSH already owns access control.
+- `screen`. tmux-resurrect and continuum target tmux.
+- Agents on the host filesystem with no sandbox. See [sandboxing.md](sandboxing.md).
+- Committing real hostnames or IPs. See [CONTRIBUTING.md](../CONTRIBUTING.md#personal-vs-published).

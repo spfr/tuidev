@@ -9,46 +9,33 @@
 #   - When executed directly, call the entrypoint function.
 #
 # Scope of 'remote':
-#   Tailscale (mesh VPN, macOS cask), mosh (roaming SSH, formula or apt),
+#   Tailscale (mesh VPN, macOS cask), mosh (roaming SSH, via scripts/lib/pkg.sh),
 #   SSH client config snippet (managed block), and optional sshd_config.d
-#   hardening when we have write permission. No sudo escalation here; if
-#   /etc/ssh is not writable, we print a manual pointer instead.
+#   hardening when we have write permission. System packages go through
+#   pkg.sh (root or `sudo -n` only); if /etc/ssh is not writable, we print a
+#   manual pointer instead.
 
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/ui.sh disable=SC1091
 . "$SCRIPT_DIR/../lib/ui.sh"
-# shellcheck source=../lib/brew.sh disable=SC1091
-. "$SCRIPT_DIR/../lib/brew.sh"
+# shellcheck source=../lib/pkg.sh disable=SC1091
+. "$SCRIPT_DIR/../lib/pkg.sh"
 # shellcheck source=../lib/config_write.sh disable=SC1091
 . "$SCRIPT_DIR/../lib/config_write.sh"
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Casks (macOS-only).
-REMOTE_CASKS_MACOS=(
+# Casks (macOS only).
+REMOTE_CASKS=(
     tailscale
 )
 
-# Formulae (macOS + Linux-via-brew).
+# Formulae (Homebrew names; pkg.sh maps them for apt/dnf/pacman).
 REMOTE_FORMULAE=(
     mosh
 )
-
-_install_apt() {
-    local pkg="$1"
-    if dpkg -s "$pkg" &>/dev/null; then
-        print_success "$pkg (already present)"
-    else
-        print_step "installing $pkg via apt"
-        if run_cmd sudo apt-get install -y "$pkg"; then
-            print_success "$pkg"
-        else
-            print_warning "failed: $pkg (continuing)"
-        fi
-    fi
-}
 
 _install_ssh_client_config() {
     local src="$REPO_ROOT/configs/ssh/config"
@@ -112,31 +99,16 @@ remote_install() {
     print_header "Pack: remote"
 
     if is_macos; then
-        command_exists brew || die "Homebrew is required on macOS; install from https://brew.sh"
-        brew_update_once
-
-        brew_install_casks "${REMOTE_CASKS_MACOS[@]}"
-        brew_install_formulae "${REMOTE_FORMULAE[@]}"
-
-    elif is_linux; then
-        # Tailscale is not provided via the same channels on Linux and has its
-        # own install script; we leave it to the user and only handle mosh.
-        print_info "Tailscale on Linux: use the official installer — https://tailscale.com/download/linux"
         if command_exists brew; then
-            print_info "brew detected on Linux; using brew for formulae"
             brew_update_once
-            brew_install_formulae "${REMOTE_FORMULAE[@]}"
-        elif command_exists apt-get; then
-            run_cmd sudo apt-get update -y || print_warning "apt-get update failed (continuing)"
-            for f in "${REMOTE_FORMULAE[@]}"; do
-                _install_apt "$f"
-            done
-        else
-            print_warning "no supported package manager (brew or apt); install mosh manually"
+            brew_install_casks "${REMOTE_CASKS[@]}"
         fi
     else
-        print_warning "unsupported platform for remote pack; skipping package installs"
+        # Tailscale ships its own Linux repos and installer; we point at it
+        # rather than pipe a remote script into a shell.
+        print_info "Tailscale on Linux: use the official installer — https://tailscale.com/download/linux"
     fi
+    pkg_install "${REMOTE_FORMULAE[@]}" || print_warning "mosh not installed (continuing)"
 
     _install_ssh_client_config
     _install_sshd_snippets

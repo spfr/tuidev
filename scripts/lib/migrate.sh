@@ -17,7 +17,7 @@
 #   is `YYYYMMDDHHMM` — e.g. `202608310900_prune_pre2_orphans.sh`. Lexical sort
 #   is chronological order, which is the order they run in.
 # * Its id is the filename without `.sh`. Applied ids are appended one per line
-#   to ~/.config/tuidev/migrations.
+#   to $TUIDEV_STATE_DIR/migrations (~/.config/tuidev/migrations).
 # * It runs at most once per machine. It should still be written to be safe if
 #   re-run by hand (check before you mutate) — "at most once" is a promise about
 #   the runner, not a licence to be destructive.
@@ -41,10 +41,9 @@ _TUIDEV_MIGRATE_LOADED=1
 _TUIDEV_MIGRATE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 : "${TUIDEV_MIGRATIONS_DIR:=$(dirname "$_TUIDEV_MIGRATE_LIB_DIR")/migrations}"
-# $HOME/.config literally, not ${XDG_CONFIG_HOME:-...}: every other tuidev
-# state path (profile, manifest, env, backups) is hardcoded there, and honoring
-# XDG only here makes an installed machine read as fresh when the two diverge.
-: "${TUIDEV_MIGRATIONS_STATE:=$HOME/.config/tuidev/migrations}"
+# Under TUIDEV_STATE_DIR like every other state path (ui.sh), so the profile,
+# manifest and this file can never disagree about where "installed" lives.
+: "${TUIDEV_MIGRATIONS_STATE:=$TUIDEV_STATE_DIR/migrations}"
 
 # tuidev_migration_id PATH — filename without directory or .sh suffix.
 tuidev_migration_id() {
@@ -103,7 +102,7 @@ tuidev_migrations_pending() {
 # `./install.sh --pack foo` on a year-old install is the common upgrade path.
 # An existing profile or manifest is proof the machine was installed to before.
 tuidev_is_fresh_install() {
-    local dir="${1:-$HOME/.config/tuidev}"
+    local dir="${1:-$TUIDEV_STATE_DIR}"
     if [[ -f "$dir/profile" || -f "$dir/manifest" || -f "$TUIDEV_MIGRATIONS_STATE" ]]; then
         return 1
     fi

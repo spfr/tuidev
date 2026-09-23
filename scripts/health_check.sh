@@ -10,7 +10,8 @@
 #
 # Categories (which categories are required depends on the active profile):
 #
-#   core     — shell/editor/CLI staples (required in every profile)
+#   core     — shell/CLI staples (required in every profile; on Linux
+#              without Homebrew, tools the distro may not package are optional)
 #   remote   — tailscale, mosh (required only in the `remote` profile)
 #   sandbox  — Seatbelt (macOS only; required in desktop & remote)
 #   ui       — Ghostty + macOS GUI apps (required only in `desktop`, macOS)
@@ -34,6 +35,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # shellcheck source=lib/ui.sh disable=SC1091
 . "$SCRIPT_DIR/lib/ui.sh"
+# shellcheck source=lib/packs.sh disable=SC1091
+. "$SCRIPT_DIR/lib/packs.sh"
+# shellcheck source=lib/pkg.sh disable=SC1091
+. "$SCRIPT_DIR/lib/pkg.sh"
 
 # Cache uname once. Probes run dozens of times across the suite.
 TUIDEV_OS="$(uname -s)"
@@ -57,7 +62,7 @@ usage() {
 Usage: $(basename "$0") [--profile minimal|desktop|remote|auto]
 
   --profile P   Force a specific profile.
-                Default: 'auto' (reads ~/.config/tuidev/profile, else
+                Default: 'auto' (reads the tuidev profile, else
                 macOS->desktop, Linux->minimal).
   -h, --help    Show this help.
 EOF
@@ -87,30 +92,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------------------------------------------------------------------
-# Profile manifest
+# Profile manifest (scripts/lib/profile.sh)
 # ---------------------------------------------------------------------------
-
-MANIFEST_DIR="$HOME/.config/tuidev"
-MANIFEST_FILE="$MANIFEST_DIR/profile"
-ENV_FILE="$MANIFEST_DIR/env"
-
-# shellcheck source=lib/profile.sh disable=SC1091
-. "$SCRIPT_DIR/lib/profile.sh"
-
-# Legacy-named aliases over the lib's globals, so the rest of this file
-# doesn't need renames.
-MANIFEST_PROFILE=""
-MANIFEST_EXTRA_PACKS=""
-MANIFEST_INSTALLED_AT=""
-MANIFEST_REPO=""
-
-parse_manifest() {
-    load_tuidev_profile "$MANIFEST_FILE" || true
-    MANIFEST_PROFILE="$TUIDEV_PROFILE_NAME"
-    MANIFEST_EXTRA_PACKS="$TUIDEV_EXTRA_PACKS"
-    MANIFEST_INSTALLED_AT="$TUIDEV_PROFILE_INSTALLED_AT"
-    MANIFEST_REPO="$TUIDEV_PROFILE_REPO"
-}
 
 platform_default_profile() {
     case "$TUIDEV_OS" in
@@ -120,29 +103,21 @@ platform_default_profile() {
 }
 
 resolve_profile() {
-    parse_manifest
+    load_tuidev_profile || true
 
     if [[ "$PROFILE" == "auto" ]]; then
-        if [[ -n "$MANIFEST_PROFILE" ]]; then
-            PROFILE="$MANIFEST_PROFILE"
-        else
-            PROFILE="$(platform_default_profile)"
-        fi
+        PROFILE="${TUIDEV_PROFILE_NAME:-$(platform_default_profile)}"
     fi
 
-    case "$PROFILE" in
-        minimal|desktop|remote) ;;
-        custom)
-            # Pack-only installs record profile=custom; check the core
-            # baseline (packs are covered by the extra_packs section).
-            print_info "Profile is 'custom' (pack-only install): checking the minimal baseline."
-            PROFILE="minimal"
-            ;;
-        *)
-            print_error "Invalid profile: $PROFILE (expected minimal|desktop|remote|auto)"
-            exit 2
-            ;;
-    esac
+    if [[ "$PROFILE" == custom ]]; then
+        # Pack-only installs record profile=custom; check the core baseline
+        # (packs are covered by the extra_packs section).
+        print_info "Profile is 'custom' (pack-only install): checking the minimal baseline."
+        PROFILE="minimal"
+    elif ! tuidev_is_valid_profile "$PROFILE"; then
+        print_error "Invalid profile: $PROFILE (expected ${TUIDEV_VALID_PROFILES[*]}|auto)"
+        exit 2
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -189,6 +164,7 @@ have_cmd() {
 }
 
 # App bundle probe (macOS GUI apps). Returns non-zero on non-macOS.
+# Invoked indirectly, like have_cmd.
 # shellcheck disable=SC2317,SC2329
 have_app() {
     [[ "$TUIDEV_OS" == "Darwin" ]] || return 1
@@ -199,35 +175,26 @@ have_app() {
 # Category: core
 # ---------------------------------------------------------------------------
 
+# A core tool is required unless this is Linux without Homebrew and the tool
+# is one a distribution may not package (pkg.sh points apt users at its
+# upstream installer instead).
+core_tool_check_fn() {
+    if is_linux && ! command_exists brew && [[ -n "$(pkg_manual_hint "$1")" ]]; then
+        echo check_optional
+    else
+        echo check_required
+    fi
+}
+
 check_core() {
     print_header "Core (required in every profile)"
 
-    local tools=(
-        tmux
-        nvim
-        rg
-        fd
-        bat
-        fzf
-        zoxide
-        starship
-        delta
-        lazygit
-        jq
-        yq
-        eza
-        gh
-        http
-        shellcheck
-    )
-
-    local tool
-    for tool in "${tools[@]}"; do
-        check_required "$tool on PATH" "have_cmd $tool"
-    done
-
-    # Git is implicit but worth checking as it underpins delta/lazygit/gh.
-    check_required "git on PATH" "have_cmd git"
+    local formula bin
+    while IFS= read -r formula; do
+        bin="$(tuidev_formula_binary "$formula")"
+        [[ -n "$bin" ]] || continue
+        "$(core_tool_check_fn "$formula")" "$bin on PATH" "have_cmd $bin"
+    done < <(pack_array core formulae)
 
     if have_cmd zsh; then
         check_required "zsh completion directories pass compaudit" \
@@ -276,8 +243,8 @@ check_sandbox() {
         "sandbox-exec -p '(version 1)(allow default)' /usr/bin/true"
 
     # Does the strict profile exist where the installer puts it?
-    "$fn" "sandbox profile present (~/.config/tuidev/sandbox/strict.sb)" \
-        "[[ -f \"$HOME/.config/tuidev/sandbox/strict.sb\" ]]"
+    "$fn" "sandbox profile present ($TUIDEV_STATE_DIR/sandbox/strict.sb)" \
+        "[[ -f \"$TUIDEV_STATE_DIR/sandbox/strict.sb\" ]]"
 
     # Is the `sbx` wrapper on PATH?
     "$fn" "sbx wrapper on PATH" "have_cmd sbx"
@@ -305,11 +272,11 @@ check_ui() {
     "$fn" "Ghostty config (~/.config/ghostty/config)" \
         "[[ -f \"$HOME/.config/ghostty/config\" ]]"
 
-    "$fn" "Rectangle.app"  "have_app Rectangle"
-    "$fn" "Stats.app"      "have_app Stats"
-    "$fn" "Maccy.app"      "have_app Maccy"
-    "$fn" "Hidden Bar.app" "have_app 'Hidden Bar'"
-    "$fn" "Hammerspoon.app" "have_app Hammerspoon"
+    local cask app
+    while IFS= read -r cask; do
+        app="$(tuidev_cask_app "$cask")"
+        "$fn" "$app.app" "have_app '$app'"
+    done < <(pack_array ui casks)
 }
 
 # ---------------------------------------------------------------------------
@@ -319,11 +286,10 @@ check_ui() {
 check_extras() {
     print_header "Extras (optional quality-of-life tools)"
 
-    local tools=(atuin dust broot bandwhich duf fastfetch glow hyperfine ncdu procs sd tealdeer tokei)
     local tool
-    for tool in "${tools[@]}"; do
+    while IFS= read -r tool; do
         check_optional "$tool on PATH" "have_cmd $tool"
-    done
+    done < <(pack_binaries extras)
 }
 
 # ---------------------------------------------------------------------------
@@ -333,16 +299,16 @@ check_extras() {
 pack_probe() {
     # Returns the probe command for a given pack name.
     case "$1" in
-        yazi)               echo "have_cmd yazi" ;;
-        nnn)                echo "have_cmd nnn" ;;
         monitoring)         echo "have_cmd btm || have_cmd bottom || have_cmd htop" ;;
         sandbox-container)  echo "have_cmd container || have_cmd podman || have_cmd docker" ;;
         mosh)               echo "have_cmd mosh" ;;
         cmux)               echo "have_cmd cmux || have_app cmux" ;;
-        bosun)              echo "have_cmd bosun" ;;
         herdr)              echo "have_cmd herdr" ;;
         fnm)                echo "have_cmd fnm" ;;
-        ai-clis)            echo "have_cmd claude || have_cmd codex || have_cmd opencode" ;;
+        ai-clis)            echo "have_cmd claude || have_cmd codex" ;;
+        opencode)           echo "have_cmd opencode" ;;
+        nvim)               echo "have_cmd nvim" ;;
+        tmux)               echo "have_cmd tmux && [[ -f \"\$HOME/.config/tmux/tmux.conf\" ]]" ;;
         *)                  echo "have_cmd $1" ;;
     esac
 }
@@ -350,18 +316,15 @@ pack_probe() {
 check_packs() {
     print_header "Packs (manifest-declared extras)"
 
-    if [[ -z "$MANIFEST_EXTRA_PACKS" ]]; then
-        print_info "No extra_packs declared in manifest (or manifest absent)."
-        return 0
-    fi
-
-    # extra_packs is expected to be space- or comma-separated.
-    local packs_str="${MANIFEST_EXTRA_PACKS//,/ }"
-    # shellcheck disable=SC2206
-    local packs=($packs_str)
+    # The remote profile includes --pack tmux, so checking a node as `remote`
+    # checks tmux too, even when the manifest predates that.
+    local packs=() p
+    while IFS= read -r p; do
+        packs+=("$p")
+    done < <(tuidev_extra_packs "$PROFILE")
 
     if [[ ${#packs[@]} -eq 0 ]]; then
-        print_info "No extra_packs declared in manifest."
+        print_info "No extra_packs declared in manifest (or manifest absent)."
         return 0
     fi
 
@@ -379,15 +342,15 @@ check_packs() {
 show_profile_banner() {
     print_header "Health check — profile: $PROFILE"
     print_info "Platform: $(uname -s) $(uname -r)"
-    if [[ -f "$MANIFEST_FILE" ]]; then
-        print_info "Manifest: $MANIFEST_FILE"
-        [[ -n "$MANIFEST_INSTALLED_AT" ]] && print_info "Installed at: $MANIFEST_INSTALLED_AT"
-        [[ -n "$MANIFEST_REPO" ]]         && print_info "Repo: $MANIFEST_REPO"
+    if $TUIDEV_PROFILE_FOUND; then
+        print_info "Manifest: $TUIDEV_PROFILE_FILE_DEFAULT"
+        [[ -n "$TUIDEV_PROFILE_INSTALLED_AT" ]] && print_info "Installed at: $TUIDEV_PROFILE_INSTALLED_AT"
+        [[ -n "$TUIDEV_PROFILE_REPO" ]]         && print_info "Repo: $TUIDEV_PROFILE_REPO"
     else
         print_info "Manifest: (not found; using platform defaults)"
     fi
-    if [[ -f "$ENV_FILE" ]]; then
-        print_info "Env file: $ENV_FILE"
+    if [[ -f "$TUIDEV_ENV_FILE_DEFAULT" ]]; then
+        print_info "Env file: $TUIDEV_ENV_FILE_DEFAULT"
     fi
 }
 

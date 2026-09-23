@@ -22,6 +22,9 @@ Host *
     ServerAliveCountMax 5
     TCPKeepAlive yes
     AddKeysToAgent yes
+    # UseKeychain is Apple-only; IgnoreUnknown keeps Linux OpenSSH from
+    # rejecting the whole file (this config is installed there too).
+    IgnoreUnknown UseKeychain
     UseKeychain yes
     IdentityFile ~/.ssh/id_ed25519
 

@@ -3,9 +3,12 @@
 # scripts/theme.sh - single-palette theming for tuidev.
 # ============================================================================
 # One palette file per theme (configs/themes/<name>/palette.toml) is rendered
-# into per-app snippets and written into the user's installed configs as
-# managed blocks (block id: tuidev-theme). User content outside the markers is
-# never touched.
+# into per-app snippets and written as managed blocks (block id: tuidev-theme):
+#   tmux      ~/.config/tmux/theme.conf, its own file — the shipped tmux.conf
+#             sources it above the TPM block (see _write_tmux_theme)
+#   ghostty   appended to ~/.config/ghostty/config
+#   starship  appended to ~/.config/starship.toml
+# User content outside the markers is never touched.
 #
 #   theme.sh list                    list discovered themes
 #   theme.sh show <name>             print the palette (with swatches on a TTY)
@@ -27,7 +30,9 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 THEMES_DIR="${TUIDEV_THEMES_DIR:-$REPO_ROOT/configs/themes}"
 THEME_BLOCK_ID="tuidev-theme"
-THEME_STATE_FILE="$HOME/.config/tuidev/theme"
+THEME_STATE_FILE="$TUIDEV_STATE_DIR/theme"
+TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+TMUX_THEME_FILE="$HOME/.config/tmux/theme.conf"
 
 # The palette contract. Every theme must define exactly these keys; apply
 # refuses to render if any are missing. Documented in docs/theming.md.
@@ -268,23 +273,11 @@ cmd_show() {
     echo ""
 }
 
-# _tmux_reload FILE — push the freshly rendered tmux snippet into a live
-# server so open panes re-theme immediately. Best-effort: no server, no-op.
-_tmux_reload() {
-    command_exists tmux || return 0
-    tmux list-sessions >/dev/null 2>&1 || return 0
-    if tmux source-file "$1" 2>/dev/null; then
-        print_success "reloaded theme into the running tmux server"
-    else
-        print_warning "tmux is running but source-file failed (restart tmux to pick up the theme)"
-    fi
-}
-
 # ============================================================================
-# Block ordering
+# Block ordering (ghostty, starship)
 # ============================================================================
-# Both target formats are last-write-wins, and install.sh *appends* its own
-# managed blocks when they are absent. So a theme applied before the installer
+# Both formats are last-write-wins, and install.sh *appends* its own managed
+# blocks when they are absent. So a theme applied before the installer
 # ran ends up above the shipped config and loses. write_managed_block replaces
 # a block where it stands, which would preserve the bad order — so when our
 # block is not already last we drop it first and let the write re-append it.
@@ -318,6 +311,54 @@ _reserve_last_slot() {
     fi
     print_step "theme block is no longer last in $(basename "$file") — moving it to the end"
     remove_managed_block "$file" "$THEME_BLOCK_ID" >/dev/null
+}
+
+# ============================================================================
+# tmux
+# ============================================================================
+
+# _tmux_sources_theme — does the installed tmux.conf source theme.conf?
+# (Every tmux.conf shipped since 2.4 does; an older managed block does not.)
+_tmux_sources_theme() {
+    [[ -f "$TMUX_CONF" ]] && grep -qE '^[[:space:]]*source-file.*tmux/theme\.conf' "$TMUX_CONF"
+}
+
+# _write_tmux_theme SNIPPET — write the tmux theme into its own file.
+#
+# tmux is last-write-wins too, but its tail belongs to TPM: plugins such as
+# tmux-continuum append their hooks to status-right when TPM runs, and a theme
+# block after that line would reset status-right and silently stop continuum's
+# autosave. So the theme is not appended to tmux.conf; tmux.conf sources this
+# file above its TPM block instead.
+_write_tmux_theme() {
+    write_managed_block "$TMUX_THEME_FILE" "$THEME_BLOCK_ID" "$(cat "$1")"
+
+    # A pre-2.4 apply appended the block to tmux.conf itself. theme.conf now
+    # holds the same content, so the old copy only does harm.
+    if _has_block "$TMUX_CONF" "$THEME_BLOCK_ID"; then
+        print_step "moving the theme out of $(basename "$TMUX_CONF") into $(basename "$TMUX_THEME_FILE")"
+        remove_managed_block "$TMUX_CONF" "$THEME_BLOCK_ID" >/dev/null
+    fi
+
+    if [[ -f "$TMUX_CONF" ]] && ! _tmux_sources_theme; then
+        print_warning "$TMUX_CONF does not source $TMUX_THEME_FILE yet"
+        print_info "run 'make update-configs' to refresh the shipped tmux config; until then tmux keeps its old colors"
+    fi
+}
+
+# _tmux_reload — re-source the whole tmux.conf into a live server so open
+# panes re-theme immediately. The whole file, not just theme.conf: that would
+# reset status-right without TPM re-adding its plugin hooks after it.
+# Best-effort: no server (or an old tmux.conf, already warned about), no-op.
+_tmux_reload() {
+    command_exists tmux || return 0
+    _tmux_sources_theme || return 0
+    tmux list-sessions >/dev/null 2>&1 || return 0
+    if tmux source-file "$TMUX_CONF" 2>/dev/null; then
+        print_success "reloaded theme into the running tmux server"
+    else
+        print_warning "tmux is running but source-file failed (restart tmux to pick up the theme)"
+    fi
 }
 
 # _starship_selector_is_top_level FILE — a `palette = "tuidev"` key only selects
@@ -387,7 +428,6 @@ cmd_apply() {
     done
     print_success "rendered 3 snippets (tmux, ghostty, starship)"
 
-    local tmux_dest="$HOME/.config/tmux/tmux.conf"
     local ghostty_dest="$HOME/.config/ghostty/config"
     local starship_dest="$HOME/.config/starship.toml"
 
@@ -399,14 +439,13 @@ cmd_apply() {
     fi
 
     if [[ "$DRY_RUN" == true ]]; then
-        _preview "$tmux_dest"    "$stage/tmux.conf"
+        _preview "$TMUX_THEME_FILE" "$stage/tmux.conf"
         _preview "$ghostty_dest" "$stage/ghostty.conf"
         $do_starship && _preview "$starship_dest" "$stage/starship.toml"
     fi
 
-    _reserve_last_slot "$tmux_dest"
+    _write_tmux_theme "$stage/tmux.conf"
     _reserve_last_slot "$ghostty_dest"
-    write_managed_block "$tmux_dest"    "$THEME_BLOCK_ID" "$(cat "$stage/tmux.conf")"
     write_managed_block "$ghostty_dest" "$THEME_BLOCK_ID" "$(cat "$stage/ghostty.conf")"
 
     if $do_starship; then
@@ -423,7 +462,7 @@ cmd_apply() {
     mkdir -p "$(dirname "$THEME_STATE_FILE")"
     echo "$name" > "$THEME_STATE_FILE"
 
-    _tmux_reload "$stage/tmux.conf"
+    _tmux_reload
 
     print_success "theme '$name' applied"
     print_info "ghostty: reload with the config-reload keybind or restart the app"

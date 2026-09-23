@@ -8,8 +8,9 @@ a state file, already-installed machines keep the old artifact forever. That is
 what a migration is for.
 
 Run by `scripts/update.sh` (`--migrations`, and as the first step of `--configs`
-and `--all`); previewed by `--check` and `--dry-run`. Applied ids are recorded
-one per line in `~/.config/tuidev/migrations`.
+and `--all`), and by `install.sh` on an existing machine before any pack runs;
+previewed by `--check` and `--dry-run`. Applied ids are recorded one per line in
+`$TUIDEV_STATE_DIR/migrations` (normally `~/.config/tuidev/migrations`).
 
 ## Naming
 

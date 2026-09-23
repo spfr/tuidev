@@ -9,10 +9,10 @@
 #   core    - core pack tools and own library scripts (always runs by default)
 #   remote  - tailscale / mosh / SSH config sanity
 #   sandbox - Seatbelt profiles, bin/sbx, sandbox-exec -n probe
-#   ui      - GUI apps (Rectangle, Stats, Maccy, Hidden Bar, Hammerspoon,
-#             Ghostty). Never affects exit code.
+#   ui      - GUI apps (Rectangle, Stats, Maccy, Hidden Bar, Ghostty).
+#             Never affects exit code.
 #   extras  - atuin, dust, broot, bandwhich, etc.
-#   packs   - extra packs listed in ~/.config/tuidev/profile
+#   packs   - extra packs listed in the tuidev profile
 #
 # Usage:
 #   ./scripts/test_suite.sh                  # core + profile-enabled tags
@@ -29,20 +29,20 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEST_RESULTS_DIR="$REPO_ROOT/test_results"
 mkdir -p "$TEST_RESULTS_DIR"
 
-PROFILE_FILE="${TUIDEV_PROFILE_FILE:-$HOME/.config/tuidev/profile}"
+# shellcheck source=lib/ui.sh disable=SC1091
+. "$SCRIPT_DIR/lib/ui.sh"
+# shellcheck source=lib/packs.sh disable=SC1091
+. "$SCRIPT_DIR/lib/packs.sh"
+# shellcheck source=lib/pkg.sh disable=SC1091
+. "$SCRIPT_DIR/lib/pkg.sh"
+
+PROFILE_FILE="${TUIDEV_PROFILE_FILE:-$TUIDEV_PROFILE_FILE_DEFAULT}"
 
 # ---------------------------------------------------------------------------
-# Local formatting — test_suite uses its own print_* variants with tee-to-log
-# behavior (see log/print_header below). ANSI sequences are redefined here
-# to stay independent of the shared lib's formatting conventions.
+# Output. Colors come from ui.sh (so NO_COLOR / TUIDEV_NO_COLOR / non-TTY are
+# honored); log() and print_header below tee everything into the log file.
 # ---------------------------------------------------------------------------
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-DIM='\033[2m'
-NC='\033[0m'
+if [[ -n "$NC" ]]; then DIM='\033[2m'; else DIM=''; fi
 
 LOG_FILE="$TEST_RESULTS_DIR/test_$(date +%Y%m%d_%H%M%S).log"
 : > "$LOG_FILE"
@@ -74,7 +74,6 @@ UI_FAILED=0
 
 CURRENT_TAG=""
 CURRENT_NAME=""
-TEST_OPEN=0
 
 start_test() {
     # start_test NAME TAG
@@ -83,7 +82,6 @@ start_test() {
     TESTS_RUN=$((TESTS_RUN + 1))
     CURRENT_TAG="$tag"
     CURRENT_NAME="$name"
-    TEST_OPEN=1
     SUB_SEEN=0
     echo ""
     log "${CYAN}[TEST $TESTS_RUN]${NC} ${DIM}[$tag]${NC} $name"
@@ -95,7 +93,6 @@ pass_test() {
     TESTS_PASSED=$((TESTS_PASSED + 1))
     log "${GREEN}  PASS${NC} $msg"
     log_plain "PASS: $msg"
-    TEST_OPEN=0
 }
 
 fail_test() {
@@ -110,7 +107,6 @@ fail_test() {
         log "${RED}  FAIL${NC} $msg"
         log_plain "FAIL: $msg"
     fi
-    TEST_OPEN=0
 }
 
 skip_test() {
@@ -118,7 +114,6 @@ skip_test() {
     TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
     log "${YELLOW}  SKIP${NC} $msg"
     log_plain "SKIP: $msg"
-    TEST_OPEN=0
 }
 
 # Helper: sub-checks under an already-started test. Each sub_* counts as a
@@ -137,7 +132,6 @@ sub_pass() {
     TESTS_PASSED=$((TESTS_PASSED + 1))
     log "${GREEN}  PASS${NC} $1"
     log_plain "PASS: $1"
-    TEST_OPEN=0
 }
 sub_fail() {
     _sub_bump_run
@@ -150,39 +144,24 @@ sub_fail() {
         log "${RED}  FAIL${NC} $1"
         log_plain "FAIL: $1"
     fi
-    TEST_OPEN=0
-}
-# sub_skip retained for future use / symmetry, marked via shellcheck directive.
-# shellcheck disable=SC2317,SC2329
-sub_skip() {
-    _sub_bump_run
-    TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
-    log "${YELLOW}  SKIP${NC} $1"
-    log_plain "SKIP: $1"
-    TEST_OPEN=0
 }
 
 # ---------------------------------------------------------------------------
-# Profile loading. Reads ~/.config/tuidev/profile for:
-#   profile=minimal|desktop|remote
-#   extra_packs=pack-a,pack-b
-# Missing file is fine — we just run core.
+# Profile loading (scripts/lib/profile.sh). Missing file is fine — we just
+# run core.
 # ---------------------------------------------------------------------------
 PROFILE_NAME=""
 PROFILE_PACKS=()
 
-# shellcheck source=lib/profile.sh disable=SC1091
-. "$SCRIPT_DIR/lib/profile.sh"
-
 load_profile() {
     load_tuidev_profile "$PROFILE_FILE" || true
     PROFILE_NAME="$TUIDEV_PROFILE_NAME"
-    # Bash 3.2 on macOS trips set -u on an empty array expansion, so guard.
-    if [[ ${#TUIDEV_EXTRA_PACKS_ARR[@]} -gt 0 ]]; then
-        PROFILE_PACKS=("${TUIDEV_EXTRA_PACKS_ARR[@]}")
-    else
-        PROFILE_PACKS=()
-    fi
+    # extra_packs, plus tmux for the remote profile (tuidev_extra_packs).
+    PROFILE_PACKS=()
+    local p
+    while IFS= read -r p; do
+        PROFILE_PACKS+=("$p")
+    done < <(tuidev_extra_packs)
 }
 
 # ---------------------------------------------------------------------------
@@ -202,9 +181,9 @@ Usage: test_suite.sh [--tag TAG]... [--all] [--no-ui] [-h|--help]
   --no-ui     Run everything except the ui tag.
   -h, --help  Show this help.
 
-With no flags, runs `core` plus tags enabled by the active profile
-at ~/.config/tuidev/profile (desktop -> adds ui; remote -> adds remote;
-extras/sandbox/packs run when profile opts in).
+With no flags, runs `core` plus a tag for each built-in pack the recorded
+profile enables (remote, sandbox, ui, extras), and `packs` when it lists
+extra packs.
 EOF
 }
 
@@ -250,23 +229,12 @@ compute_active_tags() {
     elif [[ ${#SELECTED_TAGS[@]} -gt 0 ]]; then
         ACTIVE_TAGS=("${SELECTED_TAGS[@]}")
     else
-        # Default: core + whatever the profile enables.
+        # Default: core + a tag per built-in pack the profile records.
         ACTIVE_TAGS=(core)
-        case "$PROFILE_NAME" in
-            desktop)
-                ACTIVE_TAGS+=(ui sandbox extras)
-                ;;
-            remote)
-                ACTIVE_TAGS+=(remote)
-                ;;
-            minimal|"")
-                :
-                ;;
-            *)
-                # Unknown profile — stay conservative.
-                :
-                ;;
-        esac
+        $TUIDEV_PACK_REMOTE  && ACTIVE_TAGS+=(remote)
+        $TUIDEV_PACK_SANDBOX && ACTIVE_TAGS+=(sandbox)
+        $TUIDEV_PACK_UI      && ACTIVE_TAGS+=(ui)
+        $TUIDEV_PACK_EXTRAS  && ACTIVE_TAGS+=(extras)
         if [[ ${#PROFILE_PACKS[@]} -gt 0 ]]; then
             ACTIVE_TAGS+=(packs)
         fi
@@ -333,14 +301,9 @@ run_core() {
         else
             sub_fail "ls alias missing"
         fi
-        if grep -q "alias lg=['\"]lazygit['\"]" "$HOME/.zshrc"; then
-            sub_pass "lg -> lazygit alias"
-        else
-            sub_fail "lg alias missing"
-        fi
     fi
 
-    # --- Config files (KDL / TOML / Lua) ---------------------------------
+    # --- Config files (TOML) --------------------------------------------
     start_test "Starship configuration" core
     if [[ -f "$HOME/.config/starship.toml" ]]; then
         if grep -q "^\[character\]\|character" "$HOME/.config/starship.toml"; then
@@ -352,40 +315,23 @@ run_core() {
         fail_test "starship.toml missing"
     fi
 
-    start_test "tmux configuration" core
-    if [[ -f "$HOME/.config/tmux/tmux.conf" ]] || [[ -f "$HOME/.tmux.conf" ]]; then
-        pass_test "tmux.conf present"
-    else
-        fail_test "tmux.conf missing"
-    fi
-
-    start_test "Neovim configuration" core
-    if [[ -f "$HOME/.config/nvim/init.lua" ]]; then
-        if command -v lua >/dev/null 2>&1; then
-            if lua -e "loadfile('$HOME/.config/nvim/init.lua')" >/dev/null 2>&1; then
-                pass_test "init.lua parses"
-            else
-                fail_test "init.lua failed to parse"
-            fi
-        else
-            pass_test "init.lua present (lua unavailable to parse-check)"
-        fi
-    else
-        fail_test "nvim init.lua missing"
-    fi
-
-    # --- Core CLI tool presence ------------------------------------------
-    local tool
-    for tool in tmux nvim rg fd bat fzf zoxide starship delta lazygit jq yq eza gh http shellcheck git; do
+    # --- Core CLI tool presence (from core.sh's CORE_FORMULAE) -----------
+    # On Linux without Homebrew a tool the distro may not package is a SKIP,
+    # matching health_check.sh.
+    local formula tool v
+    while IFS= read -r formula; do
+        tool="$(tuidev_formula_binary "$formula")"
+        [[ -n "$tool" ]] || continue
         start_test "$tool installed" core
         if command -v "$tool" >/dev/null 2>&1; then
-            local v
             v="$("$tool" --version 2>/dev/null | head -1)"
             pass_test "$tool ok${v:+ ($v)}"
+        elif is_linux && ! command_exists brew && [[ -n "$(pkg_manual_hint "$formula")" ]]; then
+            skip_test "$tool not installed (not packaged by every distro)"
         else
             fail_test "$tool not installed"
         fi
-    done
+    done < <(pack_array core formulae)
 
     # --- Modern CLI smoke test -------------------------------------------
     start_test "Modern CLI replacements can operate on a file" core
@@ -423,15 +369,21 @@ run_core() {
     fi
 
     # --- Integrations -----------------------------------------------------
+    # install.sh sets core.pager only when the user has none, so another
+    # pager is the user's choice, not a failure.
     start_test "Git delta pager integration" core
-    if command -v git >/dev/null 2>&1; then
-        if git config --global core.pager 2>/dev/null | grep -q "delta"; then
-            pass_test "git core.pager uses delta"
-        else
-            fail_test "git core.pager not configured with delta"
-        fi
-    else
+    local pager
+    if ! command -v git >/dev/null 2>&1; then
         fail_test "git not installed"
+    elif ! command -v delta >/dev/null 2>&1; then
+        skip_test "delta not installed"
+    else
+        pager="$(git config --global core.pager 2>/dev/null || true)"
+        case "$pager" in
+            *delta*) pass_test "git core.pager uses delta" ;;
+            "")      fail_test "git core.pager not configured (re-run install.sh)" ;;
+            *)       skip_test "core.pager is '$pager' (your own setting; kept)" ;;
+        esac
     fi
 
     start_test "fzf uses ripgrep" core
@@ -447,12 +399,14 @@ run_core() {
 
     # --- AI CLI presence (soft: SKIP when absent — opt-in --pack ai-clis) -
     local aitool
+    local aipack
     for aitool in claude codex opencode; do
         start_test "AI CLI: $aitool" core
+        case "$aitool" in opencode) aipack=opencode ;; *) aipack=ai-clis ;; esac
         if command -v "$aitool" >/dev/null 2>&1; then
             pass_test "$aitool on PATH"
         else
-            skip_test "$aitool not installed (optional; --pack ai-clis)"
+            skip_test "$aitool not installed (optional; --pack $aipack)"
         fi
     done
 
@@ -468,9 +422,10 @@ run_core() {
         elif shellcheck -x "${files[@]}" >/dev/null 2>&1; then
             pass_test "all repo scripts pass shellcheck (${#files[@]} files)"
         else
-            # Re-run to emit diagnostics visible in the log for debugging.
-            shellcheck -x "${files[@]}" 2>&1 | head -30 | while IFS= read -r l; do sub_fail "$l"; done
-            TEST_OPEN=0
+            # Diagnostics go to the log. (Piping into sub_fail would count the
+            # failures in a subshell and lose them.)
+            shellcheck -x "${files[@]}" >>"$LOG_FILE" 2>&1
+            fail_test "shellcheck findings (see $LOG_FILE)"
         fi
     else
         skip_test "shellcheck not installed"
@@ -491,24 +446,21 @@ run_core() {
             skip_test "scripts/lib/ exists but has no .sh files"
         elif [[ $libfail -eq 0 ]]; then
             pass_test "$libfiles lib scripts parse cleanly"
-        else
-            TEST_OPEN=0
         fi
     else
         skip_test "scripts/lib/ not present yet"
     fi
 
+    # Every scripts/lib/test_*.sh, so a new harness is picked up automatically
+    # (the same glob CI and `make test-lib` use).
     local harness
-    for harness in test_config_write test_profile test_contract test_theme test_migrations test_container; do
-        start_test "lib harness: $harness.sh" core
-        if [[ -f "$SCRIPT_DIR/lib/$harness.sh" ]]; then
-            if bash "$SCRIPT_DIR/lib/$harness.sh" >>"$LOG_FILE" 2>&1; then
-                pass_test "$harness.sh passed"
-            else
-                fail_test "$harness.sh failed (see log)"
-            fi
+    for harness in "$SCRIPT_DIR"/lib/test_*.sh; do
+        [[ -f "$harness" ]] || continue
+        start_test "lib harness: $(basename "$harness")" core
+        if bash "$harness" >>"$LOG_FILE" 2>&1; then
+            pass_test "$(basename "$harness") passed"
         else
-            skip_test "scripts/lib/$harness.sh not present"
+            fail_test "$(basename "$harness") failed (see log)"
         fi
     done
 }
@@ -561,20 +513,11 @@ run_sandbox() {
     print_header "Sandbox Tests"
 
     start_test "Seatbelt profiles present" sandbox
-    local sb_dir
-    for sb_dir in \
-        "$HOME/.config/tuidev/sandbox" \
-        "$HOME/.config/tuidev/seatbelt" \
-        "$REPO_ROOT/sandbox" \
-        "$REPO_ROOT/seatbelt"; do
-        if [[ -d "$sb_dir" ]] \
-            && find "$sb_dir" -maxdepth 2 -name '*.sb' 2>/dev/null | grep -q .; then
-            pass_test "Seatbelt profiles found in $sb_dir"
-            break
-        fi
-    done
-    if [[ $TEST_OPEN -eq 1 ]]; then
-        fail_test "no Seatbelt profiles (.sb) found"
+    local sb_dir="$TUIDEV_STATE_DIR/sandbox"
+    if find "$sb_dir" -maxdepth 1 -name '*.sb' 2>/dev/null | grep -q .; then
+        pass_test "Seatbelt profiles found in $sb_dir"
+    else
+        fail_test "no Seatbelt profiles (.sb) in $sb_dir"
     fi
 
     start_test "bin/sbx on PATH" sandbox
@@ -619,30 +562,16 @@ run_ui() {
         return 0
     fi
 
-    local app_name app_path
-    for entry in \
-        "Rectangle:/Applications/Rectangle.app" \
-        "Stats:/Applications/Stats.app" \
-        "Maccy:/Applications/Maccy.app" \
-        "Hidden Bar:/Applications/Hidden Bar.app" \
-        "Hammerspoon:/Applications/Hammerspoon.app" \
-        "Ghostty:/Applications/Ghostty.app"; do
-        app_name="${entry%%:*}"
-        app_path="${entry#*:}"
+    local cask app_name
+    while IFS= read -r cask; do
+        app_name="$(tuidev_cask_app "$cask")"
         start_test "$app_name present" ui
-        if [[ -d "$app_path" ]] || [[ -d "$HOME$app_path" ]]; then
+        if [[ -d "/Applications/$app_name.app" || -d "$HOME/Applications/$app_name.app" ]]; then
             pass_test "$app_name installed"
         else
             fail_test "$app_name not installed"
         fi
-    done
-
-    start_test "Hammerspoon config" ui
-    if [[ -f "$HOME/.hammerspoon/init.lua" ]]; then
-        pass_test "\$HOME/.hammerspoon/init.lua present"
-    else
-        fail_test "\$HOME/.hammerspoon/init.lua missing"
-    fi
+    done < <(pack_array ui casks; pack_array core casks)
 
     start_test "Ghostty config" ui
     if [[ -f "$HOME/.config/ghostty/config" ]]; then
@@ -659,14 +588,14 @@ run_extras() {
     print_header "Extras Tests"
 
     local tool
-    for tool in atuin dust broot bandwhich btm procs hyperfine tokei; do
+    while IFS= read -r tool; do
         start_test "extras: $tool" extras
         if command -v "$tool" >/dev/null 2>&1; then
             pass_test "$tool installed"
         else
             skip_test "$tool not installed (optional)"
         fi
-    done
+    done < <(pack_binaries extras)
 }
 
 # ---------------------------------------------------------------------------
@@ -690,13 +619,29 @@ run_packs() {
 
     # Built-in pack probes. Each one checks the pack's shipped artifacts
     # only when that pack is listed in the active profile's extra_packs.
-    if _packs_contains yazi || _packs_contains nnn; then
-        local fm; _packs_contains yazi && fm=yazi || fm=nnn
-        start_test "$fm: binary on PATH" packs
-        if command -v "$fm" >/dev/null 2>&1; then
-            pass_test "$fm available"
+    if _packs_contains tmux; then
+        start_test "tmux configuration" packs
+        if [[ -f "$HOME/.config/tmux/tmux.conf" ]] || [[ -f "$HOME/.tmux.conf" ]]; then
+            pass_test "tmux.conf present"
         else
-            fail_test "$fm not found on PATH"
+            fail_test "tmux.conf missing"
+        fi
+    fi
+
+    if _packs_contains nvim; then
+        start_test "Neovim configuration" packs
+        if [[ -f "$HOME/.config/nvim/init.lua" ]]; then
+            if command -v luac >/dev/null 2>&1; then
+                if luac -p "$HOME/.config/nvim/init.lua" >/dev/null 2>&1; then
+                    pass_test "init.lua parses"
+                else
+                    fail_test "init.lua failed to parse"
+                fi
+            else
+                pass_test "init.lua present (luac unavailable to parse-check)"
+            fi
+        else
+            fail_test "nvim init.lua missing"
         fi
     fi
 
@@ -717,30 +662,6 @@ run_packs() {
             fail_test "no container runtime found (Apple container, podman, or docker)"
         fi
     fi
-
-    # Packs with optional per-pack test.sh under packs/<name>/ (for
-    # third-party or user-authored packs that follow this convention).
-    local pack pack_dir
-    for pack in "${PROFILE_PACKS[@]}"; do
-        [[ -z "$pack" ]] && continue
-        pack_dir=""
-        for candidate in \
-            "$REPO_ROOT/packs/$pack" \
-            "$HOME/.config/tuidev/packs/$pack"; do
-            if [[ -d "$candidate" && -x "$candidate/test.sh" ]]; then
-                pack_dir="$candidate"
-                break
-            fi
-        done
-        if [[ -n "$pack_dir" ]]; then
-            start_test "pack: $pack test.sh" packs
-            if bash "$pack_dir/test.sh" >>"$LOG_FILE" 2>&1; then
-                pass_test "pack $pack test.sh passed"
-            else
-                fail_test "pack $pack test.sh failed (see log)"
-            fi
-        fi
-    done
 }
 
 # ---------------------------------------------------------------------------

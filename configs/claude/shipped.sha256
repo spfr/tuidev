@@ -1,0 +1,13 @@
+# SHA-256 of every configs/claude/settings.json version tuidev has ever shipped.
+# The ai-clis pack replaces ~/.claude/settings.json only when it is an
+# unmodified copy of one of these (backup first); a file you edited is left
+# alone. test_contract.sh fails if the current file is not listed: after
+# editing it, append `settings $(shasum -a 256 settings.json | cut -d' ' -f1)`.
+settings 575fe4da314877c7ed7237ca0c2250da10340412cf6a3448e782fa86d13389b8
+settings 7bc70a8e147d1d3953c9df08175cd3779f11303aa931312b0a0fb714864ecbfc
+settings b237440d25e5dfa450e55311a3d9ace314f0fed3931462072547b86e672288c3
+settings e9c9499d49782e91e18c5f614d34cd7404a2e03324304be36fbb4ce4b310af6b
+settings 2bf857b1fb9fca1d6b263ef21bf026b170d18ee78277a4bef077ad9370e3c815
+settings ba1609a7fb10f1536685b6e70cdf427fa487b55b2599904a3cee9c8ba967db4a
+settings c803aed4593d39e852f64e54c14e92d39f09145ecf9db5f955734c180ec9fb04
+settings d1745bcebb147182617b8a304b7831c137bd5e4683bc931eae6a45325b520d4f

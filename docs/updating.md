@@ -4,6 +4,44 @@ How an existing install moves forward, and what the installer records so it can
 be undone. For what each profile installs see
 [profiles.md](profiles.md).
 
+## Upgrading to 3.0
+
+3.0 made tmux and Neovim optional packs, dropped the `cc`/`cx` wrappers in
+favor of the CLIs' own native sandboxes, and removed the `bosun`, `yazi` and
+`nnn` packs. On an existing machine, upgrade with:
+
+```bash
+git pull
+./scripts/update.sh --configs     # or: make update-configs
+```
+
+That runs the three migrations below, then re-applies the configs of every
+pack your profile records, including one a migration just added: the
+`tuidev-tmux` block, the Neovim config and its `nvim.zsh` aliases, and an
+unmodified 2.x `~/.claude/settings.json` upgraded to the one with the
+`sandbox` block. `./install.sh` on its own is not enough: it runs the
+migrations too, but only installs the packs you name on that command line.
+
+The migrations, in order:
+
+- `202609231200_v3_optional_nvim_tmux.sh` — if tuidev already owns
+  `~/.config/nvim`, adds `nvim` to `extra_packs`; if the profile is `remote`
+  or `~/.config/tmux/tmux.conf` has the `tuidev-tmux` block, adds `tmux`. So
+  nothing you were using disappears. Prints what it carried over and how to
+  drop it by hand (edit `extra_packs` in `~/.config/tuidev/profile`). A
+  `tmux.conf` of your own never gains the `tuidev-tmux` block from an update;
+  `./install.sh --pack tmux` adds it.
+- `202609231210_v3_drop_tui_packs.sh` — removes `bosun`, `yazi` and `nnn` from
+  `extra_packs`. The tools themselves are left installed; only the pack
+  registration goes.
+- `202609231220_v3_drop_ai_wrappers.sh` — backs up and deletes the
+  tuidev-owned `ai-clis.zsh` shell fragment, so `cc`/`cx` disappear. It never
+  edits `~/.claude/settings.json`; it tells you where that file stands. With
+  a `sandbox` block, plain `claude` is sandboxed. An unmodified 2.x copy is
+  upgraded by `./scripts/update.sh --configs`. One you edited is kept: merge
+  the `sandbox` block yourself (see [sandboxing.md](sandboxing.md)). Until
+  then, `claude` runs unsandboxed.
+
 ## The three kinds of change
 
 An update has to handle three different things, and they need different
@@ -65,16 +103,17 @@ Writing one? The contract is in
 
 ## The install manifest
 
-`~/.config/tuidev/profile` records *which packs you picked*. As of 2.2.0 the
-write is a merge, not a rewrite: a pack-only run like `./install.sh --pack
-herdr` unions `extra_packs` with what was already recorded, only ever flips
-group booleans (core/remote/sandbox/ui/extras) true, and keeps the previously
-recorded profile name (minimal/desktop/remote) instead of resetting it to
-`custom` — unless `--profile` is explicitly passed on that run.
-`~/.config/tuidev/manifest` records *what was actually put on the machine* —
-the question the uninstaller needs answered. It is written silently as a side
-effect of the shared libs: every `brew_install_formula`, every managed block,
-every file `install_config` places appends a line.
+`~/.config/tuidev/profile` records *which packs you picked*. Each run merges
+into it: a pack-only run like `./install.sh --pack herdr` adds to
+`extra_packs`, only ever turns the built-in pack flags (core, remote, sandbox,
+ui, extras) on, and keeps the recorded profile name unless you pass
+`--profile` again.
+
+`~/.config/tuidev/manifest` records *what was actually put on the machine*,
+which is the question the uninstaller needs answered. The shared libs write it
+as a side effect: every package `pkg_install` or `brew_install_*` actually
+installed, every managed block, every file `install_config` placed, and every
+git default the installer set gets a line.
 
 ```
 # tuidev install manifest — one record per line: <kind> <value>
@@ -87,41 +126,74 @@ file /Users/NAME/.local/bin/notify.sh
 dir /Users/NAME/.config/nvim
 ```
 
-Line-oriented and greppable on purpose — `grep '^formula ' ~/.config/tuidev/manifest`
-is a valid way to use it. The file is append-only and deduplicated, so
-installing another pack later adds to it rather than replacing it. Records can
-go stale (a formula you later removed by hand); every consumer re-checks that a
-thing exists before acting on it, so a stale record is inert.
+The file is line-oriented and greppable on purpose: `grep '^formula ' ~/.config/tuidev/manifest`
+is a valid way to use it. It is append-only and deduplicated. Records can go
+stale (a formula you later removed by hand), so every consumer re-checks that a
+thing exists before acting on it.
 
-**Only packages tuidev actually installed are recorded.** A formula that was
-already present when a pack ran is skipped, so `./uninstall.sh` will not remove
-the `ripgrep` you had before you ever found this repo.
+**Only what tuidev installed is recorded.** A package that was already present
+when a pack ran is skipped, so `./uninstall.sh` won't remove the `ripgrep` you
+had before you found this repo.
 
-### What uninstall does with it
+## Uninstall
 
-`./uninstall.sh` prints which mode it is in on startup:
+```bash
+./uninstall.sh --dry-run   # preview
+./uninstall.sh             # interactive: asks before each step
+./uninstall.sh --all       # yes to every step
+```
 
-- **Manifest present** — it strips the managed blocks, removes the `~/.local/bin`
-  helpers, and purges the brew packages that *this* machine recorded.
-- **No manifest** (an install predating this feature, or one that never
-  finished) — it warns and falls back to the built-in list covering everything
-  tuidev can install. Uninstall has never required a manifest and still doesn't.
+It removes only what the manifest records:
 
-The opt-in "also remove tuidev-owned configs" step is the one exception: it
-removes the union of the manifest's records and the well-known tuidev-owned
-paths, because a few packs still place configs with a bare `cp` and record
-nothing. That step is consented to and backs everything up to
-`~/.config-uninstall-backup-*/` first.
+- managed blocks, including the `tuidev-theme` blocks (content outside the markers stays);
+- helpers in `~/.local/bin`;
+- global git keys tuidev set, and only while they still hold tuidev's value;
+- optionally, the config files tuidev created (each one backed up first). A
+  file tuidev adopted is never removed, and neither is a whole CLI home, so auth
+  and session state (`~/.claude/…`, `~/.codex/auth.json`) always survive;
+- optionally, the Homebrew formulae and casks tuidev installed. apt, dnf and
+  pacman packages are listed for you to remove, not removed;
+- tuidev's state dir, except `backups/`.
+
+An install that predates the manifest gets only the safe subset: managed blocks,
+and helpers still byte-identical to the repo copy. Everything else is listed for
+you to review.
 
 ## Everything else `update.sh` does
 
 ```bash
 make update-check          # preview: packages, migrations, drift, repo
-make update-packages       # brew upgrade, scoped to your active packs
+make update-packages       # upgrade the packages of your active packs only
 make update-configs        # migrations, then re-apply managed blocks + pack configs
 make update-all            # non-interactive packages + configs + repo
-make update-security       # audit Tailscale, SSH perms, Seatbelt drift
+make update-security       # audit Tailscale, SSH permissions, Seatbelt profile drift
 ```
 
-Bare `./scripts/update.sh` gives an interactive menu with the same actions.
-Every mode honors `--dry-run`.
+A bare `./scripts/update.sh` gives an interactive menu with the same actions.
+Every mode honors `--dry-run`. `update.sh` runs under macOS's stock bash 3.2.
+
+### Shipped configs you may have edited
+
+Some configs are whole files the user may take over, so they can't be managed
+blocks: the Seatbelt profiles in `~/.config/tuidev/sandbox/`, every file of
+the Neovim config in `~/.config/nvim/` (with `--pack nvim`, keyed by its
+path, so the two `init.lua` files stay distinct), and (with `--pack ai-clis`)
+`~/.claude/settings.json` and `~/.codex/config.toml`. Each is installed with
+`install_config --upgrade-shipped`:
+
+- absent: it is placed;
+- byte-identical to any version tuidev ever shipped (the `shipped.sha256` next
+  to the source lists every one): it is backed up to
+  `~/.config/tuidev/backups/` and replaced, so fixes such as tighter
+  permissions reach existing installs;
+- anything else is your edit and is kept; the run prints a
+  `diff <yours> <shipped>` command so you can merge by hand.
+
+`make update-configs` re-runs the packs, so this happens on every update.
+Files you added (say, `~/.config/nvim/lua/plugins/mine.lua`) are never
+touched. After a Neovim upgrade, `:Lazy sync` installs and cleans plugins.
+
+`make update-configs` also applies new **git defaults** (`scripts/lib/gitconfig.sh`)
+to keys you have not set, `[include]`d files included.
+`make update-security` also shows how your profiles differ from the shipped
+ones (see [sandboxing.md](sandboxing.md#customizing)).

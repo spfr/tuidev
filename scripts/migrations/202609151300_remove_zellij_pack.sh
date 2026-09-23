@@ -8,7 +8,7 @@
 #   - the `zellij` formula is left installed either way; removing a brew
 #     package on the user's behalf is uninstall.sh's job, not a migration's.
 #     We print the command instead.
-#   - `pack zellij` is dropped from ~/.config/tuidev/profile's extra_packs so
+#   - `zellij` is dropped from the profile's extra_packs so
 #     update.sh stops trying to re-apply a pack that no longer exists.
 
 set -eo pipefail
@@ -18,13 +18,12 @@ MIGRATION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$MIGRATION_DIR/../lib/ui.sh"
 # shellcheck source=../lib/config_write.sh disable=SC1091
 . "$MIGRATION_DIR/../lib/config_write.sh"
+# shellcheck source=../lib/profile.sh disable=SC1091
+. "$MIGRATION_DIR/../lib/profile.sh"
 
-state_dir="$HOME/.config/tuidev"
-manifest="$state_dir/manifest"
-profile="$state_dir/profile"
 zdir="$HOME/.config/zellij"
 
-if [[ -f "$manifest" ]] && grep -qx 'pack zellij' "$manifest"; then
+if tuidev_manifest_has pack zellij; then
     if [[ -d "$zdir" ]]; then
         backup="$(tuidev_backup "$zdir" "zellij")" \
             || { print_error "could not back up $zdir"; exit 1; }
@@ -39,17 +38,6 @@ else
 fi
 
 # Drop the pack from the recorded profile so update.sh stops re-applying it.
-if [[ -f "$profile" ]] && grep -q '^extra_packs=' "$profile"; then
-    old="$(grep '^extra_packs=' "$profile" | head -n1 | cut -d= -f2-)"
-    new=""
-    for p in ${old//,/ }; do
-        [[ "$p" == zellij ]] && continue
-        new="${new:+$new }$p"
-    done
-    if [[ "$new" != "$old" ]]; then
-        tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
-        awk -v v="$new" '/^extra_packs=/ && !done {print "extra_packs=" v; done=1; next} {print}' "$profile" > "$tmp"
-        cp "$tmp" "$profile"
-        print_success "dropped zellij from extra_packs in $profile"
-    fi
+if tuidev_profile_remove_pack zellij; then
+    print_success "dropped zellij from extra_packs in $TUIDEV_PROFILE_FILE_DEFAULT"
 fi

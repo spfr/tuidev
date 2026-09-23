@@ -1,0 +1,27 @@
+# SHA-256 of every version of each configs/nvim file tuidev has shipped,
+# keyed by path relative to configs/nvim. The core pack upgrades an installed
+# file only when it is an unmodified copy of one of these; files you edited
+# are kept. test_contract.sh fails if a current file is missing here: after
+# editing one, append `<relpath> $(shasum -a 256 <file> | cut -d' ' -f1)`.
+init.lua cbee5f9f56537474874f342bee84e09a3f2e34453d32cdb62dcbeb0863ae468b
+init.lua 7011654ecf9cd154d5e233be9279adf540e6cd7ff0be5d1fdefa36c3103465e3
+lua/config/autocmds.lua 4cb9c14670d177ee88edf2ca3251d11c97a15a01e3cae1758b15dc7c961c4618
+lua/config/autocmds.lua bca13f9730329fd576eda5439221b8516249bd09f415264b637a911eae99e8e3
+lua/config/keymaps.lua f7b2ddae74f929a120939e79e2587c152d829cc14cf20bf6bc54d33fb328c798
+lua/config/keymaps.lua 7afce18e22066aaf8bcb7514e1c732519dee90ff3b12a398b27cc7740b13ffc2
+lua/config/options.lua b68f1829d0a900f830aa1144d3c006be94bb28633331565369d9a71930fe8dde
+lua/config/options.lua 87750d6ce0809c3ef1cf05f284a6f04790dea46118e43b5125fe90a0da94bb9a
+lua/config/options.lua 396da72e391aa004368b40a12d658a2dbf59c4c647353126afd799338a2e76e0
+lua/plugins/ai.lua c992cc13ebc923a93d6693f2242fdbcce579c6bbe1669fdcc6a6234297c21e46
+lua/plugins/ai.lua 38d7494211d1a55745b1a784d60e3ff6de95e14df9c7618dfe43dc76501ecc68
+lua/plugins/ai.lua ed426342f521263e1167ac75d90aedf435ab2a520cd443ddb2eed5818a27e1ca
+lua/plugins/ai.lua afa81d01352c7a36066e783cf3004f5ffcb60d9ea440fbfaca2ba550dbeb6cea
+lua/plugins/coding.lua 77a1f3857d5b816d7afa403d23ea92c0188a4c34d8bc8933db11af38d76a8a51
+lua/plugins/coding.lua 9957e723867317e93c5e239a3925342e1fd2085e2754593c45caf3b754d80a35
+lua/plugins/coding.lua 5f8599a85f6e2154811746ab102dac706dafebd32691c8d2b7138eed7495b420
+lua/plugins/coding.lua 3951cc031ee62131d300c5240049b398194b757b9f4249ad8babbbc56dc03910
+lua/plugins/coding.lua 2fde40917fc177d79dd2e49be744740212a3f57fb3849c5d8075fcc96beb4d93
+lua/plugins/editor.lua 600f8db36e81d49e802c4a3635cec7c9e77966cf0dd7477d4743661d623af88d
+lua/plugins/editor.lua afbf83ed7f6ad851cba33eb8c562c9951d0836ae04875b0bb1717e31d6550897
+lua/plugins/init.lua 3fee965271c9af68311d22e498c27f218808d5109be38cf9eebe534fcd985ec1
+lua/plugins/init.lua a6e28ab42fa175e75507e8c032dac7e4696367a8b4c94a31f06339c9d6f83723

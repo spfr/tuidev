@@ -10,9 +10,11 @@
 ;;   PROJECT_DIR — absolute path of the project working tree.
 ;;   HOME_DIR    — absolute path of $HOME (Seatbelt does not auto-populate
 ;;                 env vars, so the wrapper passes this explicitly).
+;;   (ALLOW_HERDR is ignored here: this profile always opens the herdr socket.)
 ;;
 ;; Risk model:
-;;   Broader network reach than strict. Credentials are still locked out of
+;;   Broader network reach than strict, and the herdr control socket is
+;;   reachable (see the end of this file). Credentials are still locked out of
 ;;   both read and write. Use this profile when the agent legitimately needs
 ;;   `npm install`, `pip install`, `cargo fetch`, `git push`, etc.
 ;;
@@ -34,6 +36,19 @@
 (allow sysctl-read)
 (allow mach-lookup)
 (allow iokit-open)
+
+;; --- The CLI's own terminal ---
+;; An interactive agent (Claude Code, Codex) puts its controlling terminal in
+;; raw mode and asks it for key/mouse reporting; without these it gets "not a
+;; tty", cannot decode keys, and even Ctrl+C arrives as literal "^[[99;5u".
+;; Only terminal devices: /dev/tty (the controlling tty), the pseudo-terminal
+;; ttys* nodes, and /dev/ptmx for tools that open a pty of their own.
+(allow file-read* file-write* file-ioctl
+  (literal "/dev/tty")
+  (regex #"^/dev/ttys[0-9]+$")
+  (literal "/dev/ptmx"))
+;; Listing /dev (names only) is how ttyname() resolves the tty path.
+(allow file-read* (literal "/dev"))
 
 ;; --- File reads: system / toolchain / homebrew ---
 (allow file-read*
@@ -58,26 +73,71 @@
 (allow file-read*
   (subpath (param "HOME_DIR")))
 
-;; --- CREDENTIAL LOCKOUT ---
-(deny file-read* file-write*
-  (subpath (string-append (param "HOME_DIR") "/.ssh"))
-  (subpath (string-append (param "HOME_DIR") "/.aws"))
-  (subpath (string-append (param "HOME_DIR") "/.gnupg"))
-  (subpath (string-append (param "HOME_DIR") "/Library/Keychains"))
-  (subpath (string-append (param "HOME_DIR") "/.config/gh"))
-  (subpath (string-append (param "HOME_DIR") "/.docker"))
-  (subpath (string-append (param "HOME_DIR") "/.kube"))
-  (literal (string-append (param "HOME_DIR") "/.netrc")))
-
-;; --- File writes: project tree + temp dirs only ---
+;; --- File writes: project tree + temp dirs ---
 (allow file-write*
   (subpath (param "PROJECT_DIR"))
   (subpath "/private/tmp")
   (subpath "/private/var/folders")
   (subpath "/private/var/tmp"))
 
+;; Also allow reading the project dir (covered by HOME above in most cases,
+;; but project may live elsewhere).
 (allow file-read*
   (subpath (param "PROJECT_DIR")))
+
+;; --- File writes: AI CLI state (and nothing else in $HOME) ---
+;; The CLIs keep sessions, auth, logs, locks and caches here; without
+;; write access they fail on start (EPERM appending to ~/.claude.json).
+;;   Claude Code  ~/.claude/, ~/.claude.json (+ siblings it writes next to it),
+;;                ~/.local/share/claude (native install; versions/ is not),
+;;                ~/.local/state/claude (locks), ~/.cache/claude (staging)
+;;   Codex        ~/.codex/ (CODEX_HOME: auth, sessions, logs; not config)
+;;   OpenCode     ~/.local/share/opencode (data, auth, logs), ~/.cache/opencode
+;; Deliberately NOT writable: ~/.local/bin (sbx, notify.sh and the CLI
+;; launchers live there; a writable PATH dir is a sandbox escape). Run
+;; `claude update` outside sbx: auto-updates cannot write from inside it.
+(allow file-write*
+  (subpath (string-append (param "HOME_DIR") "/.claude"))
+  (prefix  (string-append (param "HOME_DIR") "/.claude.json"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.local/state/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.cache/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.codex"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/opencode"))
+  (subpath (string-append (param "HOME_DIR") "/.cache/opencode")))
+
+;; --- ...except the files that steer a CLI from OUTSIDE this sandbox ---
+;; Settings, hooks, commands, agents, skills, plugins, global memory and the
+;; CLI binaries are loaded or run by later sessions, including unsandboxed ones
+;; (the CLI's native sandbox, a plain shell). An agent that could edit them
+;; would escape on the next run (settings.json can turn the native sandbox
+;; off), so they stay read-only here: update, configure and install
+;; plugins for the CLIs outside sbx. The directory roots are listed too, so the
+;; agent cannot rename ~/.claude away, edit the copy and move it back.
+;; Residual risk: ~/.claude.json stays writable (Claude Code rewrites it on
+;; every start). It holds user-scope MCP servers and per-project state, so an
+;; agent could register an MCP server that runs the next time you start Claude
+;; outside sbx; check `claude mcp list` if in doubt. A PROJECT_DIR of $HOME
+;; itself makes every other dotfile writable too; don't run sbx from there.
+(deny file-write*
+  (literal (string-append (param "HOME_DIR") "/.claude"))
+  (literal (string-append (param "HOME_DIR") "/.claude/settings.json"))
+  (literal (string-append (param "HOME_DIR") "/.claude/settings.local.json"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/hooks"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/commands"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/agents"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/skills"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/plugins"))
+  (literal (string-append (param "HOME_DIR") "/.claude/CLAUDE.md"))
+  (literal (string-append (param "HOME_DIR") "/.claude/keybindings.json"))
+  (literal (string-append (param "HOME_DIR") "/.codex"))
+  (literal (string-append (param "HOME_DIR") "/.codex/config.toml"))
+  (regex (string-append "^" (param "HOME_DIR") "/\\.codex/[^/]+\\.config\\.toml$"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/rules"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/packages"))
+  (literal (string-append (param "HOME_DIR") "/.local/share/claude"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/claude/versions"))
+  (subpath (string-append (param "HOME_DIR") "/.config/opencode")))
 
 ;; --- Network ---
 ;; See strict.sb for why Seatbelt cannot enforce per-hostname allowlists.
@@ -93,9 +153,51 @@
 (allow network-bind     (local  ip  "localhost:*"))
 
 (allow network-outbound (literal "/private/var/run/syslog"))
+;; Name resolution: macOS resolves hostnames through mDNSResponder over this
+;; unix socket, not UDP 53. Without it getaddrinfo fails and no CLI can reach
+;; its API from inside the sandbox.
+(allow network-outbound (literal "/private/var/run/mDNSResponder"))
 
-;; herdr control socket (--pack herdr) — see strict.sb for the rationale.
+;; Claude Code's cross-session message socket: a session may LISTEN on its own
+;; /tmp/cc-socks/<pid>.sock so other sessions can reach it. Connecting out to
+;; other sessions stays denied: a sandboxed agent must not drive an
+;; unsandboxed one (same reasoning as the herdr socket below).
+(allow network-bind network-inbound (subpath "/private/tmp/cc-socks"))
+
+;; herdr control socket (--pack herdr) — ALWAYS open in this profile, stated
+;; explicitly because it matters: an agent that can reach the socket can make
+;; herdr spawn panes OUTSIDE the sandbox. standard is for trusted tooling
+;; sessions; strict keeps the socket closed unless you pass --allow-herdr.
 ;;   default session  ~/.config/herdr/herdr.sock
 ;;   named sessions   ~/.config/herdr/sessions/<name>/herdr.sock
 (allow network-outbound
   (subpath (string-append (param "HOME_DIR") "/.config/herdr")))
+
+;; --- CREDENTIAL LOCKOUT (last, so it wins over every allow above) ---
+;; Seatbelt applies the last matching rule. Keeping the lockout at the end means
+;; no allow can reopen these, even when PROJECT_DIR is $HOME itself. Keep this
+;; list in sync with strict.sb and configs/claude/settings.json (deny).
+(deny file-read* file-write*
+  (subpath (string-append (param "HOME_DIR") "/.ssh"))
+  (subpath (string-append (param "HOME_DIR") "/.aws"))
+  (subpath (string-append (param "HOME_DIR") "/.gnupg"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Keychains"))
+  (subpath (string-append (param "HOME_DIR") "/.config/gh"))
+  (subpath (string-append (param "HOME_DIR") "/.config/gcloud"))
+  (subpath (string-append (param "HOME_DIR") "/.config/op"))
+  (subpath (string-append (param "HOME_DIR") "/.azure"))
+  (subpath (string-append (param "HOME_DIR") "/.docker"))
+  (subpath (string-append (param "HOME_DIR") "/.kube"))
+  (subpath (string-append (param "HOME_DIR") "/.terraform.d"))
+  (subpath (string-append (param "HOME_DIR") "/.password-store"))
+  (literal (string-append (param "HOME_DIR") "/.netrc"))
+  (literal (string-append (param "HOME_DIR") "/.git-credentials"))
+  (literal (string-append (param "HOME_DIR") "/.npmrc"))
+  (literal (string-append (param "HOME_DIR") "/.pypirc"))
+  (literal (string-append (param "HOME_DIR") "/.cargo/credentials"))
+  (literal (string-append (param "HOME_DIR") "/.cargo/credentials.toml"))
+  (literal (string-append (param "HOME_DIR") "/.vault-token"))
+  (literal (string-append (param "HOME_DIR") "/.pgpass"))
+  (literal (string-append (param "HOME_DIR") "/.config/git/credentials"))
+  (literal (string-append (param "HOME_DIR") "/.config/containers/auth.json"))
+  (literal (string-append (param "HOME_DIR") "/.gem/credentials")))

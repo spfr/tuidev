@@ -8,19 +8,21 @@
         install install-minimal install-desktop install-remote install-dry \
         uninstall \
         update update-check update-packages update-configs update-migrations update-all \
-        update-sandbox-image update-security \
-        test test-core test-ui test-all \
+        update-security \
+        test test-core test-ui test-all test-lib \
         check check-minimal check-desktop check-remote \
-        lint validate-configs validate \
+        lint validate-configs validate check-links \
         sbx-test sandbox-up sandbox-down \
         adopt fix-completions clean \
         container-runtime container-build container-test container-clean \
         docker-build docker-test docker-clean \
         brew-upgrade ci-test \
-        quick-dev quick-ai quick-agents quick-worktrees quick-lazygit quick-sysinfo \
+        quick-lazygit quick-sysinfo \
         theme theme-list
 
 .DEFAULT_GOAL := help
+# Recipes use bash (echo -e, [[ ]]); /bin/sh is dash on Debian.
+SHELL := bash
 
 BLUE   := \033[0;34m
 GREEN  := \033[0;32m
@@ -52,7 +54,7 @@ install-minimal: ## Install the minimal profile (core only)
 install-desktop: ## Install the desktop profile (core + ui + sandbox)
 	@./install.sh --profile desktop
 
-install-remote: ## Install the remote profile (core + remote + sandbox)
+install-remote: ## Install the remote profile (core + remote + sandbox + tmux pack)
 	@./install.sh --profile remote
 
 install-dry: ## Preview install for a profile (PROFILE=desktop make install-dry)
@@ -83,9 +85,6 @@ update-migrations: ## Run pending one-shot migrations
 update-all: ## Non-interactive: packages + configs + repo
 	@./scripts/update.sh --all
 
-update-sandbox-image: ## Rebuild the agent-sandbox image (if --pack sandbox-container)
-	@./scripts/update.sh --sandbox-image
-
 update-security: ## Audit Tailscale + SSH perms + Seatbelt profile drift
 	@./scripts/update.sh --security
 
@@ -108,6 +107,9 @@ test-ui: ## Run only the ui-tag tests (macOS GUI)
 test-all: ## Run all tags including ui
 	@./scripts/test_suite.sh --all
 
+test-lib: ## Run the scripts/lib unit-test harnesses
+	@for t in scripts/lib/test_*.sh; do bash "$$t" || exit 1; done
+
 check: ## Health check for the active profile
 	@./scripts/health_check.sh
 
@@ -124,21 +126,21 @@ check-remote: ## Health check against the remote profile
 # Lint + validate
 # ----------------------------------------------------------------------------
 
-lint: ## Shellcheck all scripts (install/update/lib/tmux/install packs/bin)
+# One file list for `make lint` and CI.
+SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
+               scripts/install/*.sh scripts/install/packs/*.sh \
+               scripts/migrations/*.sh bin/sbx
+
+lint: ## Shellcheck every shell script (install, scripts, libs, packs, migrations, sbx)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found. brew install shellcheck"; exit 1; }
-	@shellcheck \
-	    install.sh uninstall.sh \
-	    scripts/*.sh \
-	    scripts/lib/*.sh \
-	    scripts/tmux/layout-*.sh \
-	    scripts/install/*.sh \
-	    scripts/install/packs/*.sh \
-	    scripts/migrations/*.sh \
-	    bin/sbx
+	@shellcheck -x $(SHELL_FILES)
 	@echo -e "${GREEN}shellcheck clean${NC}"
 
-validate-configs: ## Validate KDL, TOML, Lua, JSON syntax
+validate-configs: ## Validate JSON, TOML, Lua and shell config syntax
 	@./scripts/validate_configs.sh
+
+check-links: ## Check every relative link in the Markdown docs
+	@./scripts/check_links.sh
 
 validate: validate-configs ## Alias for validate-configs
 
@@ -147,7 +149,7 @@ validate: validate-configs ## Alias for validate-configs
 # ----------------------------------------------------------------------------
 
 sbx-test: ## Smoke-test the Seatbelt wrapper: deny ~/.ssh, allow project
-	@command -v sbx >/dev/null 2>&1 || { echo "sbx not installed. Run make install-desktop or --pack sandbox"; exit 1; }
+	@command -v sbx >/dev/null 2>&1 || { echo "sbx not installed. Run make install-desktop or ./install.sh --sandbox"; exit 1; }
 	@echo -e "${BLUE}sbx smoke test${NC}"
 	@echo -e "1. ${YELLOW}sbx -- ls $$PWD${NC}  (should succeed)"
 	@sbx -- ls $$PWD >/dev/null 2>&1 && echo -e "   ${GREEN}PASS${NC}" || echo -e "   ${RED}FAIL${NC}"
@@ -198,20 +200,8 @@ docker-test: container-test
 docker-clean: container-clean
 
 # ----------------------------------------------------------------------------
-# Quick launchers (attach-or-create sessions)
+# Quick launchers
 # ----------------------------------------------------------------------------
-
-quick-dev: ## Launch the dev tmux session (nvim | agent | runner)
-	@./scripts/tmux/layout-dev.sh
-
-quick-ai: ## Launch the ai tmux session (nvim + 2 agents)
-	@./scripts/tmux/layout-ai.sh
-
-quick-agents: ## Launch claude + codex side-by-side in tmux
-	@./scripts/tmux/layout-agents.sh
-
-quick-worktrees: ## Launch one git worktree + tmux window per agent (N=2 CMD=)
-	@./scripts/tmux/layout-worktrees.sh $(if $(SESSION),$(SESSION),) -n $(if $(N),$(N),2) $(if $(CMD),--cmd "$(CMD)",)
 
 quick-lazygit: ## Launch lazygit
 	@command -v lazygit >/dev/null 2>&1 && lazygit || echo "lazygit not installed"
@@ -229,7 +219,8 @@ theme: ## Apply a theme: make theme NAME=catppuccin-mocha
 # CI
 # ----------------------------------------------------------------------------
 
-ci-test: ## Non-interactive test + lint run for CI
+ci-test: ## Everything CI runs that works locally (lint, validate, links, unit tests)
 	@$(MAKE) lint
 	@$(MAKE) validate-configs
-	@./scripts/test_suite.sh --tag core
+	@$(MAKE) check-links
+	@$(MAKE) test-lib

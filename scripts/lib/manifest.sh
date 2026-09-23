@@ -44,7 +44,7 @@ _TUIDEV_MANIFEST_LOADED=1
 # shellcheck source=./ui.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/ui.sh"
 
-: "${TUIDEV_MANIFEST_FILE:=${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/manifest}"
+: "${TUIDEV_MANIFEST_FILE:=$TUIDEV_STATE_DIR/manifest}"
 : "${TUIDEV_MANIFEST_ENABLED:=0}"
 
 # Record kinds this lib knows about. Documented here so consumers (uninstall)
@@ -53,9 +53,13 @@ _TUIDEV_MANIFEST_LOADED=1
 #   pack     a pack that ran (core, ui, herdr, …)
 #   formula  a Homebrew formula we installed (not one already present)
 #   cask     a Homebrew cask we installed
+#   apt|dnf|pacman  a system package we installed (pkg.sh); uninstall only
+#            prints the removal command — it never runs sudo on its own
 #   block    a managed block we wrote: `block <id> <path>`
 #   file     a whole file we placed (helper scripts, adopted configs)
 #   dir      a directory tree we placed (nvim config, …)
+#   gitconfig  a global git key we set: `gitconfig <key> <value>`; uninstall
+#            unsets it only while it still holds that value
 
 tuidev_manifest_enable() { TUIDEV_MANIFEST_ENABLED=1; export TUIDEV_MANIFEST_ENABLED; }
 tuidev_manifest_disable() { TUIDEV_MANIFEST_ENABLED=0; export TUIDEV_MANIFEST_ENABLED; }
@@ -88,7 +92,7 @@ tuidev_manifest_record() {
         {
             echo "# tuidev install manifest — one record per line: <kind> <value>"
             echo "# Written by install.sh; read by uninstall.sh. Append-only."
-            echo "# Kinds: profile pack formula cask block file dir"
+            echo "# Kinds: profile pack formula cask apt dnf pacman block file dir gitconfig"
         } > "$TUIDEV_MANIFEST_FILE"
     fi
 

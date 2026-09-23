@@ -7,9 +7,9 @@
 # (OSC 9/99/777), a built-in browser with Playwright-equivalent automation, and
 # Claude Code Teams integration. Requires macOS 14+.
 #
-# Why opt-in: cmux is a native macOS GUI app. It complements — it does not
-# replace — the tmux-primary workflow, which keeps session durability,
-# SSH-reattach, mobile access, and Linux parity. See docs/agent-workflows.md.
+# Why opt-in: cmux is a native macOS GUI app, an alternative to plain Ghostty
+# tabs. Durable sessions on remote nodes stay with tmux or Herdr. See
+# docs/agent-workflows.md.
 #
 # Entrypoint: cmux_install
 # Invoked via: ./install.sh --pack cmux
@@ -35,15 +35,19 @@ cmux_install() {
         print_warning "cmux is macOS-only (requires macOS 14+); skipping on this platform."
         return 0
     fi
-    command_exists brew || die "Homebrew is required on macOS; install from https://brew.sh"
+    if ! command_exists brew; then
+        print_warning "cmux needs Homebrew (https://brew.sh); skipping."
+        return 0
+    fi
 
+    # The cask is in Homebrew's own repository. No third-party tap: Homebrew
+    # ignores untrusted taps unless you `brew trust` them.
     brew_update_once
-    print_step "tapping manaflow-ai/cmux"
-    run_cmd brew tap manaflow-ai/cmux || print_warning "brew tap failed (continuing)"
     brew_install_casks "${CMUX_CASKS[@]}"
 
     print_info "Launch via Spotlight or 'open -a cmux'. cmux runs your AI CLIs"
-    print_info "(cc/cx/oc) in parallel panes. See docs/agent-workflows.md."
+    print_info "(claude, codex) in parallel panes. See docs/agent-workflows.md."
+    print_info "Session resume: run 'cmux hooks setup' once the agent CLIs are on PATH."
     print_success "cmux pack complete"
 }
 

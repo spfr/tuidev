@@ -1,6 +1,6 @@
-# tuidev — macOS terminal dev setup
+# tuidev — an agent-first terminal setup for macOS (and Linux)
 
-> Opinionated, terminal-first developer environment built around **tmux durability**, **sandboxed AI agents**, and **layered installation**.
+> Opinionated macOS (and Linux) terminal environment for running AI coding agents next to your editor, with **native sandboxes on by default**, **durable remote sessions**, and **layered, reversible installation**.
 
 [![CI](https://github.com/spfr/tuidev/actions/workflows/ci.yml/badge.svg)](https://github.com/spfr/tuidev/actions/workflows/ci.yml)
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple)
@@ -9,173 +9,94 @@
 
 ## What this is
 
-A small, opinionated set of configs + install scripts for an AI-assisted coding workflow. Three ideas shape it:
+A small set of configs and install scripts for coding with AI agents from the terminal. Three ideas shape it:
 
-1. **One session, one pane, one task.** Your work has to survive disconnects, narrow terminals, and mobile reattaches. tmux is the durability layer; splits are a local bonus, not the story.
-2. **Sandbox-ready.** `sbx` runs any command inside macOS Seatbelt; install `--pack ai-clis` and your AI CLIs route through it automatically. Credentials (`~/.ssh`, `~/.aws`, keychain) are locked out even if the agent is compromised.
-3. **Layered install.** Pick a profile (`minimal`, `desktop`, `remote`) or compose packs (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`, `--pack NAME`, ...). Your `~/.zshrc` is never overwritten — edits outside the tuidev-managed block survive forever. macOS is the daily driver; `minimal` and `remote` also install on Debian/Ubuntu, falling back to `apt` where Homebrew has no build (arm64 boards like a Raspberry Pi included).
+1. **A fast, clean terminal for agents, next to a GUI editor.** Claude Code is the primary CLI, Codex is secondary. Run them in a Ghostty tab, review the diff in VS Code or Cursor. Neovim and tmux are still here, but as optional packs, not the core.
+2. **Sandboxed by default.** Plain `claude` and `codex` run under their own **native** sandboxes — no wrapper required. `sbx` (macOS Seatbelt) is still here as a general-purpose tool for sandboxing anything else, and as an optional kernel-level mode for Codex.
+3. **Durable remote sessions where they matter.** tmux and Herdr keep agent sessions alive on always-on nodes you reach over Tailscale, SSH or mosh — not on your laptop, where the CLIs' own session state already survives a restart.
+
+Layered, reversible install stays: pick a profile or compose packs. Config lands in managed blocks, so your edits outside them survive. Every install is recorded, and `./uninstall.sh` removes only what tuidev put there.
 
 ## Quick start
 
 ```bash
 git clone https://github.com/spfr/tuidev.git
 cd tuidev
-./install.sh --profile desktop    # or: minimal | remote
+./install.sh --profile desktop --pack ai-clis    # or: minimal | remote   (add --dry-run to preview)
 exec zsh -l
 
-work myproject                    # bare tmux session, attach-or-create
-dev                               # nvim | agent | runner
-ai                                # nvim + 2 work panes
-sbx -- some-cmd                   # run anything under Seatbelt
-
-./install.sh --pack ai-clis       # opt-in: cc/cx/oc wrappers for AI CLIs
+claude                             # Claude Code, sandboxed by its own settings
+codex                              # Codex, sandboxed by its own settings
 ```
 
-## The three profiles
+The first-run walkthrough is [docs/QUICK_START_GUIDE.md](docs/QUICK_START_GUIDE.md).
 
-| Profile   | Packs                          | For                                       |
-|-----------|--------------------------------|-------------------------------------------|
-| `minimal` | core                           | Remote servers, VMs, CI runners           |
-| `desktop` | core + ui + sandbox            | **Default** — local macOS laptop/desktop  |
-| `remote`  | core + remote + sandbox        | Headless machines, Tailscale nodes        |
+## Profiles
 
-Compose your own: `./install.sh --core --sandbox --pack ai-clis`. Full matrix in [docs/profiles.md](docs/profiles.md).
+| Profile   | Packs                   | For                                      |
+|-----------|-------------------------|-------------------------------------------|
+| `minimal` | core                    | Servers, VMs, CI runners                 |
+| `desktop` | core + ui + sandbox     | **Default on macOS**: laptop or desktop  |
+| `remote`  | core + remote + sandbox + `--pack tmux` | Headless machines, Tailscale nodes |
 
-## Session commands (tmux-first)
-
-All commands are attach-or-create and accept an optional session name:
-
-| Command          | Layout                                          |
-|------------------|-------------------------------------------------|
-| `work [name]`    | bare named session (default: `$(basename $PWD)`) |
-| `dev [name]`     | nvim 55% ∣ agent 25% ∣ runner 20%               |
-| `ai [name]`      | nvim 60% + two agent panes                       |
-| `ai-single`      | nvim + one shell                                |
-| `ai-triple`      | nvim + three agent panes                         |
-| `agents [name]`  | two columns: claude ∣ codex (needs `--pack ai-clis`) |
-| `worktrees [name]` | one git worktree + tmux window per agent (`-n N --cmd cc`; `--list` / `--clean`) |
-| `fullstack`      | five windows: code / web / api / db / logs      |
-| `multi`          | three windows: dev / monitor / git              |
-| `remote [name]`  | minimal nvim + shell for narrow terminals        |
-| `tls` / `tk` / `tka` | list / kill named / kill all tmux sessions |
-
-
-## Sandboxed agents
-
-`sbx` is a general Seatbelt wrapper (from `--pack sandbox`) — run *anything* under
-it. Install the opt-in `--pack ai-clis` and your AI CLIs auto-route through it:
+Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, and add optional packs with `--pack NAME`:
 
 ```bash
-sbx --profile standard -- npm ci   # wider network for package installs
-sbx --profile off -- some-tool     # documented pass-through
-
-# With --pack ai-clis installed:
-cc                          # = sbx -- claude (strict profile by default)
-CC_NO_SANDBOX=1 cc          # one-shot escape hatch
+./install.sh --core --sandbox --pack ai-clis --pack herdr
 ```
 
-Three profiles are shipped: **strict** (agent runs, LLM APIs work, package installs don't), **standard** (adds GitHub, npm, PyPI, crates, registries), **off** (escape hatch). The agent can read most of `$HOME` but **cannot** read `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/Library/Keychains`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.netrc` — ever.
+Optional packs: `ai-clis`, `opencode`, `nvim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
 
-Full details, including customization and troubleshooting: [docs/sandboxing.md](docs/sandboxing.md).
+macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it: packages come from `apt-get`, `dnf` or `pacman`, and anything the distro lacks is skipped with a link to its upstream installer. The installer never pipes a remote script into a shell.
 
-Tier 2 — a VM-backed container per agent — is available behind `./install.sh --pack sandbox-container` when you need kernel isolation. Runtime order is Apple's native `container` (macOS 26+) → Podman → Docker; the first one present wins, and nothing is installed if you already have one. Docker Desktop / OrbStack are deliberately **not** used (not FOSS).
-
-## Core tools
-
-| Tool | Purpose |
-|------|---------|
-| [tmux](https://github.com/tmux/tmux) | Primary multiplexer — durable sessions |
-| [Neovim](https://neovim.io/) + LazyVim | Editor (AI stays external by design) |
-| [Ghostty](https://ghostty.org/) | Native macOS tabs/splits (desktop profile) |
-| [Starship](https://starship.rs/) | Prompt |
-| [ripgrep](https://github.com/BurntSushi/ripgrep) / [fd](https://github.com/sharkdp/fd) / [fzf](https://github.com/junegunn/fzf) | Search + find + fuzzy |
-| [zoxide](https://github.com/ajeetdsouza/zoxide) | Smarter `cd` |
-| [git-delta](https://github.com/dandavison/delta) | Git diffs |
-| [lazygit](https://github.com/jesseduffield/lazygit) | Git TUI |
-| [HTTPie](https://httpie.io/) | Friendly HTTP requests via `http` |
-| [jq](https://stedolan.github.io/jq/) / [yq](https://github.com/mikefarah/yq) | JSON / YAML |
-| [eza](https://github.com/eza-community/eza) / [bat](https://github.com/sharkdp/bat) | `ls` / `cat` replacements |
-
-Optional: `--pack yazi` or `--pack nnn` (file manager), `--pack monitoring` (lazydocker, k9s, bottom), `--pack sandbox-container` (Apple container / Podman / Docker), `--pack fnm` (fast Node manager), `--pack ai-clis` (cc/cx/oc wrappers + AI CLI configs), `--pack cmux` / `--pack bosun` / `--pack herdr` (parallel-agent and fleet tools — see [docs/agent-workflows.md](docs/agent-workflows.md)), `--extras` (atuin, dust, broot, bandwhich, duf, hyperfine, tokei).
-
-## AI CLIs (opt-in — `--pack ai-clis`)
-
-The core install is a **CLI-agnostic terminal-tools bundle**; AI CLIs churn faster
-than the tools do, so their wrappers + configs live in one opt-in pack:
+## Everyday commands
 
 ```bash
-./install.sh --pack ai-clis   # cc/cx/oc wrappers + adopt-existing configs
+claude | codex                           # AI CLIs, sandboxed by their own native settings
+claude -w NAME                           # Claude Code in its own git worktree, for parallel agents
+t [NAME]                                 # attach-or-create a tmux session (--pack tmux)
+make check                               # health check for the installed profile
+make update                              # profile-aware, drift-detecting update
+make theme NAME=catppuccin-mocha         # re-theme tmux, Ghostty and Starship
+make help                                # every target
 ```
 
-| Tool | Shell function | Notes |
-|------|----------------|-------|
-| [Claude Code](https://claude.ai/code) | `cc` | Primary; hooks in `configs/claude/settings.json` |
-| [Codex CLI](https://github.com/openai/codex) | `cx` | Defaults in `configs/codex/config.toml` (workspace-write, on-request) |
-| [OpenCode](https://opencode.ai) | `oc` | Multi-model |
+Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
 
-All three auto-route through `sbx` when `--pack sandbox` is present (otherwise they call the CLI directly). The pack does **not** install the CLIs — they self-update. Gemini CLI is deprecated (succeeded by Antigravity, `agy`); tuidev stays CLI-agnostic, so add your own wrapper if you use one. Philosophy: **AI stays in external panes** — `configs/nvim/lua/plugins/ai.lua` is intentionally empty (ACP-driven in-editor agents are a conscious non-goal; see VISION.md). See [docs/agent-workflows.md](docs/agent-workflows.md).
+## Safety
 
-## Remote workflow
-
-Tailscale SSH + tmux is the durable path:
-
-```bash
-ssh my-dev-box      # Tailscale handles ACLs, SSO, no key sprawl
-tmux attach -t main # your session survived the disconnect
-```
-
-mosh is an optional upgrade for flaky networks (`--pack mosh`). Full setup in [docs/remote.md](docs/remote.md). iOS clients: Blink, Moshi.
-
-To drive agents from your phone, the CLIs now ship native remote control (no SSH needed just to steer Claude/Codex). `--pack herdr` is the fleet-attention runtime; `--pack cmux` / `--pack bosun` cover desk GUI and tmux session picking — see [docs/agent-workflows.md](docs/agent-workflows.md). Bind personal hosts in `~/.ssh/config.local`, never in this repo.
-
-## Day-to-day
-
-```bash
-make check            # health check against installed profile
-make test             # run core tests + any tags the active profile enables
-make update           # profile-aware, drift-detecting update
-make theme NAME=catppuccin-mocha  # re-theme tmux/Ghostty/Starship from one palette
-make sbx-test         # prove the sandbox blocks creds and allows project writes
-make help             # every available target
-```
-
-Themes are a single 26-key palette file (`configs/themes/<name>/palette.toml`) rendered into tmux, Ghostty, and Starship as `tuidev-theme` managed blocks — `tokyo-night` and `catppuccin-mocha` ship, and adding one is a copied TOML file. Details in [docs/theming.md](docs/theming.md).
-
-Running several agents at once? `worktrees -n 3 --cmd cc` gives each one its own git worktree, branch, and tmux window, keeping window `main` on the original repo for review; `worktrees --clean` removes only the worktrees that are clean and already merged.
+- `~/.zshrc`, `~/.config/starship.toml` and `~/.ssh/config` are written as `# >>> tuidev managed (...) >>>` blocks. Everything outside the markers is yours. `~/.config/tmux/tmux.conf` gets the same treatment when you install `--pack tmux`.
+- AI CLI settings (`~/.claude/settings.json`, `~/.codex/config.toml`, OpenCode's) are adopt-existing or upgrade-shipped: tuidev never clobbers a file you've edited.
+- Anything tuidev overwrites is backed up to `~/.config/tuidev/backups/` first. `--dry-run` previews every mutation.
+- `~/.config/tuidev/manifest` records what was actually installed. `./uninstall.sh` removes only those records: a `ripgrep` you already had survives, and so does CLI auth or session state.
+- One-shot migrations repair what past releases left behind, at most once per machine. See [docs/updating.md](docs/updating.md).
 
 ## Documentation
 
-| Doc | What it covers |
-|-----|----------------|
-| [docs/profiles.md](docs/profiles.md) | Every profile and pack, tool matrix |
-| [docs/sandboxing.md](docs/sandboxing.md) | Seatbelt profiles, escape hatches, Tier 2 pointer |
-| [docs/remote.md](docs/remote.md) | Tailscale + tmux + mosh workflow |
-| [docs/updating.md](docs/updating.md) | Migrations, the install manifest, and how updates work |
-| [docs/agent-workflows.md](docs/agent-workflows.md) | Fleet attention, Herdr, cmux, bosun, remote control |
-| [docs/agent-primer.md](docs/agent-primer.md) | Copy-paste brief to teach any agentic CLI the environment |
-| [docs/inspiration.md](docs/inspiration.md) | Omarchy/Omacosy practices vs non-goals; `.local` split |
-| [docs/roadmap.md](docs/roadmap.md) | 2027/28 readiness: multiplexer shift, sandbox succession, fleet-scale agents, adopt/hold criteria |
-| [docs/theming.md](docs/theming.md) | Palette contract, `theme.sh`, adding a theme |
-| [docs/engineering.md](docs/engineering.md) | Code conventions: libs, pack contract, managed blocks |
-| [VISION.md](VISION.md) | Product direction + 2026 amendments |
-| [AGENTS.md](AGENTS.md) | Universal instructions for AI coding agents |
-| [CLAUDE.md](CLAUDE.md) | Claude Code–specific guidance for this repo |
-
-Additional references live in `docs/`: CHEATSHEET, ARCHITECTURE, NEOVIM_QUICKSTART, TERMINAL_NAVIGATION, FAQ, IPHONE_SSH_CLIENTS.
-
-## Safety and non-destructiveness
-
-- `~/.zshrc` is written as a managed block (`# >>> tuidev managed (...) >>>`). User edits outside the block survive forever.
-- `~/.config/nvim` is **backed up** (timestamped) before new config lands — never `rm -rf`'d.
-- AI CLI settings (`~/.claude/settings.json`, `~/.config/opencode/opencode.json`, `~/.codex/config.toml`) are `--adopt-existing` by default: if present, they are left alone.
-- Backups live in `~/.config/tuidev/backups/`.
-- `--dry-run` on any install or update command shows every mutation without performing it.
-- Every install records what it actually placed in `~/.config/tuidev/manifest`, so `./uninstall.sh` removes only what tuidev installed — a `ripgrep` you already had survives.
-- One-shot **migrations** (`make update-migrations`) clean up artifacts past releases left behind, run at most once per machine. A fresh machine skips the history; an existing one applies it before packs run. See [docs/updating.md](docs/updating.md).
+| Doc | Covers |
+|-----|--------|
+| [Quick start](docs/QUICK_START_GUIDE.md) | Install to first sandboxed agent session |
+| [Cheatsheet](docs/CHEATSHEET.md) | Session commands, tmux keys, aliases, Makefile |
+| [FAQ](docs/FAQ.md) | Troubleshooting |
+| [Profiles and packs](docs/profiles.md) | What each profile and pack installs |
+| [Sandboxing](docs/sandboxing.md) | Native CLI sandboxes, `sbx`, Seatbelt profiles, credential deny list |
+| [Agent workflows](docs/agent-workflows.md) | AI CLIs, editor integration, agent teams, worktrees, Herdr, cmux, notifications |
+| [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, iOS clients |
+| [Neovim](docs/nvim.md) | The `nvim` pack: LazyVim essentials |
+| [Theming](docs/theming.md) | Palette contract and `theme.sh` |
+| [Updating](docs/updating.md) | Updates, migrations, the install manifest, uninstall |
+| [Engineering](docs/engineering.md) | Architecture, shared libs, pack contract, verification |
+| [Roadmap](docs/roadmap.md) | Watch-list and adopt/hold criteria |
+| [VISION.md](VISION.md) | Principles and non-goals |
+| [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | Instructions for AI agents working on this repo |
+| [AGENTS template](templates/AGENTS_TEMPLATE.md) | Starter `AGENTS.md` for your own projects |
+| [Migrations](scripts/migrations/README.md) | Script-level contract for one-shot migrations |
+| [CONTRIBUTING.md](CONTRIBUTING.md) / [SECURITY.md](SECURITY.md) / [Code of Conduct](CODE_OF_CONDUCT.md) | Contributing and reporting |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 ## Contributing
 
-Issues and PRs welcome. See [VISION.md](VISION.md) and [docs/](docs/) for context on direction. Code style: keep packs self-contained, tests tagged, docs terse.
+Issues and PRs are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [VISION.md](VISION.md) first, and run `make ci-test` before you push.
 
 ## License
 

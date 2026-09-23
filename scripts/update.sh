@@ -2,9 +2,10 @@
 # ============================================================================
 # macOS TUI Development Environment - Update Script (profile-aware)
 # ============================================================================
-# Reads the installer-written manifest at ~/.config/tuidev/profile and
-# scopes updates (brew formulae, managed config blocks, repo pulls, sandbox
-# image rebuild, security audit) to the packs that were actually installed.
+# Reads the installer-written profile ($TUIDEV_STATE_DIR/profile, normally
+# ~/.config/tuidev/profile) and scopes updates (brew formulae, managed config
+# blocks, repo pulls, security audit) to the packs that were actually installed.
+# bash 3.2-clean: runs under the /bin/bash macOS ships.
 #
 # Usage:
 #   ./scripts/update.sh                    # interactive menu
@@ -13,7 +14,6 @@
 #   ./scripts/update.sh --configs          # re-apply managed blocks + pack configs
 #   ./scripts/update.sh --migrations       # run pending one-shot migrations
 #   ./scripts/update.sh --repo             # git pull the repo
-#   ./scripts/update.sh --sandbox-image    # rebuild agent-sandbox image
 #   ./scripts/update.sh --security         # security audit (tailscale/ssh/seatbelt)
 #   ./scripts/update.sh --all              # packages + configs + repo
 #   ./scripts/update.sh --dry-run          # preview any of the above
@@ -28,23 +28,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 # ----------------------------------------------------------------------------
-# Shared libraries. ui.sh provides print_*, run_cmd, command_exists, etc.
-# config_write.sh provides managed-block helpers. profile.sh parses the
-# installer manifest.
+# Shared libraries. ui.sh: print_*, run_cmd, TUIDEV_STATE_DIR. config_write.sh:
+# managed blocks. packs.sh (+ profile.sh): the profile and pack discovery.
 # ----------------------------------------------------------------------------
 
 # shellcheck source=lib/ui.sh disable=SC1091
 . "$SCRIPT_DIR/lib/ui.sh"
 # shellcheck source=lib/config_write.sh disable=SC1091
 . "$SCRIPT_DIR/lib/config_write.sh"
-# shellcheck source=lib/profile.sh disable=SC1091
-. "$SCRIPT_DIR/lib/profile.sh"
-# shellcheck source=lib/container.sh disable=SC1091
-. "$SCRIPT_DIR/lib/container.sh"
+# shellcheck source=lib/packs.sh disable=SC1091
+. "$SCRIPT_DIR/lib/packs.sh"
 # shellcheck source=lib/migrate.sh disable=SC1091
 . "$SCRIPT_DIR/lib/migrate.sh"
 # shellcheck source=lib/manifest.sh disable=SC1091
 . "$SCRIPT_DIR/lib/manifest.sh"
+# shellcheck source=lib/gitconfig.sh disable=SC1091
+. "$SCRIPT_DIR/lib/gitconfig.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -53,7 +52,7 @@ print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
 # Argument parsing
 # ----------------------------------------------------------------------------
 
-MODE=""              # check|packages|configs|migrations|repo|sandbox-image|security|all|menu
+MODE=""              # check|packages|configs|migrations|repo|security|all|menu
 NON_INTERACTIVE=false
 
 set_mode() {
@@ -75,9 +74,8 @@ Modes (pick one; default is an interactive menu):
                       (runs pending migrations first)
   --migrations        Run pending one-shot migrations only
   --repo              git pull the tuidev repo and show git-clean dry-run
-  --sandbox-image     Rebuild agent-sandbox container (needs sandbox-container pack)
   --security          Audit tailscale/ssh perms/seatbelt profiles
-  --all               packages + configs + repo (NOT sandbox-image, NOT security)
+  --all               packages + configs + repo (NOT security)
 
 Options:
   --dry-run           Print commands instead of executing them (honored in every mode)
@@ -93,7 +91,6 @@ while [[ $# -gt 0 ]]; do
         --configs|-C)       set_mode configs; shift ;;
         --migrations|-m)    set_mode migrations; shift ;;
         --repo|-r)          set_mode repo; shift ;;
-        --sandbox-image)    set_mode sandbox-image; shift ;;
         --security)         set_mode security; shift ;;
         --all|-a)           set_mode all; NON_INTERACTIVE=true; shift ;;
         --dry-run|-d)       DRY_RUN=true; shift ;;
@@ -114,149 +111,26 @@ confirm() {
 }
 
 # ----------------------------------------------------------------------------
-# Profile manifest — delegates to scripts/lib/profile.sh for parsing.
+# Profile manifest — scripts/lib/profile.sh owns the parsing and the
+# TUIDEV_PACK_* / TUIDEV_EXTRA_PACKS globals; tuidev_active_packs lists them.
 # ----------------------------------------------------------------------------
 
-TUIDEV_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev"
-PROFILE_FILE="$TUIDEV_CONFIG_DIR/profile"
-ENV_FILE="$TUIDEV_CONFIG_DIR/env"
-
-# Pack flags and names are provided by lib/profile.sh. We re-export them
-# under the legacy names this file previously used, so the body of update.sh
-# doesn't need a sweeping rename.
-PROFILE_NAME=""
-PACK_CORE=false
-PACK_REMOTE=false
-PACK_SANDBOX=false
-PACK_UI=false
-PACK_EXTRAS=false
-EXTRA_PACKS=()
-PROFILE_FOUND=false
-
+# (Re)read the profile. Called again after migrations, which may edit it.
+# shellcheck disable=SC2034  # profile.sh globals, read by tuidev_active_packs
 load_profile() {
-    if load_tuidev_profile "$PROFILE_FILE"; then
-        PROFILE_NAME="$TUIDEV_PROFILE_NAME"
-        PACK_CORE="$TUIDEV_PACK_CORE"
-        PACK_REMOTE="$TUIDEV_PACK_REMOTE"
-        PACK_SANDBOX="$TUIDEV_PACK_SANDBOX"
-        PACK_UI="$TUIDEV_PACK_UI"
-        PACK_EXTRAS="$TUIDEV_PACK_EXTRAS"
-        EXTRA_PACKS=("${TUIDEV_EXTRA_PACKS_ARR[@]}")
-        PROFILE_FOUND=true
-    else
-        print_warning "tuidev profile manifest not found at $PROFILE_FILE"
-        print_info   "Treating as legacy install — falling back to 'update everything brew reports outdated'."
-        PACK_CORE=true; PACK_REMOTE=true; PACK_SANDBOX=true
-        PACK_UI=true;   PACK_EXTRAS=true
+    if ! load_tuidev_profile; then
+        print_warning "tuidev profile manifest not found at $TUIDEV_PROFILE_FILE_DEFAULT"
+        print_info   "Treating as legacy install — every built-in pack counts as active."
+        TUIDEV_PACK_CORE=true; TUIDEV_PACK_REMOTE=true; TUIDEV_PACK_SANDBOX=true
+        TUIDEV_PACK_UI=true;   TUIDEV_PACK_EXTRAS=true
     fi
 
-    # env file carries TUIDEV_REPO for shell-source consumers; keep sourcing it
-    # here so the rest of this script sees the right repo path.
-    if [[ -f "$ENV_FILE" ]]; then
+    # The env file carries TUIDEV_REPO for the repo-sync step.
+    if [[ -f "$TUIDEV_ENV_FILE_DEFAULT" ]]; then
         # shellcheck disable=SC1090
-        source "$ENV_FILE"
+        source "$TUIDEV_ENV_FILE_DEFAULT"
     fi
-
     return 0
-}
-
-active_packs() {
-    local packs=()
-    $PACK_CORE    && packs+=("core")
-    $PACK_REMOTE  && packs+=("remote")
-    $PACK_SANDBOX && packs+=("sandbox")
-    $PACK_UI      && packs+=("ui")
-    $PACK_EXTRAS  && packs+=("extras")
-    printf '%s\n' "${packs[@]}"
-}
-
-# ----------------------------------------------------------------------------
-# Pack formula discovery
-#
-# Each pack script (scripts/install/<name>.sh) is expected to define an array
-# of brew formulae. Convention (per the refactor spec) is uppercase pack name
-# + `_FORMULAE`, e.g. CORE_FORMULAE, REMOTE_FORMULAE. We are defensive because
-# pack scripts are being authored by sibling agents and the convention may
-# slip: we sniff several plausible array names and, as a last resort, scrape
-# `brew install <formula>` lines from the script.
-# ----------------------------------------------------------------------------
-
-PACK_SCRIPT_DIR="$SCRIPT_DIR/install"
-
-# Return (on stdout) the formula names contributed by a single pack script.
-# Silently emits nothing if the pack is missing.
-pack_formulae() {
-    local pack="$1"
-    local script="$PACK_SCRIPT_DIR/${pack}.sh"
-    [[ -f "$script" ]] || script="$PACK_SCRIPT_DIR/packs/${pack}.sh"
-    [[ -f "$script" ]] || return 0
-
-    # Candidate array names — keep the list generous.
-    local upper
-    upper="$(printf '%s' "$pack" | tr '[:lower:]' '[:upper:]')"
-    local candidates=(
-        "${upper}_FORMULAE"
-        "${upper}_PACKAGES"
-        "${upper}_BREW"
-        "${upper}_BREW_FORMULAE"
-        "FORMULAE"
-        "PACKAGES"
-    )
-
-    # Source in a subshell so the pack script can't clobber our state.
-    (
-        set +u +e
-        # shellcheck disable=SC1090
-        source "$script" 2>/dev/null || true
-        for name in "${candidates[@]}"; do
-            # Bash indirect array expansion.
-            local arr_ref="${name}[@]"
-            if declare -p "$name" >/dev/null 2>&1; then
-                printf '%s\n' "${!arr_ref}"
-                exit 0
-            fi
-        done
-        # Fallback: scrape `brew install <formula>` lines (ignore --cask taps).
-        # This keeps us working even when a pack doesn't expose an array.
-        grep -E 'brew install[[:space:]]+' "$script" 2>/dev/null \
-            | grep -v -- '--cask' \
-            | sed -E 's/.*brew install[[:space:]]+//; s/#.*$//; s/["'\'']//g' \
-            | tr ' ' '\n' \
-            | grep -Ev '^(--|-|$)'
-    )
-}
-
-pack_casks() {
-    local pack="$1"
-    local script="$PACK_SCRIPT_DIR/${pack}.sh"
-    [[ -f "$script" ]] || script="$PACK_SCRIPT_DIR/packs/${pack}.sh"
-    [[ -f "$script" ]] || return 0
-
-    local upper
-    upper="$(printf '%s' "$pack" | tr '[:lower:]' '[:upper:]')"
-    local candidates=(
-        "${upper}_CASKS"
-        "${upper}_CASKS_MACOS"
-        "${upper}_BREW_CASKS"
-        "CASKS"
-        "CASKS_MACOS"
-    )
-    (
-        set +u +e
-        # shellcheck disable=SC1090
-        source "$script" 2>/dev/null || true
-        for name in "${candidates[@]}"; do
-            local arr_ref="${name}[@]"
-            if declare -p "$name" >/dev/null 2>&1; then
-                printf '%s\n' "${!arr_ref}"
-                exit 0
-            fi
-        done
-        grep -E 'brew install[[:space:]]+--cask' "$script" 2>/dev/null \
-            | sed -E 's/.*--cask[[:space:]]+//; s/#.*$//; s/["'\'']//g' \
-            | tr ' ' '\n' \
-            | grep -Ev '^(--|-|$)'
-    )
 }
 
 # ----------------------------------------------------------------------------
@@ -270,20 +144,30 @@ pack_casks() {
 # against the source-of-truth content in the repo and reports / re-applies.
 #
 # The mapping below is intentionally small — cross-cutting files only. Pack
-# scripts own their own files (ghostty, ssh, hammerspoon, etc.) and should
+# scripts own their own files (ghostty, ssh, etc.) and should
 # expose an `install_config` we can re-invoke; drift for those is handled
 # separately via `pack_reapply_configs`.
 # ----------------------------------------------------------------------------
 
 # Format: dest_path|source_path|block_id
-# Block IDs must match exactly what install.sh writes. If this list drifts
-# from install.sh's cross-cutting config section, drift detection
+# Block IDs must match exactly what install.sh (and --pack tmux) writes. If
+# this list drifts from install.sh's cross-cutting config section, drift detection
 # misclassifies in-sync files as legacy-no-block installs.
 MANAGED_BLOCKS=(
     "$HOME/.zshrc|$REPO_DIR/configs/zsh/.zshrc|tuidev-zshrc"
-    "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml|$REPO_DIR/configs/starship/starship.toml|tuidev-starship"
-    "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf|$REPO_DIR/configs/tmux/tmux.conf|tuidev-tmux"
+    "$HOME/.config/starship.toml|$REPO_DIR/configs/starship/starship.toml|tuidev-starship"
+    "$HOME/.config/tmux/tmux.conf|$REPO_DIR/configs/tmux/tmux.conf|tuidev-tmux"
 )
+
+# tmux.conf belongs to --pack tmux: check (and re-apply) its block only where
+# that pack is active or the block is already in the file, so an update never
+# creates a tmux.conf on a machine without the pack.
+managed_block_applies() {
+    local dest="$1" id="$2"
+    [[ "$id" == tuidev-tmux ]] || return 0
+    tuidev_active_packs | grep -qx tmux && return 0
+    [[ -f "$dest" ]] && grep -qxF "$(tuidev_block_begin "$id")" "$dest" 2>/dev/null
+}
 
 # Best-effort "source of truth" — the entire file, modulo its own managed
 # markers if any. The installer writes these source files as bare content,
@@ -291,7 +175,7 @@ MANAGED_BLOCKS=(
 extract_source_block() {
     local file="$1" id="$2"
     [[ -f "$file" ]] || return 1
-    if grep -qF "# >>> tuidev managed (${id})" "$file" 2>/dev/null; then
+    if grep -qxF "$(tuidev_block_begin "$id")" "$file" 2>/dev/null; then
         read_managed_block "$file" "$id"
     else
         cat "$file"
@@ -313,9 +197,9 @@ extract_source_block() {
 # (Empty output means no duplication detected.) Checks pre-block first, then
 # post-block — reports whichever it sees first.
 detect_outside_duplication() {
-    local dest="$1" id="$2" src="$3"
-    local begin="# >>> tuidev managed (${id}) >>>"
-    local end="# <<< tuidev managed (${id}) <<<"
+    local dest="$1" id="$2" src="$3" begin end
+    begin="$(tuidev_block_begin "$id")"
+    end="$(tuidev_block_end "$id")"
 
     [[ -f "$dest" && -f "$src" ]] || return 0
     grep -qF "$begin" "$dest" 2>/dev/null || return 0
@@ -352,9 +236,9 @@ detect_outside_duplication() {
 # "exact-post"). Creates a timestamped backup via tuidev_backup. Only called
 # after detect_outside_duplication returns an "exact-*" verdict.
 clean_outside_duplication() {
-    local dest="$1" id="$2" where="$3"
-    local begin="# >>> tuidev managed (${id}) >>>"
-    local end="# <<< tuidev managed (${id}) <<<"
+    local dest="$1" id="$2" where="$3" begin end
+    begin="$(tuidev_block_begin "$id")"
+    end="$(tuidev_block_end "$id")"
 
     tuidev_backup "$dest" "$(basename "$dest")" >/dev/null || true
     local tmp; tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-cleanup.XXXXXX")"
@@ -398,6 +282,7 @@ detect_drift() {
     local entry dest src id current desired diff_out
     for entry in "${MANAGED_BLOCKS[@]}"; do
         IFS='|' read -r dest src id <<<"$entry"
+        managed_block_applies "$dest" "$id" || continue
 
         if [[ ! -f "$src" ]]; then
             print_warning "Source missing, skipping drift check: $src"
@@ -410,7 +295,7 @@ detect_drift() {
             continue
         fi
 
-        if ! grep -q "^# >>> tuidev managed (${id})" "$dest" 2>/dev/null; then
+        if ! grep -qxF "$(tuidev_block_begin "$id")" "$dest" 2>/dev/null; then
             print_warning "$dest — no managed block found (legacy install)"
             print_info   "  run 'make adopt' to convert this file to a managed block"
             DRIFT_LEGACY+=("$entry")
@@ -459,109 +344,28 @@ reapply_drift() {
         return 0
     fi
 
-    local entry dest src id content
+    local entry dest src id
     for entry in "${DRIFT_ITEMS[@]}"; do
         IFS='|' read -r dest src id <<<"$entry"
-        content="$(extract_source_block "$src" "$id")"
-
-        if declare -F write_managed_block >/dev/null; then
-            # Use the shared helper when it's available. Signature (per brief):
-            # write_managed_block <dest> <id> <content>
-            run_cmd write_managed_block "$dest" "$id" "$content"
-        else
-            # Fallback: naive in-place rewrite that preserves surrounding text.
-            reapply_drift_fallback "$dest" "$id" "$content"
-        fi
-        print_success "Re-applied managed block '$id' → $dest"
+        write_managed_block "$dest" "$id" "$(extract_source_block "$src" "$id")"
     done
 }
 
-reapply_drift_fallback() {
-    local dest="$1" id="$2" content="$3"
-    local dir; dir="$(dirname "$dest")"
-    run_cmd mkdir -p "$dir"
-
-    if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${YELLOW}  [DRY RUN]${NC} would rewrite managed block '$id' in $dest"
-        return 0
-    fi
-
-    local tmp; tmp="$(mktemp)"
-    if [[ -f "$dest" ]] && grep -q "^# >>> tuidev managed (${id})" "$dest"; then
-        awk -v id="$id" -v content="$content" '
-            BEGIN {replaced=0}
-            $0 ~ "^# >>> tuidev managed \\(" id "\\) >>>" {
-                print
-                print content
-                inblk=1
-                next
-            }
-            $0 ~ "^# <<< tuidev managed \\(" id "\\) <<<" {
-                inblk=0
-                print
-                replaced=1
-                next
-            }
-            !inblk {print}
-        ' "$dest" >"$tmp"
-    else
-        {
-            [[ -f "$dest" ]] && cat "$dest"
-            echo ""
-            echo "# >>> tuidev managed ($id) >>>"
-            echo "$content"
-            echo "# <<< tuidev managed ($id) <<<"
-        } >"$tmp"
-    fi
-    mv "$tmp" "$dest"
-}
-
-# Re-run each enabled pack's main entrypoint. Packs are idempotent — brew
-# installs short-circuit on "already installed" and install_config calls
-# with --adopt-existing/--managed-block preserve user state — so this is
-# safe to invoke on every `update --configs`.
-#
-# Covers both first-class packs (scripts/install/<name>.sh) and optional
-# packs recorded as extra_packs in the profile manifest
-# (scripts/install/packs/<name>.sh). Entrypoint convention is
-# "<name_with_underscores>_install", matching install.sh's dispatcher.
+# Re-run each enabled pack's entrypoint (built-in and extra packs alike, via
+# scripts/lib/packs.sh). Packs are idempotent — installs short-circuit on
+# "already present" and install_config preserves user state — so this is safe
+# on every `update --configs`. Each runs in a subshell so it cannot clobber
+# this script's state.
 pack_reapply_configs() {
-    local p script fn
-    for p in $(active_packs); do
-        script="$PACK_SCRIPT_DIR/${p}.sh"
-        [[ -f "$script" ]] || continue
-        fn="${p//-/_}_install"
-        (
-            set +u +e
-            # shellcheck disable=SC1090
-            source "$script" 2>/dev/null || true
-            if declare -F "$fn" >/dev/null; then
-                if [[ "$DRY_RUN" == true ]]; then
-                    echo -e "${YELLOW}  [DRY RUN]${NC} $fn (pack=$p)"
-                else
-                    "$fn"
-                fi
-            fi
-        )
-    done
-
-    for p in "${EXTRA_PACKS[@]:-}"; do
-        [[ -z "$p" ]] && continue
-        script="$PACK_SCRIPT_DIR/packs/${p}.sh"
-        [[ -f "$script" ]] || continue
-        fn="${p//-/_}_install"
-        (
-            set +u +e
-            # shellcheck disable=SC1090
-            source "$script" 2>/dev/null || true
-            if declare -F "$fn" >/dev/null; then
-                if [[ "$DRY_RUN" == true ]]; then
-                    echo -e "${YELLOW}  [DRY RUN]${NC} $fn (pack=$p)"
-                else
-                    "$fn"
-                fi
-            fi
-        )
+    local p
+    for p in $(tuidev_active_packs); do
+        if ! pack_script "$p" >/dev/null; then
+            print_warning "pack '$p' is recorded but no longer exists — skipping"
+        elif [[ "$DRY_RUN" == true ]]; then
+            echo -e "${YELLOW}  [DRY RUN]${NC} $(pack_entrypoint "$p") (pack=$p)"
+        else
+            ( set +u; pack_run "$p" ) || print_warning "pack $p reported an error (continuing)"
+        fi
     done
 }
 
@@ -569,61 +373,24 @@ pack_reapply_configs() {
 # Mode: --check / --packages  (brew)
 # ----------------------------------------------------------------------------
 
-# Returns the list of outdated formulae (stdout) out of the given name list.
+# outdated_subset formula|cask NAME... — print the NAMEs brew reports outdated.
 # Uses `brew outdated --json=v2` when jq is available for precision, falls
-# back to line-match grep otherwise.
+# back to a line match otherwise. Returns 2 when brew itself fails.
 outdated_subset() {
-    local -a wanted=("$@")
-    (( ${#wanted[@]} == 0 )) && return 0
+    local kind="$1"; shift
+    (( $# == 0 )) && return 0
+    command_exists brew || return 0
 
-    if ! command -v brew >/dev/null 2>&1; then
-        return 0
-    fi
+    local flag="--formula" json status=0
+    [[ "$kind" == cask ]] && flag="--cask"
 
-    local json status
-    if command -v jq >/dev/null 2>&1; then
-        status=0
-        json="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --json=v2 2>/dev/null)" || status=$?
+    if command_exists jq; then
+        json="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated "$flag" --json=v2 2>/dev/null)" || status=$?
         if [[ $status -eq 0 && -n "$json" ]]; then
-            printf '%s\n' "${wanted[@]}" \
+            printf '%s\n' "$@" \
                 | jq -Rr --argjson blob "$json" '
                     . as $n
-                    | $blob.formulae[]?
-                    | select(.name == $n or (.full_name // "") == $n)
-                    | .name
-                '
-            return 0
-        fi
-    fi
-
-    # Fallback without jq
-    local outdated_list
-    if ! outdated_list="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --quiet 2>/dev/null)"; then
-        return 2
-    fi
-    local w
-    for w in "${wanted[@]}"; do
-        grep -qxF "$w" <<<"$outdated_list" && printf '%s\n' "$w"
-    done
-}
-
-outdated_cask_subset() {
-    local -a wanted=("$@")
-    (( ${#wanted[@]} == 0 )) && return 0
-
-    if ! command -v brew >/dev/null 2>&1; then
-        return 0
-    fi
-
-    local json status
-    if command -v jq >/dev/null 2>&1; then
-        status=0
-        json="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --json=v2 2>/dev/null)" || status=$?
-        if [[ $status -eq 0 && -n "$json" ]]; then
-            printf '%s\n' "${wanted[@]}" \
-                | jq -Rr --argjson blob "$json" '
-                    . as $n
-                    | $blob.casks[]?
+                    | (($blob.formulae // []) + ($blob.casks // []))[]
                     | select((.name // "") == $n or (.token // "") == $n or (.full_name // "") == $n)
                     | (.name // .token)
                 '
@@ -631,14 +398,12 @@ outdated_cask_subset() {
         fi
     fi
 
-    local outdated_list
-    if ! outdated_list="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --cask --quiet 2>/dev/null)"; then
-        return 2
-    fi
-    local w
-    for w in "${wanted[@]}"; do
+    local outdated_list w
+    outdated_list="$(HOMEBREW_NO_AUTO_UPDATE=1 brew outdated "$flag" --quiet 2>/dev/null)" || return 2
+    for w in "$@"; do
         grep -qxF "$w" <<<"$outdated_list" && printf '%s\n' "$w"
     done
+    return 0
 }
 
 # ----------------------------------------------------------------------------
@@ -651,7 +416,6 @@ PKG_OUTDATED_TOTAL=0
 PKG_UNKNOWN=0
 
 # Report (and, outside --check, optionally upgrade) one brew group for a pack.
-# Formula vs cask handling differs only in the brew flag and the outdated probe.
 #   $1 header  section label, e.g. "core updates" / "core cask updates"
 #   $2 noun    confirm-prompt noun, e.g. "core formula(e)" / "core cask(s)"
 #   $3 kind    "formula" | "cask"
@@ -659,31 +423,28 @@ PKG_UNKNOWN=0
 _report_brew_group() {
     local header="$1" noun="$2" kind="$3"; shift 3
     (( $# == 0 )) && return 0
-    local items=("$@")
+    local tracked=$#
 
-    local raw status=0
-    if [[ "$kind" == cask ]]; then
-        raw="$(outdated_cask_subset "${items[@]}")" || status=$?
-    else
-        raw="$(outdated_subset "${items[@]}")" || status=$?
-    fi
-    local outdated
-    mapfile -t outdated < <(printf '%s\n' "$raw" | awk 'NF')
+    local raw status=0 o
+    raw="$(outdated_subset "$kind" "$@")" || status=$?
+    local outdated=()
+    while IFS= read -r o; do
+        [[ -n "$o" ]] && outdated+=("$o")
+    done <<<"$raw"
 
     echo ""
     if [[ $status -ne 0 ]]; then
-        echo -e "  ${BOLD}${header}${NC} (${#items[@]} tracked, status unknown):"
+        echo -e "  ${BOLD}${header}${NC} (${tracked} tracked, status unknown):"
         print_warning "brew outdated probe failed; status unknown"
         PKG_UNKNOWN=$((PKG_UNKNOWN + 1))
         return 0
     fi
 
-    echo -e "  ${BOLD}${header}${NC} (${#items[@]} tracked, ${#outdated[@]} outdated):"
+    echo -e "  ${BOLD}${header}${NC} (${tracked} tracked, ${#outdated[@]} outdated):"
     if (( ${#outdated[@]} == 0 )); then
         print_success "all up to date"
         return 0
     fi
-    local o
     for o in "${outdated[@]}"; do
         printf "    ${CYAN}•${NC} %s\n" "$o"
     done
@@ -700,26 +461,25 @@ _report_brew_group() {
     done
 }
 
-# Report every brew item a pack contributes: formulae always, casks on macOS.
-# Discovery goes through pack_formulae/pack_casks so profile packs and extra
-# packs are tracked identically.
-#   $1 pack   pack name (core, fnm, …)
-#   $2 label  display label (default: capitalized pack name)
+# Report every brew item a pack declares (scripts/lib/packs.sh pack_array):
+# formulae always, casks on macOS.
 report_pack_updates() {
-    local pack="$1" label="${2:-${1^}}"
-
-    local name_list
-    mapfile -t name_list < <(pack_formulae "$pack")
-    if (( ${#name_list[@]} == 0 )); then
-        print_info "${label} updates: (no formulae discovered for '${pack}')"
-    else
-        _report_brew_group "${label} updates" "${label} formula(e)" formula "${name_list[@]}"
+    local pack="$1" item
+    local formulae=() casks=()
+    while IFS= read -r item; do formulae+=("$item"); done < <(pack_array "$pack" formulae)
+    if is_macos; then
+        while IFS= read -r item; do casks+=("$item"); done < <(pack_array "$pack" casks)
     fi
 
-    if is_macos; then
-        local cask_list
-        mapfile -t cask_list < <(pack_casks "$pack")
-        _report_brew_group "${label} cask updates" "${label} cask(s)" cask "${cask_list[@]}"
+    if (( ${#formulae[@]} + ${#casks[@]} == 0 )); then
+        print_info "${pack} updates: (no Homebrew packages declared)"
+        return 0
+    fi
+    if (( ${#formulae[@]} > 0 )); then
+        _report_brew_group "${pack} updates" "${pack} formula(e)" formula "${formulae[@]}"
+    fi
+    if (( ${#casks[@]} > 0 )); then
+        _report_brew_group "${pack} cask updates" "${pack} cask(s)" cask "${casks[@]}"
     fi
 }
 
@@ -740,19 +500,12 @@ run_packages_mode() {
     PKG_OUTDATED_TOTAL=0
     PKG_UNKNOWN=0
 
-    # Profile packs (core/remote/sandbox/ui/extras) and user-selected extra packs
-    # are reported the same way: report_pack_updates discovers both via
-    # pack_formulae/pack_casks, so e.g. fnm's FNM_FORMULAE and cmux's CMUX_CASKS
-    # are tracked just like core's formulae.
+    # Built-in and extra packs are reported the same way, so fnm's
+    # FNM_FORMULAE and cmux's CMUX_CASKS are tracked just like core's.
     local pack any_pack=false
-    for pack in $(active_packs); do
+    for pack in $(tuidev_active_packs); do
         any_pack=true
         report_pack_updates "$pack"
-    done
-    for pack in "${EXTRA_PACKS[@]:-}"; do
-        [[ -z "$pack" ]] && continue
-        any_pack=true
-        report_pack_updates "$pack" "Extra pack: $pack"
     done
 
     if [[ "$any_pack" != true ]]; then
@@ -797,6 +550,9 @@ run_migrations_mode() {
         print_error "Migration failed — stopping before any further changes."
         exit 1
     fi
+    # A migration may have edited the profile (e.g. added a pack); later
+    # steps in this same run must see that, not the pre-migration copy.
+    load_profile >/dev/null
 }
 
 # ----------------------------------------------------------------------------
@@ -809,8 +565,8 @@ run_configs_mode() {
 
     # Summary of exact vs partial duplicates — used both for --check preview
     # and to gate the auto-clean prompt below.
-    local exact_dupes=0 partial_dupes=0 item
-    for item in "${DRIFT_DUPLICATE[@]}"; do
+    local exact_dupes=0 partial_dupes=0 item dest src id
+    for item in ${DRIFT_DUPLICATE[@]+"${DRIFT_DUPLICATE[@]}"}; do
         case "${item##*|}" in
             exact-*)   exact_dupes=$((exact_dupes+1));;
             partial-*) partial_dupes=$((partial_dupes+1));;
@@ -835,7 +591,7 @@ run_configs_mode() {
 
     if [[ $exact_dupes -gt 0 ]]; then
         if confirm "Clean ${exact_dupes} file(s) with exact duplicate content outside managed block? (backups saved)"; then
-            for item in "${DRIFT_DUPLICATE[@]}"; do
+            for item in ${DRIFT_DUPLICATE[@]+"${DRIFT_DUPLICATE[@]}"}; do
                 local entry_part="${item%|*}" dup_kind="${item##*|}"
                 case "$dup_kind" in
                     exact-*)
@@ -858,6 +614,8 @@ run_configs_mode() {
     # release, a config file that was missing) belongs in the manifest too.
     tuidev_manifest_enable
     pack_reapply_configs
+    # New git defaults reach existing machines too (unset keys only).
+    tuidev_git_defaults
     tuidev_manifest_disable
     print_success "Pack configs re-applied"
 }
@@ -900,51 +658,6 @@ run_repo_mode() {
 }
 
 # ----------------------------------------------------------------------------
-# Mode: --sandbox-image
-# ----------------------------------------------------------------------------
-
-has_extra_pack() {
-    local want="$1" p
-    for p in "${EXTRA_PACKS[@]:-}"; do
-        [[ "$p" == "$want" ]] && return 0
-    done
-    return 1
-}
-
-run_sandbox_image_mode() {
-    print_section "Agent sandbox image"
-
-    if ! has_extra_pack "sandbox-container"; then
-        print_info "sandbox-container pack not installed — no-op"
-        return 0
-    fi
-
-    local rt
-    if ! rt="$(tuidev_container_runtime)"; then
-        print_warning "no container runtime (Apple container / podman / docker) — install the sandbox-container pack first"
-        return 0
-    fi
-
-    # Image / Dockerfile path conventions — let the pack override via env.
-    local image="${TUIDEV_SANDBOX_IMAGE:-agent-sandbox:latest}"
-    local base="${TUIDEV_SANDBOX_BASE:-docker.io/library/ubuntu:24.04}"
-    local dockerfile="${TUIDEV_SANDBOX_DOCKERFILE:-$REPO_DIR/Dockerfile}"
-
-    if [[ "$MODE" == "check" ]]; then
-        print_info "Would pull $base and rebuild $image from $dockerfile via $(tuidev_container_label "$rt")"
-        return 0
-    fi
-
-    run_cmd tuidev_container_up "$rt"
-    run_cmd tuidev_container_pull "$rt" "$base"
-    if [[ -f "$dockerfile" ]]; then
-        run_cmd tuidev_container_build "$rt" "$image" "$dockerfile" "$REPO_DIR"
-    else
-        print_warning "Dockerfile not found at $dockerfile — skipping rebuild"
-    fi
-}
-
-# ----------------------------------------------------------------------------
 # Mode: --security
 # ----------------------------------------------------------------------------
 
@@ -953,7 +666,7 @@ check_ssh_perms() {
     [[ -d "$ssh_dir" ]] || { print_info "No $ssh_dir — skipping ssh perms check"; return 0; }
 
     local mode
-    mode="$(stat -f '%A' "$ssh_dir" 2>/dev/null || stat -c '%a' "$ssh_dir" 2>/dev/null || echo '?')"
+    mode="$(file_mode "$ssh_dir" || echo '?')"
     if [[ "$mode" == "700" ]]; then
         print_success "$ssh_dir is 0700"
     else
@@ -962,7 +675,7 @@ check_ssh_perms() {
 
     local f
     while IFS= read -r -d '' f; do
-        mode="$(stat -f '%A' "$f" 2>/dev/null || stat -c '%a' "$f" 2>/dev/null || echo '?')"
+        mode="$(file_mode "$f" || echo '?')"
         if [[ "$mode" == "600" || "$mode" == "400" ]]; then
             print_success "$(basename "$f") is $mode"
         else
@@ -973,9 +686,9 @@ check_ssh_perms() {
 
 check_seatbelt_drift() {
     # Paths must match scripts/install/sandbox.sh: installed to
-    # ~/.config/tuidev/sandbox/ from configs/sandbox/profiles/*.sb.
+    # $TUIDEV_STATE_DIR/sandbox/ from configs/sandbox/profiles/*.sb.
     local sb_src="$REPO_DIR/configs/sandbox/profiles"
-    local sb_dest="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/sandbox"
+    local sb_dest="$TUIDEV_STATE_DIR/sandbox"
     if [[ ! -d "$sb_src" ]]; then
         print_info "No Seatbelt profiles in repo — skipping"
         return 0
@@ -1027,10 +740,9 @@ run_menu() {
     2) Update packages (active packs only)
     3) Re-apply configs (managed blocks + pack configs)
     4) Update repo (git pull)
-    5) Rebuild sandbox image
-    6) Security audit
-    7) Update all (packages + configs + repo)
-    8) Run pending migrations
+    5) Security audit
+    6) Update all (packages + configs + repo)
+    7) Run pending migrations
     q) Quit
 EOF
     local reply
@@ -1041,10 +753,9 @@ EOF
         2) MODE=packages;       run_mode ;;
         3) MODE=configs;        run_mode ;;
         4) MODE=repo;           run_mode ;;
-        5) MODE=sandbox-image;  run_mode ;;
-        6) MODE=security;       run_mode ;;
-        7) MODE=all;            run_mode ;;
-        8) MODE=migrations;     run_mode ;;
+        5) MODE=security;       run_mode ;;
+        6) MODE=all;            run_mode ;;
+        7) MODE=migrations;     run_mode ;;
         q|Q|"") print_info "No action selected." ;;
         *) print_error "Unknown choice: $reply"; exit 2 ;;
     esac
@@ -1067,7 +778,6 @@ run_mode() {
         migrations)    run_migrations_mode ;;
         configs)       run_migrations_mode; run_configs_mode ;;
         repo)          run_repo_mode ;;
-        sandbox-image) run_sandbox_image_mode ;;
         security)      run_security_mode ;;
         all)
             run_packages_mode
@@ -1089,17 +799,16 @@ echo -e "  ${BLUE}Repo:${NC}    $REPO_DIR"
 echo -e "  ${BLUE}Date:${NC}    $(date '+%Y-%m-%d %H:%M:%S')"
 [[ "$DRY_RUN" == true ]] && echo -e "  ${YELLOW}Mode:${NC}    dry-run"
 
-load_profile || true
+load_profile
 
-if $PROFILE_FOUND; then
-    echo -e "  ${BLUE}Profile:${NC} ${PROFILE_NAME:-?}"
-    echo -e "  ${BLUE}Packs:${NC}   $(active_packs | paste -sd, -)"
-    [[ ${#EXTRA_PACKS[@]} -gt 0 ]] && echo -e "  ${BLUE}Extras:${NC}  ${EXTRA_PACKS[*]}"
+if $TUIDEV_PROFILE_FOUND; then
+    echo -e "  ${BLUE}Profile:${NC} ${TUIDEV_PROFILE_NAME:-?}"
+    echo -e "  ${BLUE}Packs:${NC}   $(tuidev_active_packs | paste -sd, -)"
 fi
 
 case "$MODE" in
     menu)
-        if ! $PROFILE_FOUND; then
+        if ! $TUIDEV_PROFILE_FOUND; then
             print_info "No profile manifest — interactive menu treats install as legacy"
         fi
         run_menu

@@ -1,156 +1,68 @@
 # Contributing to tuidev
 
-Thank you for your interest. This document captures the conventions this repo follows. See [VISION.md](VISION.md) for the product direction (especially the "2026 Amendments" at the top) before proposing anything directional.
+Thanks for your interest. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
 
-## How to Contribute
+## Reporting issues
 
-### Reporting Issues
+Search existing issues first, then use the issue template. Include your tuidev version (`git describe --tags`), OS and version, profile and packs (`cat ~/.config/tuidev/profile`), and the output of `make check`. Report security issues privately (see [SECURITY.md](SECURITY.md)).
 
-1. **Search existing issues** first to avoid duplicates
-2. **Use issue templates** when available
-3. **Include environment details:**
-   - macOS version
-   - Shell (zsh/bash)
-   - Relevant tool versions
+## Pull requests
 
-### Submitting Pull Requests
-
-1. **Fork the repository** and create your branch from `main`
-2. **Follow code style** (see below)
-3. **Test your changes:**
+1. Fork, then branch from `main`.
+2. Make the change, following [docs/engineering.md](docs/engineering.md).
+3. Verify:
    ```bash
-   make ci-test           # lint + validate-configs + core tests (what CI gates on)
-   make container-test    # Linux smoke test in a clean container (Apple container → podman → docker)
+   make ci-test        # lint + validate-configs + check-links + test-lib
+   make test-core      # core-tagged tests against your machine
+   make container-test # core-tagged tests in an Alpine container (Apple container → podman → docker)
    ```
+4. Update the docs that own the topic you changed (the README's documentation index says which doc owns what), and add a `CHANGELOG.md` entry under the unreleased version.
+5. Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `ci:`. Keep commits atomic, and don't add `Co-Authored-By` trailers.
 
-   Or run the pieces individually:
+### Test harnesses
 
-   ```bash
-   make lint              # shellcheck install/uninstall, scripts, lib, tmux, packs, migrations, bin
-   make validate-configs  # KDL / TOML / Lua / JSON syntax
-   make test-core         # core-tagged tests
-   bash scripts/lib/test_config_write.sh   # and test_profile / test_contract /
-                                           # test_theme / test_migrations
-   ```
-4. **Update documentation** if you changed behavior
-5. **Write clear commit messages** using conventional commits
+| Harness | Covers |
+|---------|--------|
+| `make lint` | shellcheck over every shell file (the list is `SHELL_FILES` in the Makefile) |
+| `make validate-configs` | JSON, TOML, Lua and shell syntax of everything in `configs/` |
+| `make check-links` | Every relative link in every tracked Markdown file |
+| `make test-lib` | `scripts/lib/test_*.sh`: config_write, container, contract (cross-file names, documented packs), migrations, pkg, profile, theme |
+| `make test` / `test-core` / `test-all` | `scripts/test_suite.sh`: tagged checks against the installed machine |
+| `make container-test` | `test_suite.sh --tag core` in an Alpine image. It tests the scripts, configs and tool contract on Linux, **not** the installer. The apt path is exercised on a real Debian box. |
+| `make sbx-test` | On macOS: `sbx` can read the project and cannot read `~/.ssh` |
 
-### Code Style
+CI runs lint, validate-configs (`--strict`), check-links, test-lib and the container core-tag test. On macOS it also parses the Seatbelt profiles, runs the lib tests under bash 3.2, and does a `desktop` install dry-run. On Linux it does `minimal` and `remote` dry-runs. The job list is in [docs/engineering.md](docs/engineering.md#verification).
 
-> The canonical engineering conventions — shared libs, the pack contract, the
-> package-array discovery convention, managed-block rules, and the small-function
-> bar — live in [docs/engineering.md](docs/engineering.md). The highlights:
+## Where changes go
 
-#### Shell Scripts
+- **New tools** go in the right pack: core (essential), remote, sandbox, ui (macOS GUI), extras, or a new optional pack under `scripts/install/packs/`. Follow the pack contract, and register the pack in `TUIDEV_VALID_PACKS`.
+- **Files written to `$HOME`** go through `install_config` (managed block, adopt-existing or overwrite). Never `cp` over a user's file, and never `rm -rf` a config.
+- **Removing something the installer used to place** needs a migration in `scripts/migrations/` (see [its README](scripts/migrations/README.md)).
+- **Optional tools like `nvim` and `tmux`** are packs like any other: follow the pack contract in [docs/engineering.md](docs/engineering.md#the-pack-contract), not a special case.
+- **Seatbelt profiles** go in `configs/sandbox/profiles/*.sb`. Every profile must parse under `sandbox-exec` (CI checks this on macOS).
+- **Themes** are one `configs/themes/<name>/palette.toml` with all 26 keys (see [docs/theming.md](docs/theming.md)).
 
-- Use `shellcheck` for linting (run `make lint`)
-- Use `$HOME` instead of `~` for portability
-- Quote variables: `"$variable"` not `$variable`
-- Use `[[ ]]` for conditionals (bash/zsh)
-- Add comments for non-obvious code
+Good areas to contribute: new packs, tighter Seatbelt rules, Linux parity (a `bubblewrap` backend for `sbx`; wider dnf and pacman coverage), bug fixes with a test, and docs that gain clarity without gaining volume.
 
-#### Configuration Files
+Not wanted: GUI apps outside the `ui` pack; AI that runs in-editor by default; breaking public commands (`t`, `sbx`, `claude -w`, …) without a deprecation path; non-FOSS tools on default paths; `curl | sh` on the user's behalf.
 
-- Use consistent indentation (2 spaces for TOML/KDL, 4 for Lua)
-- Use `$HOME` instead of a hardcoded home directory
-- Personal LAN hosts and mDNS names belong in gitignored `*.local` overlays (`~/.zshrc.local`, `~/.ssh/config.local`) — never in `configs/`, `docs/`, or `scripts/`
-- Test configs with `make validate-configs`
+## Personal vs published
 
-### Development Workflow
+This repository is public, and cloning it should never leak anyone's setup.
 
-```bash
-# Clone your fork
-git clone https://github.com/YOUR_USERNAME/tuidev.git
-cd tuidev
+| Belongs in git | Belongs in `*.local` or `.local/` only |
+|----------------|----------------------------------------|
+| `ssh devbox`, `herdr --remote workbox` | Real hostnames, mDNS names, Tailscale IPs, usernames |
+| A commented `Host always-on` example | Your `Host` stanzas (`~/.ssh/config.local`) |
+| Hardware *class* ("a Raspberry Pi or NUC") | Your board, services and network layout |
+| Generic agent guidance (`AGENTS.md`) | Machine notes and personal agent instructions (`.local/`, `CLAUDE.local.md`) |
 
-# Create a branch
-git checkout -b feature/your-feature
+`.gitignore` excludes `*.local`, `.local/` and `CLAUDE.local.md`. The shipped SSH block includes `~/.ssh/config.local*`, and `.zshrc` sources `~/.zshrc.local` last. CI's `no hardcoded paths` job fails on `/Users/<name>/`, `/home/<name>/` and `user@host.local` forms. Placeholders like `/Users/NAME` pass.
 
-# Make changes and test
-make lint
-make test
+## Getting help
 
-# Commit with conventional message
-git commit -m "feat: add new feature"
-
-# Push and create PR
-git push origin feature/your-feature
-```
-
-### Commit Convention
-
-Use conventional commit format:
-
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation only
-- `style:` Formatting, no code change
-- `refactor:` Code restructure, no behavior change
-- `test:` Adding or updating tests
-- `chore:` Maintenance tasks
-
-Examples:
-```
-feat: add k9s kubernetes TUI
-fix: correct zsh completion path
-docs: update remote sessions guide
-```
-
-### Testing Requirements
-
-All PRs must pass:
-
-1. **Shellcheck** - No lint errors
-2. **Config validation** - Valid KDL/TOML/Lua/JSON syntax
-3. **No hardcoded paths** - Use `$HOME` variables; no real hostnames, mDNS names, or usernames anywhere in the repo (CI `check-paths` fails on both)
-4. **Library unit tests** - `scripts/lib/test_*.sh` (config_write, profile, contract, theme, migrations)
-5. **Seatbelt profiles** - Every `.sb` parses under `sandbox-exec -n` (macOS runner)
-6. **Docker tests** - Install works in clean environment
-7. **Docs links** - Every `docs/...` link in the README resolves
-
-Run all checks:
-```bash
-make ci-test
-```
-
-### Packs, profiles, and managed blocks
-
-See [docs/engineering.md](docs/engineering.md) for the full pack contract and a
-worked example. In short:
-
-- New tools go into the **right pack**: core (essential), remote (Tailscale/mosh), ui (macOS GUI), sandbox (Seatbelt/Podman), extras (optional), or a new pack under `scripts/install/packs/`.
-- Every pack script follows the contract in `scripts/install/core.sh`: `#!/bin/bash`, `set -e`, source `scripts/lib/ui.sh`, expose one entrypoint function named `<pack>_install`, runnable both directly and when sourced.
-- Configs that are written to `$HOME` use **managed blocks** via `scripts/lib/config_write.sh`. Never `cp` over a user's file; never `rm -rf ~/.config/X`.
-- Tmux layouts live under `scripts/tmux/layout-*.sh` and are attach-or-create + dry-run aware.
-- Sandbox profiles live under `configs/sandbox/profiles/*.sb` and must parse under `sandbox-exec -n NAME -f FILE` (CI enforces this on macOS).
-- Anything a pack puts on the machine must be recorded to the install manifest via the shared libs, so `uninstall.sh` can remove it and nothing else. Never `brew install` directly — use `brew_install_formulae` / `brew_install_casks`.
-- Removing a file the installer used to place needs a **migration** (`scripts/migrations/YYYYMMDDHHMM_slug.sh`) — deleting it from the repo will never clean up the copy in a user's `$HOME`. Contract: [`scripts/migrations/README.md`](scripts/migrations/README.md).
-- New themes are a `configs/themes/<name>/palette.toml` satisfying the full 26-key contract — no per-tool config edits. See [docs/theming.md](docs/theming.md).
-- Never pipe a remote install script into a shell on the user's behalf. If a package manager can't supply a tool, print the official command and let the user run it.
-
-### Areas for contribution
-
-- **New packs** that slot into the layered installer.
-- **Tmux layouts** for workflows we haven't covered.
-- **Seatbelt profile refinements** — especially narrowing net egress where Apple's kernel supports it.
-- **Linux parity**: `bubblewrap` wiring for the sandbox; the core pack has an apt fallback already, so dnf/pacman equivalents and apt coverage in the remaining packs are the open work.
-- **Docs**: clarity, not volume.
-- **Bug fixes** — always with a test tag.
-
-### What we're not looking for
-
-- GUI application additions beyond the `ui` pack (the repo is terminal-first).
-- AI tooling that runs **in-editor by default**. `configs/nvim/lua/plugins/ai.lua` stays empty; ACP integrations can be opt-in only.
-- Breaking changes to public commands (`work`, `dev`, `ai`, `sbx`, …) without a deprecation path.
-- Dependencies on non-FOSS tools for default paths (explains why Docker Desktop / OrbStack are not used).
-
-## Getting Help
-
-- Open an issue for questions
-- Check existing docs in `docs/` directory
-- Review [docs/FAQ.md](docs/FAQ.md) for common questions
-- Participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md); security reports go through [SECURITY.md](SECURITY.md)
+Open an issue, or check [docs/FAQ.md](docs/FAQ.md). Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions are licensed under the MIT License.

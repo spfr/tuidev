@@ -3,8 +3,8 @@
 # Run directly: bash scripts/lib/test_theme.sh
 # Exit code: 0 on success, non-zero on failure.
 #
-# Everything runs against scratch HOMEs, so the tests never touch the real
-# ~/.config.
+# Everything runs against scratch HOMEs and a private tmux socket dir, so the
+# tests never touch the real ~/.config or a running tmux server.
 
 set -e
 
@@ -16,8 +16,13 @@ THEME="$REPO_ROOT/scripts/theme.sh"
 . "$SCRIPT_DIR/config_write.sh"
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+# theme.sh reloads a live tmux server; point it at a private, empty socket dir.
+unset TMUX
+export TMUX_TMPDIR="$tmp/tmux"
+mkdir -p "$TMUX_TMPDIR"
+trap 'tmux kill-server >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
 export TUIDEV_NO_COLOR=1
+unset XDG_CONFIG_HOME TUIDEV_STATE_DIR
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
@@ -94,6 +99,7 @@ pass "show prints the palette"
 # ============================================================================
 HOME="$(new_home normal)"; export HOME
 TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+TMUX_THEME="$HOME/.config/tmux/theme.conf"
 GHOSTTY_CONF="$HOME/.config/ghostty/config"
 STARSHIP_CONF="$HOME/.config/starship.toml"
 
@@ -108,12 +114,15 @@ grep -q "1e1e2e" <<< "$out" || fail "dry-run did not preview colors"
 [[ "$(cat "$TMUX_CONF" "$GHOSTTY_CONF" "$STARSHIP_CONF")" == "$before" ]] \
     || fail "dry-run mutated a config"
 [[ -f "$HOME/.config/tuidev/theme" ]] && fail "dry-run wrote the state file"
+[[ -e "$TMUX_THEME" ]] && fail "dry-run wrote theme.conf"
 pass "--dry-run mutates nothing"
 
 "$THEME" apply tokyo-night >/dev/null
-for f in "$TMUX_CONF" "$GHOSTTY_CONF" "$STARSHIP_CONF"; do
+for f in "$TMUX_THEME" "$GHOSTTY_CONF" "$STARSHIP_CONF"; do
     grep -qF "tuidev managed (tuidev-theme)" "$f" || fail "no managed block in $f"
 done
+grep -qF "tuidev managed (tuidev-theme)" "$TMUX_CONF" \
+    && fail "tmux theme written into tmux.conf (must go to theme.conf)"
 grep -qF "USER_TMUX_LINE" "$TMUX_CONF"           || fail "user tmux line lost"
 grep -qF "USER_GHOSTTY_LINE" "$GHOSTTY_CONF"     || fail "user ghostty line lost"
 grep -qF "USER_STARSHIP_TRAILER" "$STARSHIP_CONF" || fail "user starship line lost"
@@ -124,7 +133,7 @@ starship_sane "$STARSHIP_CONF" themed || fail "starship.toml broken after instal
 pass "install-then-theme: blocks written, user content and TOML intact"
 
 "$THEME" apply catppuccin-mocha >/dev/null
-for f in "$TMUX_CONF" "$GHOSTTY_CONF" "$STARSHIP_CONF"; do
+for f in "$TMUX_THEME" "$GHOSTTY_CONF" "$STARSHIP_CONF"; do
     n="$(grep -cF "# >>> tuidev managed (tuidev-theme) >>>" "$f")"
     [[ "$n" == "1" ]] || fail "block duplicated in $f ($n copies)"
 done
@@ -187,7 +196,6 @@ pass "theme-before-install then install then re-apply: config sane and themed"
 # apply must move its block back to the end.
 HOME="$(new_home reorder)"; export HOME
 GHOSTTY_CONF="$HOME/.config/ghostty/config"
-TMUX_CONF="$HOME/.config/tmux/tmux.conf"
 
 "$THEME" apply catppuccin-mocha >/dev/null 2>&1
 fake_install "$HOME"
@@ -199,17 +207,109 @@ ship_line="$(grep -nF '# >>> tuidev managed (tuidev-ghostty) >>>' "$GHOSTTY_CONF
 out="$("$THEME" apply catppuccin-mocha 2>&1)"
 grep -q "moving it to the end" <<< "$out" || fail "apply did not report the reorder"
 
-for f in "$GHOSTTY_CONF" "$TMUX_CONF"; do
-    n="$(grep -cF '# >>> tuidev managed (tuidev-theme) >>>' "$f")"
-    [[ "$n" == "1" ]] || fail "reorder duplicated the theme block in $f ($n copies)"
-    last="$(grep -v '^[[:space:]]*$' "$f" | tail -n1)"
-    [[ "$last" == "# <<< tuidev managed (tuidev-theme) <<<" ]] \
-        || fail "theme block is not last in $f (last line: $last)"
-done
+n="$(grep -cF '# >>> tuidev managed (tuidev-theme) >>>' "$GHOSTTY_CONF")"
+[[ "$n" == "1" ]] || fail "reorder duplicated the theme block ($n copies)"
+last="$(grep -v '^[[:space:]]*$' "$GHOSTTY_CONF" | tail -n1)"
+[[ "$last" == "# <<< tuidev managed (tuidev-theme) <<<" ]] \
+    || fail "theme block is not last in ghostty config (last line: $last)"
 grep -qF "tuidev managed (tuidev-ghostty)" "$GHOSTTY_CONF" || fail "shipped ghostty block lost"
 grep -qF "1e1e2e" <<< "$(read_managed_block "$GHOSTTY_CONF" tuidev-theme)" \
     || fail "theme colors missing after reorder"
 pass "install-after-theme: theme block moved back to last, shipped block intact"
+
+# ============================================================================
+# 10. tmux: theme.conf is sourced ABOVE the TPM block
+# ============================================================================
+# Anything after TPM's `run` resets status-right after plugins hooked it —
+# tmux-continuum's autosave dies silently. The shipped tmux.conf must source
+# theme.conf before the TPM block, and nothing may be appended after it.
+shipped="$REPO_ROOT/configs/tmux/tmux.conf"
+src_line="$(grep -nE '^source-file -q ~/.config/tmux/theme\.conf$' "$shipped" | cut -d: -f1)"
+tpm_line="$(grep -nF "run '~/.config/tmux/plugins/tpm/tpm'" "$shipped" | cut -d: -f1)"
+[[ -n "$src_line" ]] || fail "shipped tmux.conf does not source theme.conf"
+[[ -n "$tpm_line" ]] || fail "shipped tmux.conf has no TPM run line"
+[[ "$src_line" -lt "$tpm_line" ]] || fail "theme.conf is sourced after the TPM run line"
+pass "shipped tmux.conf sources theme.conf above TPM"
+
+# ============================================================================
+# 11. tmux: a pre-2.4 theme block inside tmux.conf is moved out on apply
+# ============================================================================
+HOME="$(new_home legacy-apply)"; export HOME
+TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+TMUX_THEME="$HOME/.config/tmux/theme.conf"
+fake_install "$HOME"
+write_managed_block "$TMUX_CONF" tuidev-theme "# LEGACY_THEME" >/dev/null
+
+"$THEME" apply catppuccin-mocha >/dev/null
+grep -qF "tuidev managed (tuidev-theme)" "$TMUX_CONF" && fail "legacy block left in tmux.conf"
+grep -qF "tuidev managed (tuidev-tmux)" "$TMUX_CONF"  || fail "shipped tmux block lost"
+grep -qF "1e1e2e" "$TMUX_THEME"                        || fail "theme.conf not written"
+pass "apply moves a legacy tmux.conf theme block into theme.conf"
+
+# ============================================================================
+# 12. Migration 202609222000: moves the legacy block without an apply
+# ============================================================================
+MIGRATION="$REPO_ROOT/scripts/migrations/202609222000_tmux_theme_file.sh"
+HOME="$(new_home legacy-migrate)"; export HOME
+TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+TMUX_THEME="$HOME/.config/tmux/theme.conf"
+fake_install "$HOME"
+echo "# USER_TRAILER" >> "$TMUX_CONF"
+write_managed_block "$TMUX_CONF" tuidev-theme "set -g status-style 'bg=#123456'" >/dev/null
+
+bash "$MIGRATION" >/dev/null || fail "migration failed"
+grep -qF "tuidev managed (tuidev-theme)" "$TMUX_CONF" && fail "migration left the block in tmux.conf"
+grep -qF "USER_TRAILER" "$TMUX_CONF"                   || fail "migration lost user content"
+grep -qF "bg=#123456" <<< "$(read_managed_block "$TMUX_THEME" tuidev-theme)" \
+    || fail "migration did not carry the block into theme.conf"
+ls "$HOME/.config/tuidev/backups"/tmux.conf.* >/dev/null 2>&1 || fail "migration made no backup"
+bash "$MIGRATION" >/dev/null || fail "migration re-run failed"
+[[ "$(grep -cF 'tuidev managed (tuidev-theme) >>>' "$TMUX_THEME")" == 1 ]] \
+    || fail "migration re-run duplicated the block"
+pass "migration moves the legacy block, backs up, and is idempotent"
+
+# 12b. A user-owned tmux.conf (no tuidev-tmux block, e.g. adopt-existing) gets
+#      a source-file line for theme.conf: above TPM's run line when there is
+#      one, else at the end. Re-running adds nothing.
+HOME="$(new_home legacy-own-tpm)"; export HOME
+TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+printf '%s\n' "set -g mouse on" "set -g @plugin 'tmux-plugins/tpm'" "run '~/.tmux/plugins/tpm/tpm'" > "$TMUX_CONF"
+write_managed_block "$TMUX_CONF" tuidev-theme "set -g status-style 'bg=#123456'" >/dev/null
+bash "$MIGRATION" >/dev/null || fail "migration failed on a user-owned tmux.conf"
+src_line="$(grep -nE '^source-file -q ~/.config/tmux/theme\.conf$' "$TMUX_CONF" | cut -d: -f1)"
+tpm_line="$(grep -nF "run '~/.tmux/plugins/tpm/tpm'" "$TMUX_CONF" | cut -d: -f1)"
+[[ -n "$src_line" && "$src_line" -lt "$tpm_line" ]] || fail "source-file line missing or not above TPM's run line"
+grep -qF "set -g mouse on" "$TMUX_CONF" || fail "migration lost user content"
+write_managed_block "$TMUX_CONF" tuidev-theme "set -g status-style 'bg=#654321'" >/dev/null
+bash "$MIGRATION" >/dev/null || fail "migration re-run failed"
+bash "$MIGRATION" >/dev/null || fail "migration re-run failed"
+[[ "$(grep -c 'tmux/theme\.conf$' "$TMUX_CONF")" == 1 ]] || fail "migration re-run duplicated the source-file line"
+
+HOME="$(new_home legacy-own-plain)"; export HOME
+TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+echo "set -g mouse on" > "$TMUX_CONF"
+write_managed_block "$TMUX_CONF" tuidev-theme "set -g status-style 'bg=#123456'" >/dev/null
+bash "$MIGRATION" >/dev/null || fail "migration failed on a tmux.conf without TPM"
+[[ "$(tail -n1 "$TMUX_CONF")" == "source-file -q ~/.config/tmux/theme.conf" ]] \
+    || fail "source-file line not appended at the end"
+pass "migration sources theme.conf from a user-owned tmux.conf (above TPM), idempotently"
+
+# ============================================================================
+# 13. tmux actually loads theme.conf through the shipped tmux.conf
+# ============================================================================
+# A private server (socket under $TMUX_TMPDIR, scratch HOME) started from the
+# installed tmux.conf must end up with the theme's status-style.
+if command -v tmux >/dev/null 2>&1; then
+    HOME="$(new_home live)"; export HOME
+    fake_install "$HOME"
+    "$THEME" apply catppuccin-mocha >/dev/null
+    got="$(tmux -f "$HOME/.config/tmux/tmux.conf" new-session -d \; show -gv status-style)"
+    tmux kill-server >/dev/null 2>&1 || true
+    [[ "$got" == *"1e1e2e"* ]] || fail "tmux did not load theme.conf (status-style: $got)"
+    pass "tmux loads theme.conf via the shipped tmux.conf"
+else
+    echo "SKIP: tmux not installed — live theme.conf load not checked"
+fi
 
 echo ""
 echo "All theme tests passed."

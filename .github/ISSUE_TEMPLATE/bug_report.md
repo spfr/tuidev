@@ -12,10 +12,12 @@ A clear description of the bug.
 
 ## Environment
 
-- **macOS version**: (e.g., 14.0 Sonoma)
-- **Shell**: (zsh/bash)
-- **Terminal**: (Ghostty/iTerm2/Terminal.app)
-- **Installation method**: (git clone / curl)
+- **tuidev version**: (`git describe --tags` in your checkout, e.g. v2.3.1-12-gabc1234)
+- **OS**: (e.g. macOS 27.0, Debian 13 arm64)
+- **Profile and packs**: (`cat ~/.config/tuidev/profile`: profile, built-in packs, extra_packs)
+- **Install method**: git clone
+- **Terminal and shell**: (e.g. Ghostty 1.3.1, zsh 5.9, inside tmux?)
+- **Sandboxed?**: (did it happen under a CLI's native sandbox, `sbx`, or unsandboxed? which sbx profile, if any?)
 
 ## Steps to Reproduce
 
@@ -31,18 +33,15 @@ What you expected to happen.
 
 What actually happened.
 
-## Relevant Logs
+## Relevant Output
 
 ```
-Paste any error messages or logs here
+Paste error messages, `make check` output, or `--dry-run` output here.
+Redact hostnames, usernames and tokens.
 ```
-
-## Additional Context
-
-Any other information that might help diagnose the issue.
 
 ## Checklist
 
-- [ ] I ran `make check` to verify my installation
+- [ ] I ran `make check`
 - [ ] I searched existing issues for duplicates
-- [ ] I'm using the latest version from main branch
+- [ ] I reproduced it on the latest `main` (`git pull`, then `make update-configs`)

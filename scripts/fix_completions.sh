@@ -10,20 +10,19 @@
 
 set -euo pipefail
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/ui.sh disable=SC1091
+. "$SCRIPT_DIR/lib/ui.sh"
 
 fix_path_permissions() {
     local path="$1"
 
     [[ -e "$path" ]] || return 0
 
-    echo "Fixing: $path"
+    print_step "fixing: $path"
 
     local owner
-    owner="$(stat -f '%Su' "$path" 2>/dev/null || stat -c '%U' "$path" 2>/dev/null || echo '')"
+    owner="$(file_owner "$path" || true)"
 
     if [[ "$owner" != "$(whoami)" && "$owner" != "root" ]]; then
         sudo chown "$(whoami)":admin "$path" 2>/dev/null \
@@ -32,7 +31,7 @@ fix_path_permissions() {
     fi
     chmod go-w "$path" 2>/dev/null || sudo chmod go-w "$path" 2>/dev/null || true
 
-    echo -e "${GREEN}✓ Fixed permissions for $path${NC}"
+    print_success "fixed permissions for $path"
 }
 
 collect_compaudit_paths() {
@@ -41,16 +40,13 @@ collect_compaudit_paths() {
         || true
 }
 
-echo -e "${BLUE}============================================================================${NC}"
-echo -e "${BLUE}Fixing Zsh Completion Directories${NC}"
-echo -e "${BLUE}============================================================================${NC}"
-echo ""
+print_header "Fixing Zsh Completion Directories"
 
 # Fix Homebrew completion directories
 if command -v brew &>/dev/null; then
     BREW_PREFIX=$(brew --prefix)
 
-    echo -e "${YELLOW}Fixing Homebrew completion directories...${NC}"
+    print_info "Homebrew completion directories"
 
     for path in \
         "$BREW_PREFIX/share" \
@@ -68,8 +64,7 @@ while IFS= read -r path; do
     INSECURE_PATHS+=("$path")
 done < <(collect_compaudit_paths)
 if [[ ${#INSECURE_PATHS[@]} -gt 0 ]]; then
-    echo ""
-    echo -e "${YELLOW}Fixing compaudit-reported paths...${NC}"
+    print_info "compaudit-reported paths"
     for path in "${INSECURE_PATHS[@]}"; do
         fix_path_permissions "$path"
     done
@@ -77,60 +72,46 @@ fi
 
 # Fix Docker completions
 if [[ -d "$HOME/.docker/completions" ]]; then
-    echo ""
-    echo -e "${YELLOW}Fixing Docker completion directory...${NC}"
     chmod -R go-w "$HOME/.docker/completions"
     chown -R "$(whoami)":staff "$HOME/.docker/completions" 2>/dev/null || true
-    echo -e "${GREEN}✓ Fixed permissions for $HOME/.docker/completions${NC}"
+    print_success "fixed permissions for $HOME/.docker/completions"
 fi
 
 # Fix zcompdump file
 if [[ -f "$HOME/.zcompdump" ]]; then
-    echo ""
-    echo -e "${YELLOW}Fixing zcompdump file...${NC}"
     chmod 644 "$HOME/.zcompdump"
     chown "$(whoami)":staff "$HOME/.zcompdump" 2>/dev/null || true
-    echo -e "${GREEN}✓ Fixed permissions for .zcompdump${NC}"
+    print_success "fixed permissions for .zcompdump"
 fi
 
 # Remove old completion cache
-echo ""
-echo -e "${YELLOW}Cleaning completion cache...${NC}"
 if rm -f "$HOME"/.zcompdump* "${XDG_CACHE_HOME:-$HOME/.cache}"/zsh/zcompdump* 2>/dev/null; then
-    echo -e "${GREEN}✓ Removed old completion cache${NC}"
+    print_success "removed old completion cache"
 else
-    echo -e "${YELLOW}Could not remove every completion cache file; continuing.${NC}"
+    print_warning "could not remove every completion cache file; continuing"
 fi
 
 # Verify compaudit is clean, then regenerate completions without suppressing
 # security checks.
-echo ""
-echo -e "${YELLOW}Checking compaudit...${NC}"
+print_step "checking compaudit"
 REMAINING_PATHS=()
 while IFS= read -r path; do
     REMAINING_PATHS+=("$path")
 done < <(collect_compaudit_paths)
 if [[ ${#REMAINING_PATHS[@]} -gt 0 ]]; then
-    echo -e "${YELLOW}Some completion paths are still insecure:${NC}"
+    print_warning "some completion paths are still insecure:"
     printf '  %s\n' "${REMAINING_PATHS[@]}"
-    echo ""
-    echo "Fix these manually, then rerun: make fix-completions"
+    print_info "fix these manually, then rerun: make fix-completions"
 else
-    echo -e "${GREEN}✓ compaudit clean${NC}"
-    echo ""
-    echo -e "${YELLOW}Regenerating completions...${NC}"
+    print_success "compaudit clean"
+    print_step "regenerating completions"
     zsh -f -c '
         _dump_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
         mkdir -p "$_dump_dir" 2>/dev/null || true
         autoload -Uz compinit
         compinit -d "$_dump_dir/zcompdump-${ZSH_VERSION}"
     ' 2>/dev/null || true
-    echo -e "${GREEN}✓ Completions regenerated${NC}"
+    print_success "completions regenerated"
 fi
 
-echo ""
-echo -e "${GREEN}============================================================================${NC}"
-echo -e "${GREEN}Done! Restart your shell to apply changes.${NC}"
-echo -e "${GREEN}============================================================================${NC}"
-echo ""
-echo "Run: exec zsh"
+print_header "Done — restart your shell to apply: exec zsh"

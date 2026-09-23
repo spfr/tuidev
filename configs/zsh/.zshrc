@@ -5,17 +5,38 @@
 # ============================================================================
 
 # tuidev env: written by install.sh, exports TUIDEV_REPO and TUIDEV_PROFILE.
-# Kept at the top so every downstream block (session wrappers, sandbox
-# integration, update helpers) can rely on these.
-[[ -f "$HOME/.config/tuidev/env" ]] && . "$HOME/.config/tuidev/env"
+# Kept at the top so every downstream block (update helpers, pack fragments)
+# can rely on these.
+_tuidev_state="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev"
+[[ -f "$_tuidev_state/env" ]] && . "$_tuidev_state/env"
 
 # ============================================================================
 # Environment Variables
 # ============================================================================
+# EDITOR/VISUAL are set once PATH is complete (see "Editor" below).
 
-export EDITOR='nvim'
-export VISUAL='nvim'
-export REACT_EDITOR=idea
+# _cache_init NAME CMD... — source the init script CMD prints, cached in
+# $XDG_CACHE_HOME/zsh/init-NAME.zsh. CMD runs again only when its binary is
+# replaced (new resolved path, e.g. a Homebrew upgrade) or rewritten in place
+# (newer than the cache), or when the command line itself changes. Returns
+# non-zero, sourcing nothing, if CMD is missing or fails. The script is written
+# to a per-shell temp file and moved into place, so a shell starting in
+# parallel never sources a half-written cache.
+_cache_init() {
+  local name=$1; shift
+  local bin=${commands[$1]} cache line tmp
+  [[ -n $bin ]] || return 1
+  bin=${bin:A}
+  cache=${XDG_CACHE_HOME:-$HOME/.cache}/zsh/init-$name.zsh
+  [[ -r $cache ]] && read -r line < $cache
+  if [[ $line != "# $bin $*" || $bin -nt $cache ]]; then
+    mkdir -p -- ${cache:h}
+    tmp=$cache.$$
+    { { print -r -- "# $bin $*" && "$@" } >| $tmp 2>/dev/null && mv -f -- $tmp $cache } \
+      || { rm -f -- $tmp; return 1; }
+  fi
+  source $cache
+}
 
 # ============================================================================
 # PATH Configuration
@@ -27,21 +48,37 @@ if [[ -f "/opt/homebrew/bin/brew" ]]; then
 elif [[ -f "/usr/local/bin/brew" ]]; then
     eval "$(/usr/local/bin/brew shellenv)"
 fi
+# Prefix for the fpath/plugin lookups below. Falls back to the brew on PATH
+# (<prefix>/bin/brew) so no `brew --prefix` subprocess is ever spawned.
+_tuidev_brew_prefix=${HOMEBREW_PREFIX:-}
+[[ -z $_tuidev_brew_prefix && -n ${commands[brew]} ]] && _tuidev_brew_prefix=${commands[brew]:h:h}
 
-# Ruby (if installed)
-[[ -d "/opt/homebrew/opt/ruby" ]] && export PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.0.0/bin:$PATH"
-[[ -d "/opt/homebrew/opt/ruby" ]] && export LDFLAGS="-L/opt/homebrew/opt/ruby/lib"
-[[ -d "/opt/homebrew/opt/ruby" ]] && export CPPFLAGS="-I/opt/homebrew/opt/ruby/include"
+# Ruby (Homebrew keg-only) - if installed
+if [[ -n $_tuidev_brew_prefix && -d $_tuidev_brew_prefix/opt/ruby ]]; then
+  export PATH="$_tuidev_brew_prefix/opt/ruby/bin:$PATH"
+  export LDFLAGS="-L$_tuidev_brew_prefix/opt/ruby/lib"
+  export CPPFLAGS="-I$_tuidev_brew_prefix/opt/ruby/include"
+fi
 
-# Java (jenv) - if installed
-[[ -d "$HOME/.jenv" ]] && export PATH="$HOME/.jenv/bin:$PATH"
-command -v jenv &>/dev/null && eval "$(jenv init -)"
+# Java (jenv) - if installed. Shims go on PATH now; the full `jenv init`
+# (~60 ms: rehash + refresh-plugins) runs on the first `jenv` call. Enabled
+# jenv plugins (e.g. export, which sets JAVA_HOME) need their init hooks at
+# startup, so that setup keeps the eager init.
+[[ -d "$HOME/.jenv/bin" ]] && export PATH="$HOME/.jenv/bin:$PATH"
+_tuidev_jenv_plugins=("${JENV_ROOT:-$HOME/.jenv}"/plugins/*(N))
+if (( $+commands[jenv] )); then
+  if (( ${#_tuidev_jenv_plugins} )); then
+    eval "$(jenv init -)"
+  else
+    export PATH="${JENV_ROOT:-$HOME/.jenv}/shims:$PATH" JENV_SHELL=zsh JENV_LOADED=1
+    unset JAVA_HOME JDK_HOME
+    jenv() { unfunction jenv; eval "$(command jenv init - zsh)"; jenv "$@"; }
+  fi
+fi
+unset _tuidev_jenv_plugins
 
 # Python (pyenv) - if installed
 [[ -d "$HOME/.pyenv" ]] && export PATH="${HOME}/.pyenv/shims:${PATH}"
-
-# Node.js (nvm) - if installed (default version added to PATH below; nvm is lazy)
-export NVM_DIR="$HOME/.nvm"
 
 # Yarn - if installed
 [[ -d "$HOME/.yarn" ]] && export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
@@ -49,7 +86,7 @@ export NVM_DIR="$HOME/.nvm"
 # RVM (Ruby Version Manager) - if installed
 [[ -d "$HOME/.rvm/bin" ]] && export PATH="$PATH:$HOME/.rvm/bin"
 
-# Rust (cargo) - if installed; exposes `cargo install`ed tools (e.g. bosun)
+# Rust (cargo) - if installed; exposes `cargo install`ed tools
 [[ -d "$HOME/.cargo/bin" ]] && export PATH="$HOME/.cargo/bin:$PATH"
 
 # Local binaries — tuidev's own install target: sbx, notify.sh, and on Debian
@@ -63,57 +100,73 @@ typeset -U path PATH
 path=("$HOME/.local/bin" $path)
 export PATH
 
-# opencode AI CLI
-[[ -d "$HOME/.opencode/bin" ]] && export PATH="$HOME/.opencode/bin:$PATH"
-
-# Android SDK - if installed
+# Android SDK - if installed (cmdline-tools replaces the retired `tools` dir)
 [[ -d "$HOME/Library/Android/sdk" ]] && export ANDROID_HOME="$HOME/Library/Android/sdk"
-[[ -n "$ANDROID_HOME" ]] && export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin"
+[[ -n "$ANDROID_HOME" ]] && export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin"
 
-# Custom tool paths (add your own here)
-# Example: [[ -d "$HOME/.antigravity/antigravity/bin" ]] && export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
+# Custom tool paths belong in ~/.zshrc.local (sourced last).
 
 # ============================================================================
 # Completions
+# ============================================================================
 # Homebrew adds its completion dirs; Debian/Ubuntu already ship theirs in
-# the default $fpath. compinit itself must run everywhere — the tool
-# completions evaluated below (gh, fzf, ...) call compdef and fail without it.
-if type brew &>/dev/null; then
-  _tuidev_brew_prefix="$(brew --prefix)"
-  FPATH="$_tuidev_brew_prefix/share/zsh-completions:$FPATH"
-  FPATH="$_tuidev_brew_prefix/share/zsh/site-functions:$FPATH"
-  unset _tuidev_brew_prefix
+# the default $fpath. compinit itself must run everywhere — the tool inits
+# below (fzf, atuin, ...) call compdef and fail without it. Tools that ship
+# a _cmd file in site-functions (gh, eza, atuin, ...) need no eval here.
+typeset -U fpath
+if [[ -n $_tuidev_brew_prefix ]]; then
+  fpath=("$_tuidev_brew_prefix/share/zsh-completions" "$_tuidev_brew_prefix/share/zsh/site-functions" $fpath)
 fi
 
+# The dump lives in $XDG_CACHE_HOME. The full fpath scan plus security audit
+# (-i: skip insecure dirs silently; `make fix-completions` repairs them) runs
+# at most once a day; otherwise -C trusts the dump, saving ~100 ms per shell.
+# Run `rm "${XDG_CACHE_HOME:-$HOME/.cache}"/zsh/zcompdump-*` after
+# installing new completions to pick them up immediately.
 autoload -Uz compinit
+() {
+  setopt local_options extended_glob
+  local dump="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-${ZSH_VERSION}"
+  if [[ -n $dump(#qN.mh-24) ]]; then
+    compinit -C -d "$dump"
+  else
+    mkdir -p -- "${dump:h}"
+    compinit -i -d "$dump" && touch -- "$dump"
+  fi
+}
 
-# Keep the completion dump out of $HOME and avoid startup prompts if an
-# external installer leaves a completion directory writable. Run
-# `make fix-completions` from the tuidev repo to repair the underlying
-# permissions.
-_tuidev_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-${ZSH_VERSION}"
-mkdir -p "${_tuidev_zcompdump:h}" 2>/dev/null
-compinit -i -d "$_tuidev_zcompdump"
-unset _tuidev_zcompdump
+zstyle ':completion:*' menu select                              # arrow-key menu
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'  # case-insensitive, then partial words
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompcache"
+zstyle ':completion:*' group-name ''                            # group matches by type
+zstyle ':completion:*:descriptions' format '%F{blue}-- %d --%f'
 
 # ============================================================================
 # Modern CLI Tools Integration
 # ============================================================================
 
+# Emacs line editing, set explicitly and before any tool binds keys: zsh
+# silently starts in vi mode whenever $EDITOR/$VISUAL contain "vi" (nvim or
+# vim over SSH, or inherited from a parent shell or tmux). Put `bindkey -v` in
+# ~/.zshrc.local for vi.
+bindkey -e
+
 # Starship Prompt (replaces oh-my-zsh themes)
-command -v starship &>/dev/null && eval "$(starship init zsh)"
+_cache_init starship starship init zsh --print-full-init
 
 # fzf - Fuzzy Finder
 # `fzf --zsh` needs fzf >= 0.48 (Homebrew); Debian/Ubuntu ship older builds
-# that print "unknown option" instead, so fall back to their example scripts.
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-if command -v fzf &>/dev/null; then
-  if fzf --zsh &>/dev/null; then
-    eval "$(fzf --zsh)"
-  else
-    [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
-    [ -f /usr/share/doc/fzf/examples/completion.zsh ]   && source /usr/share/doc/fzf/examples/completion.zsh
-  fi
+# that reject the flag, so fall back to their example scripts.
+# Key bindings need a terminal: without one (agent tool shells, `ssh host cmd`)
+# fzf's option save/restore fails with "can't change option: zle".
+if [[ ! -t 0 ]]; then
+  :
+elif [[ -f ~/.fzf.zsh ]]; then
+  source ~/.fzf.zsh
+elif (( $+commands[fzf] )) && ! _cache_init fzf fzf --zsh; then
+  [[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ]] && source /usr/share/doc/fzf/examples/key-bindings.zsh
+  [[ -f /usr/share/doc/fzf/examples/completion.zsh ]]   && source /usr/share/doc/fzf/examples/completion.zsh
 fi
 
 # Set fzf to use ripgrep for faster searches
@@ -121,37 +174,33 @@ export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_ALT_C_COMMAND="fd --type d --hidden --follow --exclude .git"
 
-# fzf color scheme (match terminal theme)
+# fzf colors (Tokyo Night): bg+ is the highlight row, so it must differ from bg.
 export FZF_DEFAULT_OPTS='
   --color=fg:#c0caf5,bg:#1a1b26,hl:#bb9af7
-  --color=fg+:#c0caf5,bg+:#1a1b26,hl+:#7dcfff
+  --color=fg+:#c0caf5,bg+:#292e42,hl+:#7dcfff
   --color=info:#7aa2f7,prompt:#7dcfff,pointer:#7dcfff
   --color=marker:#9ece6a,spinner:#9ece6a,header:#9ece6a
+  --color=border:#565f89,gutter:#1a1b26
   --height 50% --layout=reverse --border
-  --preview "bat --style=numbers --color=always --line-range :500 {}"
 '
+# Previews per widget: file contents for Ctrl-T, a tree for Alt-C (directories).
+export FZF_CTRL_T_OPTS="--preview 'bat --style=numbers --color=always --line-range :500 {}'"
+export FZF_ALT_C_OPTS="--preview 'eza --tree --level=2 --color=always {} | head -200'"
 
 # zoxide - Smarter cd
-command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
+_cache_init zoxide zoxide init zsh
 
-# atuin - Better shell history
-command -v atuin &>/dev/null && eval "$(atuin init zsh)"
-
-# GitHub CLI completion
-if command -v gh &> /dev/null; then
-  eval "$(gh completion -s zsh)"
-fi
+# atuin - Better shell history. Ctrl-R opens atuin's search; Up stays plain
+# prefix history (see Key Bindings) instead of opening the full-screen UI.
+_cache_init atuin atuin init zsh --disable-up-arrow
 
 # ============================================================================
 # ZSH Plugins (Homebrew on macOS, apt on Debian/Ubuntu)
 # ============================================================================
 
-# Homebrew installs under $(brew --prefix)/share, Debian/Ubuntu under
-# /usr/share. Probe both so Linux boxes without brew stay warning-free.
-_tuidev_plugin_dirs=(/usr/share)
-if command -v brew &>/dev/null; then
-  _tuidev_plugin_dirs=("$(brew --prefix)/share" "${_tuidev_plugin_dirs[@]}")
-fi
+# Homebrew installs under <prefix>/share, Debian/Ubuntu under /usr/share.
+# Probe both so Linux boxes without brew stay warning-free.
+_tuidev_plugin_dirs=(${_tuidev_brew_prefix:+$_tuidev_brew_prefix/share} /usr/share)
 
 # Syntax highlighting (must be near the end)
 for _tuidev_dir in "${_tuidev_plugin_dirs[@]}"; do
@@ -168,7 +217,7 @@ for _tuidev_dir in "${_tuidev_plugin_dirs[@]}"; do
     break
   fi
 done
-unset _tuidev_plugin_dirs _tuidev_dir
+unset _tuidev_plugin_dirs _tuidev_dir _tuidev_brew_prefix
 
 # Autosuggestion behavior
 ZSH_AUTOSUGGEST_STRATEGY=(history completion)
@@ -178,21 +227,17 @@ ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 # Aliases - Modern TUI Tools
 # ============================================================================
 
-# Editor
-alias vim='nvim'
-alias vi='nvim'
-alias v='nvim'
-
-# Modern replacements
+# Modern replacements. Always `--icons=auto`: a bare `--icons` takes the next
+# word as its value, and agents (Claude Code captures aliases) run `ls DIR`.
 alias cat='bat'
-alias ls='eza --icons'
-alias ll='eza -l --icons --git'
-alias la='eza -la --icons --git'
-alias lt='eza --tree --level=2 --icons'
-alias tree='eza --tree --icons'
+alias ls='eza --icons=auto'
+alias ll='eza -l --icons=auto --git'
+alias la='eza -la --icons=auto --git'
+alias lt='eza --tree --level=2 --icons=auto'
+alias tree='eza --tree --icons=auto'
 
 # Git
-alias lg='lazygit'
+command -v lazygit &>/dev/null && alias lg='lazygit'   # --extras
 alias gs='git status'
 alias ga='git add'
 alias gc='git commit'
@@ -203,15 +248,10 @@ alias gco='git checkout'
 alias gb='git branch'
 
 # Elite TUI Tools
-command -v lazydocker &>/dev/null && alias ld='lazydocker'
+command -v lazydocker &>/dev/null && alias lzd='lazydocker'   # not `ld`: that shadows the linker for agents and builds
 command -v fastfetch &>/dev/null && alias sys='fastfetch'
 
-# File managers (nnn = classic, yazi = modern)
-command -v yazi &>/dev/null && alias y='yazi'
 # Note: broot uses its own shell function 'br' (installed via `broot --install`)
-
-# Disk tools
-command -v ncdu &>/dev/null && alias ncdu='ncdu'
 
 # tldr pages
 command -v tldr &>/dev/null && alias help='tldr'
@@ -242,7 +282,9 @@ alias serve='python3 -m http.server'
 
 # Utility
 alias reload='source ~/.zshrc'
-alias zshconfig='nvim ~/.zshrc'
+# Functions, not aliases: $EDITOR may carry arguments (code --wait).
+unalias zshconfig mde 2>/dev/null
+function zshconfig { ${=EDITOR} ~/.zshrc; }
 alias cleanup='brew cleanup && brew autoremove'
 
 # Code stats
@@ -256,27 +298,6 @@ command -v tokei &>/dev/null && alias loc='tokei'
 fcd() {
   local dir
   dir=$(fd --type d --hidden --follow --exclude .git | fzf +m) && cd "$dir"
-}
-
-# nnn with cd on quit
-n() {
-  if [[ -n $NNNPIPE ]]; then
-    echo "nnn is already running!"
-    return
-  fi
-
-  export NNN_FIFO=/tmp/nnn-fifo-$$
-  mkfifo "$NNN_FIFO"
-  nnn -P n </dev/tty > "$NNN_FIFO" &
-
-  while read -r selection; do
-    if [[ -n "$selection" ]]; then
-      cd "$selection"
-    fi
-  done < "$NNN_FIFO"
-
-  rm -f "$NNN_FIFO"
-  unset NNN_FIFO
 }
 
 # Search in files with fzf + ripgrep
@@ -313,10 +334,8 @@ mdp() {
   fi
 }
 
-# Open markdown in nvim with preview
-mde() {
-  nvim "$1"
-}
+# Edit a markdown file in $EDITOR
+function mde { ${=EDITOR} "$@"; }
 
 # Quick project stats
 pstats() {
@@ -376,71 +395,25 @@ tunnel() {
 }
 
 # ============================================================================
-# Session Wrappers — tmux-first
+# tmux (--pack tmux)
 # ============================================================================
-# The default ergonomic commands (work/dev/ai/...) launch tmux via the
-# reproducible layout helpers under $TUIDEV_REPO/scripts/tmux/.
-#
-# Every wrapper accepts an optional session name; default is the layout's
-# name or the current directory's basename. All are attach-or-create.
+# Durable sessions for always-on nodes. `t NAME` attaches to session NAME
+# (default "main"), creating it if needed; inside tmux it switches the client
+# instead (tmux refuses to nest). `tls` lists sessions.
+unalias t tls 2>/dev/null
+if command -v tmux >/dev/null 2>&1; then
+  function t {
+    local name="${1:-main}"
+    if [[ -n "$TMUX" ]]; then
+      tmux has-session -t "=$name" 2>/dev/null || tmux new-session -d -s "$name" || return
+      tmux switch-client -t "=$name"
+    else
+      tmux new-session -A -s "$name"
+    fi
+  }
+  function tls { tmux list-sessions 2>/dev/null || echo "no tmux sessions"; }
+fi
 
-_tuidev_layout() {
-  local name="$1"; shift
-  local repo="${TUIDEV_REPO:-$HOME/.local/share/tuidev}"
-  local script="$repo/scripts/tmux/layout-$name.sh"
-  if [[ -x "$script" ]]; then
-    "$script" "$@"
-  else
-    echo "layout '$name' not found at $script" >&2
-    echo "set TUIDEV_REPO to the repo root or run: ./install.sh --profile minimal" >&2
-    return 127
-  fi
-}
-
-work()        { _tuidev_layout work "$@"; }
-dev()         { _tuidev_layout dev "$@"; }
-ai()          { _tuidev_layout ai "$@"; }
-ai-single()   { _tuidev_layout ai-single "$@"; }
-ai-triple()   { _tuidev_layout ai-triple "$@"; }
-fullstack()   { _tuidev_layout fullstack "$@"; }
-multi()       { _tuidev_layout multi "$@"; }
-remote()      { _tuidev_layout remote "$@"; }
-agents()      { _tuidev_layout agents "$@"; }
-
-# One git worktree per agent, one tmux window per worktree. Also takes
-# -n N / --branch-prefix P / --base REF / --cmd CMD, plus --list and --clean.
-#   worktrees                     # 2 worktrees, plain shells
-#   worktrees feat -n 3 --cmd cc  # 3 agents each running Claude Code
-#   worktrees --list / --clean    # status / remove clean, fully-merged ones
-worktrees()   { _tuidev_layout worktrees "$@"; }
-
-# One-time deprecation warning for old t* aliases. Writes a stamped file so
-# the warning prints only once per machine per rename.
-_tuidev_deprecated() {
-  local flag_dir="$HOME/.config/tuidev"
-  local flag_file="$flag_dir/deprecations"
-  local key="$1"
-  mkdir -p "$flag_dir" 2>/dev/null
-  if ! grep -qFx "$key" "$flag_file" 2>/dev/null; then
-    echo "tuidev: '$key' — the t* aliases are deprecated and will be removed in the next release." >&2
-    echo "$key" >> "$flag_file"
-  fi
-}
-
-ta()         { _tuidev_deprecated "ta → work"; work "$@"; }
-tdev()       { _tuidev_deprecated "tdev → dev"; dev "$@"; }
-tai()        { _tuidev_deprecated "tai → ai"; ai "$@"; }
-tai-triple() { _tuidev_deprecated "tai-triple → ai-triple"; ai-triple "$@"; }
-
-# Session management (tmux-native).
-tls() { tmux list-sessions 2>/dev/null || echo "no tmux sessions"; }
-tk()  {
-  local name=${1:-$(basename "$PWD")}
-  tmux kill-session -t "$name" 2>/dev/null && echo "killed: $name" || echo "no session: $name"
-}
-tka() { tmux kill-server 2>/dev/null && echo "killed all tmux sessions"; }
-
-# ============================================================================
 # ============================================================================
 # Update helpers
 # ============================================================================
@@ -514,7 +487,7 @@ remote-status() {
   fi
   echo ""
 
-  # tmux sessions (primary multiplexer)
+  # tmux sessions (--pack tmux)
   echo "tmux Sessions:"
   if command -v tmux &>/dev/null; then
     local sessions
@@ -543,12 +516,11 @@ if [ -f "$HOME/tools/google-cloud-sdk/completion.zsh.inc" ]; then
   . "$HOME/tools/google-cloud-sdk/completion.zsh.inc"
 fi
 
-# iTerm2 integration (if using iTerm)
-test -e "${HOME}/.iterm2_shell_integration.zsh" && source "${HOME}/.iterm2_shell_integration.zsh"
-
-# tabtab source for electron-forge - if exists (will use the actual path when available)
-# This is generated dynamically, the path below is just an example
-# [[ -f "$HOME/.npm/_npx/*/node_modules/tabtab/.completions/electron-forge.zsh" ]] && . "$HOME/.npm/_npx/*/node_modules/tabtab/.completions/electron-forge.zsh"
+# iTerm2 shell integration — only inside iTerm2; elsewhere it just prints
+# iTerm-private escape codes.
+if [[ $TERM_PROGRAM == iTerm.app && -f "$HOME/.iterm2_shell_integration.zsh" ]]; then
+  source "$HOME/.iterm2_shell_integration.zsh"
+fi
 
 # ============================================================================
 # History Configuration
@@ -577,33 +549,32 @@ setopt CORRECT                 # Spelling correction
 setopt INTERACTIVE_COMMENTS    # Allow comments in interactive shells
 
 # ============================================================================
-# Key Bindings
+# Key Bindings (emacs keymap, selected above)
 # ============================================================================
 
-# Use vim key bindings (optional - comment out if you prefer emacs mode)
-# bindkey -v
-
-# Better history search
+# Ctrl-R: atuin's search when present, zsh's incremental search otherwise.
 if [[ "${widgets[atuin-search]+set}" == set ]]; then
   bindkey '^R' atuin-search
 else
   bindkey '^R' history-incremental-search-backward
 fi
-bindkey '^[[A' history-search-backward  # Up arrow
-bindkey '^[[B' history-search-forward   # Down arrow
+
+# Up/Down: recall history entries that start with what is already typed.
+# Both the normal (CSI) and application (SS3) cursor-key forms are bound.
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+bindkey '^[[A' up-line-or-beginning-search   '^[OA' up-line-or-beginning-search
+bindkey '^[[B' down-line-or-beginning-search '^[OB' down-line-or-beginning-search
+
+# Home/End/Delete: zsh binds none of them by default. Terminals send CSI/SS3
+# H/F; tmux (tmux-256color) sends 1~/4~.
+bindkey '^[[H' beginning-of-line '^[OH' beginning-of-line '^[[1~' beginning-of-line
+bindkey '^[[F' end-of-line       '^[OF' end-of-line       '^[[4~' end-of-line
+bindkey '^[[3~' delete-char
 
 # ============================================================================
-# Welcome Message
-# ============================================================================
-
-# Show system info on shell start (optional)
-# echo "🚀 TUI Development Environment Ready"
-# echo "  Terminal: Ghostty | Shell: zsh | Editor: nvim"
-# echo "  Multiplexer: tmux | Tools: fzf, ripgrep, bat, eza"
-# echo ""
-
-# ============================================================================
-# Performance Optimization
+# Node.js
 # ============================================================================
 
 # Node.js version manager — prefer fnm (fast, Rust) when installed, else nvm.
@@ -613,7 +584,7 @@ bindkey '^[[B' history-search-forward   # Down arrow
 #        CLI (codex, language servers, tsc, …) work from the very first
 #        prompt in every shell — editors and AI agents included. `nvm` stays lazy.
 export NVM_DIR="$HOME/.nvm"
-if command -v fnm >/dev/null 2>&1; then
+if (( $+commands[fnm] )); then
   eval "$(fnm env --use-on-cd)"
 elif [ -s "$NVM_DIR/nvm.sh" ]; then
   () {
@@ -636,13 +607,31 @@ elif [ -s "$NVM_DIR/nvm.sh" ]; then
 fi
 
 # ============================================================================
+# Editor
+# ============================================================================
+# A GUI editor locally, else (and over SSH) the first terminal editor found:
+# nvim, vim, vi, nano. With none of them, EDITOR is left as it was. Override
+# in ~/.zshrc.local.
+if [[ -z "$SSH_CONNECTION" ]] && command -v code >/dev/null 2>&1; then
+  export EDITOR='code --wait'
+elif [[ -z "$SSH_CONNECTION" ]] && command -v cursor >/dev/null 2>&1; then
+  export EDITOR='cursor --wait'
+else
+  for _ed in nvim vim vi nano; do
+    if command -v "$_ed" >/dev/null 2>&1; then export EDITOR="$_ed"; break; fi
+  done
+  unset _ed
+fi
+[[ -n "$EDITOR" ]] && export VISUAL="$EDITOR"
+
+# ============================================================================
 # Optional pack shell fragments
 # ============================================================================
-# Each opt-in pack that needs shell hooks (e.g. `--pack ai-clis`) drops a
+# Each opt-in pack that needs shell hooks (e.g. `--pack nvim`) drops a
 # *.zsh file into ~/.config/tuidev/shell.d/. Sourced last so PATH (node,
 # cargo, brew) is fully resolved before any fragment's `command -v` guards run.
-if [[ -d "${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/shell.d" ]]; then
-  for _tuidev_frag in "${XDG_CONFIG_HOME:-$HOME/.config}"/tuidev/shell.d/*.zsh(N); do
+if [[ -d "$_tuidev_state/shell.d" ]]; then
+  for _tuidev_frag in "$_tuidev_state"/shell.d/*.zsh(N); do
     source "$_tuidev_frag"
   done
   unset _tuidev_frag
@@ -652,5 +641,6 @@ fi
 # End of Configuration
 # ============================================================================
 
-# Load local customizations (if any)
-[ -f ~/.zshrc.local ] && source ~/.zshrc.local
+# Load local customizations (if any). An `if`, not `&&`: a missing file must
+# not leave $? = 1 for the first prompt.
+if [[ -f ~/.zshrc.local ]]; then source ~/.zshrc.local; fi

@@ -8,24 +8,24 @@ assignees: ''
 
 ## Problem Statement
 
-Describe the problem you're trying to solve or the use case.
+The problem you're trying to solve, or the use case.
 
 ## Proposed Solution
 
-Describe your proposed solution or feature.
+Your proposed solution. If it adds a tool, say which pack it belongs in
+(core, remote, sandbox, ui, extras, or a new `--pack NAME`).
 
 ## Alternatives Considered
 
-Any alternative solutions or features you've considered.
+Other solutions or tools you've considered.
 
 ## Additional Context
 
-- Links to relevant tools or documentation
-- Screenshots or mockups if applicable
-- How this fits with the terminal-first philosophy
+- Links to the tool or its documentation
+- How this fits the direction in VISION.md: a fast, clean terminal for AI agents, sandboxed by default, with durable remote sessions where they matter
 
 ## Checklist
 
-- [ ] This is a terminal/CLI tool (not a GUI application)
-- [ ] This aligns with the project's philosophy
-- [ ] I searched existing issues/PRs for similar requests
+- [ ] This is a terminal/CLI tool, or belongs in the macOS `ui` pack
+- [ ] It installs from a package manager (no `curl | sh` on the user's behalf)
+- [ ] I searched existing issues and PRs for similar requests
