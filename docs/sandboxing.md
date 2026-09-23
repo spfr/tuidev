@@ -111,6 +111,8 @@ Reads and writes are both denied:
 
 The shipped `configs/claude/settings.json` adds matching `permissions.deny` rules, plus `.env` / `.env.*` anywhere in the project (`Read(**/.env)` and friends), so Claude Code's `Read` tool (and `Edit`, for `.env*`) respects the same boundary whether or not you're also running under `sbx`. Codex has no equivalent: under `workspace-write` it can read these paths.
 
+**On Linux, Claude Code warns at startup** that "glob patterns in sandbox permission rules are not fully supported" and names the four `.env` rules. That's expected. Its bubblewrap sandbox can deny whole directories (`~/.ssh/**`) and literal files, but a filename pattern isn't a native bubblewrap rule. In practice, a `.env` that exists when the session starts is still denied, both to `Read` (by the permission rule) and to Bash (`cat .env` fails). Treat a `.env` created mid-session as possibly readable from Bash. The rules stay because they still do their job. The credential paths use literal files and whole directories only, so they don't trigger the warning.
+
 Consequences to plan for:
 
 - **`gh` doesn't work under `sbx`.** Its token lives in the denied `~/.config/gh`, so it reports that you are not logged in. `--profile standard` widens the network, not credential access. For `gh`-heavy work, run `sbx --profile off -- gh ...`, or use plain `claude`, whose native sandbox lists `gh *` in `excludedCommands` instead.
