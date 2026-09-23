@@ -24,6 +24,8 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `bin/sbx`, `configs/sandbox/profiles/*.sb` | `~/.local/bin/sbx`, `~/.config/tuidev/sandbox/` | overwrite / upgrade-shipped (sandbox pack) |
 | `configs/zsh/opencode.zsh` | `~/.config/tuidev/shell.d/` | overwrite; sourced last by `.zshrc` |
 | `configs/{claude,codex}/` | `~/.claude/settings.json`, `~/.codex/config.toml` | upgrade-shipped (ai-clis pack) |
+| `configs/codex/rules/tuidev.rules` | `~/.codex/rules/tuidev.rules` | overwrite (ai-clis pack) |
+| `configs/orchestration/` | `~/.claude/{rules,agents,skills}`, `~/.codex/{AGENTS.md,agents}`, `~/.agents/skills` | overwrite + managed block `tuidev-orchestration` in `~/.codex/AGENTS.md` (orchestration pack) |
 | `configs/{opencode,herdr}/` | `~/.config/opencode/`, `~/.config/herdr/` | adopt-existing |
 | `configs/themes/<name>/palette.toml` | `~/.config/tmux/theme.conf` + blocks in the Ghostty and Starship configs | `scripts/theme.sh` |
 | `configs/nvim/` | `~/.config/nvim/` | upgrade-shipped per file, only while tuidev owns the tree (`nvim` pack) |
@@ -106,7 +108,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then foo_install "$@"; fi
 
 `install_config` has four modes:
 
-- `--managed-block ID` writes a fenced region and leaves everything outside it alone. Re-running rewrites only the block, and `update.sh --configs` re-applies it when it drifts. Use this for any file where `#` starts a comment.
+- `--managed-block ID` writes a fenced region and leaves everything outside it alone. Re-running rewrites only the block, and `update.sh --configs` re-applies it when it drifts. Use this for any file where `#` starts a comment, and for Markdown, where the markers are HTML comments because a `#` line would be a heading the agent reads.
   ```
   # >>> tuidev managed (tuidev-zshrc) >>>
   …repo-owned content…

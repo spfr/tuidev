@@ -50,7 +50,7 @@ The full conventions are in [docs/engineering.md](docs/engineering.md). The rule
   - Warn and continue on failure, never `exit`.
   - Register new packs in `TUIDEV_VALID_PACKS`, and document them in `docs/profiles.md`.
 - **Writing into `$HOME`:** only through `install_config`:
-  - `--managed-block ID` for `#`-comment formats;
+  - `--managed-block ID` for `#`-comment formats and Markdown (HTML-comment markers there);
   - `--adopt-existing` for JSON and user-owned files;
   - `--upgrade-shipped HASHFILE` for shipped whole files the user may edit (Seatbelt profiles, Claude and Codex settings). When you change such a file, append its new hash to the `shipped.sha256` next to it; `test_contract.sh` fails until you do;
   - `--overwrite` only for files tuidev fully owns.

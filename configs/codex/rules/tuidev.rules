@@ -1,0 +1,75 @@
+# tuidev: Codex execpolicy rules, installed to ~/.codex/rules/tuidev.rules by
+# --pack ai-clis (tuidev owns this file; put your own rules in another .rules
+# file next to it). The Codex counterpart of the `ask` rules in
+# configs/claude/settings.json: version-control and platform writes need a
+# human, so the agent stops review-ready.
+#
+# These match command prefixes: `git -C . push` or a script that runs git
+# itself is not matched. Treat them as a colleague-grade guard, not a
+# security boundary. Check a command: codex execpolicy check --rules FILE CMD...
+# Reference: https://learn.chatgpt.com/docs/agent-configuration/rules
+
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "prompt",
+    justification = "Staging is the user's call: stop review-ready",
+    match = ["git add -A", "git add src/main.rs"],
+    not_match = ["git status", "git diff --cached"],
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "prompt",
+    justification = "Commits need the user's go-ahead",
+    match = ["git commit -m wip"],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Pushing publishes: ask first",
+    match = ["git push", "git push origin main"],
+)
+
+prefix_rule(
+    pattern = ["git", "merge"],
+    decision = "prompt",
+    justification = "Merges need the user's go-ahead",
+    match = ["git merge --squash scratch"],
+)
+
+prefix_rule(
+    pattern = ["git", "tag"],
+    decision = "prompt",
+    justification = "Tags feed releases: ask first",
+    match = ["git tag v1.0.0"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "create"],
+    decision = "prompt",
+    justification = "Opening a PR publishes: ask first",
+    match = ["gh pr create --fill"],
+    not_match = ["gh pr view 12"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "prompt",
+    justification = "Merging a PR needs the user's go-ahead",
+    match = ["gh pr merge 12 --squash"],
+)
+
+prefix_rule(
+    pattern = ["gh", "release"],
+    decision = "prompt",
+    justification = "Releases publish: ask first",
+    match = ["gh release create v1.0.0"],
+)
+
+prefix_rule(
+    pattern = ["gh", "api"],
+    decision = "prompt",
+    justification = "gh api can write to GitHub: ask first",
+    match = ["gh api repos/OWNER/REPO/pulls"],
+)

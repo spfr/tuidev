@@ -11,8 +11,14 @@
       "Bash(shellcheck *)"
     ],
     "ask": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
       "Bash(git push *)",
+      "Bash(git merge *)",
+      "Bash(git tag *)",
+      "Bash(gh pr create *)",
       "Bash(gh pr merge *)",
+      "Bash(gh release *)",
       "Bash(gh api *)",
       "Bash(rg *--pre*)"
     ],

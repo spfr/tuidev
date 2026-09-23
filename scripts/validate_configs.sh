@@ -105,6 +105,7 @@ print_step "TOML (python3 tomllib)"
 toml_files=(
     "$REPO_DIR/configs/starship/starship.toml"
     "$REPO_DIR/configs/codex/config.toml"
+    "$REPO_DIR"/configs/orchestration/codex/agents/*.toml
     "$REPO_DIR/configs/herdr/config.toml"
     "$REPO_DIR"/configs/themes/*/palette.toml
 )

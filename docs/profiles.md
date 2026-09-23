@@ -55,6 +55,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 | Pack | Installs |
 |------|----------|
 | `--pack ai-clis` | Adopts/upgrades `~/.claude/settings.json` and `~/.codex/config.toml`, which turn on Claude Code's and Codex's native sandboxes. Does not install the CLIs, which update themselves. See [agent-workflows.md](agent-workflows.md) and [sandboxing.md](sandboxing.md). |
+| `--pack orchestration` | The multi-agent policy for Claude Code and Codex: a rule file in `~/.claude/rules/`, a managed block in `~/.codex/AGENTS.md`, tiered subagents, and the `delegation` and `verification` skills. Pair it with `ai-clis`, which holds the git and gh write gates. Also runs on its own, without the rest of tuidev. See [orchestration.md](orchestration.md). |
 | `--pack opencode` | `oc` wrapper for OpenCode, and adopts `opencode.json` + `tui.json`. Prints OpenCode's official installer command rather than running it. |
 | `--pack nvim` | `neovim`, and the LazyVim config in `configs/nvim/`, deployed file by file with `--upgrade-shipped`, only while tuidev owns the tree. See [nvim.md](nvim.md). |
 | `--pack tmux` | `tmux`, the `tuidev-tmux` managed block in `~/.config/tmux/tmux.conf`, and TPM (tmux-resurrect, tmux-continuum). Included by the `remote` profile. |
@@ -78,6 +79,6 @@ When `git` is installed, the installer sets these global keys, but only the ones
 - A Mac you work at: `desktop`.
 - A machine you only SSH into: `remote`.
 - A constrained server, VM or CI runner: `minimal`.
-- Running AI agents: add `--pack ai-clis`.
+- Running AI agents: add `--pack ai-clis`, and `--pack orchestration` for tiered subagents.
 - A terminal editor or a durable local tmux session: add `--pack nvim` / `--pack tmux`.
 - Many agents across machines: add `--pack herdr`.

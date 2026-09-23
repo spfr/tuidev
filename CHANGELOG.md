@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-09-23
+
+### Added
+- **`--pack orchestration`**: one multi-agent policy for Claude Code and
+  Codex, merged in from the standalone agents-orchestration repo. The
+  always-on policy as `~/.claude/rules/tuidev-orchestration.md` (your
+  `~/.claude/CLAUDE.md` is left alone) and a managed block
+  `tuidev-orchestration` in `~/.codex/AGENTS.md`; tiered subagents in
+  `~/.claude/agents/` and `~/.codex/agents/` (Codex tiers on `gpt-6-sol` and
+  `gpt-6-luna`); the `delegation` and `verification` skills in
+  `~/.claude/skills/` and `~/.agents/skills/`. Installs on its own, for teams
+  and CI runners that don't use the rest of tuidev
+  (`bash scripts/install/packs/orchestration.sh`), and `./uninstall.sh` then
+  removes just that. It removes the symlinks the agents-orchestration
+  installer left, and restores the files that installer set aside. See
+  [docs/orchestration.md](docs/orchestration.md).
+- `--pack ai-clis` installs `~/.codex/rules/tuidev.rules`: Codex prompts
+  before git and gh writes, matching Claude Code's `ask` rules.
+
+### Changed
+- Managed blocks in Markdown files use HTML-comment markers
+  (`<!-- >>> tuidev managed (ID) >>> -->`): a `#` marker line is a heading
+  the agent reads.
+- The shipped Claude Code settings also ask before `git add`, `git commit`,
+  `git merge`, `git tag`, `gh pr create` and `gh release`, so agents stop
+  review-ready. In headless `claude -p` these deny.
+
 ## [3.0.1] - 2026-09-23
 
 ### Fixed

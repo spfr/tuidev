@@ -31,6 +31,8 @@ codex                              # Codex, sandboxed by its own settings
 
 The first-run walkthrough is [docs/QUICK_START_GUIDE.md](docs/QUICK_START_GUIDE.md).
 
+**Only want the agent setup?** The `orchestration` pack (tiered Claude Code and Codex subagents, the delegation and verification skills) installs on its own, without the shell, theme or packages: `bash scripts/install/packs/orchestration.sh` from a clone. `git pull` and re-run to update, and `./uninstall.sh` to remove it. See [docs/orchestration.md](docs/orchestration.md).
+
 ## Profiles
 
 | Profile   | Packs                   | For                                      |
@@ -45,7 +47,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 ./install.sh --core --sandbox --pack ai-clis --pack herdr
 ```
 
-Optional packs: `ai-clis`, `opencode`, `nvim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
+Optional packs: `ai-clis`, `orchestration`, `opencode`, `nvim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
 
 macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it: packages come from `apt-get`, `dnf` or `pacman`, and anything the distro lacks is skipped with a link to its upstream installer. The installer never pipes a remote script into a shell.
 
@@ -81,6 +83,7 @@ Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.
 | [Profiles and packs](docs/profiles.md) | What each profile and pack installs |
 | [Sandboxing](docs/sandboxing.md) | Native CLI sandboxes, `sbx`, Seatbelt profiles, credential deny list |
 | [Agent workflows](docs/agent-workflows.md) | AI CLIs, editor integration, agent teams, worktrees, Herdr, cmux, notifications |
+| [Orchestration](docs/orchestration.md) | The `orchestration` pack: subagent tiers, skills, git gates, CI runners |
 | [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, iOS clients |
 | [Neovim](docs/nvim.md) | The `nvim` pack: LazyVim essentials |
 | [Theming](docs/theming.md) | Palette contract and `theme.sh` |

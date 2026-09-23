@@ -8,14 +8,16 @@
 #   install_config     DEST  SOURCE [--overwrite|--adopt-existing|--managed-block BLOCK_ID
 #                                    |--upgrade-shipped HASHFILE [--shipped-name NAME]]
 #   tuidev_is_shipped  FILE  SOURCE HASHFILE [NAME]
-#   tuidev_block_begin / tuidev_block_end BLOCK_ID   the marker lines themselves
+#   tuidev_block_begin / tuidev_block_end BLOCK_ID [FILE]   the marker lines themselves
 #   tuidev_backup      PATH [PREFIX]
 #
 # The managed-block strategy wraps repo-owned content in paired markers:
 #   # >>> tuidev managed (BLOCK_ID) >>>
 #   ...content...
 #   # <<< tuidev managed (BLOCK_ID) <<<
-# and rewrites only the region between markers on subsequent installs. User
+# (in Markdown, `<!-- >>> tuidev managed (BLOCK_ID) >>> -->`, since a `#` line
+# there is a heading the agent reads) and rewrites only the region between
+# markers on subsequent installs. User
 # edits outside the block survive. A header comment points the user at the
 # marker pattern so it's self-documenting.
 #
@@ -40,9 +42,20 @@ _TUIDEV_CFGW_LOADED=1
 : "${TUIDEV_BACKUP_KEEP:=10}"
 
 # The marker format, defined once. Everything that reads or writes a managed
-# block (this lib, update.sh's duplication checks) builds markers here.
-tuidev_block_begin() { printf '# >>> tuidev managed (%s) >>>' "$1"; }
-tuidev_block_end()   { printf '# <<< tuidev managed (%s) <<<' "$1"; }
+# block (this lib, update.sh's duplication checks) builds markers here. FILE,
+# when given, picks the comment syntax: HTML comments for *.md, `#` otherwise.
+tuidev_block_begin() {
+    case "${2-}" in
+        *.md) printf '<!-- >>> tuidev managed (%s) >>> -->' "$1" ;;
+        *)    printf '# >>> tuidev managed (%s) >>>' "$1" ;;
+    esac
+}
+tuidev_block_end() {
+    case "${2-}" in
+        *.md) printf '<!-- <<< tuidev managed (%s) <<< -->' "$1" ;;
+        *)    printf '# <<< tuidev managed (%s) <<<' "$1" ;;
+    esac
+}
 
 # tuidev_backup PATH [PREFIX]
 # Copy PATH (file or dir) into $TUIDEV_BACKUP_DIR with a timestamped name.
@@ -90,8 +103,8 @@ write_managed_block() {
     local block_id="$2"
     local content="${3-}"
     local begin end
-    begin="$(tuidev_block_begin "$block_id")"
-    end="$(tuidev_block_end "$block_id")"
+    begin="$(tuidev_block_begin "$block_id" "$file")"
+    end="$(tuidev_block_end "$block_id" "$file")"
 
     [[ -z "$file" || -z "$block_id" ]] && {
         print_error "write_managed_block: FILE and BLOCK_ID required"
@@ -294,8 +307,8 @@ read_managed_block() {
     local file="$1"
     local block_id="$2"
     local begin end
-    begin="$(tuidev_block_begin "$block_id")"
-    end="$(tuidev_block_end "$block_id")"
+    begin="$(tuidev_block_begin "$block_id" "$file")"
+    end="$(tuidev_block_end "$block_id" "$file")"
 
     [[ -f "$file" ]] || return 1
     grep -qF "$begin" "$file" 2>/dev/null || return 1
@@ -313,8 +326,8 @@ remove_managed_block() {
     local file="$1"
     local block_id="$2"
     local begin end
-    begin="$(tuidev_block_begin "$block_id")"
-    end="$(tuidev_block_end "$block_id")"
+    begin="$(tuidev_block_begin "$block_id" "$file")"
+    end="$(tuidev_block_end "$block_id" "$file")"
 
     [[ -f "$file" ]] || return 0
     grep -qF "$begin" "$file" 2>/dev/null || return 0

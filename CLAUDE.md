@@ -7,7 +7,7 @@
 - **Settings are the authoritative policy.** `configs/claude/settings.json` ships:
   - `sandbox.enabled = true` — Claude's own native sandbox is on by default, so plain `claude` is confined without a wrapper (`autoAllowBashIfSandboxed`, `excludedCommands` for `docker`/`gh`, `filesystem.denyRead` for the AI CLIs' own token files);
   - a read-only `allow` list;
-  - `ask` rules for `git push`, `gh pr merge` and `gh api`;
+  - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`;
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
   - empty `attribution` (no `Co-Authored-By`);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`.

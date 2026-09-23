@@ -47,6 +47,14 @@ _ai_clis_install_configs() {
             "$REPO_ROOT/configs/codex/config.toml" \
             --upgrade-shipped "$REPO_ROOT/configs/codex/shipped.sha256"
     fi
+
+    # Codex's counterpart of Claude's `ask` rules: git and gh writes prompt.
+    # A file of its own, so tuidev owns it outright and the user's rules
+    # (default.rules, where Codex saves approvals) are never touched.
+    if [[ -f "$REPO_ROOT/configs/codex/rules/tuidev.rules" ]]; then
+        install_config "$HOME/.codex/rules/tuidev.rules" \
+            "$REPO_ROOT/configs/codex/rules/tuidev.rules" --overwrite
+    fi
 }
 
 ai_clis_install() {

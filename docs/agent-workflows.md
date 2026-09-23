@@ -38,12 +38,14 @@ The packs install configs, not the CLIs. The CLIs update themselves, and `--pack
 
 **Shipped Claude Code policy:**
 
-- Permissions: read-only commands are allowed (`gh pr view/list`, `gh run view/list`, `rg`, `jq`, `shellcheck`). `git push`, `gh pr merge` and `gh api` always ask. Credential paths and `.env*` are denied.
+- Permissions: read-only commands are allowed (`gh pr view/list`, `gh run view/list`, `rg`, `jq`, `shellcheck`). `git add`, `commit`, `push`, `merge` and `tag`, and `gh pr create`, `gh pr merge`, `gh release` and `gh api` always ask. Credential paths and `.env*` are denied.
 - `sandbox.enabled` is `true`: Claude Code's native sandbox confines the Bash tool and its children by default. See [sandboxing.md](sandboxing.md) for what it confines and how to adjust it.
 - `attribution` is empty (no `Co-Authored-By`). Agent teams are on.
 - Notification hooks cover permission prompts, idle prompts, idle teammates and auto-mode denials. There is no `Stop` hook.
 
-**Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off by default, `file_opener = "vscode"`, and an unpinned model. See [sandboxing.md](sandboxing.md) for how this native sandbox relates to `sbx`.
+**Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off by default, `file_opener = "vscode"`, an unpinned model, and `~/.codex/rules/tuidev.rules`, which makes the same git and gh writes prompt. See [sandboxing.md](sandboxing.md) for how this native sandbox relates to `sbx`.
+
+**Multi-agent orchestration** (tiered subagents, delegation and verification skills, one policy for both CLIs) is its own pack: see [orchestration.md](orchestration.md).
 
 ### Instruction files
 
