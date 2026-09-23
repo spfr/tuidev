@@ -41,8 +41,9 @@ fake_install() {
 # starship_sane FILE [themed] — the whole point of the ordering guard: the
 # shipped prompt config must still be top-level TOML, not swallowed by our
 # palette table. Pass "themed" to also require the palette table itself.
-# Skipped (with a notice) if python3 has no tomllib.
+# Skipped (with a notice) without python3 or its tomllib (the Alpine test image).
 starship_sane() {
+    command -v python3 >/dev/null 2>&1 || { echo "SKIP: python3 unavailable"; return 0; }
     python3 - "$1" "${2:-}" <<'PY'
 import sys
 try:

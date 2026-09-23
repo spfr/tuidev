@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2026-09-23
+
+### Fixed
+- CI's Linux container job: `scripts/lib/profile.sh` passes the profile name
+  to `tuidev_extra_packs` explicitly (shellcheck 0.10 flagged SC2120), and
+  `test_theme.sh` skips its starship TOML check when `python3` is absent, as it
+  already did without `tomllib`. No change to installed behavior.
+
 ## [3.0.0] - 2026-09-23
 
 A repositioning release. Five months of shell history showed the real

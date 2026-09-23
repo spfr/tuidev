@@ -163,7 +163,7 @@ tuidev_active_packs() {
     $TUIDEV_PACK_SANDBOX && echo sandbox
     $TUIDEV_PACK_UI      && echo ui
     $TUIDEV_PACK_EXTRAS  && echo extras
-    tuidev_extra_packs
+    tuidev_extra_packs "$TUIDEV_PROFILE_NAME"
 }
 
 # Convenience: true if PROFILE_NAME arg is one of the valid profiles.
