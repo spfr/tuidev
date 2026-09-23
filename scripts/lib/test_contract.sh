@@ -112,5 +112,16 @@ while IFS= read -r ref; do
 done < <(grep -rhoE 'configs/[a-z/]+/shipped\.sha256' "$REPO_DIR/scripts/install" | sort -u)
 pass "every shipped-config version is fingerprinted (sandbox, claude, codex, nvim)"
 
+# Claude Code's Linux sandbox enforces literal paths and whole directories
+# (a trailing /**), but warns about any other glob in a Read/Edit rule. Only
+# the .env rules, which can't be written literally, may use one.
+while IFS= read -r rule; do
+    path="${rule#*(}"; path="${path%)}"
+    case "$path" in **/.env|**/.env.*) continue ;; esac
+    path="${path%/\*\*}"
+    case "$path" in *'*'*|*'?'*|*'['*) fail "configs/claude/settings.json: $rule uses a glob Claude Code's Linux sandbox can't enforce (use literal paths or a trailing /**)" ;; esac
+done < <(grep -oE '"(Read|Edit)\([^)]*\)"' "$REPO_DIR/configs/claude/settings.json" | tr -d '"')
+pass "Claude Read/Edit rules use only globs the Linux sandbox supports"
+
 echo ""
 echo "All cross-file contract tests passed."
