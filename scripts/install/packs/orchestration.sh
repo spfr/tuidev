@@ -99,7 +99,9 @@ _orchestration_warn_plain_copy() {
     # A link left in place (a dry run) is not the user's text.
     [[ -f "$file" && ! -L "$file" ]] || return 0
     outside="$(sed "/tuidev managed ($ORCHESTRATION_BLOCK) >>>/,/tuidev managed ($ORCHESTRATION_BLOCK) <<</d" "$file")"
-    if grep -qF "The main thread is the orchestrator:" <<<"$outside"; then
+    # The first sentence of the agents-orchestration policy, and of ours.
+    if grep -qF -e "The main thread is the orchestrator:" \
+        -e "Delegate for context isolation, independent parallel work" <<<"$outside"; then
         print_warning "$file holds the orchestration policy as plain text (an agents-orchestration copy?): delete it there, or it loads twice"
     fi
 }

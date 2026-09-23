@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   removes just that. It removes the symlinks the agents-orchestration
   installer left, and restores the files that installer set aside. See
   [docs/orchestration.md](docs/orchestration.md).
+- The policy, agents and skills were re-audited against current Anthropic and
+  OpenAI guidance (current models need less direction, and leftover
+  scaffolding hurts), which cut them to under half their agents-orchestration
+  length. The Codex standard implementor runs `gpt-6-luna` at `high`, OpenAI's
+  starting point for Luna.
 - `--pack ai-clis` installs `~/.codex/rules/tuidev.rules`: Codex prompts
   before git and gh writes, matching Claude Code's `ask` rules.
 

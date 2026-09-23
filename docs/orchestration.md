@@ -43,20 +43,20 @@ The gates also cover the one git write the `delegation` skill allows, a scratch 
 | Orchestrator (main session) | your session model and effort | your session model and effort | — |
 | Complex implementor | `opus` · `high` | `gpt-6-sol` · `high` | `implementor-complex` |
 | Reviewer (independent, read-only) | `opus` · `high` | `gpt-6-sol` · `high` | `reviewer` |
-| Standard implementor | `sonnet` · `medium` | `gpt-6-luna` · `medium` | `implementor-standard` |
+| Standard implementor | `sonnet` · `medium` | `gpt-6-luna` · `high` | `implementor-standard` |
 | Executor (builds, suites, logs, browser runs) | `haiku` | `gpt-6-luna` · `low` | `executor` |
 | Explore (search fan-out) | `haiku` | built-in `explorer` | `Explore` (overrides Claude's built-in) |
 
-Claude definitions pin family aliases, which follow each new generation. Codex pins exact model ids: bump them when OpenAI ships a new family, and re-read each agent's instructions at the same time. The session model and effort are left to each CLI's default; raise effort per session (`/effort`, a Codex `--profile`) when the task is hard.
+Claude definitions pin family aliases, which follow each new generation. Codex pins exact model ids: bump them when OpenAI ships a new family, and re-read each agent's instructions at the same time. Codex efforts follow OpenAI's starting points (Luna at `high` for implementation, `low` for mechanical runs; Sol higher than its `medium` default for the complex tier and review). The session model and effort are left to each CLI's default; raise effort per session (`/effort`, a Codex `--profile`) when the task is hard.
 
 The `Explore` override exists because Claude's built-in Explore inherits the session model (capped at Opus), and a user-level agent named `Explore` keeps its own `model`. It sets `omitClaudeMd`, like the built-in.
 
 ## Why it looks like this
 
 - **Delegation pays for context isolation, parallel independent work and fresh-context review**, and not for a dependent chain that fits in one context: a subagent starts uncached, and the orchestrator's cached history is the cheapest context there is. Bounded high-output work (full builds and suites, long logs, browser runs, multi-source research) always goes to a subagent so its output never lands in the orchestrator's context.
-- **Small always-on text.** The block restates nothing the CLIs' own system prompts say; everything that matters only during a multi-agent task is a skill (`delegation`, `verification`).
-- **Enforced where it can be.** Secrets and git writes are permission rules the CLI applies, not prose the model reads.
-- **Scope discipline** in the implementor definitions is Anthropic's measured Claude Fable 5.1 wording: it cuts unrequested changes and extra committed tests with no change in task success. Re-test it whenever the `opus` or `sonnet` alias moves to a new generation.
+- **As little direction as works.** Both vendors now say current models do more on their own and that leftover scaffolding hurts: Anthropic cut most of Claude Code's system prompt for Claude 5, and OpenAI warns that emphatic or stop-early rules make GPT-6 halt work you'd want finished. So every line has to prevent a real mistake. The always-on text is about 150 words: when delegation pays, and the few rules neither CLI applies by default. Agent bodies are a few sentences plus a report format. Skill descriptions only say when to load them.
+- **Delegation is stated, not assumed.** Codex delegates only when asked at most effort levels, so the Codex block names the tiers and says to use them.
+- **Enforced where it can be.** Secrets and git writes are permission rules the CLI applies, not prose the model reads. The prose says to leave work uncommitted, not to stop early.
 
 ## CI runners and sandboxes
 
@@ -68,4 +68,4 @@ In headless `claude -p`, an `ask` rule has nobody to ask, so it denies: an agent
 
 This pack replaces the standalone agents-orchestration repo. On its first run it removes the symlinks that repo's installer left in `~/.claude`, `~/.codex` and `~/.agents` (only links into that repo's `build/` or agent files) before writing. Where that installer had set your own `CLAUDE.md` or `AGENTS.md` aside as `.bak`, the pack moves it back. If you installed that repo with `--copy`, its policy is plain text in those files; the pack warns, and you delete it (it would otherwise load twice). If you kept your own fragments in that checkout's gitignored `local/*.md`, move them before you delete it: into `~/.claude/rules/` for Claude Code, and into `~/.codex/AGENTS.md` outside the tuidev block for Codex. Both load every session. Keys that repo merged into your settings stay yours: `effortLevel`, `permissions.ask` and the `.env` rules in `~/.claude/settings.json`, and the `model` and `model_reasoning_effort` lines in `~/.codex/config.toml`, which pin the Codex session. Delete those two lines to follow Codex's defaults; the pack warns when `model` pins a superseded `gpt-5.6` model. Because of those merges, `--pack ai-clis` sees both files as edited by you and never upgrades them: compare them with `configs/claude/settings.json` and `configs/codex/config.toml` once, by hand.
 
-Re-audit the policy at every model release: a line that is load-bearing on one generation is dead weight on the next.
+Re-audit the policy at every model release: for each line, ask whether removing it would cause a mistake. A line that is load-bearing on one generation is dead weight on the next.

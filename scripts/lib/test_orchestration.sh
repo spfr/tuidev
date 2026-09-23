@@ -78,10 +78,10 @@ done
 grep -qxF "my codex notes" "$HOME/.codex/AGENTS.md" || fail "user text in ~/.codex/AGENTS.md lost"
 grep -qxF "<!-- >>> tuidev managed (tuidev-orchestration) >>> -->" "$HOME/.codex/AGENTS.md" \
     || fail "the Codex block needs HTML-comment markers (a # line is a Markdown heading)"
-read_managed_block "$HOME/.codex/AGENTS.md" tuidev-orchestration | grep -q "## Codex mechanics" \
-    || fail "Codex block lacks its mechanics section"
-! grep -q "## Codex mechanics" "$HOME/.claude/rules/tuidev-orchestration.md" \
-    || fail "the Claude rule carries the Codex mechanics section"
+read_managed_block "$HOME/.codex/AGENTS.md" tuidev-orchestration | grep -q "## Codex agents" \
+    || fail "Codex block lacks its agents section"
+! grep -q "## Codex agents" "$HOME/.claude/rules/tuidev-orchestration.md" \
+    || fail "the Claude rule carries the Codex agents section"
 pass "install replaces legacy links, keeps the user's links and text"
 
 # 4. A second run changes nothing.
@@ -91,11 +91,15 @@ orchestration_install >/dev/null
 pass "idempotent"
 
 # 5. A policy left as plain text (agents-orchestration --copy) is flagged.
-cat "$REPO_DIR/configs/orchestration/global-instructions.md" > "$HOME/.claude/CLAUDE.md"
+printf '# Agent Orchestration\n\nThe main thread is the orchestrator: it plans.\n' > "$HOME/.claude/CLAUDE.md"
 out="$(orchestration_install 2>&1)"
 grep -qF "holds the orchestration policy as plain text" <<<"$out" \
     || fail "no warning for a plain-text copy of the policy"
-pass "a plain-text copy of the policy is flagged"
+cat "$REPO_DIR/configs/orchestration/global-instructions.md" > "$HOME/.claude/CLAUDE.md"
+out="$(orchestration_install 2>&1)"
+grep -qF "holds the orchestration policy as plain text" <<<"$out" \
+    || fail "no warning for a plain-text copy of the current policy"
+pass "a plain-text copy of the policy (old or current) is flagged"
 
 # 6. Run on its own, the pack records what it wrote, so uninstall.sh can
 #    remove it on a machine without the rest of tuidev.
