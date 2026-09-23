@@ -1,0 +1,6 @@
+# SHA-256 of every configs/vim/vimrc version tuidev has ever shipped.
+# The vim pack replaces ~/.vim/vimrc only when it is an unmodified copy of one
+# of these (backup first); a file you edited is left alone. test_contract.sh
+# fails if the current file is not listed: after editing it, append
+# `vimrc $(shasum -a 256 vimrc | cut -d' ' -f1)`.
+vimrc 4c11987201a6ffcf8b38beaf31cb9c955408c9ee6fd1a531ebdc3840de3b7294

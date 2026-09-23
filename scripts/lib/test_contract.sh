@@ -98,6 +98,7 @@ check_fingerprinted() {
 check_fingerprinted "$REPO_DIR/configs/sandbox/profiles/shipped.sha256" "$REPO_DIR"/configs/sandbox/profiles/*.sb
 check_fingerprinted "$REPO_DIR/configs/claude/shipped.sha256" "$REPO_DIR/configs/claude/settings.json"
 check_fingerprinted "$REPO_DIR/configs/codex/shipped.sha256"  "$REPO_DIR/configs/codex/config.toml"
+check_fingerprinted "$REPO_DIR/configs/vim/shipped.sha256"    "$REPO_DIR/configs/vim/vimrc"
 # nvim is a tree: keyed by path relative to configs/nvim (two init.lua files).
 nvim_root="$REPO_DIR/configs/nvim"
 while IFS= read -r src; do
@@ -110,7 +111,7 @@ done < <(find "$nvim_root" -type f -not -name '.*')
 while IFS= read -r ref; do
     [[ -f "$REPO_DIR/$ref" ]] || fail "--upgrade-shipped names $ref, which does not exist"
 done < <(grep -rhoE 'configs/[a-z/]+/shipped\.sha256' "$REPO_DIR/scripts/install" | sort -u)
-pass "every shipped-config version is fingerprinted (sandbox, claude, codex, nvim)"
+pass "every shipped-config version is fingerprinted (sandbox, claude, codex, vim, nvim)"
 
 # Claude Code's Linux sandbox enforces literal paths and whole directories
 # (a trailing /**), but warns about any other glob in a Read/Edit rule. Only

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`--pack vim`**: plain Vim with a zero-plugin vimrc, the lightweight
+  alternative to `--pack nvim` for servers and small boxes. It uses only Vim
+  9.1's built-in packages (`comment`, `editorconfig`, `matchit`, `hlyank`,
+  `nohlsearch`), fzf's own Vim plugin, ripgrep as `:grep`, persistent undo
+  under `~/.local/state/vim`, and OSC 52 yanks over SSH. Deployed as
+  `~/.vim/vimrc` with `--upgrade-shipped`, so a `~/.vimrc` of your own wins.
+  On macOS the system Vim is used. See docs/vim.md.
+
 ## [3.1.1] - 2026-09-23
 
 ### Fixed

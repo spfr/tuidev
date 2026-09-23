@@ -146,6 +146,19 @@ Ghostty keeps its macOS defaults (`Cmd+T`, `Cmd+D`, and so on) and adds `Ctrl+Sh
 
 The full guide is in [nvim.md](nvim.md).
 
+## Vim (`--pack vim`)
+
+| Keys | Action |
+|------|--------|
+| `Space Space` | Find files (fzf) |
+| `Space /` / `Space *` | Grep the project / the word under the cursor (ripgrep, into quickfix) |
+| `Space b` / `Space r` | Buffers / recent files |
+| `Space e` | netrw file explorer |
+| `gcc` / `gc{motion}` | Toggle comment |
+| `]q` / `[q`, `]b` / `[b` | Next/previous quickfix entry, buffer |
+
+The full guide is in [vim.md](vim.md).
+
 ## Theming
 
 ```bash

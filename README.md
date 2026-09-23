@@ -47,7 +47,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 ./install.sh --core --sandbox --pack ai-clis --pack herdr
 ```
 
-Optional packs: `ai-clis`, `orchestration`, `opencode`, `nvim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
+Optional packs: `ai-clis`, `orchestration`, `opencode`, `nvim`, `vim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
 
 macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it: packages come from `apt-get`, `dnf` or `pacman`, and anything the distro lacks is skipped with a link to its upstream installer. The installer never pipes a remote script into a shell.
 
@@ -86,6 +86,7 @@ Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.
 | [Orchestration](docs/orchestration.md) | The `orchestration` pack: subagent tiers, skills, git gates, CI runners |
 | [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, iOS clients |
 | [Neovim](docs/nvim.md) | The `nvim` pack: LazyVim essentials |
+| [Vim](docs/vim.md) | The `vim` pack: a zero-plugin vimrc for servers |
 | [Theming](docs/theming.md) | Palette contract and `theme.sh` |
 | [Updating](docs/updating.md) | Updates, migrations, the install manifest, uninstall |
 | [Engineering](docs/engineering.md) | Architecture, shared libs, pack contract, verification |

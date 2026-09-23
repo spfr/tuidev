@@ -29,6 +29,7 @@ With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `m
 | Tailscale, mosh, SSH client and sshd config (remote) | | | ✓ |
 | tmux, the `tuidev-tmux` block, TPM (`--pack tmux`) | | | ✓ |
 | Neovim, LazyVim config (`--pack nvim`) | | | |
+| Vim, zero-plugin vimrc (`--pack vim`) | | | |
 | Optional packs (`--pack NAME`) | + | + | + |
 
 Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pack tmux` and/or `--pack nvim` yourself. An existing install that already had them keeps them: see [updating.md](updating.md#migrations) for the migration that carries them into your profile.
@@ -58,6 +59,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 | `--pack orchestration` | The multi-agent policy for Claude Code and Codex: a rule file in `~/.claude/rules/`, a managed block in `~/.codex/AGENTS.md`, tiered subagents, and the `delegation` and `verification` skills. Pair it with `ai-clis`, which holds the git and gh write gates. Also runs on its own, without the rest of tuidev. See [orchestration.md](orchestration.md). |
 | `--pack opencode` | `oc` wrapper for OpenCode, and adopts `opencode.json` + `tui.json`. Prints OpenCode's official installer command rather than running it. |
 | `--pack nvim` | `neovim`, and the LazyVim config in `configs/nvim/`, deployed file by file with `--upgrade-shipped`, only while tuidev owns the tree. See [nvim.md](nvim.md). |
+| `--pack vim` | `vim` (on macOS the system Vim is used), and a zero-plugin vimrc deployed as `~/.vim/vimrc` with `--upgrade-shipped`. A `~/.vimrc` of your own wins. The light alternative to `nvim` for servers and small boxes. See [vim.md](vim.md). |
 | `--pack tmux` | `tmux`, the `tuidev-tmux` managed block in `~/.config/tmux/tmux.conf`, and TPM (tmux-resurrect, tmux-continuum). Included by the `remote` profile. |
 | `--pack herdr` | [Herdr](https://herdr.dev/), an agent-aware runtime for fleet attention, installed through Homebrew. When Homebrew has no formula, the pack prints the official installer command instead. Adopts a Tokyo Night `~/.config/herdr/config.toml`. |
 | `--pack cmux` | [cmux](https://github.com/manaflow-ai/cmux), a macOS terminal app for parallel agents (macOS 14+). |

@@ -149,6 +149,27 @@ fi
 echo ""
 
 # ============================================================================
+# Vim script (the vim pack's vimrc)
+# ============================================================================
+print_step "Vim script (vim -es)"
+
+# Ex mode exits non-zero when sourcing the vimrc raised any error. State goes
+# to a scratch dir so the check never touches ~/.local/state/vim.
+vimrc="$REPO_DIR/configs/vim/vimrc"
+if command -v vim >/dev/null 2>&1 && vim --version 2>/dev/null | head -1 | grep -q '^VIM'; then
+    vim_state="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-vim.XXXXXX")"
+    if err=$(XDG_STATE_HOME="$vim_state" vim -Nu "$vimrc" -i NONE -es +q </dev/null 2>&1); then
+        pass "$(rel "$vimrc")"
+    else
+        fail "$(rel "$vimrc") - ${err:-vim reported an error}"
+    fi
+    rm -rf "$vim_state"
+else
+    missing_tool "vim not installed - vimrc not checked"
+fi
+echo ""
+
+# ============================================================================
 # zsh
 # ============================================================================
 print_step "zsh (.zshrc)"

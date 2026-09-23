@@ -25,7 +25,8 @@
 #
 #   --pack NAME  optional pack (repeatable): ai-clis (Claude Code + Codex
 #                configs, native sandboxes on), opencode, nvim (Neovim +
-#                LazyVim), tmux (durable sessions + TPM), herdr, cmux,
+#                LazyVim), vim (plain Vim, zero-plugin vimrc), tmux (durable
+#                sessions + TPM), herdr, cmux,
 #                sandbox-container, mosh, fnm, monitoring
 #
 # Config write policy:

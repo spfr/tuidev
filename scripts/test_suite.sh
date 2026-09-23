@@ -645,6 +645,17 @@ run_packs() {
         fi
     fi
 
+    if _packs_contains vim; then
+        start_test "Vim configuration" packs
+        if [[ -f "$HOME/.vimrc" ]]; then
+            pass_test "your own .vimrc is in use"
+        elif [[ -f "$HOME/.vim/vimrc" ]]; then
+            pass_test ".vim/vimrc present"
+        else
+            fail_test ".vim/vimrc missing"
+        fi
+    fi
+
     if _packs_contains mosh; then
         start_test "mosh: binary on PATH" packs
         if command -v mosh >/dev/null 2>&1; then

@@ -1,0 +1,154 @@
+" tuidev vimrc — plain Vim 9, zero plugins (installed by `--pack vim`).
+"
+" For servers and small boxes where Neovim + LazyVim is too heavy: starts in
+" a few milliseconds, has nothing to update, and uses only what ships with
+" Vim and the core pack (fzf, ripgrep). Installed as ~/.vim/vimrc, so a
+" ~/.vimrc of your own takes precedence. Keys: docs/vim.md.
+
+unlet! skip_defaults_vim
+source $VIMRUNTIME/defaults.vim   " filetype, syntax, incsearch, last position
+
+" --- Behaviour ---------------------------------------------------------------
+set encoding=utf-8
+set hidden                        " switch buffers without saving
+set autoread                      " pick up changes made by agents / git
+set updatetime=300
+set ttimeoutlen=10                " fast <Esc>, also inside tmux
+set mouse=a
+set belloff=all
+set splitright splitbelow
+set nostartofline
+set shortmess+=cI
+
+" --- Look --------------------------------------------------------------------
+set number relativenumber
+set signcolumn=number
+set cursorline
+set laststatus=2
+set list listchars=tab:»\ ,trail:·,nbsp:␣
+let &fillchars = 'vert:│,eob: '
+set linebreak breakindent
+let &statusline = ' %f%m%r%h%w%=%y %{&fenc}  %l:%c  %p%% '
+if has('termguicolors') && $COLORTERM =~# 'truecolor\|24bit'
+  set termguicolors
+endif
+set background=dark
+silent! colorscheme habamax
+
+" Cursor: bar in insert, underline in replace, block elsewhere.
+let &t_SI = "\e[6 q"
+let &t_SR = "\e[4 q"
+let &t_EI = "\e[2 q"
+
+" --- Indent and search -------------------------------------------------------
+set expandtab shiftwidth=4 softtabstop=4 tabstop=8 shiftround
+set autoindent smartindent
+set ignorecase smartcase hlsearch
+set wildmenu wildmode=longest:full,full
+set wildignorecase
+set wildignore+=*/.git/*,*/node_modules/*,*/.venv/*,*/__pycache__/*,*/dist/*,*/build/*
+if has('patch-9.0.0000')
+  set wildoptions=pum,fuzzy
+endif
+set path=.,**                     " :find with fuzzy wildmenu when fzf is absent
+if executable('rg')
+  set grepprg=rg\ --vimgrep\ --smart-case\ --hidden\ --glob\ !.git
+  set grepformat=%f:%l:%c:%m
+endif
+
+" --- Files: XDG state, persistent undo, no clutter next to your files --------
+let s:state = (empty($XDG_STATE_HOME) ? $HOME . '/.local/state' : $XDG_STATE_HOME) . '/vim'
+for s:d in ['undo', 'swap', 'backup']
+  if !isdirectory(s:state . '/' . s:d)
+    silent! call mkdir(s:state . '/' . s:d, 'p', 0700)
+  endif
+endfor
+let &undodir   = s:state . '/undo//'
+let &directory = s:state . '/swap//'
+let &backupdir = s:state . '/backup//'
+set undofile
+let &viminfofile = s:state . '/viminfo'
+
+" --- Built-in packages (Vim 9.1; silently skipped on older Vims) -------------
+silent! packadd! matchit          " % across if/else/end, tags
+silent! packadd! comment          " gcc / gc{motion} toggle comments
+silent! packadd! editorconfig     " honour .editorconfig
+silent! packadd! hlyank           " flash the yanked text
+silent! packadd! nohlsearch       " clear search highlight after moving
+let g:netrw_banner = 0
+let g:netrw_liststyle = 3
+
+" fzf's own Vim plugin (:FZF), from the fzf package: Homebrew or Debian path.
+for s:dir in ['/opt/homebrew/opt/fzf', '/usr/local/opt/fzf', '/home/linuxbrew/.linuxbrew/opt/fzf',
+      \ '/usr/share/doc/fzf/examples', '/usr/share/vim/vimfiles']
+  if filereadable(s:dir . '/plugin/fzf.vim')
+    execute 'set runtimepath+=' . fnameescape(s:dir)
+    break
+  endif
+endfor
+
+" --- Keys (leader = Space) ---------------------------------------------------
+let mapleader = ' '
+nnoremap <leader>w <Cmd>update<CR>
+nnoremap <leader>q <Cmd>quit<CR>
+nnoremap <leader>e <Cmd>Explore<CR>
+nnoremap <leader>/ :silent grep!<Space>
+nnoremap <leader>* <Cmd>silent grep! <cword> <Bar> redraw!<CR>
+nnoremap <leader>x <Cmd>bdelete<CR>
+nnoremap <leader>o <Cmd>only<CR>
+nnoremap [q <Cmd>cprevious<CR>
+nnoremap ]q <Cmd>cnext<CR>
+nnoremap [b <Cmd>bprevious<CR>
+nnoremap ]b <Cmd>bnext<CR>
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+nnoremap Y y$
+vnoremap < <gv
+vnoremap > >gv
+vnoremap J :move '>+1<CR>gv=gv
+vnoremap K :move '<-2<CR>gv=gv
+
+" Files and buffers: fzf when available, else the fuzzy wildmenu.
+if !empty(globpath(&runtimepath, 'plugin/fzf.vim'))
+  nnoremap <leader><Space> <Cmd>FZF<CR>
+  nnoremap <leader>b <Cmd>call fzf#run(fzf#wrap({
+        \ 'source': map(filter(range(1, bufnr('$')), 'buflisted(v:val)'), 'bufname(v:val)'),
+        \ 'sink': 'buffer', 'options': '--prompt "buffer> "'}))<CR>
+  nnoremap <leader>r <Cmd>call fzf#run(fzf#wrap({
+        \ 'source': filter(copy(v:oldfiles), 'filereadable(expand(v:val))'),
+        \ 'sink': 'edit', 'options': '--prompt "recent> "'}))<CR>
+else
+  nnoremap <leader><Space> :find<Space>
+  nnoremap <leader>b :buffer<Space>
+  nnoremap <leader>r :browse oldfiles<CR>
+endif
+
+" --- Autocommands ------------------------------------------------------------
+augroup tuidev_vim
+  autocmd!
+  " Reload files changed on disk (an agent or git edited them).
+  autocmd FocusGained,BufEnter,CursorHold * silent! checktime
+  " Open the quickfix list after :grep / :make.
+  autocmd QuickFixCmdPost [^l]* cwindow
+  autocmd QuickFixCmdPost l* lwindow
+  autocmd FileType gitcommit,markdown,text setlocal spell textwidth=72
+  autocmd FileType yaml,json,lua,javascript,typescript,html,css,sh,zsh,vim
+        \ setlocal shiftwidth=2 softtabstop=2
+  autocmd FileType make setlocal noexpandtab
+augroup END
+
+" Yanks reach the local clipboard over SSH and tmux via OSC 52, when this Vim
+" has no clipboard of its own (the usual case on a server).
+if !has('clipboard') && exists('*echoraw')
+  function! s:Osc52(event) abort
+    if a:event.operator !=# 'y' || !executable('base64') | return | endif
+    let l:b64 = system('base64 | tr -d "\n"', join(a:event.regcontents, "\n"))
+    call echoraw("\e]52;c;" . l:b64 . "\x07")
+  endfunction
+  augroup tuidev_vim_osc52
+    autocmd!
+    autocmd TextYankPost * call s:Osc52(v:event)
+  augroup END
+endif

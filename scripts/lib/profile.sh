@@ -58,7 +58,7 @@ TUIDEV_ENV_FILE_DEFAULT="$TUIDEV_STATE_DIR/env"
 TUIDEV_VALID_PROFILES=(minimal desktop remote)
 
 # Valid pack names (non-profile packs exposed via --pack NAME).
-TUIDEV_VALID_PACKS=(ai-clis orchestration opencode nvim tmux herdr cmux sandbox-container mosh fnm monitoring)
+TUIDEV_VALID_PACKS=(ai-clis orchestration opencode nvim vim tmux herdr cmux sandbox-container mosh fnm monitoring)
 
 load_tuidev_profile() {
     local file="${1:-$TUIDEV_PROFILE_FILE_DEFAULT}"
