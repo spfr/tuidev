@@ -5,14 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.1.1] - 2026-09-23
 
 ### Fixed
 - **Claude Code settings:** `Read(~/.cargo/credentials*)` is now two literal
   rules, `~/.cargo/credentials` and `~/.cargo/credentials.toml`, the same pair
   `sbx` denies. Claude Code's Linux sandbox warned about the glob. The
   remaining warning about the `.env` rules is expected and is explained in
-  docs/sandboxing.md.
+  docs/sandboxing.md. `test_contract.sh` now fails if any other Read/Edit
+  rule uses a glob the Linux sandbox can't enforce.
 
 ## [3.1.0] - 2026-09-23
 
