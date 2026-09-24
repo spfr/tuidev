@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **`delegation` skill:** the `reviewer` is now offered as a fresh-context
+  check for changes where a plausible-but-wrong result would be costly, not
+  prescribed for every risky or large change. Anthropic's Claude 5 guidance
+  says instructions to verify through a subagent cause over-verification.
+
 ## [3.1.2] - 2026-09-23
 
 ### Added

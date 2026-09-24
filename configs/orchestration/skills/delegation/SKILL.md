@@ -9,7 +9,7 @@ Give a subagent what it can't cheaply rediscover: the purpose, file anchors, the
 
 ## Verify and review once, on the integrated state
 
-With parallel workstreams in flight, gather the reports and integrate, then run one `executor` round against the result instead of one per implementor. For a risky or large change, have the `reviewer` check it against the acceptance criteria before you accept it; it never reviews its own work. For a plain bug hunt on the current diff, `/code-review` is cheaper.
+With parallel workstreams in flight, gather the reports and integrate, then run one `executor` round against the result instead of one per implementor. The `reviewer` is a fresh-context check for changes where a plausible-but-wrong result would be costly; it never reviews its own work. For a plain bug hunt on the current diff, `/code-review` is cheaper.
 
 ## Parallel work
 
