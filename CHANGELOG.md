@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-09-25
+
+### Added
+- **Updates now merge into an edited `~/.claude/settings.json`.**
+  `--pack ai-clis` (and `update.sh --configs`) used to leave a file you'd
+  edited alone, so shipped policy changes never reached it. Now it does a
+  three-way merge with `jq` against the version it last applied, stored in
+  `~/.config/tuidev/shipped/settings.json`:
+  - values you never changed follow the release;
+  - your values, keys and deletions stay;
+  - lists keep your entries, drop the ones a release removed, and gain new
+    ones.
+  
+  When both sides changed a value, yours is kept and reported. The file is
+  backed up before any write, and `--dry-run` only previews. The first merge
+  on an existing install only adds. Your own sandbox exceptions (such as
+  `"git *"` in `sandbox.excludedCommands`) now belong in that file and
+  survive updates. Codex's `config.toml` still keeps your copy and shows a
+  diff.
+
+### Fixed
+- **Backups of symlinked configs are real copies.** A dotfiles symlink used
+  to be backed up as a link, which then pointed at the rewritten file. A
+  failed backup now stops the write instead of going ahead.
+- **Test harnesses honor `TMPDIR`**, so `make test-lib` runs inside Claude
+  Code's and Codex's sandboxes.
+
+### Changed
+- **No attribution, brief commits.** The shipped Claude Code settings add
+  `attribution.sessionUrl: false`, so cloud and Remote Control commits don't
+  carry a claude.ai session link either. The orchestration instructions
+  (Claude rules file and Codex `AGENTS.md` block) ask for a punchy
+  conventional-commit subject, a body only when the why isn't obvious, and
+  no `Co-Authored-By`, "Generated with" or session-link lines. A link to
+  the session, when wanted, goes in `git notes` instead.
+
 ## [3.1.4] - 2026-09-25
 
 ### Fixed
