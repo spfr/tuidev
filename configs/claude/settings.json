@@ -67,7 +67,8 @@
   "teammateMode": "auto",
   "attribution": {
     "commit": "",
-    "pr": ""
+    "pr": "",
+    "sessionUrl": false
   },
   "hooks": {
     "Notification": [

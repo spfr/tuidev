@@ -67,7 +67,8 @@ The full conventions are in [docs/engineering.md](docs/engineering.md). The rule
 ## Commits
 
 - Conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `ci:`), atomic and focused.
-- No `Co-Authored-By` trailers.
+- Punchy subject line; a body of a line or two only when the why isn't obvious. The CHANGELOG carries the detail.
+- No attribution: no `Co-Authored-By`, "Generated with", or session-link lines. Traceability, if wanted, goes in `git notes`.
 - Don't commit, push or open a PR unless you were asked to.
 
 ## Sandbox boundary

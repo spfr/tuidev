@@ -9,7 +9,7 @@
   - a read-only `allow` list;
   - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`;
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
-  - empty `attribution` (no `Co-Authored-By`);
+  - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`.
 
   Keep `bin/sbx`, the `.sb` profiles and those deny rules in sync when you change any of them.
