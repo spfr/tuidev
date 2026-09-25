@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./profile.sh disable=SC1091
 . "$SCRIPT_DIR/profile.sh"
 
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
 fail() { echo "FAIL: $1" >&2; exit 1; }

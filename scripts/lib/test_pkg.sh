@@ -6,7 +6,7 @@
 set -eo pipefail
 
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"; trap 'rm -rf "$tmp"' EXIT
 export TUIDEV_NO_COLOR=1
 export TUIDEV_MANIFEST_FILE="$tmp/manifest"
 

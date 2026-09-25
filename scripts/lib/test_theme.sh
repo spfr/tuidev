@@ -15,7 +15,7 @@ THEME="$REPO_ROOT/scripts/theme.sh"
 # shellcheck source=./config_write.sh disable=SC1091
 . "$SCRIPT_DIR/config_write.sh"
 
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 # theme.sh reloads a live tmux server; point it at a private, empty socket dir.
 unset TMUX
 export TMUX_TMPDIR="$tmp/tmux"
