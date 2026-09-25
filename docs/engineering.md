@@ -106,7 +106,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then foo_install "$@"; fi
 
 ## Writing into `$HOME`
 
-`install_config` has four modes:
+`install_config` has four modes, and a modifier for the third:
 
 - `--managed-block ID` writes a fenced region and leaves everything outside it alone. Re-running rewrites only the block, and `update.sh --configs` re-applies it when it drifts. Use this for any file where `#` starts a comment, and for Markdown, where the markers are HTML comments because a `#` line would be a heading the agent reads.
   ```
@@ -116,6 +116,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then foo_install "$@"; fi
   ```
 - `--adopt-existing` places the file only when it is absent. Use it for formats without `#` comments (JSON) and for files the user owns once they exist.
 - `--upgrade-shipped HASHFILE` is `--adopt-existing`, except that a file byte-identical to any version tuidev shipped is backed up and replaced, so fixes reach existing installs. HASHFILE (`shipped.sha256` next to the source) lists `<basename without extension> <sha256>` for every version ever shipped. Use it for whole files the user may edit (Seatbelt profiles, Claude and Codex settings). When you change such a source, append its new hash; `test_contract.sh` fails until you do.
+- `--upgrade-shipped HASHFILE --merge-json` (JSON only) goes further for a file the user edited: it three-way merges the base (the source last applied, kept at `$TUIDEV_STATE_DIR/shipped/<name>.json`; `{}` before the first merge, so only additions arrive), the user's file and the new source. Values the user never touched follow the source; the user's changes and deletions stay; arrays keep the user's entries, drop the ones the source removed and append its new ones; where both changed a value, the user's wins and the path is reported. The file is backed up before a write and left alone when nothing changes. Invalid JSON or a missing `jq` falls back to plain `--upgrade-shipped`. The jq program is `tuidev_json_merge3` in `config_write.sh`. Use it for `~/.claude/settings.json`, which users always edit.
 - `--overwrite` replaces the file after taking a backup. Use it only for files tuidev fully owns (`sbx`, `notify.sh`, the `shell.d` fragments).
 
 Backups go to `$TUIDEV_STATE_DIR/backups/`, and only the most recent copies of each file are kept. Everything placed is recorded in the manifest, so `uninstall.sh` can remove exactly that and nothing else.

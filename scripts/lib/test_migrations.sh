@@ -10,7 +10,7 @@ unset XDG_CONFIG_HOME   # state paths below assume $HOME/.config/tuidev
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
 export TUIDEV_NO_COLOR=1
@@ -305,7 +305,7 @@ mkdir -p "$v3_home/.claude"
 echo '{"model":"x"}' > "$v3_home/.claude/settings.json"
 echo "cc() { :; }" > "$v3_home/.config/tuidev/shell.d/ai-clis.zsh"
 out="$(HOME="$v3_home" bash "$wrap_mig" 2>&1)" || fail "drop-wrappers migration failed (no sandbox)"
-[[ "$out" == *"Merge the sandbox block"* && "$out" != *"turns on its native sandbox"* ]] \
+[[ "$out" == *"merges the sandbox block"* && "$out" != *"turns on its native sandbox"* ]] \
     || fail "user settings without sandbox: $out"
 cp "$SCRIPT_DIR/../../configs/claude/settings.json" "$v3_home/.claude/settings.json"
 echo "cc() { :; }" > "$v3_home/.config/tuidev/shell.d/ai-clis.zsh"

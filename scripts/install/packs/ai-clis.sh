@@ -6,7 +6,10 @@
 # repo stays CLI-agnostic and current as CLIs churn. This pack adopts the
 # shipped Claude Code and Codex configs: placed when absent, upgraded when
 # still an unmodified copy of an earlier release
-# (configs/{claude,codex}/shipped.sha256), never clobbered once edited.
+# (configs/{claude,codex}/shipped.sha256). Once edited, they are never
+# clobbered: Claude's settings.json gets a three-way JSON merge (--merge-json:
+# shipped changes land, your edits win, backup first); Codex's config.toml
+# is kept as it is, with a diff hint.
 #
 # Both configs turn the CLI's NATIVE sandbox on (Claude Code: the `sandbox`
 # block in settings.json; Codex: sandbox_mode = "workspace-write"), so a plain
@@ -29,8 +32,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 # shellcheck source=../../lib/config_write.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/config_write.sh"
 
-# Adopt the shipped AI CLI configs. A copy the user edited is theirs; one that
-# is byte-identical to a version we shipped is upgraded (backup first).
+# Adopt the shipped AI CLI configs. One that is byte-identical to a version we
+# shipped is upgraded (backup first). A settings.json the user edited gets the
+# shipped changes merged in (the user's values win); an edited config.toml is
+# theirs.
 _ai_clis_install_configs() {
     # Claude Code reads settings from ~/.claude/settings.json. (~/.claude.json
     # is the CLI's own state file — never write settings there.)
@@ -39,14 +44,15 @@ _ai_clis_install_configs() {
     # a glob, so it walks the whole project for matches, over and over; on a
     # large repo that pins a core and stalls the TUI. Both are keyed
     # `settings` in shipped.sha256, so either platform's copy of an earlier
-    # release upgrades.
+    # release upgrades. --merge-json keeps the version applied last in
+    # $TUIDEV_STATE_DIR/shipped/settings.json as the base of the next merge.
     local claude_src="$REPO_ROOT/configs/claude/settings.json"
     is_linux && claude_src="$REPO_ROOT/configs/claude/settings.linux.json"
     if [[ -f "$claude_src" ]]; then
         [[ "${DRY_RUN:-false}" == true ]] || mkdir -p "$HOME/.claude"
         install_config "$HOME/.claude/settings.json" "$claude_src" \
             --upgrade-shipped "$REPO_ROOT/configs/claude/shipped.sha256" \
-            --shipped-name settings
+            --shipped-name settings --merge-json
     fi
 
     if [[ -f "$REPO_ROOT/configs/codex/config.toml" ]]; then
@@ -73,10 +79,10 @@ ai_clis_install() {
     # lacks the sandbox block (under --dry-run nothing was written, so skip).
     local settings="$HOME/.claude/settings.json"
     if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && ! grep -q '"sandbox"' "$settings"; then
-        print_warning "$settings (yours, kept) has no sandbox settings: merge the sandbox block by hand (docs/sandboxing.md)."
+        print_warning "$settings still has no sandbox settings (removed by you, or not mergeable): claude runs unsandboxed. See docs/sandboxing.md."
     fi
     if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && is_linux && grep -q '\*\*/\.env' "$settings"; then
-        print_warning "$settings (yours, kept) has **/.env rules: on Linux they make Claude Code's sandbox rescan the whole project and stall the TUI. Use the literal rules from configs/claude/settings.linux.json (docs/sandboxing.md)."
+        print_warning "$settings still has **/.env rules: on Linux they make Claude Code's sandbox rescan the whole project and stall the TUI. Use the literal rules from configs/claude/settings.linux.json (docs/sandboxing.md)."
     fi
     print_success "ai-clis pack complete"
 }

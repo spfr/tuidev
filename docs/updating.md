@@ -38,9 +38,10 @@ The migrations, in order:
   tuidev-owned `ai-clis.zsh` shell fragment, so `cc`/`cx` disappear. It never
   edits `~/.claude/settings.json`; it tells you where that file stands. With
   a `sandbox` block, plain `claude` is sandboxed. An unmodified 2.x copy is
-  upgraded by `./scripts/update.sh --configs`. One you edited is kept: merge
-  the `sandbox` block yourself (see [sandboxing.md](sandboxing.md)). Until
-  then, `claude` runs unsandboxed.
+  upgraded by `./scripts/update.sh --configs`, and one you edited gets the
+  `sandbox` block merged in by it (see
+  [Shipped configs you may have edited](#shipped-configs-you-may-have-edited)).
+  Until then, `claude` runs unsandboxed.
 
 ## The three kinds of change
 
@@ -187,7 +188,47 @@ path, so the two `init.lua` files stay distinct), and (with `--pack ai-clis`)
   `~/.config/tuidev/backups/` and replaced, so fixes such as tighter
   permissions reach existing installs;
 - anything else is your edit and is kept; the run prints a
-  `diff <yours> <shipped>` command so you can merge by hand.
+  `diff <yours> <shipped>` command so you can merge by hand. The exception is
+  `~/.claude/settings.json`, below.
+
+`~/.claude/settings.json` is edited by nearly everyone (plugins, `statusLine`,
+`/config`), so an edited copy is merged instead of kept as it is
+(`--upgrade-shipped --merge-json`). tuidev stores the version it last applied
+as `~/.config/tuidev/shipped/settings.json`, and each update does a three-way
+merge of that base, your file and the new shipped file:
+
+- a value you never changed follows the shipped one, including a key tuidev
+  removed;
+- a value you changed or deleted stays yours;
+- lists (`permissions.allow`, `sandbox.excludedCommands`, hooks) keep your
+  entries in your order, lose the entries tuidev removed (even one you had
+  added yourself before), and gain the new ones at the end. List elements
+  are compared whole, so a shipped hook group you edited stays as your copy,
+  and the new shipped version is added next to it;
+- where you and tuidev both changed the same value, yours wins and the run
+  names the path, with the `diff` command;
+- before a write, the old file is backed up to `~/.config/tuidev/backups/`
+  (a real copy, even when the file is a symlink into your dotfiles; the
+  write goes through the link). If nothing would change, the file isn't
+  touched.
+
+The first update after an install that predates this has no stored base, so
+it only adds: new keys and new list entries arrive, and none of your values
+change or go. That also means a shipped key or list entry you had deleted
+comes back, because without a base tuidev can't tell a deletion from a
+missing addition. Preview it first with
+`./install.sh --pack ai-clis --dry-run`, which lists the paths that would
+change and writes nothing (`./scripts/update.sh --dry-run` doesn't show this
+preview). From then on the base is there, and a deletion sticks.
+
+A file that isn't valid JSON (say, one with comments), or a machine without
+`jq`, gets the old behavior: kept, with a warning and the `diff` command. jq
+rewrites the whole file when it merges, with 2-space indentation; jq 1.6 may
+also normalize number literals (1.7 and later keep them). So personal
+additions such as an extra `sandbox.excludedCommands` entry (`"git *"`)
+belong in `~/.claude/settings.json` itself, and they survive updates unless
+a release removes that same entry. `~/.codex/config.toml` is TOML and is not
+merged.
 
 `make update-configs` re-runs the packs, so this happens on every update.
 Files you added (say, `~/.config/nvim/lua/plugins/mine.lua`) are never
