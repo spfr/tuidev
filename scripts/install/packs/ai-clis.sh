@@ -34,11 +34,19 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 _ai_clis_install_configs() {
     # Claude Code reads settings from ~/.claude/settings.json. (~/.claude.json
     # is the CLI's own state file — never write settings there.)
-    if [[ -f "$REPO_ROOT/configs/claude/settings.json" ]]; then
+    # Linux gets settings.linux.json: the same file with the `**/.env` rules
+    # spelled as literal paths. Claude Code's bubblewrap sandbox can't enforce
+    # a glob, so it walks the whole project for matches, over and over; on a
+    # large repo that pins a core and stalls the TUI. Both are keyed
+    # `settings` in shipped.sha256, so either platform's copy of an earlier
+    # release upgrades.
+    local claude_src="$REPO_ROOT/configs/claude/settings.json"
+    is_linux && claude_src="$REPO_ROOT/configs/claude/settings.linux.json"
+    if [[ -f "$claude_src" ]]; then
         [[ "${DRY_RUN:-false}" == true ]] || mkdir -p "$HOME/.claude"
-        install_config "$HOME/.claude/settings.json" \
-            "$REPO_ROOT/configs/claude/settings.json" \
-            --upgrade-shipped "$REPO_ROOT/configs/claude/shipped.sha256"
+        install_config "$HOME/.claude/settings.json" "$claude_src" \
+            --upgrade-shipped "$REPO_ROOT/configs/claude/shipped.sha256" \
+            --shipped-name settings
     fi
 
     if [[ -f "$REPO_ROOT/configs/codex/config.toml" ]]; then
@@ -66,6 +74,9 @@ ai_clis_install() {
     local settings="$HOME/.claude/settings.json"
     if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && ! grep -q '"sandbox"' "$settings"; then
         print_warning "$settings (yours, kept) has no sandbox settings: merge the sandbox block by hand (docs/sandboxing.md)."
+    fi
+    if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && is_linux && grep -q '\*\*/\.env' "$settings"; then
+        print_warning "$settings (yours, kept) has **/.env rules: on Linux they make Claude Code's sandbox rescan the whole project and stall the TUI. Use the literal rules from configs/claude/settings.linux.json (docs/sandboxing.md)."
     fi
     print_success "ai-clis pack complete"
 }

@@ -97,6 +97,9 @@ check_fingerprinted() {
 }
 check_fingerprinted "$REPO_DIR/configs/sandbox/profiles/shipped.sha256" "$REPO_DIR"/configs/sandbox/profiles/*.sb
 check_fingerprinted "$REPO_DIR/configs/claude/shipped.sha256" "$REPO_DIR/configs/claude/settings.json"
+# settings.linux.json is installed with --shipped-name settings.
+grep -qx "settings $(file_sha256 "$REPO_DIR/configs/claude/settings.linux.json")" "$REPO_DIR/configs/claude/shipped.sha256" \
+    || fail "configs/claude/settings.linux.json changed but its hash is not in configs/claude/shipped.sha256 (append: settings $(file_sha256 "$REPO_DIR/configs/claude/settings.linux.json"))"
 check_fingerprinted "$REPO_DIR/configs/codex/shipped.sha256"  "$REPO_DIR/configs/codex/config.toml"
 check_fingerprinted "$REPO_DIR/configs/vim/shipped.sha256"    "$REPO_DIR/configs/vim/vimrc"
 # nvim is a tree: keyed by path relative to configs/nvim (two init.lua files).
@@ -114,15 +117,34 @@ done < <(grep -rhoE 'configs/[a-z/]+/shipped\.sha256' "$REPO_DIR/scripts/install
 pass "every shipped-config version is fingerprinted (sandbox, claude, codex, vim, nvim)"
 
 # Claude Code's Linux sandbox enforces literal paths and whole directories
-# (a trailing /**), but warns about any other glob in a Read/Edit rule. Only
-# the .env rules, which can't be written literally, may use one.
-while IFS= read -r rule; do
-    path="${rule#*(}"; path="${path%)}"
-    case "$path" in **/.env|**/.env.*) continue ;; esac
-    path="${path%/\*\*}"
-    case "$path" in *'*'*|*'?'*|*'['*) fail "configs/claude/settings.json: $rule uses a glob Claude Code's Linux sandbox can't enforce (use literal paths or a trailing /**)" ;; esac
-done < <(grep -oE '"(Read|Edit)\([^)]*\)"' "$REPO_DIR/configs/claude/settings.json" | tr -d '"')
+# (a trailing /**). Any other glob in a Read/Edit rule makes it walk the whole
+# project for matches, repeatedly, which stalls the TUI on a large repo. Only
+# the macOS settings.json may keep the **/.env rules (Seatbelt matches them
+# natively); settings.linux.json spells them as literal paths.
+check_linux_safe_rules() {
+    local file="$1" allow_env="$2" rule path
+    while IFS= read -r rule; do
+        path="${rule#*(}"; path="${path%)}"
+        if [[ "$allow_env" == true ]]; then
+            case "$path" in **/.env|**/.env.*) continue ;; esac
+        fi
+        path="${path%/\*\*}"
+        case "$path" in *'*'*|*'?'*|*'['*) fail "${file#"$REPO_DIR"/}: $rule uses a glob Claude Code's Linux sandbox can't enforce (use literal paths or a trailing /**)" ;; esac
+    done < <(grep -oE '"(Read|Edit)\([^)]*\)"' "$file" | tr -d '"')
+}
+check_linux_safe_rules "$REPO_DIR/configs/claude/settings.json" true
+check_linux_safe_rules "$REPO_DIR/configs/claude/settings.linux.json" false
 pass "Claude Read/Edit rules use only globs the Linux sandbox supports"
+
+# The Linux settings differ from the macOS ones only in the .env deny rules,
+# and those are the full literal set (9 names, Read and Edit each).
+env_rule='^[[:space:]]*"(Read|Edit)\((\*\*|\.)/\.env[^"]*\)",?$'
+[[ "$(grep -cE '^[[:space:]]*"(Read|Edit)\(\./\.env[^"]*\)",?$' "$REPO_DIR/configs/claude/settings.linux.json")" == 18 ]] \
+    || fail "configs/claude/settings.linux.json must deny the 18 literal ./.env* Read/Edit rules"
+[[ "$(grep -vE "$env_rule" "$REPO_DIR/configs/claude/settings.json")" \
+   == "$(grep -vE "$env_rule" "$REPO_DIR/configs/claude/settings.linux.json")" ]] \
+    || fail "configs/claude/settings.linux.json drifted from settings.json beyond the .env rules"
+pass "configs/claude/settings.linux.json mirrors settings.json apart from the .env rules"
 
 echo ""
 echo "All cross-file contract tests passed."

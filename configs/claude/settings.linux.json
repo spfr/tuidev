@@ -1,0 +1,128 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list *)",
+      "Bash(rg *)",
+      "Bash(jq *)",
+      "Bash(shellcheck *)"
+    ],
+    "ask": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git merge *)",
+      "Bash(git tag *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh release *)",
+      "Bash(gh api *)",
+      "Bash(rg *--pre*)"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.netrc)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.config/gcloud/**)",
+      "Read(~/.config/op/**)",
+      "Read(~/.azure/**)",
+      "Read(~/.docker/**)",
+      "Read(~/.kube/**)",
+      "Read(~/.terraform.d/**)",
+      "Read(~/.password-store/**)",
+      "Read(~/.git-credentials)",
+      "Read(~/.npmrc)",
+      "Read(~/.pypirc)",
+      "Read(~/.cargo/credentials)",
+      "Read(~/.cargo/credentials.toml)",
+      "Read(~/.vault-token)",
+      "Read(~/.pgpass)",
+      "Read(~/Library/Keychains/**)",
+      "Read(~/.config/git/credentials)",
+      "Read(~/.config/containers/auth.json)",
+      "Read(~/.gem/credentials)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.development)",
+      "Read(./.env.development.local)",
+      "Read(./.env.test)",
+      "Read(./.env.test.local)",
+      "Read(./.env.production)",
+      "Read(./.env.production.local)",
+      "Read(./.env.staging)",
+      "Edit(./.env)",
+      "Edit(./.env.local)",
+      "Edit(./.env.development)",
+      "Edit(./.env.development.local)",
+      "Edit(./.env.test)",
+      "Edit(./.env.test.local)",
+      "Edit(./.env.production)",
+      "Edit(./.env.production.local)",
+      "Edit(./.env.staging)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker *", "docker-compose *", "gh *"],
+    "filesystem": {
+      "denyRead": ["~/.claude/.credentials.json", "~/.codex/auth.json"]
+    }
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "teammateMode": "auto",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Needs your approval' 'Permission'"
+          }
+        ]
+      },
+      {
+        "matcher": "idle_prompt|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Waiting for your input' 'Idle'"
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Teammate idle' 'Agent Teams'"
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Auto mode denied a tool call' 'Auto mode'"
+          }
+        ]
+      }
+    ]
+  }
+}

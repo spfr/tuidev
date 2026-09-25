@@ -112,6 +112,7 @@ jobs:
             configs/ghostty/config
             configs/ssh/config
             configs/claude/settings.json
+            configs/claude/settings.linux.json
             configs/codex/config.toml
             configs/opencode/opencode.json
             configs/opencode/tui.json

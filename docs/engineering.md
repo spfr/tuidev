@@ -23,7 +23,7 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `configs/ssh/config`, `configs/ssh/sshd_config.d/` | `~/.ssh/config`, `/etc/ssh/sshd_config.d/` | managed block / copied when writable (remote pack) |
 | `bin/sbx`, `configs/sandbox/profiles/*.sb` | `~/.local/bin/sbx`, `~/.config/tuidev/sandbox/` | overwrite / upgrade-shipped (sandbox pack) |
 | `configs/zsh/opencode.zsh` | `~/.config/tuidev/shell.d/` | overwrite; sourced last by `.zshrc` |
-| `configs/{claude,codex}/` | `~/.claude/settings.json`, `~/.codex/config.toml` | upgrade-shipped (ai-clis pack) |
+| `configs/{claude,codex}/` | `~/.claude/settings.json` (`settings.linux.json` on Linux), `~/.codex/config.toml` | upgrade-shipped (ai-clis pack) |
 | `configs/codex/rules/tuidev.rules` | `~/.codex/rules/tuidev.rules` | overwrite (ai-clis pack) |
 | `configs/orchestration/` | `~/.claude/{rules,agents,skills}`, `~/.codex/{AGENTS.md,agents}`, `~/.agents/skills` | overwrite + managed block `tuidev-orchestration` in `~/.codex/AGENTS.md` (orchestration pack) |
 | `configs/{opencode,herdr}/` | `~/.config/opencode/`, `~/.config/herdr/` | adopt-existing |

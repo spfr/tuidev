@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Claude Code on Linux stalled on large repos.** Linux installs of
+  `--pack ai-clis` now get `configs/claude/settings.linux.json`. It's
+  `settings.json` with the `**/.env` deny rules written as literal paths
+  (`./.env`, `./.env.local`, `./.env.production`, …). Claude Code's
+  bubblewrap sandbox can't enforce a pattern, so it walked the whole project,
+  including `node_modules` and `.git`, again and again while the model
+  worked. That kept one core busy and made typing lag. An unmodified earlier
+  copy upgrades on `./scripts/update.sh --configs`. For a copy you edited,
+  the pack warns when it still has `**/.env` rules. On Linux, `.env` files
+  in subdirectories are no longer denied. macOS keeps the patterns. See
+  docs/sandboxing.md.
+
 ## [3.1.3] - 2026-09-24
 
 ### Changed

@@ -30,7 +30,7 @@ Run the agent in a terminal tab next to your editor, not inside it:
 
 | CLI | Pack | Shipped config (adopted, never overwritten) |
 |-----|------|----------------------------------------------|
-| Claude Code (primary) | `ai-clis` | `configs/claude/settings.json` → `~/.claude/settings.json` |
+| Claude Code (primary) | `ai-clis` | `configs/claude/settings.json` (Linux: `settings.linux.json`) → `~/.claude/settings.json` |
 | Codex (secondary) | `ai-clis` | `configs/codex/config.toml` → `~/.codex/config.toml` |
 | OpenCode (optional) | `opencode` | `configs/opencode/{opencode,tui}.json` → `~/.config/opencode/` |
 
