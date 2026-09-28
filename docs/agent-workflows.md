@@ -40,12 +40,12 @@ The packs install configs, not the CLIs. The CLIs update themselves, and `--pack
 
 - Permissions: read-only commands are allowed (`gh pr view/list`, `gh run view/list`, `rg`, `jq`, `shellcheck`). `git add`, `commit`, `push`, `merge` and `tag`, and `gh pr create`, `gh pr merge`, `gh release` and `gh api` always ask. Credential paths and `.env*` are denied.
 - `sandbox.enabled` is `true`: Claude Code's native sandbox confines the Bash tool and its children by default. See [sandboxing.md](sandboxing.md) for what it confines and how to adjust it.
-- `attribution` is empty (no `Co-Authored-By`). Agent teams are on.
+- `attribution` is empty (no `Co-Authored-By`). Agent teams are off (see [Agent teams](#agent-teams)).
 - Notification hooks cover permission prompts, idle prompts, idle teammates and auto-mode denials. There is no `Stop` hook.
 
 **Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off by default, `file_opener = "vscode"`, an unpinned model, and `~/.codex/rules/tuidev.rules`, which makes the same git and gh writes prompt. See [sandboxing.md](sandboxing.md) for how this native sandbox relates to `sbx`.
 
-**Multi-agent orchestration** (tiered subagents, delegation and verification skills, one policy for both CLIs) is its own pack: see [orchestration.md](orchestration.md).
+**Multi-agent orchestration** (tiered subagents, a delegation skill, one policy for both CLIs) is its own pack: see [orchestration.md](orchestration.md).
 
 ### Instruction files
 
@@ -59,12 +59,14 @@ Start a project's instructions from [templates/AGENTS_TEMPLATE.md](../templates/
 
 ### Agent teams
 
-The shipped settings enable Claude Code's experimental agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) with `"teammateMode": "auto"`:
+Claude Code's experimental agent teams are **off** in the shipped settings. While teams are enabled, every subagent Claude names launches as a teammate, without asking. That makes teams form during ordinary delegation, and each teammate is a full session with its own context and a 5-minute cache. Plain subagents cover focused work that only needs to return a result.
+
+Turn teams on when teammates must talk to each other: `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` for a shell, or the same key under `env` in `~/.claude/settings.json`. The shipped `"teammateMode": "auto"` then picks the display:
 
 - **Inside tmux** (`--pack tmux`), each teammate gets its own tmux pane. Run `claude` from inside a tmux session.
 - **Elsewhere**, teammates run in-process. The agent panel below the prompt lists them: arrow keys select, Enter opens, `x` stops. Force this mode with `claude --teammate-mode in-process`.
 
-Split panes need tmux or iTerm2. Ghostty's native splits don't work for this. With teams enabled, a *named* subagent launches as a teammate. Use plain subagents for focused work that only needs to return a result, and a team when teammates must talk to each other. Set the variable to `0` to turn teams off.
+Split panes need tmux or iTerm2. Ghostty's native splits don't work for this.
 
 ## Worktree-per-agent
 

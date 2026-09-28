@@ -84,7 +84,7 @@ Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi 
 | `oc` | `command opencode` | `opencode` |
 
 ```bash
-claude --teammate-mode in-process       # agent team in one terminal instead of tmux panes
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude   # agent teams, off by default
 ```
 
 `claude` and `codex` are no longer routed through wrapper functions — plain binaries, confined by the sandbox settings each CLI ships with. Details: [sandboxing.md](sandboxing.md). Setup, agent teams and the instruction files each CLI reads: [agent-workflows.md](agent-workflows.md).

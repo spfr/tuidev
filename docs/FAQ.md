@@ -46,7 +46,7 @@ tmux is optional now (`--pack tmux`), bundled automatically by the `remote` prof
 
 **tmux-continuum stopped auto-saving.** Older configs appended the theme below the TPM line, which reset `status-right` after continuum hooked it. Migration `202609222000_tmux_theme_file` moves that block into `theme.conf`. Run `make update-migrations`, then `make update-configs`.
 
-**Agent-team teammates don't open as panes.** Split panes need `claude` to run inside tmux (the shipped `teammateMode` is `auto`), which means `--pack tmux` installed and a session already attached. Outside tmux, teammates run in-process. See [agent-workflows.md](agent-workflows.md#agent-teams).
+**Agent-team teammates don't open as panes.** Teams are off in the shipped settings, so turn them on first. Split panes need `claude` to run inside tmux (the shipped `teammateMode` is `auto`), which means `--pack tmux` installed and a session already attached. Outside tmux, teammates run in-process. See [agent-workflows.md](agent-workflows.md#agent-teams).
 
 ## Sandbox
 

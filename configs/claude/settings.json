@@ -61,9 +61,6 @@
       "denyRead": ["~/.claude/.credentials.json", "~/.codex/auth.json"]
     }
   },
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
   "teammateMode": "auto",
   "attribution": {
     "commit": "",
