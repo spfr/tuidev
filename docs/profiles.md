@@ -65,6 +65,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 | `--pack sandbox-container` | Tier 2 sandboxing: finds a container runtime (Apple `container`, then Podman, then Docker), installs Podman only when none exists, and starts it. See [sandboxing.md](sandboxing.md#tier-2-containers). |
 | `--pack mosh` | mosh on its own, without the rest of `--remote`. |
 | `--pack fnm` | fnm (Fast Node Manager), which `.zshrc` prefers over nvm when present. |
+| `--pack hunk` | [hunk](https://hunk.dev), a review-first diff viewer for agent-written changesets (`hunk diff --watch`, `hunk show`). Homebrew only; 0.x, so opt-in. Nothing is written to `$HOME`: to page git through it, run `git config --global core.pager "hunk pager"`. |
 | `--pack monitoring` | `lazydocker` (`lzd`), `k9s`, `bottom` (`btm`, aliased as `top`). |
 
 The canonical list of pack names is `TUIDEV_VALID_PACKS` in `scripts/lib/profile.sh`. Adding a pack is covered in [engineering.md](engineering.md#the-pack-contract).

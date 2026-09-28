@@ -60,6 +60,7 @@ pkg_manual_hint() {
         zoxide)    echo "https://github.com/ajeetdsouza/zoxide#installation" ;;
         neovim)    echo "https://github.com/neovim/neovim/blob/master/INSTALL.md" ;;
         mosh)      echo "https://mosh.org/#getting" ;;
+        hunk)      echo "https://github.com/modem-dev/hunk#install" ;;
         podman)    echo "https://podman.io/docs/installation" ;;
         *)         echo "" ;;
     esac

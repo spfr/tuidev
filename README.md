@@ -47,7 +47,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 ./install.sh --core --sandbox --pack ai-clis --pack herdr
 ```
 
-Optional packs: `ai-clis`, `orchestration`, `nvim`, `vim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
+Optional packs: `ai-clis`, `orchestration`, `nvim`, `vim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `hunk`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
 
 macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it: packages come from `apt-get`, `dnf` or `pacman`, and anything the distro lacks is skipped with a link to its upstream installer. The installer never pipes a remote script into a shell.
 

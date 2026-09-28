@@ -305,6 +305,7 @@ pack_probe() {
         cmux)               echo "have_cmd cmux || have_app cmux" ;;
         herdr)              echo "have_cmd herdr" ;;
         fnm)                echo "have_cmd fnm" ;;
+        hunk)               echo "have_cmd hunk" ;;
         ai-clis)            echo "have_cmd claude || have_cmd codex" ;;
         nvim)               echo "have_cmd nvim" ;;
         tmux)               echo "have_cmd tmux && [[ -f \"\$HOME/.config/tmux/tmux.conf\" ]]" ;;

@@ -60,6 +60,7 @@ Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi 
 | `cat` | `bat` |
 | `cd` | `z` (zoxide) in interactive shells; `zi` picks interactively |
 | `lg` | `lazygit` |
+| `hunk diff`, `hunk show` | review the working tree or a commit in hunk (`--pack hunk`); `--watch` reloads on change |
 | `gs` `ga` `gc` `gp` `gl` `gd` `gco` `gb` | `git status` / `add` / `commit` / `push` / `pull` / `diff` / `checkout` / `branch` |
 | `lzd` | `lazydocker` (`--pack monitoring`) |
 | `top`, `bottom` | `btm` (`--pack monitoring`) |
