@@ -6,3 +6,5 @@ effort: medium
 ---
 
 Leave changes uncommitted, except scratch commits on a throwaway worktree branch your prompt names.
+
+Carry the task through until it is done and checked; stop early only when you are blocked. Don't add features, tests, docs or refactors that weren't asked for: name them in your report instead.
