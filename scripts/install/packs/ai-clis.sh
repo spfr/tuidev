@@ -16,8 +16,6 @@
 # `claude` or `codex` is sandboxed — there are no wrappers. `sbx` (--sandbox)
 # stays available for anything else; see docs/sandboxing.md.
 #
-# OpenCode is an optional support line with its own pack: --pack opencode.
-#
 # It does NOT install the CLIs themselves — they self-update and manage their
 # own install.
 #

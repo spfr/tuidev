@@ -6,7 +6,7 @@ repo root, fill in the <placeholders>, and delete what doesn't apply. Keep it
 short: every line loads into the agent's context at session start.
 
 Who reads it:
-  - Codex and OpenCode read AGENTS.md natively.
+  - Codex reads AGENTS.md natively.
   - Claude Code reads AGENTS.md when the project has no CLAUDE.md. If you want
     Claude-specific notes, create a CLAUDE.md whose first line is `@AGENTS.md`
     (the import), and put only the Claude-specific lines below it.

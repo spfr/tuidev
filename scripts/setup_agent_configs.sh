@@ -12,7 +12,7 @@
 # natively:
 #   - Claude Code v2.1.277+ → reads AGENTS.md when the project has no CLAUDE.md
 #                             or CLAUDE.local.md (code.claude.com/docs/en/memory)
-#   - Codex CLI, OpenCode   → read AGENTS.md natively
+#   - Codex CLI             → reads AGENTS.md natively
 #
 # --all creates compatibility files, for teams that still need them:
 #   - Claude Code           → CLAUDE.md (older than v2.1.277, or sessions that
@@ -68,7 +68,7 @@ if [[ ! -f "$AGENTS_FILE" ]]; then
 fi
 
 print_header "AI agent configs for $PROJECT_DIR"
-print_info "Claude Code (v2.1.277+), Codex CLI and OpenCode read AGENTS.md natively."
+print_info "Claude Code (v2.1.277+) and Codex CLI read AGENTS.md natively."
 
 if ! $ALL; then
     print_success "nothing to create (use --all for CLAUDE.md and legacy vendor files)"

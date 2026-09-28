@@ -47,7 +47,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 ./install.sh --core --sandbox --pack ai-clis --pack herdr
 ```
 
-Optional packs: `ai-clis`, `orchestration`, `opencode`, `nvim`, `vim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
+Optional packs: `ai-clis`, `orchestration`, `nvim`, `vim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
 
 macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it: packages come from `apt-get`, `dnf` or `pacman`, and anything the distro lacks is skipped with a link to its upstream installer. The installer never pipes a remote script into a shell.
 
@@ -68,7 +68,7 @@ Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.
 ## Safety
 
 - `~/.zshrc`, `~/.config/starship.toml` and `~/.ssh/config` are written as `# >>> tuidev managed (...) >>>` blocks. Everything outside the markers is yours. `~/.config/tmux/tmux.conf` gets the same treatment when you install `--pack tmux`.
-- AI CLI settings (`~/.claude/settings.json`, `~/.codex/config.toml`, OpenCode's) are adopt-existing or upgrade-shipped: tuidev never clobbers a file you've edited. An edited `~/.claude/settings.json` gets new shipped settings merged in, and your values win ([docs/updating.md](docs/updating.md#shipped-configs-you-may-have-edited)).
+- AI CLI settings (`~/.claude/settings.json`, `~/.codex/config.toml`) are adopt-existing or upgrade-shipped: tuidev never clobbers a file you've edited. An edited `~/.claude/settings.json` gets new shipped settings merged in, and your values win ([docs/updating.md](docs/updating.md#shipped-configs-you-may-have-edited)).
 - Anything tuidev overwrites is backed up to `~/.config/tuidev/backups/` first. `--dry-run` previews every mutation.
 - `~/.config/tuidev/manifest` records what was actually installed. `./uninstall.sh` removes only those records: a `ripgrep` you already had survives, and so does CLI auth or session state.
 - One-shot migrations repair what past releases left behind, at most once per machine. See [docs/updating.md](docs/updating.md).

@@ -315,6 +315,20 @@ cmp -s "$SCRIPT_DIR/../../configs/claude/settings.json" "$v3_home/.claude/settin
     || fail "drop-wrappers migration touched settings.json"
 pass "v3 drop-wrappers migration reports the Claude sandbox state truthfully"
 
+# 14g. 3.2.3: opencode leaves extra_packs and its oc fragment goes, with a backup;
+# ~/.config/opencode is the user's and stays.
+ocd_mig="$SCRIPT_DIR/../migrations/202609281300_drop_opencode_pack.sh"
+printf 'profile=desktop\nextra_packs=ai-clis opencode herdr\n' > "$v3_home/.config/tuidev/profile"
+mkdir -p "$v3_home/.config/opencode"
+echo '{}' > "$v3_home/.config/opencode/opencode.json"
+HOME="$v3_home" bash "$ocd_mig" >/dev/null || fail "drop-opencode migration failed"
+HOME="$v3_home" bash "$ocd_mig" >/dev/null || fail "drop-opencode migration not re-runnable"
+[[ "$(v3_packs)" == "ai-clis herdr" ]] || fail "opencode not dropped: $(v3_packs)"
+[[ ! -e "$v3_home/.config/tuidev/shell.d/opencode.zsh" ]] || fail "opencode.zsh not removed"
+find "$v3_home/.config/tuidev/backups" -name 'opencode.zsh.*' | grep -q . || fail "opencode.zsh not backed up"
+[[ -f "$v3_home/.config/opencode/opencode.json" ]] || fail "drop-opencode touched ~/.config/opencode"
+pass "drop-opencode migration drops the pack and the oc fragment only, idempotently"
+
 # ---------------------------------------------------------------------------
 # manifest.sh
 # ---------------------------------------------------------------------------

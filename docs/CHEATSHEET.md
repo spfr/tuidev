@@ -81,7 +81,6 @@ Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi 
 | `claude` | Claude Code, sandboxed by its own native settings | |
 | `claude -w NAME` | Claude Code in its own worktree (`.claude/worktrees/NAME`) | |
 | `codex` | Codex, sandboxed by its own native settings | |
-| `oc` | `command opencode` | `opencode` |
 
 ```bash
 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude   # agent teams, off by default
@@ -103,7 +102,7 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude   # agent teams, off by default
 | `sbx --dry-run -- CMD` | Print the `sandbox-exec` command without running it |
 | `make sbx-test` | Check that the project is readable and `~/.ssh` is denied |
 
-`sbx` runs binaries, not shell functions (`sbx -- opencode`, not `sbx -- oc`). Seatbelt doesn't nest, so plain `claude` already runs under its native sandbox; to run it under `sbx` instead, turn that off for the run: `sbx -- claude --settings '{"sandbox":{"enabled":false}}'`. Details: [sandboxing.md](sandboxing.md).
+`sbx` runs binaries, not shell functions or aliases. Seatbelt doesn't nest, so plain `claude` already runs under its native sandbox; to run it under `sbx` instead, turn that off for the run: `sbx -- claude --settings '{"sandbox":{"enabled":false}}'`. Details: [sandboxing.md](sandboxing.md).
 
 ## Herdr (`--pack herdr`)
 

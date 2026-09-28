@@ -399,14 +399,12 @@ run_core() {
 
     # --- AI CLI presence (soft: SKIP when absent — opt-in --pack ai-clis) -
     local aitool
-    local aipack
-    for aitool in claude codex opencode; do
+    for aitool in claude codex; do
         start_test "AI CLI: $aitool" core
-        case "$aitool" in opencode) aipack=opencode ;; *) aipack=ai-clis ;; esac
         if command -v "$aitool" >/dev/null 2>&1; then
             pass_test "$aitool on PATH"
         else
-            skip_test "$aitool not installed (optional; --pack $aipack)"
+            skip_test "$aitool not installed (optional; --pack ai-clis)"
         fi
     done
 

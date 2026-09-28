@@ -92,7 +92,6 @@
 ;;                ~/.local/share/claude (native install; versions/ is not),
 ;;                ~/.local/state/claude (locks), ~/.cache/claude (staging)
 ;;   Codex        ~/.codex/ (CODEX_HOME: auth, sessions, logs; not config)
-;;   OpenCode     ~/.local/share/opencode (data, auth, logs), ~/.cache/opencode
 ;; Deliberately NOT writable: ~/.local/bin (sbx, notify.sh and the CLI
 ;; launchers live there; a writable PATH dir is a sandbox escape). Run
 ;; `claude update` outside sbx: auto-updates cannot write from inside it.
@@ -102,9 +101,7 @@
   (subpath (string-append (param "HOME_DIR") "/.local/share/claude"))
   (subpath (string-append (param "HOME_DIR") "/.local/state/claude"))
   (subpath (string-append (param "HOME_DIR") "/.cache/claude"))
-  (subpath (string-append (param "HOME_DIR") "/.codex"))
-  (subpath (string-append (param "HOME_DIR") "/.local/share/opencode"))
-  (subpath (string-append (param "HOME_DIR") "/.cache/opencode")))
+  (subpath (string-append (param "HOME_DIR") "/.codex")))
 
 ;; --- ...except the files that steer a CLI from OUTSIDE this sandbox ---
 ;; Settings, hooks, commands, agents, skills, plugins, global memory and the
@@ -136,8 +133,7 @@
   (subpath (string-append (param "HOME_DIR") "/.codex/rules"))
   (subpath (string-append (param "HOME_DIR") "/.codex/packages"))
   (literal (string-append (param "HOME_DIR") "/.local/share/claude"))
-  (subpath (string-append (param "HOME_DIR") "/.local/share/claude/versions"))
-  (subpath (string-append (param "HOME_DIR") "/.config/opencode")))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/claude/versions")))
 
 ;; --- Network ---
 ;; See strict.sb for why Seatbelt cannot enforce per-hostname allowlists.

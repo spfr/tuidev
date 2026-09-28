@@ -66,7 +66,7 @@ tmux is optional now (`--pack tmux`), bundled automatically by the `remote` prof
 
 ## AI CLIs
 
-`--pack ai-clis` adopts/upgrades `~/.claude/settings.json` and `~/.codex/config.toml`, which turn on the native sandboxes; it doesn't install `claude` or `codex` themselves. `oc` (OpenCode) needs `--pack opencode`.
+`--pack ai-clis` adopts/upgrades `~/.claude/settings.json` and `~/.codex/config.toml`, which turn on the native sandboxes; it doesn't install `claude` or `codex` themselves.
 
 **`claude` or `codex` not found.** They update themselves and aren't installed by tuidev. Follow each CLI's own install instructions, then open a new shell so `--pack ai-clis`'s settings apply.
 

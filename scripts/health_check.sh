@@ -306,7 +306,6 @@ pack_probe() {
         herdr)              echo "have_cmd herdr" ;;
         fnm)                echo "have_cmd fnm" ;;
         ai-clis)            echo "have_cmd claude || have_cmd codex" ;;
-        opencode)           echo "have_cmd opencode" ;;
         nvim)               echo "have_cmd nvim" ;;
         tmux)               echo "have_cmd tmux && [[ -f \"\$HOME/.config/tmux/tmux.conf\" ]]" ;;
         *)                  echo "have_cmd $1" ;;

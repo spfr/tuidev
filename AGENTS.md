@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for AI coding agents (Claude Code, Codex, OpenCode, and others) working **on this repository**. For the human-facing docs, start at [README.md](README.md).
+Instructions for AI coding agents (Claude Code, Codex, and others) working **on this repository**. For the human-facing docs, start at [README.md](README.md).
 
 ## What this repo is
 

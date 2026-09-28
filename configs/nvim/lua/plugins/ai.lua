@@ -1,6 +1,6 @@
 -- ============================================================================
 -- AI Integrations
--- Note: This setup uses TERMINAL-BASED AI tools (claude, codex, opencode)
+-- Note: This setup uses TERMINAL-BASED AI tools (claude, codex)
 -- in separate tmux panes rather than in-editor AI plugins.
 -- This keeps nvim fast and focused on editing.
 -- ============================================================================

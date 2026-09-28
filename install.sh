@@ -24,10 +24,10 @@
 #   --extras     lazygit, httpie, atuin, dust, broot, hyperfine, tokei, ...
 #
 #   --pack NAME  optional pack (repeatable): ai-clis (Claude Code + Codex
-#                configs, native sandboxes on), opencode, nvim (Neovim +
-#                LazyVim), vim (plain Vim, zero-plugin vimrc), tmux (durable
-#                sessions + TPM), herdr, cmux,
-#                sandbox-container, mosh, fnm, monitoring
+#                configs, native sandboxes on), orchestration, nvim
+#                (Neovim + LazyVim), vim (plain Vim, zero-plugin vimrc), tmux
+#                (durable sessions + TPM), herdr, cmux, sandbox-container,
+#                mosh, fnm, monitoring
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files

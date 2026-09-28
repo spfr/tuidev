@@ -80,8 +80,6 @@ print_step "JSON (jq)"
 json_files=(
     configs/claude/settings.json
     configs/claude/settings.linux.json
-    configs/opencode/opencode.json
-    configs/opencode/tui.json
 )
 if command_exists jq; then
     for f in "${json_files[@]}"; do

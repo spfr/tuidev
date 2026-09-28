@@ -20,7 +20,7 @@ The forward-looking view (fleet-scale agents, sandbox succession, watch-list cri
 
 **Layered and reversible.** Profiles are shortcuts over packs, and every optional tool — including tmux and Neovim now — is a pack. Config is written as managed blocks or adopted, never clobbered. Every install is recorded so uninstall removes exactly that. Migrations repair the past once per machine.
 
-**CLI-agnostic core.** The terminal layer doesn't depend on any AI CLI. Claude Code (primary) and Codex (secondary) are one opt-in pack, and OpenCode is optional. When a CLI is deprecated or a new one appears, the core doesn't move.
+**CLI-agnostic core.** The terminal layer doesn't depend on any AI CLI. Claude Code (primary) and Codex (secondary) are one opt-in pack. When a CLI is deprecated or a new one appears, the core doesn't move.
 
 **Public means generic.** The repo ships best practices only. Hosts, IPs, usernames and hardware stay in gitignored `*.local` files. No telemetry, ever.
 

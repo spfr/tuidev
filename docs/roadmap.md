@@ -111,18 +111,17 @@ they are *why* (a)–(c) above don't require rewrites:
 - **Drift-detecting updates and one-shot migrations.** `scripts/update.sh`
   separates package updates from config-drift detection per profile, and
   timestamped migrations (`scripts/migrations/`) repair what past releases
-  left behind: a removed multiplexer pack, the OpenCode pack split, and the move of
+  left behind: removed packs (a multiplexer, OpenCode), and the move of
   the tmux theme into `theme.conf`. Future transitions ship as a migration
   instead of asking users to hand-edit dotfiles.
 - **Manifest-driven uninstall.** `uninstall.sh` removes only what
   `~/.config/tuidev/manifest` records, rather than guessing from what's on
   disk, the same shape Omacosy uses. That's what makes "cleanly remove one
   pack" tractable as the pack count grows.
-- **CLI-agnostic core.** AI CLIs (`claude`, `codex`, and the optional
-  `opencode`) run sandboxed by their own means: Claude Code and Codex by
+- **CLI-agnostic core.** AI CLIs (`claude`, `codex`) run sandboxed by
   their own native sandbox settings (`--pack ai-clis` adopts/upgrades
-  `~/.claude/settings.json` and `~/.codex/config.toml` to turn those on),
-  OpenCode by its own `--pack opencode`'s plain `oc` wrapper. When a CLI is
+  `~/.claude/settings.json` and `~/.codex/config.toml` to turn those on).
+  When a CLI is
   deprecated (as happened to Gemini CLI, succeeded by Antigravity) or a new
   one appears, the core install doesn't move.
 

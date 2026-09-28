@@ -65,7 +65,7 @@ make sbx-test                          # check that the project is readable and 
 
 `sbx -- codex -s danger-full-access -a on-request` turns Codex's own sandbox off and makes `sbx` the single boundary, at the kernel level, while Codex still asks before acting (`-a on-request`). Unlike `workspace-write`, it denies the credential paths. The Claude Code line above does the same for `claude`.
 
-`sbx` executes a **binary**, not a shell function or alias. `oc` is a zsh function (`configs/zsh/opencode.zsh`), so `sbx -- oc` fails: name the real binary, `sbx -- opencode`.
+`sbx` executes a **binary**, not a shell function or alias: name the real binary (`sbx -- codex`, not an alias of it).
 
 Escape hatch, one run at a time: `sbx --profile off -- CMD` runs CMD with no sandbox at all. (For `claude` that is the same as plain `claude`, whose native sandbox then applies.)
 
@@ -79,7 +79,7 @@ Escape hatch, one run at a time: `sbx --profile off -- CMD` runs CMD with no san
 | herdr socket | Only with `--allow-herdr` / `SBX_ALLOW_HERDR=1` | Always open | open |
 | Use for | Agent runs: LLM APIs and HTTPS git work | `npm ci`, `pip install`, git over ssh | A trusted tool, or debugging a profile |
 
-**The AI CLIs' state dirs** are writable so the CLIs can save sessions, logs and caches: `~/.claude`, `~/.claude.json*`, `~/.local/share/claude`, `~/.local/state/claude`, `~/.cache/claude`, `~/.codex`, `~/.local/share/opencode` and `~/.cache/opencode`.
+**The AI CLIs' state dirs** are writable so the CLIs can save sessions, logs and caches: `~/.claude`, `~/.claude.json*`, `~/.local/share/claude`, `~/.local/state/claude`, `~/.cache/claude` and `~/.codex`.
 
 **Except what steers a CLI outside the sandbox.** Settings, hooks and binaries are loaded by later sessions, including unsandboxed ones, so an agent that could edit them would escape on your next run. Under `strict` and `standard` these stay read-only:
 
@@ -87,7 +87,7 @@ Escape hatch, one run at a time: `sbx --profile off -- CMD` runs CMD with no san
 ~/.claude/settings.json  ~/.claude/settings.local.json  ~/.claude/CLAUDE.md
 ~/.claude/keybindings.json  ~/.claude/{hooks,commands,agents,skills,plugins}/
 ~/.codex/config.toml  ~/.codex/*.config.toml  ~/.codex/{rules,packages}/
-~/.local/share/claude/versions/  ~/.config/opencode/
+~/.local/share/claude/versions/
 the ~/.claude, ~/.codex and ~/.local/share/claude directories themselves (no rename-and-swap)
 ```
 

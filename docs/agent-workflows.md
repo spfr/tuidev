@@ -32,9 +32,8 @@ Run the agent in a terminal tab next to your editor, not inside it:
 |-----|------|----------------------------------------------|
 | Claude Code (primary) | `ai-clis` | `configs/claude/settings.json` (Linux: `settings.linux.json`) → `~/.claude/settings.json` |
 | Codex (secondary) | `ai-clis` | `configs/codex/config.toml` → `~/.codex/config.toml` |
-| OpenCode (optional) | `opencode` | `configs/opencode/{opencode,tui}.json` → `~/.config/opencode/` |
 
-The packs install configs, not the CLIs. The CLIs update themselves, and `--pack opencode` prints OpenCode's official installer command. `oc` runs `command opencode` directly. Claude Code and Codex run as plain `claude` and `codex`, sandboxed by the native settings each CLI ships with — see [sandboxing.md](sandboxing.md). Gemini CLI is deprecated upstream (its successor is Antigravity, `agy`) and isn't shipped. To use it, add your own wrapper in `~/.zshrc.local`.
+The packs install configs, not the CLIs. The CLIs update themselves. Claude Code and Codex run as plain `claude` and `codex`, sandboxed by the native settings each CLI ships with — see [sandboxing.md](sandboxing.md). Gemini CLI is deprecated upstream (its successor is Antigravity, `agy`) and isn't shipped. To use it, add your own wrapper in `~/.zshrc.local`.
 
 **Shipped Claude Code policy:**
 
@@ -53,7 +52,6 @@ The packs install configs, not the CLIs. The CLIs update themselves, and `--pack
 |-----|----------------|-------------------|
 | Claude Code | `CLAUDE.md` (managed → `~/.claude/CLAUDE.md` → project → `CLAUDE.local.md`) and `.claude/rules/*.md`. Reads `AGENTS.md` when the project has no `CLAUDE.md` (v2.1.277+). | Put `@AGENTS.md` on the first line of `CLAUDE.md` |
 | Codex | `AGENTS.md` (`~/.codex/AGENTS.md`, then repo root down to the cwd; 32 KiB cap) | `project_doc_fallback_filenames = ["CLAUDE.md"]` |
-| OpenCode | The nearest `AGENTS.md`. Falls back to `CLAUDE.md` when no `AGENTS.md` exists. | Nothing needed |
 
 Start a project's instructions from [templates/AGENTS_TEMPLATE.md](../templates/AGENTS_TEMPLATE.md). `scripts/setup_agent_configs.sh PROJECT` creates nothing by default. With `--all`, it adds a `CLAUDE.md` symlink (for older Claude Code, or sessions that can't read `AGENTS.md`) and the legacy per-vendor files (`.cursorrules`, `.windsurfrules`, `.aider.md`, `.clinerules`, Roo, Copilot). It never overwrites a file. Keep each instruction file short, because every one loads into context at session start.
 
