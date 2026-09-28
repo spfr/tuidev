@@ -31,7 +31,7 @@ codex                              # Codex, sandboxed by its own settings
 
 The first-run walkthrough is [docs/QUICK_START_GUIDE.md](docs/QUICK_START_GUIDE.md).
 
-**Only want the agent setup?** The `orchestration` pack (tiered Claude Code and Codex subagents, the delegation and verification skills) installs on its own, without the shell, theme or packages: `bash scripts/install/packs/orchestration.sh` from a clone. `git pull` and re-run to update, and `./uninstall.sh` to remove it. See [docs/orchestration.md](docs/orchestration.md).
+**Only want the agent setup?** The `orchestration` pack (tiered Claude Code and Codex subagents, the delegation skill) installs on its own, without the shell, theme or packages: `bash scripts/install/packs/orchestration.sh` from a clone. `git pull` and re-run to update, and `./uninstall.sh` to remove it. See [docs/orchestration.md](docs/orchestration.md).
 
 ## Profiles
 

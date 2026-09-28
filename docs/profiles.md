@@ -56,7 +56,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 | Pack | Installs |
 |------|----------|
 | `--pack ai-clis` | Adopts/upgrades `~/.claude/settings.json` and `~/.codex/config.toml`, which turn on Claude Code's and Codex's native sandboxes. Does not install the CLIs, which update themselves. See [agent-workflows.md](agent-workflows.md) and [sandboxing.md](sandboxing.md). |
-| `--pack orchestration` | The multi-agent policy for Claude Code and Codex: a rule file in `~/.claude/rules/`, a managed block in `~/.codex/AGENTS.md`, tiered subagents, and the `delegation` and `verification` skills. Pair it with `ai-clis`, which holds the git and gh write gates. Also runs on its own, without the rest of tuidev. See [orchestration.md](orchestration.md). |
+| `--pack orchestration` | The multi-agent policy for Claude Code and Codex: a rule file in `~/.claude/rules/`, a managed block in `~/.codex/AGENTS.md`, tiered subagents, and the `delegation` skill. Pair it with `ai-clis`, which holds the git and gh write gates. Also runs on its own, without the rest of tuidev. See [orchestration.md](orchestration.md). |
 | `--pack opencode` | `oc` wrapper for OpenCode, and adopts `opencode.json` + `tui.json`. Prints OpenCode's official installer command rather than running it. |
 | `--pack nvim` | `neovim`, and the LazyVim config in `configs/nvim/`, deployed file by file with `--upgrade-shipped`, only while tuidev owns the tree. See [nvim.md](nvim.md). |
 | `--pack vim` | `vim` (on macOS the system Vim is used), and a zero-plugin vimrc deployed as `~/.vim/vimrc` with `--upgrade-shipped`. A `~/.vimrc` of your own wins. The light alternative to `nvim` for servers and small boxes. See [vim.md](vim.md). |

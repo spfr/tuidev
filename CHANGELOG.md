@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Leaner orchestration policy for Opus 5.5 and GPT-6.** Both vendors now
+  say leftover scaffolding hurts, and Anthropic says Claude over-delegates.
+  The always-on text drops its delegation guidance, which Claude Code's
+  harness and the agent descriptions already give, and keeps only the rules
+  neither CLI applies by default (uncommitted work, commit style, `.env`,
+  your decisions). Implementor bodies keep only the uncommitted-work rule,
+  and the reviewer only its verdict format: the method and report templates
+  are gone. The `delegation` skill is cut to worktree parallelism and the
+  harvest. The Codex block, where delegation stays opt-in, sends high-output
+  runs to `executor`.
+- **Agent teams are off in the shipped Claude Code settings.** While teams
+  are on, every subagent Claude names launches as a full teammate session,
+  unasked. Turn them on with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`;
+  `teammateMode: "auto"` stays. The settings merge drops the old value from
+  an edited `~/.claude/settings.json` unless you changed it.
+
+### Removed
+- **The `verification` skill.** Current models check their own work, and
+  verification reminders now cause over-verification. A migration backs up
+  and removes `~/.claude/skills/verification/` and
+  `~/.agents/skills/verification/`.
+
 ## [3.2.0] - 2026-09-25
 
 ### Added

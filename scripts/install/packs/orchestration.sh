@@ -12,7 +12,7 @@
 #     ~/.codex/AGENTS.md (Codex's copy adds a short mechanics section; your
 #     own text outside the block is kept).
 #   - the subagent tiers: ~/.claude/agents/*.md and ~/.codex/agents/*.toml
-#   - the on-demand skills (delegation, verification): ~/.claude/skills/ and
+#   - the on-demand skill (delegation): ~/.claude/skills/ and
 #     ~/.agents/skills/ (where Codex reads user skills)
 #
 # Agent and skill files are tuidev-owned (--overwrite, backup first). The git
@@ -99,9 +99,11 @@ _orchestration_warn_plain_copy() {
     # A link left in place (a dry run) is not the user's text.
     [[ -f "$file" && ! -L "$file" ]] || return 0
     outside="$(sed "/tuidev managed ($ORCHESTRATION_BLOCK) >>>/,/tuidev managed ($ORCHESTRATION_BLOCK) <<</d" "$file")"
-    # The first sentence of the agents-orchestration policy, and of ours.
+    # The first sentence of the agents-orchestration policy, and of ours
+    # (3.2 and current).
     if grep -qF -e "The main thread is the orchestrator:" \
-        -e "Delegate for context isolation, independent parallel work" <<<"$outside"; then
+        -e "Delegate for context isolation, independent parallel work" \
+        -e "Leave finished work uncommitted for the user to review." <<<"$outside"; then
         print_warning "$file holds the orchestration policy as plain text (an agents-orchestration copy?): delete it there, or it loads twice"
     fi
 }
