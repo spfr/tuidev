@@ -521,8 +521,9 @@ _tuidev_merge_json() {
             print_warning "could not back up $dest: left as it was, nothing merged ($hint)"
             return 0
         fi
-        # cp writes through a symlinked DEST and keeps DEST's mode.
-        if ! cp "$tmp" "$dest"; then
+        # A redirect writes through a symlinked DEST and keeps DEST's mode.
+        # Not cp: BusyBox cp replaces the link with a regular file.
+        if ! cat "$tmp" > "$dest"; then
             rm -f "$tmp"
             print_warning "could not write $dest: left as it was (backup in $TUIDEV_BACKUP_DIR)"
             return 0
