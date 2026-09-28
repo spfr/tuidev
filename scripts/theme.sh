@@ -154,6 +154,7 @@ set-option -g status-right "#[fg=$(pc bg_highlight)]#[bg=$(pc bg_highlight),fg=$
 set-window-option -g window-status-format "#[fg=$(pc fg)] #I:#W "
 set-window-option -g window-status-current-format "#[bg=$(pc bg_highlight),fg=$(pc accent),bold] #I:#W "
 set-window-option -g window-status-activity-style "fg=$(pc ansi_yellow)"
+set-window-option -g window-status-current-style "default"
 set-option -g pane-border-style "fg=$(pc border)"
 set-option -g pane-active-border-style "fg=$(pc border_active)"
 set-option -g message-style "bg=$(pc bg_highlight),fg=$(pc accent)"
