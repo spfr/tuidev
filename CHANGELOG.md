@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.3] - 2026-09-28
+
+### Added
+- **`--pack hunk`.** Installs [hunk](https://hunk.dev), a review-first diff
+  viewer for agent-written changesets (`hunk diff --watch`, `hunk show`), from
+  Homebrew. Opt-in because upstream is 0.x; it writes nothing to `$HOME` and
+  prints the `git config --global core.pager "hunk pager"` opt-in.
+- **Background sessions in `docs/agent-workflows.md`:** `claude --bg`,
+  `claude agents`, `attach|logs|stop|respawn|rm`, `/bg` and `/fork` (each in
+  its own worktree), Codex's worktrees-by-default, and how background
+  sessions treat git and the `ask` rules.
+- **Recent sandbox behavior in `docs/sandboxing.md`:** `!` commands run
+  outside Claude Code's sandbox, `sandbox.network.strictAllowlist` for
+  unattended runs, `sandbox.ripgrep` and `excludedCommands` scope, and
+  Codex's background server relative to `sbx`.
+
+### Changed
+- **tmux: the current window keeps its plain style on tmux 3.8+,** which
+  underlines it by default. `window-status-current-style` is pinned to
+  `default` in `tmux.conf` and the generated `theme.conf`.
+- **`implementor-standard` finishes what it starts and stays in scope.** On
+  Sonnet 5.5 at `medium`, Anthropic notes it can stop to check in before a
+  task is done and add unrequested tests or docs; one body line covers both.
+  `docs/orchestration.md` also names the env vars to set where the model
+  aliases lag (Amazon Bedrock, Google Cloud, Claude Platform on AWS).
+
+### Removed
+- **The `opencode` pack.** tuidev supports Claude Code and Codex only. A
+  migration drops `opencode` from your recorded packs and removes the `oc`
+  wrapper fragment (backup first); `~/.config/opencode` and the `opencode`
+  binary are yours and stay. The `strict` and `standard` Seatbelt profiles
+  no longer make OpenCode's state dirs writable, so `sbx -- opencode` now
+  fails on start.
+
 ## [3.2.2] - 2026-09-28
 
 ### Fixed
