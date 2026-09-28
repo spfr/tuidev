@@ -84,7 +84,8 @@ jobs:
           }
 
           scan "hardcoded /Users/USER path found" '/Users/[a-zA-Z0-9_-]+/'
-          scan "hardcoded /home/USER path found"  '/home/[a-zA-Z0-9_-]+/' 'testuser'
+          # /home/linuxbrew is Homebrew's fixed Linux prefix, not a person.
+          scan "hardcoded /home/USER path found"  '/home/[a-zA-Z0-9_-]+/' 'testuser|/home/linuxbrew/'
           # user@hostname.local mDNS — do not ban ~/.local/bin or config.local
           scan "personal mDNS host (user@ + hostname) found — keep those in gitignored *.local overlays" \
                '@[A-Za-z0-9._-]+\.local\b'
