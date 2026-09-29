@@ -5,9 +5,8 @@
 # Installs fnm (Fast Node Manager, Rust) — a drop-in, ~1ms-startup replacement
 # for nvm. It reads .nvmrc / .node-version / package.json engines.node and, with
 # `--use-on-cd` (already wired into the managed ~/.zshrc block), auto-switches
-# Node per project. The shipped zsh config prefers fnm when it is present and
-# falls back to the existing nvm setup otherwise — installing this pack is all
-# you need.
+# Node per project. The shipped zsh config puts Node on PATH only through fnm
+# (nvm is no longer wired in) — installing this pack is all you need.
 #
 # Entrypoint: fnm_install
 # Invoked via: ./install.sh --pack fnm
@@ -75,7 +74,7 @@ fnm_install() {
 
     _fnm_ensure_node "$(_fnm_bin)"
 
-    print_info "Open a new shell — the managed ~/.zshrc prefers fnm automatically."
+    print_info "Open a new shell — the managed ~/.zshrc loads fnm automatically."
     print_info "fnm reads .nvmrc/.node-version and switches Node on cd."
     print_success "fnm pack complete"
 }

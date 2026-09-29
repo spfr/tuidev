@@ -329,6 +329,35 @@ find "$v3_home/.config/tuidev/backups" -name 'opencode.zsh.*' | grep -q . || fai
 [[ -f "$v3_home/.config/opencode/opencode.json" ]] || fail "drop-opencode touched ~/.config/opencode"
 pass "drop-opencode migration drops the pack and the oc fragment only, idempotently"
 
+# 14h. cmux leaves extra_packs, idempotently.
+cmux_mig="$SCRIPT_DIR/../migrations/202609291200_drop_cmux_pack.sh"
+printf 'profile=desktop\nextra_packs=ai-clis cmux tmux\n' > "$v3_home/.config/tuidev/profile"
+HOME="$v3_home" bash "$cmux_mig" >/dev/null || fail "drop-cmux migration failed"
+HOME="$v3_home" bash "$cmux_mig" >/dev/null || fail "drop-cmux migration not re-runnable"
+[[ "$(v3_packs)" == "ai-clis tmux" ]] || fail "cmux not dropped: $(v3_packs)"
+pass "drop-cmux migration drops the pack from extra_packs, idempotently"
+
+# 14i. mosh leaves extra_packs (--remote owns it), idempotently.
+mosh_mig="$SCRIPT_DIR/../migrations/202609291210_drop_mosh_pack.sh"
+printf 'profile=desktop\nremote=false\nextra_packs=ai-clis mosh tmux\n' > "$v3_home/.config/tuidev/profile"
+out="$(HOME="$v3_home" bash "$mosh_mig" 2>&1)" || fail "drop-mosh migration failed"
+[[ "$out" == *"--remote now owns it"* ]] || fail "drop-mosh migration: no --remote hint: $out"
+HOME="$v3_home" bash "$mosh_mig" >/dev/null || fail "drop-mosh migration not re-runnable"
+[[ "$(v3_packs)" == "ai-clis tmux" ]] || fail "mosh not dropped: $(v3_packs)"
+pass "drop-mosh migration drops the pack from extra_packs, idempotently"
+
+# 14j. nvm without fnm gets a warning; nothing under ~/.nvm is touched.
+fnm_mig="$SCRIPT_DIR/../migrations/202609291220_zshrc_fnm_only.sh"
+mkdir -p "$v3_home/.nvm"
+echo '# nvm' > "$v3_home/.nvm/nvm.sh"
+out="$(HOME="$v3_home" NVM_DIR='' PATH=/usr/bin:/bin bash "$fnm_mig" 2>&1)" || fail "fnm-only migration failed"
+[[ "$out" == *"no longer loads nvm"* && "$out" == *"--pack fnm"* ]] || fail "fnm-only migration: no warning: $out"
+[[ -f "$v3_home/.nvm/nvm.sh" ]] || fail "fnm-only migration touched ~/.nvm"
+rm -rf "$v3_home/.nvm"
+out="$(HOME="$v3_home" NVM_DIR='' PATH=/usr/bin:/bin bash "$fnm_mig" 2>&1)" || fail "fnm-only migration failed without nvm"
+[[ -z "$out" ]] || fail "fnm-only migration spoke without nvm: $out"
+pass "fnm-only migration warns nvm users and touches nothing"
+
 # ---------------------------------------------------------------------------
 # manifest.sh
 # ---------------------------------------------------------------------------

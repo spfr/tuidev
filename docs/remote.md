@@ -32,7 +32,7 @@ Detach with `Ctrl+a d`. `tls` lists sessions on the box. tmux-continuum saves ev
 
 ## mosh for flaky networks
 
-Use mosh on cellular, roaming Wi-Fi, or a laptop that sleeps a lot. It comes with `--remote`, or on its own with `--pack mosh`.
+Use mosh on cellular, roaming Wi-Fi, or a laptop that sleeps a lot. It comes with `--remote`.
 
 ```bash
 mosh devbox -- tmux attach -t myproject

@@ -1,6 +1,6 @@
 # Roadmap — 2027/2028 Readiness
 
-*Last updated: September 2026 (tuidev 3.0).*
+*Last updated: 29 September 2026.*
 
 This is not a feature list. It is groundwork for a landscape that keeps
 moving faster than most tools can absorb — multiplexers, sandboxing, and
@@ -27,7 +27,8 @@ Three things are true at once in mid-2026:
   expanding toward a single system for interactive work, background jobs,
   and production — local, remote, and CI unified. Backed by Notable Capital
   and Amplify Partners; promises an open-source release during development.
-  As of this writing there is **no public binary**, only a beta waitlist.
+  As of 29 September 2026 there is still **no public binary**, only a beta
+  waitlist.
 
 **This repo's posture:** tmux stays the durability layer when you choose it —
 `--pack tmux`, included by the `remote` profile for always-on nodes — rather

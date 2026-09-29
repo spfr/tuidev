@@ -25,20 +25,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Formula list (Homebrew). Alphabetized for drift-diff friendliness.
 EXTRAS_FORMULAE=(
     atuin
-    bandwhich
     broot
     duf
     dust
-    fastfetch
     glow
-    httpie
     hyperfine
     lazygit
-    ncdu
     procs
     sd
     tealdeer
     tokei
+    uv
+    xh
 )
 # bottom lives in --pack monitoring; kept out of extras to avoid double-count.
 

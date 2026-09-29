@@ -301,8 +301,6 @@ pack_probe() {
     case "$1" in
         monitoring)         echo "have_cmd btm || have_cmd bottom || have_cmd htop" ;;
         sandbox-container)  echo "have_cmd container || have_cmd podman || have_cmd docker" ;;
-        mosh)               echo "have_cmd mosh" ;;
-        cmux)               echo "have_cmd cmux || have_app cmux" ;;
         herdr)              echo "have_cmd herdr" ;;
         fnm)                echo "have_cmd fnm" ;;
         hunk)               echo "have_cmd hunk" ;;

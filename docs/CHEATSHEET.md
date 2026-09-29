@@ -66,7 +66,7 @@ Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi 
 | `top`, `bottom` | `btm` (`--pack monitoring`) |
 | `md`, `mdp FILE` | glow (`--extras`) |
 | `help CMD` | `tldr` (`--extras`) |
-| `sys`, `loc` | fastfetch / tokei (`--extras`) |
+| `loc` | tokei (`--extras`) |
 | `fcd`, `fif TEXT`, `fshow` | fzf: cd into a directory / grep files / browse commits |
 | `mkcd DIR`, `serve`, `bench CMD` | mkdir+cd / `python3 -m http.server` / hyperfine |
 | `ts-status`, `ts-ip`, `remote-status` | Tailscale and SSH status |

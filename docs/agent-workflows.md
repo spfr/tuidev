@@ -15,10 +15,9 @@ A fleet of agents is an **attention queue**, not a wall of panes. Look at an age
 | Parallel agents on one repo | **Worktrees**: `claude -w NAME`, or a subagent with `isolation: worktree` |
 | Sessions that keep running with the terminal closed | **Background sessions**: `claude --bg`, `claude agents` (see [below](#background-sessions)) |
 | Many agents: which one is blocked? | **Herdr** (`--pack herdr`, prefix `Ctrl+b`) |
-| Desk-only GUI with parallel panes | **cmux** (`--pack cmux`, macOS; doesn't survive SSH) |
 | Steer one agent from your phone | The CLI's native **remote control** |
 
-These tools don't replace each other. tmux doesn't know agent state, Herdr doesn't replace a Ghostty tab, and cmux isn't the remote story. Work that must survive a laptop lid belongs on an always-on node (see [remote.md](remote.md)).
+These tools don't replace each other. tmux doesn't know agent state, and Herdr doesn't replace a Ghostty tab. Work that must survive a laptop lid belongs on an always-on node (see [remote.md](remote.md)).
 
 ## Editor integration
 
@@ -54,7 +53,7 @@ The packs install configs, not the CLIs. The CLIs update themselves. Claude Code
 | Claude Code | `CLAUDE.md` (managed → `~/.claude/CLAUDE.md` → project → `CLAUDE.local.md`) and `.claude/rules/*.md`. Reads `AGENTS.md` when the project has no `CLAUDE.md` (v2.1.277+). | Put `@AGENTS.md` on the first line of `CLAUDE.md` |
 | Codex | `AGENTS.md` (`~/.codex/AGENTS.md`, then repo root down to the cwd; 32 KiB cap) | `project_doc_fallback_filenames = ["CLAUDE.md"]` |
 
-Start a project's instructions from [templates/AGENTS_TEMPLATE.md](../templates/AGENTS_TEMPLATE.md). `scripts/setup_agent_configs.sh PROJECT` creates nothing by default. With `--all`, it adds a `CLAUDE.md` symlink (for older Claude Code, or sessions that can't read `AGENTS.md`) and the legacy per-vendor files (`.cursorrules`, `.windsurfrules`, `.aider.md`, `.clinerules`, Roo, Copilot). It never overwrites a file. Keep each instruction file short, because every one loads into context at session start.
+Start a project's instructions from [templates/AGENTS_TEMPLATE.md](../templates/AGENTS_TEMPLATE.md). Claude Code and Codex both read `AGENTS.md`; for Claude-specific notes, add a `CLAUDE.md` whose first line is `@AGENTS.md`. Keep each instruction file short, because every one loads into context at session start.
 
 ### Agent teams
 
@@ -149,8 +148,6 @@ Practices:
 `herdr machine add` checks and, after asking, installs the remote server. It never copies your config or secrets. Passphrase-protected keys need `ssh-add` first. Under `sbx --profile strict`, an agent reaches the Herdr socket only with `--allow-herdr` (see [sandboxing.md](sandboxing.md#profiles)). Inside a Herdr pane, `HERDR_ENV=1` is already set, and `sbx` hides the wrapped process from Herdr's detection unless you pass `--allow-herdr`. Herdr's docs: <https://herdr.dev/docs/>.
 
 ## Desk and session tools
-
-**cmux** (`--pack cmux`, macOS 14+) is a Ghostty-based GUI terminal for running agents side by side, with notification rings, a built-in browser and Claude Code teams integration. You give up tmux's durability, SSH reattach and Linux parity, so treat it as a desktop complement.
 
 **Superlogical** (<https://www.superlogical.com/>) is on the watch-list. There is no pack until a public release exists (see [roadmap.md](roadmap.md)).
 

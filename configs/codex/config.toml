@@ -58,7 +58,7 @@ exclude_slash_tmp = false
 [history]
 persistence = "save-all"
 
-# Terminal notifications (OSC 9 / bell) while the pane is unfocused — cmux,
+# Terminal notifications (OSC 9 / bell) while the pane is unfocused —
 # Ghostty and tmux surface them. `true` = all event types; the reference
 # also accepts an array of event names if you want to narrow it.
 [tui]

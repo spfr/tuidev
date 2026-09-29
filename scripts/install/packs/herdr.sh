@@ -5,8 +5,8 @@
 # Installs herdr — an agent-aware terminal runtime (Rust). A background
 # server owns panes so agents keep running after detach; a sidebar marks
 # each detected agent working / blocked / done. The CLI and socket API are
-# the same surface agents drive. Unlike cmux (a GUI app), herdr is its own
-# multiplexer, an alternative to --pack tmux for durable agent sessions.
+# the same surface agents drive. herdr is its own multiplexer, an alternative
+# to --pack tmux for durable agent sessions.
 #
 # Prefix is ctrl+b (tmux in this setup is ctrl+a). See docs/agent-workflows.md.
 #

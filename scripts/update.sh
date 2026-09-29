@@ -501,7 +501,7 @@ run_packages_mode() {
     PKG_UNKNOWN=0
 
     # Built-in and extra packs are reported the same way, so fnm's
-    # FNM_FORMULAE and cmux's CMUX_CASKS are tracked just like core's.
+    # FNM_FORMULAE and hunk's HUNK_FORMULAE are tracked just like core's.
     local pack any_pack=false
     for pack in $(tuidev_active_packs); do
         any_pack=true

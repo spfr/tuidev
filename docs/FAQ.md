@@ -28,7 +28,7 @@ Troubleshooting, one question at a time. Each topic's full reference is in its o
 
 **Up arrow doesn't open atuin.** By design: Up recalls history entries that start with what you have typed. `Ctrl+r` opens atuin.
 
-**The shell is slow to start.** A stock shell starts in about 70 ms. Measure it with `time zsh -i -c exit`. Tool init scripts (starship, zoxide, atuin, fzf) are cached in `~/.cache/zsh/init-*.zsh` and regenerate when the tool's binary changes. jenv and nvm load lazily, on first use. Look in `~/.zshrc.local` for anything that sources `nvm.sh` or runs `eval "$(tool init)"` eagerly. After installing new completions, run `rm ~/.cache/zsh/zcompdump-*`.
+**The shell is slow to start.** A stock shell starts in about 70 ms. Measure it with `time zsh -i -c exit`. Tool init scripts (starship, zoxide, atuin, fzf) are cached in `~/.cache/zsh/init-*.zsh` and regenerate when the tool's binary changes. jenv loads lazily, on first use. Look in `~/.zshrc.local` for anything that sources `nvm.sh` or runs `eval "$(tool init)"` eagerly. After installing new completions, run `rm ~/.cache/zsh/zcompdump-*`.
 
 **Word jumps, Home or End print garbage.** In Ghostty, Option acts as Alt (`macos-option-as-alt = true`), so `Alt+b` / `Alt+f` move by word, and the shipped `.zshrc` binds Home, End and Delete. In iTerm2, set Preferences → Profiles → Keys → Left/Right Option key to `Esc+`. To see what a key actually sends, run `cat -v` and press it.
 

@@ -110,8 +110,7 @@ pass "pack_script / pack_entrypoint"
 got="$(pack_binaries extras | tr '\n' ' ')"
 [[ "$got" == *" tldr "* && "$got" != *tealdeer* ]] || fail "extras binaries: $got"
 [[ "$(pack_binaries core | grep -c zsh-)" == 0 ]] || fail "zsh plugins have no binary"
-[[ "$(tuidev_cask_app hiddenbar)" == "Hidden Bar" && "$(tuidev_cask_app rectangle)" == Rectangle ]] \
-    || fail "cask app names"
+[[ "$(tuidev_cask_app rectangle)" == Rectangle ]] || fail "cask app names"
 pass "formula → binary and cask → app mapping"
 
 echo "All pkg + packs lib tests passed."

@@ -38,7 +38,7 @@ From OpenClaw's 2.0 rework, we take three lessons: complexity should be progress
 We refuse:
 
 - **Omarchy as a product.** Hyprland, an Arch desktop and a distro installer are the wrong OS and the wrong layer.
-- **Desktop-environment experiments:** tiling window managers, Super-key remaps, Karabiner-as-root. The `ui` pack stays lean: Ghostty, Rectangle, Stats, Maccy and Hidden Bar.
+- **Desktop-environment experiments:** tiling window managers, Super-key remaps, Karabiner-as-root. The `ui` pack stays lean: Ghostty, Rectangle, Stats and Maccy.
 - **Executable theme and plugin systems.** Code that runs at theme-switch time is a supply-chain surface (see [basecamp/omarchy#5946](https://github.com/basecamp/omarchy/discussions/5946)). Themes here are static files that ship with the repo.
 - **Kitchen-sink CLI lists.** Speed comes from a short core and a runtime that knows agent state, not from another `ls` replacement.
 

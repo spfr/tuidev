@@ -85,7 +85,6 @@ tuidev_formula_binary() {
         ripgrep)   echo rg ;;
         neovim)    echo nvim ;;
         git-delta) echo delta ;;
-        httpie)    echo http ;;
         tealdeer)  echo tldr ;;
         bottom)    echo btm ;;
         zsh-autosuggestions|zsh-completions|zsh-syntax-highlighting) echo "" ;;

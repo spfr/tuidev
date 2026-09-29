@@ -19,15 +19,15 @@
 #   --core       the shell for agent CLIs (ripgrep, fd, fzf, starship, delta, ...)
 #   --remote     tailscale + mosh + SSH config
 #   --sandbox    Seatbelt profiles + sbx wrapper (macOS only)
-#   --ui         GUI apps: Ghostty, Rectangle, Stats, Maccy, Hidden Bar
+#   --ui         GUI apps: Ghostty, Rectangle, Stats, Maccy
 #                (macOS only)
-#   --extras     lazygit, httpie, atuin, dust, broot, hyperfine, tokei, ...
+#   --extras     lazygit, uv, xh, atuin, dust, broot, hyperfine, tokei, ...
 #
 #   --pack NAME  optional pack (repeatable): ai-clis (Claude Code + Codex
 #                configs, native sandboxes on), orchestration, nvim
 #                (Neovim + LazyVim), vim (plain Vim, zero-plugin vimrc), tmux
-#                (durable sessions + TPM), herdr, cmux, sandbox-container,
-#                mosh, fnm, hunk, monitoring
+#                (durable sessions + TPM), herdr, sandbox-container,
+#                fnm, hunk, monitoring
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files
@@ -367,7 +367,7 @@ ${CYAN}Docs:${NC}
   docs/profiles.md         what each profile and pack installs
   docs/sandboxing.md       native sandboxes, sbx, escape hatches
   docs/remote.md           Tailscale + tmux + mosh workflow
-  docs/agent-workflows.md  AI CLIs, editors, worktrees, Herdr, cmux
+  docs/agent-workflows.md  AI CLIs, editors, worktrees, Herdr
 
 ${CYAN}Your profile manifest:${NC} $TUIDEV_PROFILE_FILE_DEFAULT
 ${CYAN}What was installed:${NC}    $TUIDEV_MANIFEST_FILE  (read by ./uninstall.sh)"

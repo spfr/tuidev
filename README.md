@@ -47,7 +47,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 ./install.sh --core --sandbox --pack ai-clis --pack herdr
 ```
 
-Optional packs: `ai-clis`, `orchestration`, `nvim`, `vim`, `tmux`, `herdr`, `cmux`, `sandbox-container`, `mosh`, `fnm`, `hunk`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
+Optional packs: `ai-clis`, `orchestration`, `nvim`, `vim`, `tmux`, `herdr`, `sandbox-container`, `fnm`, `hunk`, `monitoring`. See [docs/profiles.md](docs/profiles.md) for what each installs.
 
 macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it: packages come from `apt-get`, `dnf` or `pacman`, and anything the distro lacks is skipped with a link to its upstream installer. The installer never pipes a remote script into a shell.
 
@@ -82,7 +82,7 @@ Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.
 | [FAQ](docs/FAQ.md) | Troubleshooting |
 | [Profiles and packs](docs/profiles.md) | What each profile and pack installs |
 | [Sandboxing](docs/sandboxing.md) | Native CLI sandboxes, `sbx`, Seatbelt profiles, credential deny list |
-| [Agent workflows](docs/agent-workflows.md) | AI CLIs, editor integration, agent teams, worktrees, Herdr, cmux, notifications |
+| [Agent workflows](docs/agent-workflows.md) | AI CLIs, editor integration, agent teams, worktrees, Herdr, notifications |
 | [Orchestration](docs/orchestration.md) | The `orchestration` pack: subagent tiers, skills, git gates, CI runners |
 | [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, iOS clients |
 | [Neovim](docs/nvim.md) | The `nvim` pack: LazyVim essentials |

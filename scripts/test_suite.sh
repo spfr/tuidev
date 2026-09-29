@@ -9,9 +9,9 @@
 #   core    - core pack tools and own library scripts (always runs by default)
 #   remote  - tailscale / mosh / SSH config sanity
 #   sandbox - Seatbelt profiles, bin/sbx, sandbox-exec -n probe
-#   ui      - GUI apps (Rectangle, Stats, Maccy, Hidden Bar, Ghostty).
+#   ui      - GUI apps (Rectangle, Stats, Maccy, Ghostty).
 #             Never affects exit code.
-#   extras  - atuin, dust, broot, bandwhich, etc.
+#   extras  - atuin, dust, broot, uv, xh, etc.
 #   packs   - extra packs listed in the tuidev profile
 #
 # Usage:

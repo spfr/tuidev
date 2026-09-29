@@ -77,9 +77,6 @@ if (( $+commands[jenv] )); then
 fi
 unset _tuidev_jenv_plugins
 
-# Python (pyenv) - if installed
-[[ -d "$HOME/.pyenv" ]] && export PATH="${HOME}/.pyenv/shims:${PATH}"
-
 # Yarn - if installed
 [[ -d "$HOME/.yarn" ]] && export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
 
@@ -249,7 +246,6 @@ alias gb='git branch'
 
 # Elite TUI Tools
 command -v lazydocker &>/dev/null && alias lzd='lazydocker'   # not `ld`: that shadows the linker for agents and builds
-command -v fastfetch &>/dev/null && alias sys='fastfetch'
 
 # Note: broot uses its own shell function 'br' (installed via `broot --install`)
 
@@ -277,7 +273,6 @@ fi
 command -v glow &>/dev/null && alias md='glow'
 
 # Development
-command -v http &>/dev/null && alias http='http --pretty=all --style=monokai'
 alias serve='python3 -m http.server'
 
 # Utility
@@ -577,34 +572,9 @@ bindkey '^[[3~' delete-char
 # Node.js
 # ============================================================================
 
-# Node.js version manager — prefer fnm (fast, Rust) when installed, else nvm.
-#   fnm: ~1ms init, puts Node on PATH eagerly, auto-switches on .nvmrc/.node-version.
-#   nvm: the default version's bin is added to PATH immediately — nearly free (no
-#        ~1s sourcing of nvm.sh) yet node/npm/npx AND every globally installed Node
-#        CLI (codex, language servers, tsc, …) work from the very first
-#        prompt in every shell — editors and AI agents included. `nvm` stays lazy.
-export NVM_DIR="$HOME/.nvm"
-if (( $+commands[fnm] )); then
-  eval "$(fnm env --use-on-cd)"
-elif [ -s "$NVM_DIR/nvm.sh" ]; then
-  () {
-    emulate -L zsh
-    setopt local_options null_glob
-    local versions=("$NVM_DIR/versions/node/"v*(/))
-    (( ${#versions} )) || return                 # nothing installed yet
-    versions=(${(nO)versions})                   # newest version first
-    local def="" dir="${versions[1]}" v
-    [ -r "$NVM_DIR/alias/default" ] && def="$(<"$NVM_DIR/alias/default")"
-    if [ -n "$def" ]; then
-      for v in $versions; do
-        if [[ "${v:t}" == "v$def" || "${v:t}" == "v$def."* ]]; then dir="$v"; break; fi
-      done
-    fi
-    [ -d "$dir/bin" ] && export PATH="$dir/bin:$PATH"
-  }
-  # Lazy-load the full nvm machinery only when a version command is invoked.
-  nvm() { unset -f nvm; . "$NVM_DIR/nvm.sh"; nvm "$@"; }
-fi
+# Node.js via fnm (--pack fnm): ~1ms init, puts Node on PATH eagerly and
+# switches on .nvmrc/.node-version.
+(( $+commands[fnm] )) && eval "$(fnm env --use-on-cd)"
 
 # ============================================================================
 # Editor

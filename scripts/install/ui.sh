@@ -28,7 +28,6 @@ UI_CASKS=(
     rectangle
     stats
     maccy
-    hiddenbar
 )
 
 ui_install() {

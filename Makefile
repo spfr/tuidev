@@ -207,7 +207,7 @@ quick-lazygit: ## Launch lazygit
 	@command -v lazygit >/dev/null 2>&1 && lazygit || echo "lazygit not installed"
 
 quick-sysinfo: ## Show system info
-	@command -v fastfetch >/dev/null 2>&1 && fastfetch || uname -a
+	@uname -a
 
 theme-list: ## List available color themes
 	@./scripts/theme.sh list

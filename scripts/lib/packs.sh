@@ -90,11 +90,7 @@ pack_array() {
 
 # The .app bundle name a cask installs.
 tuidev_cask_app() {
-    case "$1" in
-        hiddenbar) echo "Hidden Bar" ;;
-        cmux)      echo cmux ;;
-        *)         printf '%s%s\n' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}" ;;
-    esac
+    printf '%s%s\n' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}"
 }
 
 # pack_binaries NAME — one command per line for the pack's formulae.

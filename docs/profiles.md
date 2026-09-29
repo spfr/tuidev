@@ -24,7 +24,7 @@ With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `m
 | Component | minimal | desktop | remote |
 |-----------|:-------:|:-------:|:------:|
 | Shell, prompt, CLI tools (core) | ✓ | ✓ | ✓ |
-| Ghostty config, Rectangle, Stats, Maccy, Hidden Bar (ui) | | ✓ | |
+| Ghostty config, Rectangle, Stats, Maccy (ui) | | ✓ | |
 | `sbx` + Seatbelt profiles (sandbox, macOS) | | ✓ | ✓ |
 | Tailscale, mosh, SSH client and sshd config (remote) | | | ✓ |
 | tmux, the `tuidev-tmux` block, TPM (`--pack tmux`) | | | ✓ |
@@ -40,7 +40,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 : `bat`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `jq`, `ripgrep`, `shellcheck`, `starship`, `yq`, `zoxide`, and the zsh plugins `zsh-autosuggestions`, `zsh-completions` and `zsh-syntax-highlighting`. On macOS it also installs the Ghostty app. The installer then writes the managed blocks for `~/.zshrc` and `~/.config/starship.toml`, and sets [git defaults](#git-defaults).
 
 **`--ui`** (macOS only)
-: The Ghostty config (as a managed block), and the Rectangle, Stats, Maccy and Hidden Bar casks. The hotkeys are in the [cheatsheet](CHEATSHEET.md#macos-hotkeys-desktop-profile).
+: The Ghostty config (as a managed block), and the Rectangle, Stats and Maccy casks. Menu-bar items are hidden natively in System Settings. The hotkeys are in the [cheatsheet](CHEATSHEET.md#macos-hotkeys-desktop-profile).
 
 **`--sandbox`** (macOS only)
 : `sbx` in `~/.local/bin` and the Seatbelt profiles in `~/.config/tuidev/sandbox/`. See [sandboxing.md](sandboxing.md).
@@ -49,7 +49,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 : Tailscale (a Homebrew cask on macOS; on Linux, a link to the official installer), mosh, the SSH client config as a managed block, and sshd hardening snippets (these are copied only when `/etc/ssh/sshd_config.d` is writable, and otherwise printed as `sudo` commands). See [remote.md](remote.md).
 
 **`--extras`**
-: `atuin`, `bandwhich`, `broot`, `duf`, `dust`, `fastfetch`, `glow`, `httpie`, `hyperfine`, `lazygit`, `ncdu`, `procs`, `sd`, `tealdeer`, `tokei`. Every one is optional: whatever the package manager lacks is skipped.
+: `atuin`, `broot`, `duf`, `dust`, `glow`, `hyperfine`, `lazygit`, `procs`, `sd`, `tealdeer`, `tokei`, `uv` (Python versions, venvs and tools), `xh` (HTTP client). Every one is optional: whatever the package manager lacks is skipped.
 
 ## Optional packs
 
@@ -61,12 +61,10 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 | `--pack vim` | `vim` (on macOS the system Vim is used), and a zero-plugin vimrc deployed as `~/.vim/vimrc` with `--upgrade-shipped`. A `~/.vimrc` of your own wins. The light alternative to `nvim` for servers and small boxes. See [vim.md](vim.md). |
 | `--pack tmux` | `tmux`, the `tuidev-tmux` managed block in `~/.config/tmux/tmux.conf`, and TPM (tmux-resurrect, tmux-continuum). Included by the `remote` profile. |
 | `--pack herdr` | [Herdr](https://herdr.dev/), an agent-aware runtime for fleet attention, installed through Homebrew. When Homebrew has no formula, the pack prints the official installer command instead. Adopts a Tokyo Night `~/.config/herdr/config.toml`. |
-| `--pack cmux` | [cmux](https://github.com/manaflow-ai/cmux), a macOS terminal app for parallel agents (macOS 14+). |
 | `--pack sandbox-container` | Tier 2 sandboxing: finds a container runtime (Apple `container`, then Podman, then Docker), installs Podman only when none exists, and starts it. See [sandboxing.md](sandboxing.md#tier-2-containers). |
-| `--pack mosh` | mosh on its own, without the rest of `--remote`. |
-| `--pack fnm` | fnm (Fast Node Manager), which `.zshrc` prefers over nvm when present. |
+| `--pack fnm` | fnm (Fast Node Manager): the only way the shipped `.zshrc` puts Node on `PATH`. |
 | `--pack hunk` | [hunk](https://hunk.dev), a review-first diff viewer for agent-written changesets (`hunk diff --watch`, `hunk show`). Homebrew only; 0.x, so opt-in. Nothing is written to `$HOME`: to page git through it, run `git config --global core.pager "hunk pager"`. |
-| `--pack monitoring` | `lazydocker` (`lzd`), `k9s`, `bottom` (`btm`, aliased as `top`). |
+| `--pack monitoring` | `lazydocker` (`lzd`), `bottom` (`btm`, aliased as `top`). |
 
 The canonical list of pack names is `TUIDEV_VALID_PACKS` in `scripts/lib/profile.sh`. Adding a pack is covered in [engineering.md](engineering.md#the-pack-contract).
 
