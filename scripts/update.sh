@@ -483,6 +483,19 @@ report_pack_updates() {
     fi
 }
 
+# Apple's `container` ships as a signed pkg, not through Homebrew, so no pack
+# array covers it. Name the installed version and Apple's own updater (it
+# needs sudo and a stopped service); never run it for the user.
+report_apple_container() {
+    is_macos || return 0
+    command -v container >/dev/null 2>&1 || return 0
+    local ver
+    ver="$(container --version 2>/dev/null | awk '{print $4}')"
+    echo ""
+    echo -e "  ${BOLD}Apple container${NC} (${ver:-unknown}, pkg-installed, not tracked by brew):"
+    print_info "upgrade from a real terminal (needs sudo): container system stop && update-container.sh, then make sandbox-up"
+}
+
 run_packages_mode() {
     print_section "Checking pack-scoped package updates"
 
@@ -512,6 +525,8 @@ run_packages_mode() {
         print_warning "No active packs detected; nothing to update"
         return 0
     fi
+
+    report_apple_container
 
     echo ""
     if [[ "$MODE" == "check" ]]; then

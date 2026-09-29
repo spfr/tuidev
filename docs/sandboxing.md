@@ -151,6 +151,8 @@ To change a policy, copy a profile and edit it rather than writing one from scra
 
 If none is present, it installs Podman and points you at Apple's signed package. Force a runtime with `TUIDEV_CONTAINER_RUNTIME=container|podman|docker`. `make sandbox-up` and `make sandbox-down` start and stop it. The pack provides the runtime only. Run your agent in a container image or devcontainer of your choice. Docker Desktop and OrbStack are never installed, because they aren't FOSS.
 
+**Upgrades.** `./scripts/update.sh --packages` upgrades a Homebrew-installed Podman. Apple `container` comes from a pkg, so it only prints the installed version and Apple's updater: `container system stop && update-container.sh`, then `make sandbox-up`. Run it from a normal terminal: the updater asks for your sudo password, which an agent session can't take.
+
 ## Troubleshooting
 
 - **`Operation not permitted`** from a tool inside `sbx`: Seatbelt denied an operation. Watch the log in another terminal and re-run the command:
