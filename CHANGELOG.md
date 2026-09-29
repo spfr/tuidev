@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.4] - 2026-09-29
+
+### Added
+- **`uv` and `xh` in `--extras`.** uv for Python versions, venvs and tools;
+  xh replaces httpie.
+- **One credential list.** `configs/sandbox/credential-paths.txt` is the
+  canonical deny set; `test_contract.sh` fails when `bin/sbx`, the `.sb`
+  profiles, the Claude deny rules or the docs drift from it.
+
+### Changed
+- **`.zshrc` loads Node only through fnm.** The nvm fallback is gone; a
+  migration warns machines still on nvm and leaves `~/.nvm` alone.
+- **`--pack monitoring` is `lazydocker` and `bottom`;** `k9s` is out.
+- **`health_check.sh` recognizes `--pack orchestration`** by its rule file.
+- **`test_theme.sh` skips the live tmux check** when a sandbox denies the
+  socket, instead of failing the gate.
+
+### Removed
+- **`--pack cmux`** (tmux is the multiplexer) and **`--pack mosh`**
+  (`--remote` already installs it). Migrations drop both from your recorded
+  packs; the apps stay installed.
+- **Hidden Bar** from `--ui`; macOS hides menu-bar items natively.
+- **`ncdu`, `bandwhich`, `fastfetch`, `httpie`** from `--extras`, with the
+  `sys` and `http` aliases, and the pyenv shims line from `.zshrc`.
+- **`scripts/setup_agent_configs.sh`.** Claude Code and Codex read
+  `AGENTS.md` natively.
+
 ## [3.2.3] - 2026-09-28
 
 ### Added
