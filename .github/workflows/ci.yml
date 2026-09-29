@@ -115,8 +115,6 @@ jobs:
             configs/claude/settings.json
             configs/claude/settings.linux.json
             configs/codex/config.toml
-            configs/opencode/opencode.json
-            configs/opencode/tui.json
             configs/sandbox/profiles/strict.sb
             configs/sandbox/profiles/standard.sb
             configs/sandbox/profiles/off.sb

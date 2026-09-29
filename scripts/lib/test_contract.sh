@@ -183,5 +183,12 @@ check_creds "AGENTS.md" "$cred_want_flat" \
     "$(grep -F "Denied under \`sbx\`" "$REPO_DIR/AGENTS.md" | sed 's/.*:\*\*//' | prose_paths)"
 pass "credential lockout matches configs/sandbox/credential-paths.txt in every copy"
 
+# CI's required-files job must list only files that exist, or a removal breaks CI
+# while every local check stays green.
+while IFS= read -r f; do
+    [[ -e "$REPO_DIR/$f" ]] || fail ".github/workflows/ci.yml requires $f, which no longer exists"
+done < <(awk '/^ *required=\($/{f=1; next} f && /^ *\)$/{exit} f {print $1}' "$REPO_DIR/.github/workflows/ci.yml")
+pass "every file CI requires exists"
+
 echo ""
 echo "All cross-file contract tests passed."
