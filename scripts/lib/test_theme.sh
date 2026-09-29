@@ -299,8 +299,15 @@ pass "migration sources theme.conf from a user-owned tmux.conf (above TPM), idem
 # 13. tmux actually loads theme.conf through the shipped tmux.conf
 # ============================================================================
 # A private server (socket under $TMUX_TMPDIR, scratch HOME) started from the
-# installed tmux.conf must end up with the theme's status-style.
-if command -v tmux >/dev/null 2>&1; then
+# installed tmux.conf must end up with the theme's status-style. Agent
+# sandboxes can deny the socket; that is a SKIP, not a theme bug.
+if ! command -v tmux >/dev/null 2>&1; then
+    echo "SKIP: tmux not installed — live theme.conf load not checked"
+# new-session exits 0 even when the server never starts; has-session tells.
+elif ! { tmux -f /dev/null new-session -d 2>/dev/null && tmux has-session 2>/dev/null; }; then
+    echo "SKIP: tmux cannot create a server socket here (sandboxed?) — live theme.conf load not checked"
+else
+    tmux kill-server >/dev/null 2>&1 || true
     HOME="$(new_home live)"; export HOME
     fake_install "$HOME"
     "$THEME" apply catppuccin-mocha >/dev/null
@@ -308,8 +315,6 @@ if command -v tmux >/dev/null 2>&1; then
     tmux kill-server >/dev/null 2>&1 || true
     [[ "$got" == *"1e1e2e"* ]] || fail "tmux did not load theme.conf (status-style: $got)"
     pass "tmux loads theme.conf via the shipped tmux.conf"
-else
-    echo "SKIP: tmux not installed — live theme.conf load not checked"
 fi
 
 echo ""
