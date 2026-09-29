@@ -305,6 +305,7 @@ pack_probe() {
         fnm)                echo "have_cmd fnm" ;;
         hunk)               echo "have_cmd hunk" ;;
         ai-clis)            echo "have_cmd claude || have_cmd codex" ;;
+        orchestration)      echo "[[ -f \"\$HOME/.claude/rules/tuidev-orchestration.md\" ]]" ;;
         nvim)               echo "have_cmd nvim" ;;
         tmux)               echo "have_cmd tmux && [[ -f \"\$HOME/.config/tmux/tmux.conf\" ]]" ;;
         *)                  echo "have_cmd $1" ;;
