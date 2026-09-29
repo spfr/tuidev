@@ -12,7 +12,7 @@
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`.
 
-  Keep `bin/sbx`, the `.sb` profiles and those deny rules in sync when you change any of them.
+  The credential paths live in `configs/sandbox/credential-paths.txt`; `test_contract.sh` fails until `bin/sbx`, the `.sb` profiles, those deny rules and the docs match it.
 - **Agent teams are off by default.** While they are on, every subagent Claude names launches as a teammate. Use plain subagents; turn teams on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) only when teammates must talk to each other. `teammateMode: "auto"` then gives them tmux panes.
 - **Parallel work uses worktrees.** Use `claude -w NAME` (under `.claude/worktrees/`), or give subagents `isolation: worktree`. Both stay inside the repo, where the sandbox allows writes.
 - **`sbx` or the native sandbox, never both.** Seatbelt doesn't nest. With the shipped settings, plain `claude` already runs under its own native sandbox; running it under `sbx` too (`sbx -- claude`) stacks two Seatbelt profiles and fails. Pick one: to use `sbx`, turn the native one off for that run (`sbx -- claude --settings '{"sandbox":{"enabled":false}}'`). Under `sbx` on macOS, the Keychain is denied, so log in with `claude setup-token` and `CLAUDE_CODE_OAUTH_TOKEN`. `gh` doesn't work under `sbx --profile strict`/`standard`; under the native sandbox it's in `excludedCommands` instead. See [docs/sandboxing.md](docs/sandboxing.md).

@@ -146,5 +146,42 @@ env_rule='^[[:space:]]*"(Read|Edit)\((\*\*|\.)/\.env[^"]*\)",?$'
     || fail "configs/claude/settings.linux.json drifted from settings.json beyond the .env rules"
 pass "configs/claude/settings.linux.json mirrors settings.json apart from the .env rules"
 
+# Credential lockout: every copy denies exactly configs/sandbox/credential-paths.txt.
+# Structured copies keep the dir/file distinction (trailing /); prose copies
+# are compared without it.
+cred_want="$(grep -vE '^(#|$)' "$REPO_DIR/configs/sandbox/credential-paths.txt" | sort)"
+cred_want_flat="$(printf '%s\n' "$cred_want" | sed 's:/$::' | sort)"
+check_creds() {
+    local label="$1" want="$2" got="$3"
+    got="$(printf '%s\n' "$got" | grep -v '^$' | sort)"
+    [[ "$got" == "$want" ]] && return 0
+    local missing extra
+    missing="$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | tr '\n' ' ')"
+    extra="$(comm -13 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | tr '\n' ' ')"
+    fail "$label: credential paths drifted from configs/sandbox/credential-paths.txt (missing: ${missing:-none}; extra: ${extra:-none})"
+}
+for sb in strict standard; do
+    check_creds "$sb.sb" "$cred_want" "$(awk '/CREDENTIAL LOCKOUT/{f=1} f' "$REPO_DIR/configs/sandbox/profiles/$sb.sb" \
+        | sed -nE 's:.*\((subpath|literal) \(string-append \(param "HOME_DIR"\) "/([^"]+)"\).*:\1 ~/\2:p' \
+        | sed -E 's:^subpath (.*):\1/:; s:^literal ::')"
+done
+for f in settings.json settings.linux.json; do
+    check_creds "$f" "$cred_want" "$(grep -oE '"Read\(~/[^)]*\)"' "$REPO_DIR/configs/claude/$f" \
+        | sed -E 's:^"Read\(::; s:\)"$::; s:/\*\*$:/:')"
+done
+# Prose copies write the two cargo files as ~/.cargo/credentials[.toml].
+prose_paths() {
+    # shellcheck disable=SC2088  # a literal ~/ in the docs, not a path to expand
+    grep -oE '~/[A-Za-z0-9._/-]+(\[\.toml\])?' \
+        | awk '{ if (sub(/\[\.toml\]$/, "")) print $0 ".toml"; print }'
+}
+check_creds "bin/sbx --help" "$cred_want_flat" \
+    "$(awk '/^CREDENTIALS/{f=1; next} f && /^$/{exit} f' "$REPO_DIR/bin/sbx" | prose_paths)"
+check_creds "docs/sandboxing.md" "$cred_want_flat" \
+    "$(awk '/^### Credentials: denied/{f=1} f && /^```$/{n++; if (n==2) exit; next} f && n==1' "$REPO_DIR/docs/sandboxing.md" | prose_paths)"
+check_creds "AGENTS.md" "$cred_want_flat" \
+    "$(grep -F "Denied under \`sbx\`" "$REPO_DIR/AGENTS.md" | sed 's/.*:\*\*//' | prose_paths)"
+pass "credential lockout matches configs/sandbox/credential-paths.txt in every copy"
+
 echo ""
 echo "All cross-file contract tests passed."
