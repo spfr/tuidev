@@ -409,6 +409,12 @@ if command -v tmux >/dev/null 2>&1; then
   function tls { tmux list-sessions 2>/dev/null || echo "no tmux sessions"; }
 fi
 
+# Herdr (>= 0.9.2) sets TERM_PROGRAM=herdr, which hyperlink detection (Claude
+# Code, supports-hyperlinks) doesn't recognize, so agents stop emitting OSC 8
+# links. Herdr renders them (Ctrl+click), so advertise it; an explicit value,
+# including 0, wins.
+[[ -n "$HERDR_ENV" && -z "${FORCE_HYPERLINK+x}" ]] && export FORCE_HYPERLINK=1
+
 # ============================================================================
 # Update helpers
 # ============================================================================

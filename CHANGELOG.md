@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Clickable links in Herdr panes.** Herdr 0.9.2 sets `TERM_PROGRAM=herdr`,
+  so Claude Code stopped emitting OSC 8 links; `.zshrc` now exports
+  `FORCE_HYPERLINK=1` inside Herdr panes unless it is already set.
+
 ### Changed
 - **`update.sh --packages` names Apple `container`.** It is pkg-installed, so
   no pack tracks it; the run now prints its version and Apple's
