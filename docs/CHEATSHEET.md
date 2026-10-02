@@ -109,14 +109,18 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude   # agent teams, off by default
 
 ```bash
 herdr                                   # attach locally (starts the server)
-herdr machine add workbox --label workbox   # save an SSH node (interactive, once)
+herdr machine add workbox               # save an SSH node; pick its session (once)
+herdr machine status                    # saved nodes reachable? (no prompts)
 herdr --machine workbox agent list      # agents on a saved node: working / blocked / done
-herdr --remote workbox                  # one-off thin client over SSH
+herdr --remote workbox --session NAME   # one-off thin client over SSH
+herdr session list                      # sessions on this machine (one server each)
+herdr session attach NAME               # join a named session (e.g. from a phone over SSH)
+herdr session stop NAME                 # stop a session: kills its panes
 herdr status                            # versions; server_binary_stale means restart when idle
 herdr integration status                # after every upgrade: reinstall anything outdated
 ```
 
-Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
+Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. Plain `herdr` is the `default` session; keep one per machine and split projects into workspaces. Run `herdr update` from outside Herdr. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
 
 ## macOS hotkeys (desktop profile)
 

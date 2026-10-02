@@ -45,7 +45,7 @@ mosh needs UDP 60000–61000 open on the server. Its scrollback is only partiall
 A cheap box that stays awake (a Raspberry Pi, NUC or VM) is a **node**, not a second product. Put work there that must outlive your laptop lid. `--profile remote` installs on Debian/Ubuntu without Homebrew (see [profiles.md](profiles.md)). Herdr adds a sidebar that spans machines:
 
 ```bash
-herdr machine add workbox --label workbox   # once, interactively
+herdr machine add workbox                   # once, interactively; pick the session
 herdr --machine workbox agent list          # from the Mac, no TUI
 herdr --remote workbox                      # one-off thin client
 ```
@@ -70,11 +70,12 @@ Setup is the same for every client:
 1. Install Tailscale on the phone and sign in to the same tailnet.
 2. Generate an **Ed25519** key in the app, and append its public key to `~/.ssh/authorized_keys` on the host (`chmod 600` the file, `chmod 700 ~/.ssh`). The shipped sshd snippet disables password login.
 3. Add a host with the node's Tailscale name or `100.x` address (`ts-ip`), your user, port 22, and **mosh** as the protocol if the app offers it.
-4. Connect and run `t myproject`.
+4. Connect and run `t myproject`, or `herdr` to join the node's Herdr session (`herdr session attach NAME` for a named one). Save it as the host's startup command to land there directly.
 
 Tips:
 
 - The prefix `Ctrl+a` comes from the app's extra key row. Map a snippet to `Ctrl+a d` to detach quickly.
+- Herdr's `Ctrl+b` is awkward on a phone keyboard. Herdr ≥ 0.9.2 takes several prefixes, e.g. `prefix = ["ctrl+b", "ctrl+s"]` under `[keys]` in `~/.config/herdr/config.toml`.
 - Bigger fonts help on a phone screen; a single tmux pane reads better than a cramped split.
 - A Bluetooth keyboard makes every tmux and nvim binding usable.
 - *Connection refused:* check that Remote Login is on (`sudo systemsetup -getremotelogin`) and that the Mac isn't asleep.

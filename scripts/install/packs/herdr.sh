@@ -86,7 +86,7 @@ herdr_install() {
         print_info "Optional: herdr integration install claude  (agent state hooks)."
         print_info "Agents under sbx strict cannot reach herdr's socket;"
         print_info "  sbx --allow-herdr opens it for agents you trust (herdr panes run unsandboxed)."
-        print_info "Remote nodes: herdr machine add HOST --label NAME (saved sidebar entry)."
+        print_info "Remote nodes: herdr machine add HOST (saved sidebar entry; pick its session)."
         print_success "herdr pack complete"
         return 0
     fi
