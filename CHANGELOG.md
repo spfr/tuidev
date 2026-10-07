@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Clickable file paths.** The orchestration policy asks agents to write
+  file paths as Markdown links to absolute `file://` URLs, which Claude Code
+  emits as OSC 8 links: Ctrl-click in Herdr or Cmd-click in Ghostty opens the
+  exact file, where plain-path matching grabs stray dots and words.
 - **Herdr link clicks documented.** `agent-workflows.md` says Herdr opens pane
   links on Ctrl-click (Cmd-click never reaches it), Shift-Cmd-click hands the
   click to Ghostty, which also opens plain file paths, panes from before the
