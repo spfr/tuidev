@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **No sudo warning for packages already present.** Without passwordless
+  sudo, `pkg_install` warned and printed an install command before checking
+  what was installed, so packs on such Linux boxes flagged tools they had
+  (`vim not installed`). It now asks for root only for missing packages.
+
 ### Changed
 - **Clickable file paths.** The orchestration policy asks agents to write
   file paths as Markdown links to absolute `file://` URLs, which Claude Code

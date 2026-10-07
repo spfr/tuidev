@@ -150,23 +150,12 @@ _pkg_report_unavailable() {
     done
 }
 
-# _pkg_install_native MGR NAME... — probe, then one batched install.
+# _pkg_install_native MGR NAME... — skip what's present, probe, then one
+# batched install. Root (or sudo -n) is needed only when something is missing.
 _pkg_install_native() {
     local mgr="$1"; shift
     local sudo_prefix name pkg rc=0
-    local -a wanted=()
-
-    if ! sudo_prefix="$(_pkg_sudo_prefix)"; then
-        print_warning "$mgr needs root and passwordless sudo is not available."
-        print_info "Run this yourself, then re-run the installer:"
-        [[ "$mgr" == apt ]] && print_info "    sudo apt-get update"
-        for name in "$@"; do wanted+=("$(_pkg_native_name "$mgr" "$name")"); done
-        print_info "    sudo $(_pkg_install_cmd "$mgr") ${wanted[*]}"
-        PKG_UNAVAILABLE=("$@")
-        return 1
-    fi
-
-    _pkg_refresh_once "$mgr" "$sudo_prefix"
+    local -a missing=() wanted=()
 
     for name in "$@"; do
         pkg="$(_pkg_native_name "$mgr" "$name")"
@@ -174,7 +163,26 @@ _pkg_install_native() {
             PKG_UNAVAILABLE+=("$name")
         elif _pkg_is_installed "$mgr" "$pkg"; then
             print_success "$name (already present)"
-        elif _pkg_is_available "$mgr" "$pkg"; then
+        else
+            missing+=("$name")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]] && ! sudo_prefix="$(_pkg_sudo_prefix)"; then
+        print_warning "$mgr needs root and passwordless sudo is not available."
+        print_info "Run this yourself, then re-run the installer:"
+        [[ "$mgr" == apt ]] && print_info "    sudo apt-get update"
+        for name in "${missing[@]}"; do wanted+=("$(_pkg_native_name "$mgr" "$name")"); done
+        print_info "    sudo $(_pkg_install_cmd "$mgr") ${wanted[*]}"
+        PKG_UNAVAILABLE+=("${missing[@]}")
+        return 1
+    fi
+
+    [[ ${#missing[@]} -eq 0 ]] || _pkg_refresh_once "$mgr" "$sudo_prefix"
+
+    for name in ${missing[@]+"${missing[@]}"}; do
+        pkg="$(_pkg_native_name "$mgr" "$name")"
+        if _pkg_is_available "$mgr" "$pkg"; then
             wanted+=("$pkg")
         else
             PKG_UNAVAILABLE+=("$name")

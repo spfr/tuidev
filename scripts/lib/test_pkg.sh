@@ -83,9 +83,14 @@ id() { echo 1000; }
 out="$(PATH="$tmp/bin:$SYS_PATH" pkg_install jq 2>&1)" && fail "no-sudo path should return 1"
 grep -q 'apt-get install' "$log" && fail "ran apt-get without privileges"
 [[ "$out" == *"sudo apt-get install -y jq"* ]] || fail "no-sudo hint missing: $out"
+: > "$log"
+out="$(PATH="$tmp/bin:$SYS_PATH" pkg_install mosh 2>&1)" || fail "present package without sudo should succeed: $out"
+[[ "$out" == *"passwordless sudo"* ]] && fail "warned about sudo for a present package: $out"
+out="$(PATH="$tmp/bin:$SYS_PATH" pkg_install mosh jq 2>&1)" && fail "missing package without sudo should return 1"
+[[ "$out" == *"sudo apt-get install -y jq"* && "$out" != *"-y mosh"* ]] || fail "hint should name only missing packages: $out"
 # shellcheck disable=SC2329,SC2317
 id() { echo 0; }
-pass "apt: without root or sudo -n, prints the command instead"
+pass "apt: without root or sudo -n, prints the command for missing packages only"
 
 unstub apt-get
 PATH="$tmp/bin:$SYS_PATH" pkg_install mosh >/dev/null 2>&1 && fail "no manager should return 1"
