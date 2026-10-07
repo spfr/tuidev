@@ -64,6 +64,7 @@ pkg_manual_hint() {
         uv)        echo "https://docs.astral.sh/uv/getting-started/installation/" ;;
         xh)        echo "https://github.com/ducaale/xh#installation" ;;
         podman)    echo "https://podman.io/docs/installation" ;;
+        zsh-completions) echo "optional: Debian's zsh already ships most completions; https://github.com/zsh-users/zsh-completions" ;;
         *)         echo "" ;;
     esac
 }
@@ -168,26 +169,40 @@ _pkg_install_native() {
         fi
     done
 
-    if [[ ${#missing[@]} -gt 0 ]] && ! sudo_prefix="$(_pkg_sudo_prefix)"; then
-        print_warning "$mgr needs root and passwordless sudo is not available."
-        print_info "Run this yourself, then re-run the installer:"
-        [[ "$mgr" == apt ]] && print_info "    sudo apt-get update"
-        for name in "${missing[@]}"; do wanted+=("$(_pkg_native_name "$mgr" "$name")"); done
-        print_info "    sudo $(_pkg_install_cmd "$mgr") ${wanted[*]}"
-        PKG_UNAVAILABLE+=("${missing[@]}")
-        return 1
+    local root=yes
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        if sudo_prefix="$(_pkg_sudo_prefix)"; then
+            _pkg_refresh_once "$mgr" "$sudo_prefix"
+        else
+            root=""
+        fi
     fi
 
-    [[ ${#missing[@]} -eq 0 ]] || _pkg_refresh_once "$mgr" "$sudo_prefix"
-
+    # Without root the probe reads the cached lists; that still beats asking
+    # the user to install a package the distribution doesn't ship.
+    local -a wanted_names=()
     for name in ${missing[@]+"${missing[@]}"}; do
         pkg="$(_pkg_native_name "$mgr" "$name")"
         if _pkg_is_available "$mgr" "$pkg"; then
             wanted+=("$pkg")
+            wanted_names+=("$name")
         else
             PKG_UNAVAILABLE+=("$name")
         fi
     done
+
+    if [[ -z "$root" ]]; then
+        _pkg_report_unavailable "not available from $mgr"
+        if [[ ${#wanted[@]} -gt 0 ]]; then
+            print_warning "$mgr needs root and passwordless sudo is not available."
+            print_info "Run this yourself, then re-run the installer:"
+            [[ "$mgr" == apt ]] && print_info "    sudo apt-get update"
+            print_info "    sudo $(_pkg_install_cmd "$mgr") ${wanted[*]}"
+            PKG_UNAVAILABLE+=("${wanted_names[@]}")
+        fi
+        [[ ${#PKG_UNAVAILABLE[@]} -eq 0 ]]
+        return
+    fi
 
     if [[ ${#wanted[@]} -gt 0 ]]; then
         print_step "installing ${wanted[*]} via $mgr"

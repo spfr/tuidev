@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **No install hint for packages the distribution lacks.** Without
+  passwordless sudo, `pkg_install` put every missing package in its
+  `sudo apt-get install` hint, including ones apt can't supply (Debian has no
+  `zsh-completions`). It now probes the cached lists first and reports those
+  as unavailable.
+
 ## [3.2.7] - 2026-10-07
 
 ### Fixed

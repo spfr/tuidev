@@ -88,6 +88,9 @@ out="$(PATH="$tmp/bin:$SYS_PATH" pkg_install mosh 2>&1)" || fail "present packag
 [[ "$out" == *"passwordless sudo"* ]] && fail "warned about sudo for a present package: $out"
 out="$(PATH="$tmp/bin:$SYS_PATH" pkg_install mosh jq 2>&1)" && fail "missing package without sudo should return 1"
 [[ "$out" == *"sudo apt-get install -y jq"* && "$out" != *"-y mosh"* ]] || fail "hint should name only missing packages: $out"
+out="$(PATH="$tmp/bin:$SYS_PATH" pkg_install nosuch 2>&1)" && fail "unavailable package without sudo should return 1"
+[[ "$out" == *"sudo apt-get install"* || "$out" == *"passwordless sudo"* ]] && fail "suggested installing a package apt lacks: $out"
+[[ "$out" == *"not available from apt"* ]] || fail "unavailable package not reported: $out"
 # shellcheck disable=SC2329,SC2317
 id() { echo 0; }
 pass "apt: without root or sudo -n, prints the command for missing packages only"
