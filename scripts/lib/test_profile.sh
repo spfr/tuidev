@@ -3,7 +3,7 @@
 # Run: bash scripts/lib/test_profile.sh  -> exit 0 on pass.
 
 set -e
-unset XDG_CONFIG_HOME
+unset XDG_CONFIG_HOME TUIDEV_REPO
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./profile.sh disable=SC1091
@@ -46,8 +46,19 @@ load_tuidev_profile "$tmp/desktop" || fail "should return 0 on valid file"
 [[ "${TUIDEV_EXTRA_PACKS_ARR[1]}" == "tmux" ]] || fail "arr[1]"
 [[ "$TUIDEV_PROFILE_INSTALLED_AT" == "2026-04-14T12:00:00Z" ]] || fail "installed_at"
 [[ "$TUIDEV_PROFILE_REPO" == "/tmp/fake-repo" ]] || fail "repo"
-[[ "$TUIDEV_REPO" == "/tmp/fake-repo" ]] || fail "TUIDEV_REPO exported"
+[[ -z "${TUIDEV_REPO:-}" ]] || fail "a repo= path that doesn't exist must not be exported: $TUIDEV_REPO"
 pass "desktop manifest parsed"
+
+# repo= fills an unset TUIDEV_REPO only, so install.sh's own root wins over a
+# moved checkout's old path.
+printf 'profile=desktop\nrepo=%s\n' "$tmp" > "$tmp/repo-ok"
+load_tuidev_profile "$tmp/repo-ok"
+[[ "$TUIDEV_REPO" == "$tmp" ]] || fail "existing repo= path exported: '${TUIDEV_REPO:-}'"
+TUIDEV_REPO=/somewhere/else
+load_tuidev_profile "$tmp/repo-ok"
+[[ "$TUIDEV_REPO" == /somewhere/else ]] || fail "an already-set TUIDEV_REPO was overwritten"
+unset TUIDEV_REPO
+pass "repo= exports TUIDEV_REPO only when unset and the path exists"
 
 # 3. Comma-separated extra_packs
 cat > "$tmp/commas" <<'EOF'

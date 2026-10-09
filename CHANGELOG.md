@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed (or under `--dry-run`) and reported success. It now says the status
   is unknown, fetches the branch's own remote, reports a missing upstream,
   and tells ahead from behind.
+- **A moved checkout's old path no longer sticks.** Re-running `install.sh`
+  read the profile's old `repo=` path over its own location and wrote it back
+  to the profile and `~/.config/tuidev/env`, so repo sync kept skipping a
+  directory that no longer existed. The installer now records where it runs
+  from, and `update.sh` falls back to its own checkout when the recorded path
+  isn't one.
 - **`dust` and `bottom` install on Debian.** apt ships them as `du-dust` and
   `btm`; `pkg_install` reported both as unavailable. apt probes also run
   under `LC_ALL=C` and ignore removed-but-configured packages.

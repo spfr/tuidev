@@ -30,7 +30,8 @@
 #   TUIDEV_PROFILE_REPO      repo path recorded at install time
 #   TUIDEV_PROFILE_FOUND     true if the manifest file was read
 #
-# Also, when the manifest's repo= path is set, exports TUIDEV_REPO.
+# Also exports TUIDEV_REPO from the manifest's repo= path, when TUIDEV_REPO is
+# unset and that directory still exists.
 #
 # Manifest format (written by install.sh):
 #   profile=desktop
@@ -128,7 +129,9 @@ load_tuidev_profile() {
             installed_at)  TUIDEV_PROFILE_INSTALLED_AT="$value" ;;
             repo)
                 TUIDEV_PROFILE_REPO="$value"
-                [[ -n "$value" ]] && export TUIDEV_REPO="$value"
+                # Only fills a gap: install.sh's own root (already set) must
+                # win, or a moved checkout's old path is written back forever.
+                [[ -z "${TUIDEV_REPO:-}" && -d "$value" ]] && export TUIDEV_REPO="$value"
                 ;;
         esac
     done < "$file"

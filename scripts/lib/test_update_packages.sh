@@ -15,7 +15,9 @@ pass() { echo "PASS: $*"; }
 
 export HOME="$tmp/home" TUIDEV_STATE_DIR="$tmp/state" TUIDEV_NO_COLOR=1
 unset XDG_CONFIG_HOME
-export TUIDEV_REPO="$tmp/no-repo"   # repo sync skips: no git fetch in tests
+# A checkout without an upstream: repo sync stops before any git fetch.
+export TUIDEV_REPO="$tmp/repo"
+git init -q "$TUIDEV_REPO"
 mkdir -p "$HOME" "$TUIDEV_STATE_DIR" "$tmp/bin"
 cat > "$TUIDEV_STATE_DIR/profile" <<'EOF'
 profile=test
@@ -69,5 +71,15 @@ out="$(APT_FAIL=1 run_update --check)" || fail "--check with a failing probe exi
 [[ "$out" == *"status unknown"* ]] || fail "failed probe should be status unknown: $out"
 [[ "$out" != *"All pack-tracked packages up to date"* ]] || fail "failed probe reported up to date: $out"
 pass "a failed apt probe is status unknown, never up to date"
+
+# A recorded repo path that no longer exists falls back to this checkout
+# (only checkable when this tree is one: synced copies and tarballs aren't).
+if [[ -e "$LIB_DIR/../../.git" ]]; then
+    out="$(TUIDEV_REPO="$tmp/moved-away" GIT_ALLOW_PROTOCOL=none run_update --check)" || fail "--check with a stale repo path"
+    [[ "$out" == *"Recorded repo $tmp/moved-away is not a git checkout; using"* ]] || fail "stale repo fallback: $out"
+    pass "a stale recorded repo path falls back to the running checkout"
+else
+    echo "SKIP: not a git checkout — stale repo fallback not checked"
+fi
 
 echo "All update --packages tests passed."

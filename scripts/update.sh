@@ -749,6 +749,11 @@ run_repo_mode() {
 
     local target="${TUIDEV_REPO:-$REPO_DIR}"
     # .git can be a directory (normal clone) or a file (worktree/submodule).
+    # A recorded path can go stale when the checkout moves; this one is real.
+    if [[ ! -e "$target/.git" && "$target" != "$REPO_DIR" && -e "$REPO_DIR/.git" ]]; then
+        print_warning "Recorded repo $target is not a git checkout; using $REPO_DIR (re-run ./install.sh to update the record)"
+        target="$REPO_DIR"
+    fi
     if [[ ! -e "$target/.git" ]]; then
         print_warning "No git checkout at $target — skipping"
         return 0
