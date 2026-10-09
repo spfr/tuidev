@@ -12,6 +12,13 @@
 #   pkg_manual_hint NAME   upstream install page for a tool distros may lack
 #   PKG_UNAVAILABLE        array: names the last pkg_install could not provide
 #
+# For update.sh on apt/dnf/pacman (brew has its own outdated/upgrade path):
+#   pkg_native_tracked MGR NAME...   the NAMEs installed through MGR
+#   pkg_native_outdated MGR NAME...  the tracked NAMEs with a newer version
+#                                    (returns 2 when the probe failed)
+#   pkg_native_refresh MGR           refresh apt lists when root is available
+#   pkg_native_upgrade MGR NAME...   upgrade installed packages, or print how
+#
 # Names are Homebrew formula names; distro renames are mapped here. Order:
 # Homebrew (macOS, or Linux when the user has it) → apt-get → dnf → pacman.
 # System managers run as root or through `sudo -n` only — never a hidden
@@ -73,6 +80,8 @@ pkg_manual_hint() {
 _pkg_native_name() {
     case "$1:$2" in
         apt:fd|dnf:fd) echo "fd-find" ;;   # Debian/Fedora ship the binary as fdfind
+        apt:dust)      echo "du-dust" ;;   # binary is still dust
+        apt:bottom)    echo "btm" ;;       # binary is still btm
         *)             echo "$2" ;;
     esac
 }
@@ -89,7 +98,8 @@ _pkg_is_different_tool() {
 
 _pkg_is_installed() {
     case "$1" in
-        apt)    dpkg -s "$2" >/dev/null 2>&1 ;;
+        # Status, not mere presence: removed-but-configured ("rc") isn't installed.
+        apt)    dpkg -s "$2" 2>/dev/null | grep -q '^Status: install ok installed' ;;
         dnf)    rpm -q "$2" >/dev/null 2>&1 ;;
         pacman) pacman -Qi "$2" >/dev/null 2>&1 ;;
     esac
@@ -100,7 +110,7 @@ _pkg_is_available() {
     case "$1" in
         apt)
             local cand
-            cand="$(apt-cache policy "$2" 2>/dev/null | awk -F': ' '/Candidate:/ {print $2; exit}')"
+            cand="$(LC_ALL=C apt-cache policy "$2" 2>/dev/null | awk -F': ' '/Candidate:/ {print $2; exit}')"
             [[ -n "$cand" && "$cand" != "(none)" ]]
             ;;
         dnf)    dnf -q info "$2" >/dev/null 2>&1 ;;
@@ -194,10 +204,8 @@ _pkg_install_native() {
     if [[ -z "$root" ]]; then
         _pkg_report_unavailable "not available from $mgr"
         if [[ ${#wanted[@]} -gt 0 ]]; then
-            print_warning "$mgr needs root and passwordless sudo is not available."
-            print_info "Run this yourself, then re-run the installer:"
-            [[ "$mgr" == apt ]] && print_info "    sudo apt-get update"
-            print_info "    sudo $(_pkg_install_cmd "$mgr") ${wanted[*]}"
+            _pkg_root_hint "$mgr" "Run this yourself, then re-run the installer:" \
+                "$(_pkg_install_cmd "$mgr")" "${wanted[@]}"
             PKG_UNAVAILABLE+=("${wanted_names[@]}")
         fi
         [[ ${#PKG_UNAVAILABLE[@]} -eq 0 ]]
@@ -219,6 +227,136 @@ _pkg_install_native() {
 
     _pkg_report_unavailable "not available from $mgr"
     [[ ${#PKG_UNAVAILABLE[@]} -eq 0 ]] || rc=1
+    return $rc
+}
+
+# pkg_native_tracked MGR NAME... — print the Homebrew NAMEs whose native
+# package is installed and is the tool this repo means. Like the brew path,
+# that includes packages that were there before tuidev.
+pkg_native_tracked() {
+    local mgr="$1" name; shift
+    for name in "$@"; do
+        _pkg_is_different_tool "$mgr" "$name" && continue
+        _pkg_is_installed "$mgr" "$(_pkg_native_name "$mgr" "$name")" && printf '%s\n' "$name"
+    done
+    return 0
+}
+
+# _pkg_outdated_native MGR PKG... — print the native PKGs with a newer version
+# in the current metadata (no refresh). Returns 2 when the probe failed.
+_pkg_outdated_native() {
+    local mgr="$1"; shift
+    local pkg out rc=0 inst cand
+    case "$mgr" in
+        apt)
+            for pkg in "$@"; do
+                out="$(LC_ALL=C apt-cache policy "$pkg" 2>/dev/null)" || rc=2
+                inst="$(awk -F': ' '/Installed:/ {print $2; exit}' <<<"$out")"
+                cand="$(awk -F': ' '/Candidate:/ {print $2; exit}' <<<"$out")"
+                if [[ -z "$inst" || "$inst" == "(none)" ]]; then
+                    rc=2   # tracked means installed; no answer is a failed probe
+                elif [[ -n "$cand" && "$cand" != "(none)" ]] \
+                    && dpkg --compare-versions "$inst" lt "$cand"; then
+                    printf '%s\n' "$pkg"
+                fi
+            done
+            ;;
+        dnf)
+            # One call for all: exit 100 = updates listed, 0 = none, else error.
+            out="$(LC_ALL=C dnf -q check-update "$@" 2>/dev/null)" || rc=$?
+            case $rc in
+                0)   return 0 ;;
+                100) rc=0 ;;
+                *)   return 2 ;;
+            esac
+            awk 'NF == 3 { sub(/\.[^.]*$/, "", $1); print $1 }' <<<"$out"
+            ;;
+        pacman)
+            # -Qu exits 1 both for "nothing outdated" and on errors; tell
+            # them apart by pacman's error: lines.
+            out="$(LC_ALL=C pacman -Qu "$@" 2>&1)" || true
+            grep -q '^error:' <<<"$out" && return 2
+            awk '$3 == "->" { print $1 }' <<<"$out"
+            ;;
+        *) return 2 ;;
+    esac
+    return $rc
+}
+
+# pkg_native_outdated MGR NAME... — print the tracked NAMEs (pkg_native_tracked)
+# with a newer version available. Returns 2 when the probe failed; the NAMEs
+# it could check are still printed.
+pkg_native_outdated() {
+    local mgr="$1" name pkg rc=0 out; shift
+    [[ $# -gt 0 ]] || return 0
+    local -a pkgs=()
+    for name in "$@"; do pkgs+=("$(_pkg_native_name "$mgr" "$name")"); done
+    out="$(_pkg_outdated_native "$mgr" "${pkgs[@]}")" || rc=$?
+    for name in "$@"; do
+        pkg="$(_pkg_native_name "$mgr" "$name")"
+        grep -qxF "$pkg" <<<"$out" && printf '%s\n' "$name"
+    done
+    return $rc
+}
+
+# pkg_native_refresh MGR — refresh package metadata when root or sudo -n is
+# available (apt only; dnf refreshes expired metadata itself, and a bare
+# `pacman -Sy` invites partial upgrades). Returns 1 when it could not.
+pkg_native_refresh() {
+    [[ "$1" == apt ]] || return 0
+    local sudo_prefix
+    sudo_prefix="$(_pkg_sudo_prefix)" || return 1
+    _pkg_refresh_once apt "$sudo_prefix"
+}
+
+# _pkg_root_hint MGR LEAD CMD... — the "run this yourself" block for a
+# manager that needs root we don't have.
+_pkg_root_hint() {
+    local mgr="$1" lead="$2"; shift 2
+    print_warning "$mgr needs root and passwordless sudo is not available."
+    print_info "$lead"
+    [[ "$mgr" == apt ]] && print_info "    sudo apt-get update"
+    print_info "    sudo $*"
+}
+
+# pkg_native_upgrade MGR NAME... — upgrade already-installed packages in one
+# batch, or print the command when root is unavailable. Never installs
+# anything new, and apt keeps each package's auto/manual mark. pacman only
+# gets the full-system command: upgrading a subset is a partial upgrade,
+# which Arch doesn't support. Returns 1 on failure or when only a hint was
+# printed.
+pkg_native_upgrade() {
+    local mgr="$1"; shift
+    [[ $# -gt 0 ]] || return 0
+    local name cmd sudo_prefix auto
+    local -a pkgs=()
+    for name in "$@"; do pkgs+=("$(_pkg_native_name "$mgr" "$name")"); done
+    case "$mgr" in
+        apt)    cmd="apt-get install --only-upgrade -y" ;;
+        dnf)    cmd="dnf upgrade -y" ;;
+        pacman)
+            print_info "pacman upgrades the whole system, not single packages. Run this yourself:"
+            print_info "    sudo pacman -Syu"
+            return 1
+            ;;
+        *)      return 1 ;;
+    esac
+
+    if ! sudo_prefix="$(_pkg_sudo_prefix)"; then
+        _pkg_root_hint "$mgr" "Run this yourself:" "$cmd" "${pkgs[@]}"
+        return 1
+    fi
+    # `apt-get install` marks what it touches as manual; put auto marks back
+    # so `apt autoremove` still sees dependencies as dependencies.
+    [[ "$mgr" == apt ]] && auto="$(apt-mark showauto "${pkgs[@]}" 2>/dev/null)"
+    print_step "upgrading ${pkgs[*]} via $mgr"
+    local rc=0
+    # shellcheck disable=SC2086  # prefix and command word-split on purpose
+    run_cmd $sudo_prefix $cmd "${pkgs[@]}" || rc=1
+    if [[ -n "${auto:-}" ]]; then
+        # shellcheck disable=SC2086
+        run_cmd $sudo_prefix apt-mark auto $auto >/dev/null || true
+    fi
     return $rc
 }
 

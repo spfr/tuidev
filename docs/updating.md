@@ -173,6 +173,32 @@ make update-security       # audit Tailscale, SSH permissions, Seatbelt profile 
 A bare `./scripts/update.sh` gives an interactive menu with the same actions.
 Every mode honors `--dry-run`. `update.sh` runs under macOS's stock bash 3.2.
 
+### Packages on Linux
+
+`--packages` uses the same manager the installer did: Homebrew when it is on
+`PATH`, otherwise `apt-get`, `dnf` or `pacman`. With a native manager it checks
+the pack packages installed through that manager, whoever installed them (as
+with Homebrew). A tool you put there another way, or one the distribution
+doesn't ship, is left alone, and Debian's unrelated `yq` is never counted.
+Outdated packages from every pack are upgraded in one batch
+(`apt-get install --only-upgrade` or `dnf upgrade`), so nothing new is ever
+installed by an update, and apt keeps each package's auto/manual mark. A probe
+that fails is reported as "status unknown", never as up to date.
+
+It never asks for a sudo password. As root or with passwordless sudo it
+refreshes the apt lists first and upgrades. Otherwise it reports from the
+cached lists and prints the commands to run yourself:
+
+```bash
+sudo apt-get update
+sudo apt-get install --only-upgrade -y tmux vim
+```
+
+pacman is checked against the local sync database, and the fix is always
+`sudo pacman -Syu`: Arch doesn't support upgrading a subset of packages, so
+tuidev prints that command instead of upgrading them one by one, and never
+runs a bare `pacman -Sy`.
+
 ### Shipped configs you may have edited
 
 Some configs are whole files the user may take over, so they can't be managed

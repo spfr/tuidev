@@ -73,7 +73,7 @@ update: ## Update everything interactively (profile-aware)
 update-check: ## Preview available updates (no changes)
 	@./scripts/update.sh --check
 
-update-packages: ## Update brew packages for the installed profile only
+update-packages: ## Update packages (brew, apt, dnf, pacman) for the installed profile only
 	@./scripts/update.sh --packages
 
 update-configs: ## Re-apply managed blocks and pack-owned configs

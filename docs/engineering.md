@@ -60,7 +60,7 @@ Source these instead of reimplementing them. Each lib is idempotent to source, s
 | Lib | Provides |
 |-----|----------|
 | `ui.sh` | `print_header/step/success/warning/error/info`, `run_cmd` (dry-run aware), `command_exists`, `is_macos`/`is_linux`, `file_mode`/`file_owner`, `die`, `TUIDEV_STATE_DIR` |
-| `pkg.sh` | `pkg_install NAME...`: Homebrew, then `apt-get`, `dnf`, `pacman`, using Homebrew names mapped per distro. Also `pkg_manager`, `pkg_manual_hint` and `PKG_UNAVAILABLE`. It fails soft, never prompts for a sudo password, and records what it installs |
+| `pkg.sh` | `pkg_install NAME...`: Homebrew, then `apt-get`, `dnf`, `pacman`, using Homebrew names mapped per distro. Also `pkg_manager`, `pkg_manual_hint` and `PKG_UNAVAILABLE`, plus the `pkg_native_*` helpers `update.sh --packages` uses to find and upgrade outdated apt/dnf/pacman packages. It fails soft, never prompts for a sudo password, and records what it installs |
 | `gitconfig.sh` | `tuidev_git_defaults`: opinionated global git defaults (histogram, zdiff3, rerere, autoSquash/updateRefs, autoSetupRemote, delta). Sets a key only while it is unset, `[include]`s counted, records each in the manifest; run by install.sh and `update.sh --configs` |
 | `brew.sh` | `brew_install_formulae` / `brew_install_casks` (and the singular forms), `brew_has_formula` / `brew_has_cask`, `brew_update_once`. Use it for casks and tap formulae. Everything else goes through `pkg_install` |
 | `packs.sh` | `pack_script`, `pack_entrypoint`, `pack_run`, `pack_array NAME formulae\|casks`, `pack_binaries`, `TUIDEV_BUILTIN_PACKS` |

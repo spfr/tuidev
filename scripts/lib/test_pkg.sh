@@ -53,7 +53,7 @@ pass "pkg_manager order: brew > apt-get > dnf > pacman"
 # apt-cache: fd-find, mosh and yq have candidates; nosuch does not.
 # shellcheck disable=SC2016  # stub bodies expand in the stub, not here
 stub apt-cache 'case "$2" in nosuch) echo "  Candidate: (none)" ;; *) echo "  Candidate: 1.0" ;; esac'
-stub dpkg "grep -qx \"\$2\" '$installed'"
+stub dpkg "grep -qx \"\$2\" '$installed' && echo 'Status: install ok installed'"
 stub apt-get "shift 2; printf '%s\n' \"\$@\" >> '$installed'"
 tuidev_manifest_enable
 : > "$log"
@@ -64,6 +64,9 @@ grep -qx 'apt-get install -y fd-find mosh' "$log" || fail "batched install: $(ca
 tuidev_manifest_has apt fd-find || fail "fd-find not recorded"
 tuidev_manifest_has apt yq && fail "Debian's different yq must never be taken"
 pass "apt: renames, refuses Debian yq, batches, records what landed"
+[[ "$(_pkg_native_name apt dust) $(_pkg_native_name apt bottom) $(_pkg_native_name pacman dust)" == "du-dust btm dust" ]] \
+    || fail "Debian renames for dust/bottom"
+pass "apt: du-dust and btm renames"
 
 : > "$log"
 PATH="$tmp/bin:$SYS_PATH" pkg_install fd mosh >/dev/null || fail "already-present packages are success"
@@ -94,6 +97,69 @@ out="$(PATH="$tmp/bin:$SYS_PATH" pkg_install nosuch 2>&1)" && fail "unavailable 
 # shellcheck disable=SC2329,SC2317
 id() { echo 0; }
 pass "apt: without root or sudo -n, prints the command for missing packages only"
+
+# --- update helpers (apt) ---------------------------------------------------
+# mosh 1.0 → 1.1 available, fd-find current, jq absent, yq is Debian's.
+# shellcheck disable=SC2016
+stub apt-cache 'case "$2" in
+    mosh)    printf "  Installed: 1.0\n  Candidate: 1.1\n" ;;
+    fd-find) printf "  Installed: 2.0\n  Candidate: 2.0\n" ;;
+    *)       printf "  Installed: (none)\n  Candidate: 1.0\n" ;;
+esac'
+stub dpkg "case \"\$1\" in --compare-versions) [[ \"\$2\" < \"\$4\" ]] ;; *) grep -qx \"\$2\" '$installed' && echo 'Status: install ok installed' ;; esac"
+echo yq >> "$installed"
+got="$(PATH="$tmp/bin:$SYS_PATH" pkg_native_tracked apt fd mosh jq yq | tr '\n' ' ')"
+[[ "$got" == "fd mosh " ]] || fail "tracked: $got"
+got="$(PATH="$tmp/bin:$SYS_PATH" pkg_native_outdated apt fd mosh | tr '\n' ' ')" || fail "apt probe rc"
+[[ "$got" == "mosh " ]] || fail "outdated: $got"
+rc=0; PATH="$tmp/bin:$SYS_PATH" pkg_native_outdated apt jq >/dev/null || rc=$?
+[[ $rc == 2 ]] || fail "a tracked package apt can't answer for should be status unknown (2), got $rc"
+pass "apt: tracked skips absent and different-tool packages; outdated compares versions; failures return 2"
+
+# mosh was installed as a dependency: its auto mark must survive the upgrade.
+# shellcheck disable=SC2016
+stub apt-mark '[[ "$1" == showauto ]] && echo mosh; exit 0'
+: > "$log"
+PATH="$tmp/bin:$SYS_PATH" pkg_native_upgrade apt fd mosh >/dev/null || fail "upgrade as root"
+grep -qx 'apt-get install --only-upgrade -y fd-find mosh' "$log" || fail "upgrade cmd: $(cat "$log")"
+grep -qx 'apt-mark auto mosh' "$log" || fail "auto mark not restored: $(cat "$log")"
+: > "$log"
+DRY_RUN=true PATH="$tmp/bin:$SYS_PATH" pkg_native_upgrade apt mosh >/dev/null || true
+grep -q 'apt-get' "$log" && fail "DRY_RUN upgraded"
+# shellcheck disable=SC2329,SC2317
+id() { echo 1000; }
+out="$(PATH="$tmp/bin:$SYS_PATH" pkg_native_upgrade apt mosh 2>&1)" && fail "no-sudo upgrade should return 1"
+grep -q 'apt-get' "$log" && fail "upgraded without privileges"
+[[ "$out" == *"sudo apt-get install --only-upgrade -y mosh"* ]] || fail "no-sudo upgrade hint: $out"
+PATH="$tmp/bin:$SYS_PATH" pkg_native_refresh apt && fail "refresh without root should return 1"
+# shellcheck disable=SC2329,SC2317
+id() { echo 0; }
+unstub apt-mark
+pass "apt: upgrade batches --only-upgrade, keeps auto marks, honors DRY_RUN, prints the command without sudo"
+
+# dnf: one check-update for every name; 100 = updates listed, 1 = error.
+# shellcheck disable=SC2016
+stub dnf '[[ "$1 $2" == "-q check-update" ]] || exit 0
+[[ -n "${DNF_FAIL:-}" ]] && exit 1
+echo "vim-enhanced.aarch64  2:9.1-1.fc41  updates"; exit 100'
+[[ "$(PATH="$tmp/bin:$SYS_PATH" pkg_native_outdated dnf vim-enhanced tmux)" == vim-enhanced ]] || fail "dnf outdated"
+[[ "$(grep -c 'check-update' "$log")" == 1 ]] || fail "dnf should probe once: $(cat "$log")"
+rc=0; DNF_FAIL=1 PATH="$tmp/bin:$SYS_PATH" pkg_native_outdated dnf tmux >/dev/null || rc=$?
+[[ $rc == 2 ]] || fail "dnf probe error should be status unknown, got $rc"
+# pacman: -Qu lists "name old -> new"; an error: line means unknown, and
+# upgrades are only ever the full-system command.
+# shellcheck disable=SC2016
+stub pacman '[[ -n "${PAC_FAIL:-}" ]] && { echo "error: could not lock database" >&2; exit 1; }
+[[ "$1" == -Qu ]] && echo "tmux 3.4-1 -> 3.5-1"; exit 0'
+[[ "$(PATH="$tmp/bin:$SYS_PATH" pkg_native_outdated pacman vim tmux)" == tmux ]] || fail "pacman outdated"
+rc=0; PAC_FAIL=1 PATH="$tmp/bin:$SYS_PATH" pkg_native_outdated pacman tmux >/dev/null || rc=$?
+[[ $rc == 2 ]] || fail "pacman probe error should be status unknown, got $rc"
+: > "$log"
+out="$(PATH="$tmp/bin:$SYS_PATH" pkg_native_upgrade pacman tmux 2>&1)" && fail "pacman upgrade is hint-only"
+[[ "$out" == *"sudo pacman -Syu"* ]] || fail "pacman hint: $out"
+grep -q '^pacman -S' "$log" && fail "ran a partial pacman upgrade"
+unstub dnf; unstub pacman
+pass "dnf / pacman: batched probes, errors are status unknown, pacman never upgrades a subset"
 
 unstub apt-get
 PATH="$tmp/bin:$SYS_PATH" pkg_install mosh >/dev/null 2>&1 && fail "no manager should return 1"

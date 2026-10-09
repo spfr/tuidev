@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Package updates on Linux.** `update.sh --packages` (and `make update`)
+  stopped at "brew not found" on apt, dnf and pacman machines. It now checks
+  the pack packages the native manager installed and upgrades the outdated
+  ones in one batch, never installing anything new. Without root or
+  passwordless sudo it reports from the cached lists and prints the
+  `sudo` command instead of prompting. A failed probe reads "status
+  unknown", apt keeps auto/manual marks, and pacman gets `sudo pacman -Syu`
+  rather than a partial upgrade.
+
+### Fixed
+- **Repo check no longer claims "up to date" after a failed fetch.**
+  `update.sh --check` compared against the stale upstream when `git fetch`
+  failed (or under `--dry-run`) and reported success. It now says the status
+  is unknown, fetches the branch's own remote, reports a missing upstream,
+  and tells ahead from behind.
+- **`dust` and `bottom` install on Debian.** apt ships them as `du-dust` and
+  `btm`; `pkg_install` reported both as unavailable. apt probes also run
+  under `LC_ALL=C` and ignore removed-but-configured packages.
+
 ## [3.2.8] - 2026-10-07
 
 ### Fixed

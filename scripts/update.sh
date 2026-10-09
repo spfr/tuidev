@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # ============================================================================
-# macOS TUI Development Environment - Update Script (profile-aware)
+# tuidev - Update Script (profile-aware, macOS and Linux)
 # ============================================================================
 # Reads the installer-written profile ($TUIDEV_STATE_DIR/profile, normally
-# ~/.config/tuidev/profile) and scopes updates (brew formulae, managed config
+# ~/.config/tuidev/profile) and scopes updates (brew or apt/dnf/pacman packages, managed config
 # blocks, repo pulls, security audit) to the packs that were actually installed.
 # bash 3.2-clean: runs under the /bin/bash macOS ships.
 #
 # Usage:
 #   ./scripts/update.sh                    # interactive menu
 #   ./scripts/update.sh --check            # preview only
-#   ./scripts/update.sh --packages         # upgrade brew formulae for active packs
+#   ./scripts/update.sh --packages         # upgrade packages for active packs
 #   ./scripts/update.sh --configs          # re-apply managed blocks + pack configs
 #   ./scripts/update.sh --migrations       # run pending one-shot migrations
 #   ./scripts/update.sh --repo             # git pull the repo
@@ -44,6 +44,8 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/manifest.sh"
 # shellcheck source=lib/gitconfig.sh disable=SC1091
 . "$SCRIPT_DIR/lib/gitconfig.sh"
+# shellcheck source=lib/pkg.sh disable=SC1091
+. "$SCRIPT_DIR/lib/pkg.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -69,7 +71,7 @@ Usage: $(basename "$0") [OPTIONS]
 
 Modes (pick one; default is an interactive menu):
   --check             Preview outdated packages and config drift; mutate nothing
-  --packages          brew upgrade formulae/casks belonging to active packs
+  --packages          upgrade packages (brew, apt, dnf, pacman) of active packs
   --configs           Re-apply repo managed blocks and pack-owned configs
                       (runs pending migrations first)
   --migrations        Run pending one-shot migrations only
@@ -370,7 +372,7 @@ pack_reapply_configs() {
 }
 
 # ----------------------------------------------------------------------------
-# Mode: --check / --packages  (brew)
+# Mode: --check / --packages  (brew, or apt/dnf/pacman via scripts/lib/pkg.sh)
 # ----------------------------------------------------------------------------
 
 # outdated_subset formula|cask NAME... — print the NAMEs brew reports outdated.
@@ -410,10 +412,13 @@ outdated_subset() {
 # Per-pack update reporting — shared by profile packs and extra packs
 # ----------------------------------------------------------------------------
 
-# Accumulators summed across packs by _report_brew_group; read by the
-# run_packages_mode summary. Reset at the top of run_packages_mode.
+# Accumulators summed across packs by _report_brew_group and
+# _report_native_group; read by the run_packages_mode summary. Reset at the
+# top of run_packages_mode. NATIVE_OUTDATED collects apt/dnf/pacman names so
+# they upgrade in one batch (one sudo) after every pack is reported.
 PKG_OUTDATED_TOTAL=0
 PKG_UNKNOWN=0
+NATIVE_OUTDATED=()
 
 # Report (and, outside --check, optionally upgrade) one brew group for a pack.
 #   $1 header  section label, e.g. "core updates" / "core cask updates"
@@ -461,10 +466,53 @@ _report_brew_group() {
     done
 }
 
-# Report every brew item a pack declares (scripts/lib/packs.sh pack_array):
-# formulae always, casks on macOS.
+# Report one pack's apt/dnf/pacman packages: only those the manager has
+# installed count as tracked (a tool installed another way, or one the distro
+# lacks, is not ours to upgrade). Upgrades are batched by run_packages_mode.
+#   $1 header  section label   $2 mgr  apt|dnf|pacman   $3.. Homebrew names
+_report_native_group() {
+    local header="$1" mgr="$2"; shift 2
+    local tracked=() outdated=() item
+    while IFS= read -r item; do
+        [[ -n "$item" ]] && tracked+=("$item")
+    done < <(pkg_native_tracked "$mgr" "$@")
+
+    echo ""
+    if (( ${#tracked[@]} == 0 )); then
+        echo -e "  ${BOLD}${header}${NC} (none installed via ${mgr})"
+        return 0
+    fi
+    local raw status=0
+    raw="$(pkg_native_outdated "$mgr" "${tracked[@]}")" || status=$?
+    while IFS= read -r item; do
+        [[ -n "$item" ]] && outdated+=("$item")
+    done <<<"$raw"
+
+    if [[ $status -ne 0 ]]; then
+        echo -e "  ${BOLD}${header}${NC} (${#tracked[@]} tracked via ${mgr}, status unknown):"
+        print_warning "${mgr} outdated probe failed; status unknown"
+        PKG_UNKNOWN=$((PKG_UNKNOWN + 1))
+    else
+        echo -e "  ${BOLD}${header}${NC} (${#tracked[@]} tracked via ${mgr}, ${#outdated[@]} outdated):"
+    fi
+    if (( ${#outdated[@]} == 0 )); then
+        [[ $status -ne 0 ]] && return 0
+        print_success "all up to date"
+        return 0
+    fi
+    for item in "${outdated[@]}"; do
+        printf "    ${CYAN}•${NC} %s\n" "$item"
+        case " ${NATIVE_OUTDATED[*]-} " in
+            *" $item "*) ;;
+            *) NATIVE_OUTDATED+=("$item"); PKG_OUTDATED_TOTAL=$((PKG_OUTDATED_TOTAL + 1)) ;;
+        esac
+    done
+}
+
+# Report every package a pack declares (scripts/lib/packs.sh pack_array):
+# formulae always, casks on macOS. $2 is pkg_manager's answer.
 report_pack_updates() {
-    local pack="$1" item
+    local pack="$1" mgr="$2" item
     local formulae=() casks=()
     while IFS= read -r item; do formulae+=("$item"); done < <(pack_array "$pack" formulae)
     if is_macos; then
@@ -472,7 +520,11 @@ report_pack_updates() {
     fi
 
     if (( ${#formulae[@]} + ${#casks[@]} == 0 )); then
-        print_info "${pack} updates: (no Homebrew packages declared)"
+        print_info "${pack} updates: (no packages declared)"
+        return 0
+    fi
+    if [[ "$mgr" != brew ]]; then
+        (( ${#formulae[@]} > 0 )) && _report_native_group "${pack} updates" "$mgr" "${formulae[@]}"
         return 0
     fi
     if (( ${#formulae[@]} > 0 )); then
@@ -499,26 +551,30 @@ report_apple_container() {
 run_packages_mode() {
     print_section "Checking pack-scoped package updates"
 
-    if ! command -v brew >/dev/null 2>&1; then
-        print_warning "brew not found — skipping package updates"
+    local mgr
+    if ! mgr="$(pkg_manager)"; then
+        print_warning "no supported package manager (brew, apt-get, dnf, pacman) — skipping package updates"
         return 0
     fi
 
-    if [[ "$MODE" == "check" ]]; then
-        print_info "Using local Homebrew metadata; run --packages to refresh and upgrade."
-    else
-        run_cmd brew update --quiet || true
-    fi
+    case "$MODE:$mgr" in
+        check:brew)  print_info "Using local Homebrew metadata; run --packages to refresh and upgrade." ;;
+        check:apt)   print_info "Using cached apt lists; --packages refreshes them when it can run as root." ;;
+        check:*)     print_info "Using cached ${mgr} metadata." ;;
+        *:brew)      run_cmd brew update --quiet || true ;;
+        *)           pkg_native_refresh "$mgr" || print_info "Using cached ${mgr} lists (refreshing needs root)." ;;
+    esac
 
     PKG_OUTDATED_TOTAL=0
     PKG_UNKNOWN=0
+    NATIVE_OUTDATED=()
 
     # Built-in and extra packs are reported the same way, so fnm's
     # FNM_FORMULAE and hunk's HUNK_FORMULAE are tracked just like core's.
     local pack any_pack=false
     for pack in $(tuidev_active_packs); do
         any_pack=true
-        report_pack_updates "$pack"
+        report_pack_updates "$pack" "$mgr"
     done
 
     if [[ "$any_pack" != true ]]; then
@@ -527,6 +583,17 @@ run_packages_mode() {
     fi
 
     report_apple_container
+
+    if [[ "$MODE" != "check" && ${#NATIVE_OUTDATED[@]} -gt 0 ]]; then
+        echo ""
+        # pacman only gets the full-system command (no partial upgrades).
+        if [[ "$mgr" == pacman ]]; then
+            pkg_native_upgrade "$mgr" "${NATIVE_OUTDATED[@]}" || true
+        elif confirm "Upgrade ${#NATIVE_OUTDATED[@]} package(s) via ${mgr}?"; then
+            pkg_native_upgrade "$mgr" "${NATIVE_OUTDATED[@]}" \
+                || print_warning "${mgr} upgrade did not complete"
+        fi
+    fi
 
     echo ""
     if [[ "$MODE" == "check" ]]; then
@@ -639,6 +706,44 @@ run_configs_mode() {
 # Mode: --repo
 # ----------------------------------------------------------------------------
 
+# Report how the checkout at $1 stands against its upstream (--check only).
+_report_repo_status() {
+    if ! git -C "$1" rev-parse --verify --quiet '@{u}' >/dev/null 2>&1; then
+        print_warning "No upstream branch configured — cannot check for updates"
+        return 0
+    fi
+    # A failed (or dry-run) fetch leaves the last-fetched upstream, so a
+    # match then means "not behind as of the last fetch", not up to date.
+    local stale=""
+    # Bare fetch: the branch's own remote, which is what @{u} lives on.
+    if [[ "$DRY_RUN" == true ]]; then
+        run_cmd git -C "$1" fetch --quiet
+        stale="dry run, not fetched"
+    elif ! git -C "$1" fetch --quiet; then
+        print_warning "git fetch failed — comparing with the last fetched upstream"
+        stale="fetch failed"
+    fi
+    local counts ahead behind
+    if ! counts="$(git -C "$1" rev-list --left-right --count 'HEAD...@{u}' 2>/dev/null)"; then
+        print_warning "Could not compare with upstream; status unknown"
+        return 0
+    fi
+    read -r ahead behind <<<"$counts"
+    if [[ "$behind" == 0 && "$ahead" == 0 ]]; then
+        if [[ -n "$stale" ]]; then
+            print_warning "Repo matches the last fetched upstream ($stale); status unknown"
+        else
+            print_success "Repo up to date"
+        fi
+    elif [[ "$behind" == 0 ]]; then
+        print_info "Repo is $ahead commit(s) ahead of upstream${stale:+ ($stale)}"
+    else
+        print_warning "Repo is $behind commit(s) behind upstream${stale:+ ($stale)}"
+        [[ "$ahead" != 0 ]] && print_warning "…and $ahead local commit(s) ahead: a fast-forward pull will fail"
+        git -C "$1" log --oneline "HEAD..@{u}" 2>/dev/null | head -5 | sed 's/^/      /'
+    fi
+}
+
 run_repo_mode() {
     print_section "Repository sync"
 
@@ -652,18 +757,7 @@ run_repo_mode() {
     echo -e "  ${BLUE}Repo:${NC} $target"
 
     if [[ "$MODE" == "check" ]]; then
-        run_cmd git -C "$target" fetch --quiet origin || true
-        local local_sha remote_sha
-        local_sha="$(git -C "$target" rev-parse HEAD 2>/dev/null || echo 0)"
-        remote_sha="$(git -C "$target" rev-parse '@{u}' 2>/dev/null || echo 0)"
-        if [[ "$local_sha" == "$remote_sha" ]]; then
-            print_success "Repo up to date"
-        else
-            local behind
-            behind="$(git -C "$target" rev-list --count "HEAD..@{u}" 2>/dev/null || echo '?')"
-            print_warning "Repo is $behind commit(s) behind upstream"
-            git -C "$target" log --oneline "HEAD..@{u}" 2>/dev/null | head -5 | sed 's/^/      /'
-        fi
+        _report_repo_status "$target"
     else
         run_cmd git -C "$target" pull --ff-only || print_warning "Fast-forward failed — manual intervention needed"
     fi
@@ -808,7 +902,7 @@ run_mode() {
 # Main
 # ----------------------------------------------------------------------------
 
-print_header "macOS TUI Environment Update"
+print_header "tuidev Update"
 
 echo -e "  ${BLUE}Repo:${NC}    $REPO_DIR"
 echo -e "  ${BLUE}Date:${NC}    $(date '+%Y-%m-%d %H:%M:%S')"
