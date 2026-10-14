@@ -210,16 +210,24 @@ printf '%s\t%s\twaste\tx\n' "$FAKE_NOW" "$((FAKE_NOW + 60))" > "$w/insight.txt"
   [[ "$(cut -f2 "$w/insight.txt")" == $((1760400000 + 86400)) ]] ) || fail "insight.txt outlives the day: $(cat "$w/insight.txt")"
 pass "insight.txt: today's top insight, at most every 5 minutes, until midnight or an hour; the tsv row only while current"
 
-# 9. The menu: one line under Today, opening that view of the report.
-printf 'hist\tok\t3600\ttest\t1800\ninsight\ttrends\t- a|b: `go` test ×3\n' > "$tmp/tsv"
+# 9. The menu: one line under Today, what was found as its label and the
+# whole sentence as its tooltip, opening that view of the report.
+printf 'hist\tok\t3600\ttest\t1800\ninsight\ttrends\t- a|b: `go` test ×3 — do "this"\n' > "$tmp/tsv"
 printf '#!/bin/bash\ncase "$1" in tsv) cat "%s" ;; esac\n' "$tmp/tsv" > "$tmp/agents-stub"
 chmod +x "$tmp/agents-stub"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
 section="$(printf '%s\n' "$menu" | awk '/^Where the CPU goes/ { on = 1 } on && /^---$/ { exit } on')"
 want="Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis refresh=true symbolize=false
-a¦b: go test ×3 | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=trends sfimage=lightbulb symbolize=false
+a¦b: go test ×3 | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=trends tooltip=\"a¦b: go test ×3 — do 'this'\" sfimage=lightbulb symbolize=false
 Open report | "
 [[ "$section" == *"$want"* ]] || fail "menu insight line:"$'\n'"$section"
+long="api: 40 CPU-min today, ↑200% on yesterday by this hour (build +27 CPU-min) — see what changed: agents report --view trends"
+printf 'hist\tok\t3600\ttest\t1800\ninsight\ttrends\t%s\n' "$long" > "$tmp/tsv"
+line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'sfimage=lightbulb')"
+# (67 characters or bytes, by the locale, then back to a word.)
+[[ "$line" == "api: 40 CPU-min today, ↑200% on yesterday by this hour "*"... | "*" param5=trends tooltip=\"$long\" "* \
+   && "${line%% | *}" != *" ..." && "${line%% | *}" != *"CPU-min)"* ]] \
+    || fail "a long insight: label cut at a word, the sentence in the tooltip:"$'\n'"$line"
 for bad in '--x' 'trends extra' ''; do
     printf 'hist\tok\t3600\ttest\t1800\ninsight\t%s\tsome text\n' "$bad" > "$tmp/tsv"
     menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
@@ -228,7 +236,7 @@ done
 printf 'hist\toff\t0\t-\t0\ninsight\twaste\tsome text\n' > "$tmp/tsv"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
 [[ "$menu" != *"some text"* ]] || fail "menu shows an insight with history off"
-pass "menu: the top insight under Today (text cleaned, a fixed view as its only param), Open report after it"
+pass "menu: the top insight under Today (its finding as the label, cut at 70; the sentence as the tooltip; a fixed view as its only param), Open report after it"
 
 # 10. A month of runs: thousands of commands, JSON far past mawk's 8 KiB
 # sprintf limit, every number still in place.

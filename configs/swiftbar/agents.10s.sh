@@ -508,7 +508,7 @@ job_lines() {
         }'
 }
 section_jobs() {
-    local tag job cpu rss n proj kind root start cwd line t sym click
+    local tag job cpu rss n proj kind root start cwd line t sym click tip q="'"
     [[ -n "$job_rows" || "$hist_state" == ok || "$hist_state" == due ]] || return 0
     echo "Where the CPU goes | size=12"
     while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd; do
@@ -537,12 +537,16 @@ section_jobs() {
     fi
     echo "$line | sfimage=chart.bar.xaxis $ROW symbolize=false"
     # Today's top insight (from insight.txt, which `agents sample` refreshes):
-    # its text in the label only; the param is one of the report's fixed views.
+    # what it found as the label (the text before " — ", at most 70
+    # characters, cut at a word), the whole sentence with its advice as the
+    # tooltip; the only param is one of the report's fixed views.
     case "$insight_view" in
         summary|runs|waste|trends|agents)
             if [[ -n "$insight_text" ]]; then
-                cl "$insight_text"
-                echo "${REPLY//\`/} | $TERM_OPEN param2=--hold param3=report param4=--view param5=$insight_view sfimage=lightbulb symbolize=false"
+                cl "${insight_text//\`/}"
+                tip="${REPLY//\"/$q}" line="${REPLY%% — *}"
+                [[ ${#line} -le 70 ]] || { line="${line:0:67}"; line="${line% *}..."; }
+                echo "$line | $TERM_OPEN param2=--hold param3=report param4=--view param5=$insight_view tooltip=\"$tip\" sfimage=lightbulb symbolize=false"
             fi ;;
     esac
     echo "Open report | $TERM_OPEN param2=--hold param3=report sfimage=doc.text.magnifyingglass"
