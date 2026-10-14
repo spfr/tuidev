@@ -64,6 +64,7 @@ for script in "$REPO_DIR"/*.sh \
               "$REPO_DIR"/scripts/install/*.sh \
               "$REPO_DIR"/scripts/install/packs/*.sh \
               "$REPO_DIR"/bin/agents \
+              "$REPO_DIR"/lib/agents/*.sh \
               "$REPO_DIR"/configs/swiftbar/*.sh; do
     [[ -f "$script" ]] || continue
     if bash -n "$script" 2>/dev/null; then

@@ -47,6 +47,12 @@ fi
 # different HOME recomputes it.
 : "${TUIDEV_STATE_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}"
 
+# Where tuidev installs code that its commands load at run time (the agents
+# modules, in agents/): ~/.local/lib/tuidev, beside ~/.local/bin, which is
+# where ~/.local/bin/agents looks for it. Not a setting: the two stay paired.
+# shellcheck disable=SC2034  # read by the monitoring pack and uninstall.sh
+TUIDEV_LIB_DIR="$HOME/.local/lib/tuidev"
+
 print_header() {
     echo ""
     echo -e "${PURPLE}============================================================================${NC}"

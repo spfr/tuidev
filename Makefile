@@ -129,7 +129,7 @@ check-remote: ## Health check against the remote profile
 # One file list for `make lint` and CI.
 SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
                scripts/install/*.sh scripts/install/packs/*.sh \
-               scripts/migrations/*.sh bin/sbx bin/agents configs/swiftbar/*.sh \
+               scripts/migrations/*.sh bin/sbx bin/agents lib/agents/*.sh configs/swiftbar/*.sh \
                docs/assets/tapes/*.sh docs/assets/tapes/bin/agents
 
 lint: ## Shellcheck every shell script (install, scripts, libs, packs, migrations, sbx)

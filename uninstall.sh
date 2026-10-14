@@ -8,7 +8,8 @@
 # that manifest records is removed:
 #   - managed blocks (content outside the markers is preserved), plus any
 #     tuidev-theme blocks written later by scripts/theme.sh;
-#   - helpers under ~/.local/bin, and global git keys tuidev set (only while
+#   - helpers under ~/.local/bin (with the agents modules in
+#     ~/.local/lib/tuidev), and global git keys tuidev set (only while
 #     they still hold tuidev's value);
 #   - optionally, config files tuidev created — never one it adopted, never a
 #     whole CLI home, so auth and session state (~/.codex/auth.json,
@@ -139,7 +140,7 @@ _unset_git_record() {
 each_line "$M_GIT" _unset_git_record
 
 # ---------------------------------------------------------------------------
-# 2. Helpers in ~/.local/bin.
+# 2. Helpers in ~/.local/bin, and the modules agents loads.
 # ---------------------------------------------------------------------------
 
 print_header "removing tuidev helpers"
@@ -150,10 +151,30 @@ if [[ -x "$HOME/.local/bin/agents" ]]; then
 fi
 
 _remove_helper() {
-    case "$1" in "$HOME/.local/bin/"*) ;; *) return 0 ;; esac
+    case "$1" in "$HOME/.local/bin/"*|"$TUIDEV_LIB_DIR/"*) ;; *) return 0 ;; esac
     [[ -e "$1" || -L "$1" ]] || return 0
     run_cmd rm -f "$1"
     done_msg "removed $1"
+}
+
+# The module directories, once their files are gone (only empty ones).
+_remove_lib_dirs() {
+    local d
+    [[ "$DRY_RUN" != true ]] || return 0
+    for d in "$TUIDEV_LIB_DIR/agents/awk" "$TUIDEV_LIB_DIR/agents" "$TUIDEV_LIB_DIR"; do
+        [[ -d "$d" ]] && rmdir "$d" 2>/dev/null && done_msg "removed $d"
+    done
+    return 0
+}
+
+# _remove_if_ours FILE REPO_COPY — without a record, remove FILE only while it
+# is still exactly the repo's copy.
+_remove_if_ours() {
+    if [[ -f "$1" ]] && cmp -s "$1" "$2"; then
+        _remove_helper "$1"
+    elif [[ -e "$1" ]]; then
+        print_info "kept $1 (differs from the repo copy — review it yourself)"
+    fi
 }
 
 if $MANIFEST_MODE; then
@@ -161,14 +182,13 @@ if $MANIFEST_MODE; then
 else
     # Without a record, remove a helper only if it is still exactly ours.
     for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents"; do
-        f="$HOME/.local/bin/${pair%%:*}"
-        if [[ -f "$f" ]] && cmp -s "$f" "$SCRIPT_DIR/${pair#*:}"; then
-            _remove_helper "$f"
-        elif [[ -e "$f" ]]; then
-            print_info "kept $f (differs from the repo copy — review it yourself)"
-        fi
+        _remove_if_ours "$HOME/.local/bin/${pair%%:*}" "$SCRIPT_DIR/${pair#*:}"
     done
+    while IFS= read -r src; do
+        _remove_if_ours "$TUIDEV_LIB_DIR/agents/${src#"$SCRIPT_DIR/lib/agents/"}" "$src"
+    done < <(find "$SCRIPT_DIR/lib/agents" -type f | LC_ALL=C sort)
 fi
+_remove_lib_dirs
 
 # The SwiftBar plugin only calls `agents`, so it goes with it: left behind, it
 # would show "not on PATH" on every refresh.
@@ -203,7 +223,7 @@ fi
 _remove_config_path() {
     local path="$1"
     case "$path" in
-        "$HOME/.local/bin/"*|"$TUIDEV_STATE_DIR"/*) return 0 ;;   # steps 2 and 5
+        "$HOME/.local/bin/"*|"$TUIDEV_LIB_DIR/"*|"$TUIDEV_STATE_DIR"/*) return 0 ;;   # steps 2 and 5
     esac
     [[ -e "$path" ]] || return 0
     local rel="${path#"$HOME"/}"
@@ -318,7 +338,7 @@ fi
 print_header "Uninstall complete"
 printf '%b\n' "${GREEN}What was removed:${NC}
   - tuidev managed blocks and the global git keys tuidev set (if unchanged)
-  - tuidev helpers under ~/.local/bin
+  - tuidev helpers under ~/.local/bin, and the agents modules in ~/.local/lib/tuidev
   - $TUIDEV_STATE_DIR (profile, manifest, env, theme state)
   - (optional) config files tuidev created, and the brew packages it installed
 

@@ -799,7 +799,7 @@ check_actions() {   # MENU
         sub="${1:-}"; shift || true
         case "$target" in
             "$HOME/.local/bin/agents")
-                grep -qE "^        $sub\)" "$REPO_DIR/bin/agents" || fail "menu calls unknown agents subcommand '$sub'"
+                grep -qE "^        $sub\)" "$REPO_DIR/lib/agents/cli.sh" || fail "menu calls unknown agents subcommand '$sub'"
                 case "$sub" in
                     kill|term)
                         [[ $# -ge 1 ]] || fail "$sub without arguments"
@@ -1087,7 +1087,8 @@ pass "stuck polling loops: AGENTS_WAIT_STUCK of age, unless the watched file is 
 
 # watched(): only a path given to tail, head, grep, cat, test, [ or [[ (or
 # through VAR=/path) is a watched file; quoted paths with spaces are whole.
-wprobe() { printf '%s\n' "$1" | LC_ALL=C awk "$_AGENTS_AWK_LIB"'{ print watched($0) }'; }
+# shellcheck disable=SC2016  # awk source
+wprobe() { printf '%s\n' "$1" | _agents_awk_eval "lib_proc lib_activity" '{ print watched($0) }'; }
 [[ "$(wprobe 'until docker exec db /usr/bin/pg_isready; do sleep 2; done')" == "" ]] || fail "watched: docker exec's program taken as the file"
 [[ "$(wprobe 'until curl --unix-socket /var/run/x.sock http://x/health; do sleep 2; done')" == "" ]] || fail "watched: curl's socket taken as the file"
 [[ "$(wprobe 'until [ -f "/tmp/my dir/done" ]; do sleep 2; done')" == "/tmp/my dir/done" ]] || fail "watched: quoted path with a space: $(wprobe 'until [ -f "/tmp/my dir/done" ]; do sleep 2; done')"
@@ -1175,7 +1176,7 @@ pass "a tool shell can be stopped: zsh -c is not an interactive shell"
 
 # bash 3.2 can read a UTF-8 byte as part of a variable name: "$n×" printed
 # "\x97" on macOS CI. Every variable before a non-ASCII character is braced.
-bad="$(LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~]' "$REPO_DIR/bin/agents" "$REPO_DIR/configs/swiftbar/agents.10s.sh" || true)"
+bad="$(LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~]' "$REPO_DIR/bin/agents" "$REPO_DIR"/lib/agents/*.sh "$REPO_DIR"/lib/agents/awk/*.awk "$REPO_DIR/configs/swiftbar/agents.10s.sh" || true)"
 [[ -z "$bad" ]] || fail "unbraced variable before a non-ASCII character: $bad"
 pass "variables before non-ASCII text are braced (bash 3.2)"
 

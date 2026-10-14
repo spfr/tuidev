@@ -181,10 +181,10 @@ check_creds "docs/sandboxing.md" "$cred_want_flat" \
     "$(awk '/^### Credentials: denied/{f=1} f && /^```$/{n++; if (n==2) exit; next} f && n==1' "$REPO_DIR/docs/sandboxing.md" | prose_paths)"
 check_creds "AGENTS.md" "$cred_want_flat" \
     "$(grep -F "Denied under \`sbx\`" "$REPO_DIR/AGENTS.md" | sed 's/.*:\*\*//' | prose_paths)"
-# bin/agents runs without the repo, so it embeds the list (relative to $HOME)
+# agents runs without the repo, so it embeds the list (relative to $HOME)
 # for the files whose last line it never reads.
-check_creds "bin/agents _AGENTS_CRED_PATHS" "$cred_want" \
-    "$(sed -n "s/^_AGENTS_CRED_PATHS='\(.*\)'$/\1/p" "$REPO_DIR/bin/agents" | tr ' ' '\n' | grep -v '^$' | sed 's:^:~/:')"
+check_creds "lib/agents/watched.sh _AGENTS_CRED_PATHS" "$cred_want" \
+    "$(sed -n "s/^_AGENTS_CRED_PATHS='\(.*\)'$/\1/p" "$REPO_DIR/lib/agents/watched.sh" | tr ' ' '\n' | grep -v '^$' | sed 's:^:~/:')"
 pass "credential lockout matches configs/sandbox/credential-paths.txt in every copy"
 
 # CI's required-files job must list only files that exist, or a removal breaks CI

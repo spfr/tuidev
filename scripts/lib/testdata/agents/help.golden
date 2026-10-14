@@ -84,7 +84,7 @@ SETTINGS
   bar's AGENTS_BAR_TITLE
   AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. The same
   names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
-  AGENTS_ORPHAN_PATTERNS at the top of @REPO@/bin/agents. History: AGENTS_HISTORY
+  AGENTS_ORPHAN_PATTERNS in @REPO@/lib/agents/config.sh. History: AGENTS_HISTORY
   AGENTS_HISTORY_DAYS; extra job patterns (EREs): AGENTS_JOB_TEST AGENTS_JOB_BUILD
   AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Data: @TMP@/data
 

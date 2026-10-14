@@ -365,11 +365,21 @@ check_packs() {
         check_optional "pack: $pack" "$probe"
     done
 
-    # The monitoring pack's SwiftBar plugin (macOS), wherever the manifest put it.
+    # The monitoring pack: agents with its modules, and its SwiftBar plugin
+    # (macOS), wherever the manifest put it.
     case " ${packs[*]} " in
-        *" monitoring "*) is_macos && check_optional "SwiftBar agents plugin" swiftbar_plugin_present ;;
+        *" monitoring "*)
+            check_optional "agents runs (its modules are in place)" agents_runs
+            is_macos && check_optional "SwiftBar agents plugin" swiftbar_plugin_present ;;
     esac
     return 0
+}
+
+# Probe: agents finds and loads its modules (when not, `agents --help` names
+# what is missing).
+# shellcheck disable=SC2317,SC2329  # invoked through check_optional's eval
+agents_runs() {
+    have_cmd agents && agents --help >/dev/null
 }
 
 # Probe: the SwiftBar plugin the monitoring pack recorded is in place.
