@@ -29,10 +29,14 @@ LOOK
                                it, informational; --copy puts it on the clipboard
 
 HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
-  agents report [--since 24h|7d|30d|today] [--json]
+  agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]
                                where the CPU went: CPU-hours by job (test, build,
                                server, browser, mcp, agent, wait, other), project,
-                               session and hour, and what was cleaned up (default 24h)
+                               session and hour, what was cleaned up, and the top
+                               insights from the runs (default 24h). VIEW: runs
+                               (repeated and slowest commands), waste (duplicates,
+                               leaks, polling, failed re-runs), trends (against the
+                               window before; default 7d), agents (by agent type)
   agents sample                record one sample; the menu bar and 'agents watch'
                                do it every minute (cron it where neither runs)
 

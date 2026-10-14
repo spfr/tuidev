@@ -317,6 +317,23 @@ case_ report-7d report --since 7d
 case_ report-today report --since today
 case_ report-json report --json
 case_ report-bad report --since yesterday
+case_ report-runs-noledger report --view runs
+# The run ledger's views: the same history and events, plus
+# scripts/lib/testdata/agents-runs.tsv counted back from now.
+mkdir -p "$tmp/runs"
+cp "$AGENTS_DATA_DIR/history.tsv" "$AGENTS_DATA_DIR/events.tsv" "$tmp/runs/"
+awk -F '\t' -v OFS='\t' -v n="$FAKE_NOW" '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { $1 = n - $1; $2 = n - $2 } { print }' \
+    "$SCRIPT_DIR/testdata/agents-runs.tsv" > "$tmp/runs/runs.tsv"
+( AGENTS_DATA_DIR="$tmp/runs"
+  case_ report-insights report
+  case_ report-insights-json report --json
+  for v in runs waste agents; do
+      case_ "report-$v" report --view "$v"
+      case_ "report-$v-json" report --view "$v" --json
+  done
+  case_ report-trends report --view trends --since 24h
+  case_ report-trends-json report --view trends --since 24h --json
+  case_ report-view-bad report --view everything )
 case_ reap-n reap -n
 case_ reap-stuck-n reap --stuck -n
 case_ reap-auto-n reap --auto -n

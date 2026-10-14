@@ -1,0 +1,11 @@
+agents report · agents · last 24h
+
+  AGENT                 RUNS   CPU-h     %  FAILED  DUPS DUP CPU-h  LEFT  LEFT h  WAIT h
+  main                    12    1.11   54%      9%     3      0.33     0     0.0     2.0
+  implementor-complex      5    0.67   32%      0%     0      0.00     0     0.0     0.0
+  Explore                  8    0.28   14%     60%     0      0.00     3     2.1     2.1
+  (unknown)                1    0.00    0%      0%     0      0.00     0     0.0     0.0
+
+LEAKS MOST       Explore 3 (2.1 h)
+DUPLICATES MOST  main 3 (0.33 CPU-h)
+[rc=0]
