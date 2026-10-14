@@ -50,6 +50,8 @@ esac'
 stub apt-get 'exit 0'
 stub apt-mark 'exit 0'
 stub sudo 'exit 1'   # no passwordless sudo
+# pkg_manager only looks for apt on Linux, so a Mac run must report Linux too.
+printf '#!/bin/bash\necho Linux\n' > "$tmp/bin/uname"; chmod +x "$tmp/bin/uname"
 # No Homebrew: only the stubs and the system basics (not /opt/homebrew).
 run_update() { PATH="$tmp/bin:/usr/bin:/bin" bash "$UPDATE" "$@" < /dev/null 2>&1; }
 
