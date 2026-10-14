@@ -928,7 +928,8 @@ _agents_awake_write() {   # PID MODE UNTIL
 # `agents awake lid DURATION` does, with `pmset -a disablesleep 1`, which
 # needs root: one admin dialog (osascript `with administrator privileges`, no
 # sudo rights are stored) sets it and starts a root-owned guard that sets it
-# back when the time is up, the battery runs low off AC, or the Mac heats up.
+# back when the time is up, the battery runs low off AC, or thermal pressure
+# reaches heavy (moderate is common in a closed Mac running a build).
 # `awake off` ends it early with one more dialog. macOS keeps disablesleep
 # across a reboot that killed the guard: agents_lid_stale notices.
 # State: $AGENTS_RUN_DIR/lid holds "guard_pid start until_epoch".
@@ -952,7 +953,7 @@ while [ "$(/bin/date +%s)" -lt "$end" ]; do
     t="${t##* }"
     case "$t" in
         ""|*[!0-9]*) ;;
-        *) if [ "$t" -gt 0 ]; then restore; fi ;;
+        *) if [ "$t" -ge 2 ]; then restore; fi ;;
     esac
     /bin/sleep 60 &
     wait $!
@@ -1058,7 +1059,7 @@ agents_awake_lid() {
         read -r pid _ v <<<"$state"; [[ "$v" == 1 ]] && old="$pid"
     fi
     cmd="$(_agents_lid_cmd start "$secs" "$AGENTS_LID_MIN_BATTERY" "$old")" || { echo "agents: refusing to build the root command" >&2; return 2; }
-    if ! out="$(_agents_admin_run "$cmd" "agents wants to keep your Mac awake with the lid closed for $dur. Lid sleep comes back after that, below ${AGENTS_LID_MIN_BATTERY}% battery, or when the Mac heats up.")"; then
+    if ! out="$(_agents_admin_run "$cmd" "agents wants to keep your Mac awake with the lid closed for $dur. Lid sleep comes back after that, below ${AGENTS_LID_MIN_BATTERY}% battery, or when the Mac runs hot.")"; then
         echo "awake: cancelled (no administrator rights); nothing changed" >&2; return 1
     fi
     rm -f "$AGENTS_RUN_DIR/powermode"
@@ -1075,7 +1076,7 @@ agents_awake_lid() {
     pid=$!
     disown "$pid" 2>/dev/null
     _agents_awake_write "$pid" lid "$until"
-    echo "awake: on with the lid closed until $(_agents_clock "$until") (guard pid $gpid): lid sleep comes back then, below ${AGENTS_LID_MIN_BATTERY}% battery off AC, or when the Mac heats up"
+    echo "awake: on with the lid closed until $(_agents_clock "$until") (guard pid $gpid): lid sleep comes back then, below ${AGENTS_LID_MIN_BATTERY}% battery off AC, or when the Mac runs hot (heavy thermal pressure)"
 }
 
 # agents_lid_stop [--always] — turn lid sleep back on (one admin dialog) and
@@ -2009,7 +2010,7 @@ KEEP AWAKE
                                most AGENTS_LID_MAX ($AGENTS_LID_MAX). Asks for an admin
                                password each time; a root guard restores lid sleep
                                when DURATION ends, below ${AGENTS_LID_MIN_BATTERY}% battery off AC,
-                               or when thermal pressure rises above nominal
+                               or when thermal pressure reaches heavy
   agents awake off             release (ends lid mode too: one more password)
   agents awake restore         let a closed lid sleep again (pmset disablesleep 0),
                                e.g. after a reboot killed the guard

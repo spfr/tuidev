@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are stored. It is always time-boxed (`AGENTS_LID_MAX`, default 8h). The
   same root command starts a small root-owned guard, which turns lid sleep
   back on when the time is up, below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or
-  when thermal pressure rises above nominal. The usual `caffeinate -di` holder
+  when thermal pressure reaches heavy. The usual `caffeinate -di` holder
   runs alongside for the same time. `agents awake off` ends it early (one more
   dialog), and `agents awake restore` turns lid sleep back on whatever
   disabled it. macOS keeps the setting across a reboot that kills the guard,

@@ -441,7 +441,8 @@ bad_lid_cmd go 60 20
 pass "lid: the root command is fixed text around checked numbers (duration seconds, battery %, guard pid)"
 
 # The guard itself: valid, shellcheck-clean bash; restores on low battery off
-# AC, on heat and when the time is up; SIGUSR1 retires it quietly.
+# AC, on heavy thermal pressure (not moderate) and when the time is up;
+# SIGUSR1 retires it quietly.
 printf '%s\n' "$_AGENTS_LID_GUARD" > "$tmp/guard.sh"
 bash -n "$tmp/guard.sh" || fail "guard body does not parse"
 if command -v shellcheck >/dev/null 2>&1; then
@@ -460,10 +461,14 @@ guard() { : > "$PMSET_LOG"; bash -c "$guard_test" agents-lid-guard "$@"; cat "$P
 ( PMSET_BATT="Now drawing from 'AC Power'" bash -c "$guard_test" agents-lid-guard 600 20 ) & gp=$!
 sleep 0.5; kill -USR1 "$gp"; wait "$gp" 2>/dev/null || true
 [[ ! -s "$PMSET_LOG" ]] || fail "guard: SIGUSR1 (a replacement guard) restored sleep"
+: > "$PMSET_LOG"
+( PMSET_BATT="Now drawing from 'AC Power'" THERMAL=1 bash -c "$guard_test" agents-lid-guard 600 20 ) & gp=$!
+sleep 0.5; kill -USR1 "$gp"; wait "$gp" 2>/dev/null || true
+[[ ! -s "$PMSET_LOG" ]] || fail "guard: moderate thermal pressure restored sleep"
 ( PMSET_BATT="Now drawing from 'AC Power'" bash -c "$guard_test" agents-lid-guard 600 20 ) & gp=$!
 sleep 0.5; kill -TERM "$gp"; wait "$gp" 2>/dev/null || true
 [[ "$(cat "$PMSET_LOG")" == "-a disablesleep 0" ]] || fail "guard: SIGTERM does not restore"
-pass "lid guard: bash -n and shellcheck clean; restores on low battery, heat, timeout and SIGTERM; SIGUSR1 retires it"
+pass "lid guard: bash -n and shellcheck clean; restores on low battery, heavy (not moderate) heat, timeout and SIGTERM; SIGUSR1 retires it"
 
 # The command: a required, capped duration; one dialog; state recorded.
 lid() {   # ARGS... — agents awake, with the stubs, in its own run dir
