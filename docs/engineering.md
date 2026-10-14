@@ -55,7 +55,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | Module | Owns |
 |--------|------|
 | `config.sh` | every `AGENTS_*` setting (`agents.conf`, the environment, defaults), the process patterns, the run and data dirs, this process's pid and uid; `agents config` |
-| `util.sh` | `_agents_awk` (runs the `awk/` programs), durations, clock times, timeouts, detached jobs, lock directories, epoch stamps, atomic replace |
+| `util.sh` | `_agents_awk` (runs the `awk/` programs), durations, `--since` windows, clock times, timeouts, detached jobs, lock directories, epoch stamps, atomic replace |
 | `snapshot.sh` | the `ps` snapshot, start times, listeners, cwds (`/proc` or `lsof`), pids never stale, Herdr's cached view, `agents_collect` |
 | `classify.sh` | `agents_classify` and `agents_enrich`: agents, stale, hogs, what each session runs, jobs, flags, project names |
 | `watched.sh` | the files polling loops watch: quiet or fresh, mtime, last line, and the credential files never read |
@@ -67,6 +67,8 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `events.sh` | the private data dir and `events.tsv` |
 | `assess.sh` | Needs you: evidence and a verdict per item, `agents why` |
 | `history.sh` | `agents sample`: `history.tsv`, `today.tsv`, `sample.state`, pruning |
+| `runs.sh` | the run ledger (`runs.state`, `runs.tsv`), the menu's run feed, `agents runs` |
+| `transcript.sh` | reading Claude Code transcripts: task-id lines, subagent meta and type, which agent started a task (shared by `hooks.sh` and `runs.sh`) |
 | `report.sh` | `agents report` |
 | `render.sh` | the human views: the table, its status lines, `agents watch` |
 | `json.sh` | `agents json`, a versioned contract |
@@ -76,8 +78,8 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `notify.sh` | the y/N prompt, the macOS dialog, notifications |
 | `usage.sh` | `agents --help` |
 | `cli.sh` | `agents_main`: options and the subcommand table; `agents cwd` |
-| `awk/lib_*.awk` | awk functions shared by several programs: process-table primitives (`lib_proc`), what a tool shell runs (`lib_activity`), jobs (`lib_jobs`), JSON strings (`lib_json`), ordering (`lib_sort`) |
-| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `refusal`, `tree`, `new_members`, `hook_*`), run by `_agents_awk` after the libraries it names |
+| `awk/lib_*.awk` | awk functions shared by several programs: process-table primitives (`lib_proc`), what a tool shell runs and the name it goes by (`lib_activity`), jobs (`lib_jobs`), JSON strings (`lib_json`), ordering (`lib_sort`), durations and sizes for people (`lib_fmt`) |
+| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `refusal`, `tree`, `new_members`, `hook_*`), run by `_agents_awk` after the libraries it names |
 
 The monitoring pack installs each file with `install_config --overwrite`, so the manifest records it and `uninstall.sh` removes it. Adding a module needs no migration; renaming or removing one does, like any installed file. `scripts/lib/test_agents_golden.sh` compares every view and dry run with recorded output byte for byte, and `test_agents_install.sh` runs the installed command outside the repo.
 
@@ -179,7 +181,7 @@ Run these locally, in this order. `make ci-test` runs the first four.
 make lint              # shellcheck -x over every shell file (the list lives in the Makefile)
 make validate-configs  # JSON, TOML, Lua, zsh/sh syntax (CI adds --strict)
 make check-links       # every relative link in every tracked .md resolves
-make test-lib          # scripts/lib/test_*.sh: agents, agents_golden, agents_history, agents_hooks, agents_install, agents_needs, config_write, container, contract, gitconfig, migrations, orchestration, pkg, profile, theme, update_packages
+make test-lib          # scripts/lib/test_*.sh: agents, agents_golden, agents_history, agents_hooks, agents_install, agents_needs, agents_runs, config_write, container, contract, gitconfig, migrations, orchestration, pkg, profile, theme, update_packages
 make test-core         # core-tagged tests against this machine
 make container-test    # core-tagged tests in an Alpine container (tests scripts and configs, not the installer)
 ```
