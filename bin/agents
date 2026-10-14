@@ -532,10 +532,11 @@ agents_project() {
 # then activity rows, where column 15 is the origin (main, or the worktree a
 # subagent runs in), 16 the flags (dup, long, hot, wait, stuck) and 17 how
 # many copies of that command run in the same directory (in the session, or
-# any session). A tool's cwd is where it cd'"'"'s to first, if it does. QUIET:
-# pids of polling loops whose watched file has gone quiet (agents_collect).
+# any session). A tool's cwd is where it cd'"'"'s to first, if it does. WATCHED:
+# "pid<TAB>quiet|fresh" for polling loops whose watched file exists
+# (_agents_watched).
 agents_enrich() {
-    AGENTS_CWDS="$1" AGENTS_HERDR="$2" AGENTS_QUIET="${3:-}" AGENTS_CWD_ROOTS="$(_agents_cwd_roots)" HOME="$HOME" \
+    AGENTS_CWDS="$1" AGENTS_HERDR="$2" AGENTS_WATCHED="${3:-}" AGENTS_CWD_ROOTS="$(_agents_cwd_roots)" HOME="$HOME" \
     AGENTS_TOOL_LONG="$AGENTS_TOOL_LONG" AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_WAIT_STUCK="$AGENTS_WAIT_STUCK" \
     LC_ALL=C awk -F '\t' -v OFS='\t' "$_AGENTS_AWK_LIB"'
 function project(c,   i) {
@@ -575,11 +576,13 @@ END {
     }
     for (i = 1; i <= nx; i++) {
         $0 = xrow[i]; d = 1; fl = ""
-        # A polling loop is stuck once it has run AGENTS_WAIT_STUCK minutes, or
-        # once the file it watches has been quiet that long.
+        # A polling loop is stuck once the file it watches has been quiet for
+        # AGENTS_WAIT_STUCK minutes, or, when it watches no file that exists,
+        # once it has run that long. A file written lately (a long build'"'"'s
+        # log) means the producer is alive: never stuck then.
         if ($3 == "tool" && waits($14)) {
-            fl = "wait"
-            if (stuck > 0 && ($4 >= stuck || ($2 in quiet))) fl = fl ",stuck"
+            fl = "wait"; w = ($2 in wst) ? wst[$2] : ""
+            if (stuck > 0 && (w == "quiet" || (w == "" && $4 >= stuck))) fl = fl ",stuck"
         }
         else if ($3 == "tool") {
             d = same[$11, $13, $14]; if ($13 != "-" && here[$13, $14] > d) d = here[$13, $14]
@@ -599,7 +602,8 @@ BEGIN {
     for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 2) cwd[f[1]] = f[2]
     n = split(ENVIRON["AGENTS_HERDR"], t, "\n")
     for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 3 && !((f[1], f[3]) in hs)) hs[f[1], f[3]] = f[2]
-    n = split(ENVIRON["AGENTS_QUIET"], t, "\n"); for (i = 1; i <= n; i++) if (t[i] != "") quiet[t[i]] = 1
+    n = split(ENVIRON["AGENTS_WATCHED"], t, "\n")
+    for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 2) wst[f[1]] = f[2]
 }
 NF < 14 { next }
 $1 == "cand" {
@@ -749,24 +753,25 @@ agents_collect() {
         esac
     done <<<"$recs"
     pids="$(_agents_cwds "$@")"
-    printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_quiet "$watch")"
+    printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_watched "$watch")"
 }
 
-# _agents_quiet "PID<TAB>PATH" lines — the pids of polling loops whose watched
-# file exists but has not changed for AGENTS_WAIT_STUCK minutes. One find for
-# all of them (-mmin works the same on macOS and Linux); a missing file says
-# nothing, and the loop is then judged by its age alone.
-_agents_quiet() {
+# _agents_watched "PID<TAB>PATH" lines — "pid<TAB>quiet" for each polling loop
+# whose watched file has not changed for AGENTS_WAIT_STUCK minutes, and
+# "pid<TAB>fresh" for one whose file changed since. One find for all of them
+# (-mmin works the same on macOS and Linux); a missing file says nothing, and
+# the loop is then judged by its age alone.
+_agents_watched() {
     local pid path paths=() old
     [[ -n "$1" && "$AGENTS_WAIT_STUCK" -gt 0 ]] || return 0
     while IFS=$'\t' read -r pid path; do
-        [[ "$pid" =~ ^[0-9]+$ && "$path" == /* ]] && paths+=("$path")
+        [[ "$pid" =~ ^[0-9]+$ && "$path" == /* && -e "$path" ]] && paths+=("$path")
     done <<<"$1"
     [[ ${#paths[@]} -gt 0 ]] || return 0
     old="$(find "${paths[@]}" -maxdepth 0 -mmin "+$AGENTS_WAIT_STUCK" -print 2>/dev/null)"
-    [[ -n "$old" ]] || return 0
     while IFS=$'\t' read -r pid path; do
-        [[ -n "$path" && $'\n'"$old"$'\n' == *$'\n'"$path"$'\n'* ]] && echo "$pid"
+        [[ "$pid" =~ ^[0-9]+$ && "$path" == /* && -e "$path" ]] || continue
+        if [[ $'\n'"$old"$'\n' == *$'\n'"$path"$'\n'* ]]; then printf '%s\tquiet\n' "$pid"; else printf '%s\tfresh\n' "$pid"; fi
     done <<<"$1"
     return 0
 }

@@ -58,10 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Claude Code ends a background task's `.output` with `[exited with code N]`,
   so a subagent's `until tail -1 $F | grep -q ok; do sleep 5; done` spins
   forever, and `agents` showed it as a gray hourglass for hours. A `wait`
-  loop is now also flagged `stuck` once it has run `AGENTS_WAIT_STUCK`
-  minutes, or once the file it watches (the first absolute path in its
-  condition, directly or through `F=/path` before the loop) has not changed
-  for that long; one `find -mmin` checks every such file. `agents ps` shows
+  loop is now also flagged `stuck` once the file it watches (the first
+  absolute path in its condition, directly or through `F=/path` before the
+  loop) has not changed for `AGENTS_WAIT_STUCK` minutes; one `find -mmin`
+  checks every such file. A file changed within that time (a long build's
+  log) keeps the loop a plain `wait`, however old it is. A loop with no file
+  to watch, or whose file doesn't exist, is stuck once it has run that long. `agents ps` shows
   `stuck`, `agents json` adds it to the tool's `flags` (still
   `schema_version` 1: the flag is added next to `wait`), and the menu shows
   an orange hourglass with Stop command… under Needs you, which tints the
