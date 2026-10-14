@@ -72,7 +72,9 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
         o = o "],\"hours\":["
         for (i = 1; i <= nh; i++) o = o (i > 1 ? "," : "") sprintf("{\"hour\":%d,\"cpu_s\":%d}", ho[i], hc[ho[i]])
         o = o sprintf("],\"cleanups\":{\"total\":%d,\"by_reason\":", ev) jlist(ro, nr, er, "reason", "count") ",\"by_kind\":" jlist(ko, nk, ek, "kind", "count") ",\"projects\":" jlist(eo, ne, ep, "project", "count") "}"
-        print o ",\"view\":\"summary\",\"ledger\":" jb(RL) ",\"insights\":" insights_json(3) "}"
+        o = o ",\"view\":\"summary\",\"ledger\":" jb(RL)
+        o = o sprintf(",\"runs\":{\"count\":%d,\"failed\":%d,\"dup\":%d,\"cleaned\":%d}", RN, RFAIL, RDUP, RCLN)
+        print o ",\"insights\":" insights_json(3) "}"
         return
     }
     if (!any && !RL) {

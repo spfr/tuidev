@@ -33,21 +33,21 @@ function jcmds(keys, n, lim,   i, o) {
 }
 
 # runs: the most repeated commands, and the slowest tests and builds.
-function view_runs(   i, k, ns, nf, nk, o) {
+function view_runs(   i, k, ns, o) {
     gstats()
-    for (i = 1; i <= GC; i++) { k = GO[i]; RK[i] = k; RC[k] = Gn[k] + Gcpu[k] / 1e9; nf += Gfail[k]; nk += Gknown[k] }
+    for (i = 1; i <= GC; i++) { k = GO[i]; RK[i] = k; RC[k] = Gn[k] + Gcpu[k] / 1e9 }
     sortk(RC, RK, GC)
     ns = 0
     for (i = 1; i <= GC; i++) { k = GO[i]; gsplit(k); if (G_J == "test" || G_J == "build") { SK[++ns] = k; SM[k] = GMED[k] } }
     sortk(SM, SK, ns)
     if (json) {
-        o = jhead("runs") ",\"runs\":" RN ",\"cpu_s\":" jn(RCPU) ",\"exit_known\":" (nk + 0) ",\"failed\":" (nf + 0)
+        o = jhead("runs") ",\"runs\":" RN ",\"cpu_s\":" jn(RCPU) ",\"exit_known\":" RKNOWN ",\"failed\":" RFAIL
         print o ",\"commands\":" jcmds(RK, GC, GC) ",\"slowest\":" jcmds(SK, ns, 10) "}"
         return
     }
     vhead("runs")
     if (!RN) { print "no runs in this window"; return }
-    printf "%sRUNS%s %d \302\267 %s CPU-h \302\267 %s failed\n\n", b, e, RN, ch(RCPU), pctn(nf, nk)
+    printf "%sRUNS%s %d \302\267 %s CPU-h \302\267 %s failed\n\n", b, e, RN, ch(RCPU), pctn(RFAIL, RKNOWN)
     printf "%sMOST REPEATED%s\n", b, e
     th(cmdhead() " " rc("RUNS", 5) " " rc("CPU-h", 7) " " rc("MEDIAN", 7) " " rc("P90", 7) " " rc("FAILED", 7))
     for (i = 1; i <= GC && i <= 10; i++) {

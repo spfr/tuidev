@@ -19,7 +19,9 @@
 #             left running, and its CPU and hours are the leak's cost.
 
 # runs_load FILE START PSTART PEND — read the ledger into:
-#   RL 1 when it has any row at all; RN, RCPU, RDUR: this window's runs.
+#   RL 1 when it has any row at all; RN, RCPU, RDUR: this window's runs,
+#     RKNOWN RFAIL RDUP RCLN: how many had a known exit, failed, were dups,
+#     were cleaned up.
 #   Commands (project SUBSEP cmd SUBSEP job): GO[1..GC] first seen first;
 #     Gn Gcpu Gknown Gfail Gdup Gdupcpu Grer Grercpu, Gd[k, 1..Gn[k]] durations.
 #   Agent types: AO[1..AC]; An Acpu Aknown Afail Adup Adupcpu Acln Aclncpu
@@ -30,7 +32,7 @@
 #     TPO[1..TPC] and TJO[1..TJC] the names seen in either.
 function runs_load(rf, start, pstart, pend,   ln, f, e, w, j, p, a, c, d, cpu, k, rk, x, cln, dup, known, failed, n) {
     RERUN_GAP = 120
-    RL = 0; RN = 0; RCPU = 0; RDUR = 0; GC = 0; AC = 0; CJC = 0; TPC = 0; TJC = 0
+    RL = 0; RN = 0; RCPU = 0; RDUR = 0; RKNOWN = RFAIL = RDUP = RCLN = 0; GC = 0; AC = 0; CJC = 0; TPC = 0; TJC = 0
     while ((getline ln < rf) > 0) {
         if (split(ln, f, "\t") < 13 || f[1] !~ /^[0-9]+$/) continue
         RL = 1
@@ -50,6 +52,7 @@ function runs_load(rf, start, pstart, pend,   ln, f, e, w, j, p, a, c, d, cpu, k
         RN++; RCPU += cpu; RDUR += d
         cln = f[13] == "1"; dup = f[12] == "1"
         known = !cln && f[11] ~ /^[0-9]+$/; failed = known && f[11] + 0 != 0
+        RKNOWN += known; RFAIL += failed; RDUP += dup; RCLN += cln
         k = p SUBSEP c SUBSEP j
         if (!(k in Gn)) GO[++GC] = k
         n = ++Gn[k]; Gcpu[k] += cpu; Gd[k, n] = d

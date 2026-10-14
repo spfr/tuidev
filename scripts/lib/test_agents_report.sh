@@ -136,6 +136,7 @@ want="TOP INSIGHTS
 json="$(rep --json)"
 jqt "$json" '.view == "summary" and .ledger and ([.insights[] | [.kind, .impact_s]] == [["regression",1600],["dup",1200],["leak",771]])' "summary json insights" '.insights'
 jqt "$json" '.insights[1] | .project == "app" and .cmd == "go" and .job == "test" and .agent == null and .view == "waste"' "summary json: an insight's subject" '.insights[1]'
+jqt "$json" '.runs == {count: 26, failed: 4, dup: 3, cleaned: 3}' "summary json: run counts" '.runs'
 # Below 5 CPU-min nothing is worth a line: only the polling (720) and the
 # re-runs (400) are left once the three above are gone.
 awk -F '\t' '!($4 == "api" || ($7 == "go" && $4 == "app") || ($7 == "wait-loop" && $4 == "shop"))' "$d/runs.tsv" > "$tmp/r"
@@ -161,7 +162,7 @@ for v in runs waste trends agents; do
     [[ "$json" == '{"schema_version":1,"view":"'"$v"'",'*'"ledger":false'* ]] || fail "--view $v --json without a ledger: $json"
     jqt "$json" '.ledger == false' "--view $v --json"
 done
-jqt "$(AGENTS_DATA_DIR="$e" agents_report --json)" '.ledger == false and .insights == []' "summary json without a ledger"
+jqt "$(AGENTS_DATA_DIR="$e" agents_report --json)" '.ledger == false and .insights == [] and .runs == {count: 0, failed: 0, dup: 0, cleaned: 0}' "summary json without a ledger"
 jqt "$(AGENTS_DATA_DIR="$e" agents_report --view runs --json)" '.runs == 0 and .commands == [] and .slowest == []' "runs json without a ledger"
 jqt "$(AGENTS_DATA_DIR="$e" agents_report --view waste --json)" '.duplicates.runs == 0 and .cleaned.agents == [] and .reruns.commands == []' "waste json without a ledger"
 grep old "$d/runs.tsv" > "$e/runs.tsv"
