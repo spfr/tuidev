@@ -1,7 +1,7 @@
 #!/bin/bash
 # <xbar.title>agents</xbar.title>
 # <xbar.version>v1.3</xbar.version>
-# <xbar.desc>Agentic-coding sessions (blocked first), stale helpers, CPU hogs, keep-awake and a compact system view, from tuidev's `agents` command.</xbar.desc>
+# <xbar.desc>Agentic-coding sessions (blocked first), where their CPU goes, stale helpers, CPU hogs, keep-awake and a compact system view, from tuidev's `agents` command.</xbar.desc>
 # <xbar.dependencies>bash,agents</xbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
@@ -121,7 +121,8 @@ needs_menu="" agents_menu="" daemon_menu="" stale_menu="" hogs_menu="" top_menu=
 awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
-BAR_TITLE="count awake" BAR_SECTIONS="needs agents stale hogs awake system" BAR_ICON=terminal CONF=""
+BAR_TITLE="count awake" BAR_SECTIONS="needs agents jobs stale hogs awake system" BAR_ICON=terminal CONF=""
+job_rows="" hist_state="" hist_total=0 hist_top=- hist_top_s=0
 
 # Per-session activity, gathered from the act rows into variables named after
 # the session's pid (bash 3.2 has no associative arrays): A_<what>_<pid>.
@@ -324,6 +325,10 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         thermal) thermal="$pid"; thermal_name="$kind" ;;
         power)   power="$pid" ;;
         lid)     lid_state="$pid"; lid_until="$age_s"; lid_max="$pcpu" ;;   # lid STATE PID UNTIL MAX
+        # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD - PROJECT
+        job)     job_rows+="$kind"$'	'"$pcpu"$'	'"$rss"$'	'"$kids"$'	'"$herdr"$'	'"$project"$'	'"$pid"$'	'"$start"$'	'"$cwd"$'
+' ;;
+        hist)    hist_state="$pid"; hist_total="$kind"; hist_top="$age_s"; hist_top_s="$pcpu" ;;   # hist STATE TODAY_S TOP TOP_S
         conf)
             [[ "$kind" == - ]] && kind=""
             case "$pid" in
@@ -346,6 +351,10 @@ if [[ "$BAR_AUTO" == 1 && $n_auto -gt 0 ]]; then
 fi
 # `sys` packs battery state into the kids column, which can hold spaces.
 [[ "$bstate" == - ]] && bstate=""
+# History: a sample a minute (`agents sample`), in the background, never waited on.
+if [[ "$hist_state" == due ]]; then
+    ( trap '' HUP; exec "$AGENTS" sample ) </dev/null >/dev/null 2>&1 &
+fi
 
 # Second pass: sessions, now that their activity is known. A blocked session,
 # a command running twice, a long-running command and a stuck polling loop
@@ -454,6 +463,81 @@ section_agents() {
     printf '%s' "$daemon_menu"
 }
 
+# Where the CPU goes: CPU now by job type, busiest first, each with the
+# sessions behind it (clicking one shows its project in Finder); then today's
+# CPU-hours from the history, and the report.
+job_label() {
+    case "$1" in
+        test) REPLY=tests ;; build) REPLY=builds ;; server) REPLY="dev servers" ;;
+        browser) REPLY=browsers ;; mcp) REPLY="MCP servers" ;; agent) REPLY=agents ;;
+        wait) REPLY="polling loops" ;; *) REPLY=other ;;
+    esac
+}
+job_symbol() {
+    case "$1" in
+        test) REPLY=checkmark.seal ;; build) REPLY=hammer ;; server) REPLY=server.rack ;;
+        browser) REPLY=globe ;; mcp) REPLY=puzzlepiece.extension ;; agent) REPLY=sparkles ;;
+        wait) REPLY=hourglass ;; *) REPLY=ellipsis.circle ;;
+    esac
+}
+# job_lines — job_rows summed per job ("J job cpu rss procs") and per job and
+# session ("S job cpu rss procs project kind root start cwd"), busiest first.
+job_lines() {
+    printf '%s' "$job_rows" | LC_ALL=C awk -F '\t' -v OFS='\t' '
+        function pc(x) { return (x > 0 && x < 0.5) ? "<1" : sprintf("%.0f", x) }
+        function sortk(arr, keys, n,   i, j, b, t) {
+            for (i = 1; i <= n; i++) { b = i; for (j = i + 1; j <= n; j++) if (arr[keys[j]] > arr[keys[b]]) b = j; t = keys[i]; keys[i] = keys[b]; keys[b] = t }
+        }
+        NF >= 9 {
+            if (!($1 in jc)) jo[++nj] = $1
+            jc[$1] += $2 + 0.001 * ($3 / 1048576); jcpu[$1] += $2; jm[$1] += $3; jn[$1] += $4
+            k = $1 SUBSEP $7
+            if (!(k in sc)) { sn[$1]++; sk[$1, sn[$1]] = k; sp[k] = $6; sd[k] = $5; ss[k] = $8; sw[k] = $9 }
+            sc[k] += $2; sm[k] += $3; sx[k] += $4
+            so[k] += $2 + 0.000000001 * $3          # the sort key: ties go to more memory
+        }
+        END {
+            sortk(jc, jo, nj)
+            for (i = 1; i <= nj; i++) {
+                j = jo[i]; print "J", j, pc(jcpu[j]), jm[j], jn[j]
+                m = sn[j]; for (q = 1; q <= m; q++) l[q] = sk[j, q]
+                sortk(so, l, m)
+                for (q = 1; q <= m; q++) { k = l[q]; split(k, r, SUBSEP); print "S", j, pc(sc[k]), sm[k], sx[k], sp[k], sd[k], r[2], ss[k], sw[k] }
+            }
+        }'
+}
+section_jobs() {
+    local tag job cpu rss n proj kind root start cwd line t sym click
+    [[ -n "$job_rows" || "$hist_state" == ok || "$hist_state" == due ]] || return 0
+    echo "Where the CPU goes | size=12"
+    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd; do
+        case "$tag" in
+            J)  job_symbol "$job"; sym="$REPLY"; job_label "$job"; line="$REPLY · ${cpu}%"; memv "${rss:-0}"
+                echo "$line · $REPLY | sfimage=$sym $ROW symbolize=false" ;;
+            S)  cl "${proj:--}"; line="$REPLY"
+                case "$kind" in -) line+=" · stale" ;; daemon) line+=" · codex daemon" ;; *) cl "$kind"; line+=" · $REPLY" ;; esac
+                memv "${rss:-0}"; line+=" · ${cpu}% · $REPLY"
+                click="$ROW"
+                t="$(tok "$root" "$start")" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$t"
+                echo "--$line | $click symbolize=false" ;;
+        esac
+    done < <([[ -z "$job_rows" ]] || job_lines)
+    [[ "$hist_state" == ok || "$hist_state" == due ]] || return 0
+    if num "$hist_total" && [[ $hist_total -gt 0 ]]; then
+        if [[ $hist_total -ge 3600 ]]; then
+            t=$(( (hist_total + 180) / 360 )); line="Today: $((t / 10)).$((t % 10)) CPU-h"
+        elif [[ $hist_total -ge 60 ]]; then line="Today: $((hist_total / 60)) CPU-min"
+        else line="Today: <1 CPU-min"; fi
+        if num "$hist_top_s" && [[ "$hist_top" =~ ^[a-z]+$ ]]; then
+            job_label "$hist_top"; line+=" · $REPLY $(( (hist_top_s * 100 + hist_total / 2) / hist_total ))%"
+        fi
+    else
+        line="Today: nothing recorded yet (a sample a minute)"
+    fi
+    echo "$line | sfimage=chart.bar.xaxis $ROW symbolize=false"
+    echo "Open report | $TERM_OPEN param2=--hold param3=report sfimage=doc.text.magnifyingglass"
+}
+
 section_stale() {
     [[ $n_stale -gt 0 ]] || return 0
     echo "Stale ($n_stale) | size=12"
@@ -544,7 +628,7 @@ section_system() {
 bar_title
 for section in $BAR_SECTIONS; do
     case "$section" in
-        needs|agents|stale|hogs|awake|system) out="$("section_$section")" ;;
+        needs|agents|jobs|stale|hogs|awake|system) out="$("section_$section")" ;;
         *) out="" ;;
     esac
     [[ -n "$out" ]] || continue

@@ -28,8 +28,20 @@ _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP"
+_AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
-_AGENTS_BAR_SECTION_NAMES="needs agents stale hogs awake system"
+_AGENTS_BAR_SECTION_NAMES="needs agents jobs stale hogs awake system"
+
+# _agents_ere_ok VALUE — empty, or a printable extended regex that compiles.
+_agents_ere_ok() {
+    local re="$1" rc=0
+    [[ -n "$re" ]] || return 0
+    [[ "$re" =~ ^[[:print:]]+$ ]] || return 1
+    # [[ =~ ]] returns 2 for a pattern that does not compile.
+    # shellcheck disable=SC2319  # that status is the point
+    { [[ "" =~ $re ]]; rc=$?; } 2>/dev/null
+    [[ $rc -ne 2 ]]
+}
 
 # _agents_conf_valid KEY VALUE — does VALUE have the shape KEY needs?
 _agents_conf_valid() {
@@ -43,6 +55,7 @@ _agents_conf_valid() {
         AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
         AGENTS_HOOK_REAP)   [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_JOB_TEST|AGENTS_JOB_BUILD|AGENTS_JOB_SERVER|AGENTS_JOB_BROWSER|AGENTS_JOB_MCP) _agents_ere_ok "$2" ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
         AGENTS_LID_MIN_BATTERY) [[ "$2" =~ ^([0-9]|[1-9][0-9]|100)$ ]] ;;
         AGENTS_BAR_ICON)    [[ "$2" =~ ^[a-z0-9.]+$ ]] ;;
@@ -121,13 +134,42 @@ AGENTS_AUTO_REAP="${AGENTS_AUTO_REAP:-0}"
 _agents_env_check AGENTS_HISTORY 1
 _agents_env_check AGENTS_HISTORY_DAYS 30
 _agents_env_check AGENTS_AUTO_REAP 0
+# Job types: where an agent tree's CPU goes. Each process in an agent tree (or
+# a stale one) gets one job: agent (the CLIs themselves), browser (headless
+# Chrome and friends, whatever started them), wait (a polling loop and what it
+# runs), else the job of the nearest tool command above it (a `go test` and
+# the test binaries it compiles), else its own match below (test, build,
+# server, mcp, in that order), else other. A tool command is matched as the
+# command it runs (agents_classify's tool_cmd), anything else by its argv. The
+# defaults are EREs; AGENTS_JOB_<JOB> in agents.conf appends one (with |).
+_AGENTS_JOB_TEST_RE='(^|[ /])(go test|gotestsum|cargo (test|nextest)|pytest|py[.]test|jest|vitest|mocha|ava|karma|rspec|phpunit|ctest|bats|tox|nox|playwright test|(swift|deno|bun|dotnet|mix|zig) test|(npm|pnpm|yarn) (run )?test(:[^ ]*)?|(mvn|gradle|gradlew)( [^ ]+)* test|make( -[^ ]+)* (test|check))( |$)|[.]test( |$)| -test[.]|(^|[ /])test_[^ /]*[.](sh|py)( |$)'
+_AGENTS_JOB_BUILD_RE='(^|[ /])(go (build|install|vet|generate)|cargo (build|check|clippy|doc)|rustc|tsc|webpack|esbuild|rollup|swc|babel|turbo( run)? build|nx (build|run-many)|(vite|next|nuxt|astro|remix|svelte-kit|react-scripts|ng|gatsby|hugo) build|(npm|pnpm|yarn|bun) (run )?(build|compile|typecheck|lint)(:[^ ]*)?|gmake|cmake|ninja|bazel|bazelisk|buck2?|gradle|gradlew|mvn|xcodebuild|(swift|dotnet|zig) build|swiftc|clang|clang[+][+]|gcc|g[+][+]|cc1|cc1plus|ld|docker build|podman build|eslint|ruff|mypy|pyright|golangci-lint|shellcheck|biome)( |$)|(^|[ /])make( -[^ ]+)*( (all|build|install|lint|fmt|compile|dist|release|generate|vet|ci))+( |$)|(^|[ /])make( -[^ ]+)*$'
+_AGENTS_JOB_SERVER_RE='(^|[ /])((npm|pnpm|yarn|bun) (run )?(dev|start|serve|preview|watch)(:[^ ]*)?|(next|nuxt|astro|remix|vite|svelte-kit|react-scripts|ng|expo|gatsby|hugo|jekyll|mkdocs|wrangler|vercel|netlify) (dev|serve|start|preview|server)|vite|webpack-dev-server|nodemon|tsx watch|uvicorn|gunicorn|hypercorn|flask run|manage[.]py runserver|rails (s|server)|puma|php -S|http-server|live-server|browser-sync|python[0-9.]* -m http[.]server|air|(docker|podman)[ -]compose( [^ ]+)* up|make( -[^ ]+)* (serve|server|dev|run|start|up|watch))( |$)|/server[.][cm]?js( |$)'
+_AGENTS_JOB_BROWSER_RE='(^|/)(chrome-headless-shell|headless_shell|chromium|chromium-browser|chrome)( |$)|--headless|Chrome for Testing|Chromium[.]app|ms-playwright/|--remote-debugging-(pipe|port)|puppeteer'
+# MCP: what agents_classify already calls an MCP server (npm exec, npx, the npx
+# cache, "mcp" in the argv); never a tool command (`npx prettier` is not one).
+_AGENTS_JOB_MCP_RE='(^|/)npm exec( |$)|(^|/)npx( |$)|/_npx/|mcp'
+_agents_env_check AGENTS_JOB_TEST ""
+_agents_env_check AGENTS_JOB_BUILD ""
+_agents_env_check AGENTS_JOB_SERVER ""
+_agents_env_check AGENTS_JOB_BROWSER ""
+_agents_env_check AGENTS_JOB_MCP ""
+# _agents_job_env — export the patterns the awk programs read (default|yours).
+_agents_job_env() {
+    export AGENTS_JRE_TEST="$_AGENTS_JOB_TEST_RE${AGENTS_JOB_TEST:+|$AGENTS_JOB_TEST}"
+    export AGENTS_JRE_BUILD="$_AGENTS_JOB_BUILD_RE${AGENTS_JOB_BUILD:+|$AGENTS_JOB_BUILD}"
+    export AGENTS_JRE_SERVER="$_AGENTS_JOB_SERVER_RE${AGENTS_JOB_SERVER:+|$AGENTS_JOB_SERVER}"
+    export AGENTS_JRE_BROWSER="$_AGENTS_JOB_BROWSER_RE${AGENTS_JOB_BROWSER:+|$AGENTS_JOB_BROWSER}"
+    export AGENTS_JRE_MCP="$_AGENTS_JOB_MCP_RE${AGENTS_JOB_MCP:+|$AGENTS_JOB_MCP}"
+}
+_agents_job_env
 AGENTS_NAMES="${AGENTS_NAMES:-claude codex}"  # argv[0] basenames that are agents
 AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
 # Menu bar (SwiftBar plugin): what the title shows, which sections the menu
 # has (in this order), its icon, how many top CPU processes the System
 # section lists, and the refresh interval the pack names the plugin file with.
 AGENTS_BAR_TITLE="${AGENTS_BAR_TITLE-count awake}"
-AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs agents stale hogs awake system}"
+AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs agents jobs stale hogs awake system}"
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"
@@ -385,7 +427,7 @@ agents_parse_duration() {
 # type is agent | stale | cand (a dev-server candidate agents_enrich confirms
 # by cwd) | hog. Unknown fields are "-". Plus three-column "watch PID PATH"
 # records: the file a polling loop waits on (agents_collect checks its age,
-# agents_enrich drops them).
+# agents_enrich drops them), and "job" records (_AGENTS_AWK_JOBS).
 agents_classify() {
     local IFS=$'\n'
     AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
@@ -393,7 +435,7 @@ agents_classify() {
     AGENTS_DAEMON="$AGENTS_DAEMON_PATTERN" AGENTS_SYSTEM="$AGENTS_SYSTEM_PATTERN" \
     AGENTS_HOG_PCT="$AGENTS_HOG_PCT" AGENTS_HOG_MIN="$AGENTS_HOG_MIN" \
     AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_HOG_TOP="$AGENTS_HOG_TOP" AGENTS_BAR_TOP="$AGENTS_BAR_TOP" \
-    LC_ALL=C awk "$_AGENTS_AWK_LIB"'
+    LC_ALL=C awk "$_AGENTS_AWK_LIB$_AGENTS_AWK_JOBS"'
 function addports(q, list,   n, a, i) {
     n = split(list, a, ",")
     for (i = 1; i <= n; i++)
@@ -472,10 +514,10 @@ END {
         } else if (pp[p] == 1 && uid[p] == me && kind[p] == "" && !(p in keep) && !mine[p] && !anc[p] && !shelter[p]) {
             hit = 0
             for (i = 1; i <= np; i++) if (pat[i] != "" && av[p] ~ pat[i]) { hit = 1; break }
-            if (hit) rec("stale", p, "orphan", tcpu[p], trss[p], kids[p], tp[p])
+            if (hit) { rec("stale", p, "orphan", tcpu[p], trss[p], kids[p], tp[p]); sroot[p] = 1 }
             # A dev server listens itself or through its children (`npm run dev`
             # starting vite); a tree that hosts a session never gets here.
-            else if (tp[p] != "" && av[p] !~ sysre) rec("cand", p, "server", tcpu[p], trss[p], kids[p], tp[p])
+            else if (tp[p] != "" && av[p] !~ sysre) { rec("cand", p, "server", tcpu[p], trss[p], kids[p], tp[p]); sroot[p] = 1 }
         }
         if (p <= 1 || anc[p] || mine[p]) continue
         a = avg(p)
@@ -529,6 +571,7 @@ END {
         else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a), a)
         else act(p, "other", r, "-", a)
     }
+    jobs_emit()
 }'
 }
 
@@ -643,9 +686,10 @@ BEGIN {
 }
 NF < 14 { next }
 $1 == "cand" {
-    if (!project(cwd[$2])) next
+    if (!project(cwd[$2])) { dropped[$2] = 1; next }
     $1 = "stale"
 }
+$1 == "job" && ($2 in dropped) { next }
 ($2 in cwd) { $13 = cwd[$2] }
 $1 == "agent" && (($3, $13) in hs) { $12 = hs[$3, $13] }
 {
@@ -2065,6 +2109,428 @@ agents_reap_auto() {
     AGENTS_NOTIFY="$notify" _agents_notify "Auto-reap stopped $_AGENTS_EV_N: $_AGENTS_EV_DONE"
 }
 
+# --- Jobs: where an agent tree's CPU goes ---
+# Appended to agents_classify's awk program (the job rules are at the top, by
+# _AGENTS_JOB_TEST_RE). One "job" record per unit and job, a unit being the
+# root of an agent tree or of a stale one, or a child of that root (a tool
+# command, an MCP server…):
+#   job ROOT JOB 0 CPU 0 RSS PROCS ROOT_START own|sub UNIT KIND - -
+# own: JOB is the unit process's own job (what `agents json` gives a tool or
+# an MCP server). KIND is the root's agent kind, "-" for a stale tree.
+# agents_enrich adds the root's cwd (13) and project (15). With
+# AGENTS_JOBS_PROC set (agents sample), also one line per process:
+#   jp PID START ROOT JOB CPUTIME_S RSS AGE_S
+# shellcheck disable=SC2016  # awk source
+_AGENTS_AWK_JOBS='
+function jobinit() {
+    if (job_ok++) return
+    jre_test = ENVIRON["AGENTS_JRE_TEST"]; jre_build = ENVIRON["AGENTS_JRE_BUILD"]; jre_server = ENVIRON["AGENTS_JRE_SERVER"]
+    jre_browser = ENVIRON["AGENTS_JRE_BROWSER"]; jre_mcp = ENVIRON["AGENTS_JRE_MCP"]
+}
+# jobmatch: the job a process asks for by its own command, "" for none. A tool
+# command is matched as the command it runs, and is never an MCP server.
+function jobmatch(a,   c, t) {
+    jobinit()
+    t = tool_shell(a)
+    if (t) { c = tool_cmd(a); if (waits(c)) return "wait" } else c = a
+    if (jre_test != "" && c ~ jre_test) return "test"
+    if (jre_build != "" && c ~ jre_build) return "build"
+    if (!t && jre_mcp != "" && c ~ jre_mcp) return "mcp"
+    if (jre_server != "" && c ~ jre_server) return "server"
+    return ""
+}
+# jobof: agent and browser always; otherwise the parent'"'"'s job (unless that is
+# agent or other), else its own match, else other. jroot[] is the scope.
+function jobof(p,   j) {
+    if (p in jb) return jb[p]
+    jobinit()
+    if (kind[p] != "") return jb[p] = "agent"
+    if (jre_browser != "" && av[p] ~ jre_browser) return jb[p] = "browser"
+    if (p != jroot[p] && (pp[p] in jroot)) {
+        j = jobof(pp[p]); if (j != "agent" && j != "other") return jb[p] = j
+    }
+    j = jobmatch(av[p])
+    return jb[p] = (j == "" ? "other" : j)
+}
+function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc) {
+    proc = (ENVIRON["AGENTS_JOBS_PROC"] != "")
+    for (k = 1; k <= n; k++) {
+        p = ord[k]
+        if (mine[p]) continue
+        r = root[p]; q = p; d = 0
+        if (r == "") while (q > 1 && (q in pp) && d++ < 64) { if (q in sroot) { r = q; break } q = pp[q] }
+        if (r != "") jroot[p] = r
+    }
+    nk = 0
+    for (k = 1; k <= n; k++) {
+        p = ord[k]
+        if (!(p in jroot)) continue
+        r = jroot[p]; u = p; d = 0
+        while (u != r && pp[u] != r && d++ < 64) u = pp[u]
+        j = jobof(p); key = u SUBSEP j
+        if (!(key in jn)) { nk++; jku[nk] = u; jkj[nk] = j }
+        jc[key] += cpu[p]; jm[key] += rss[p]; jn[key]++
+        if (proc) printf "jp\t%d\t%s\t%d\t%s\t%d\t%d\t%d\n", p, st[p], r, j, ct[p], rss[p], et[p]
+    }
+    for (i = 1; i <= nk; i++) {
+        u = jku[i]; j = jkj[i]; key = u SUBSEP j; r = jroot[u]
+        printf "job\t%d\t%s\t0\t%.1f\t0\t%d\t%d\t%s\t%s\t%d\t%s\t-\t-\n", r, j, jc[key], jm[key], jn[key], st[r], (j == jobof(u) ? "own" : "sub"), u, (kind[r] == "" ? "-" : kind[r])
+    }
+}
+'
+
+# Appended to agents_json's awk program: the job of each tool and MCP server,
+# and the top-level "jobs" list (busiest first, each with its sessions).
+# shellcheck disable=SC2016  # awk source
+_AGENTS_AWK_JOBS_JSON='
+function jobrow(   k) {
+    if ($10 == "own") ujob[$11] = $3
+    if (!($3 in jcpu)) jord[++njob] = $3
+    jcpu[$3] += $5; jrss[$3] += $7; jproc[$3] += $8
+    k = $3 SUBSEP $2
+    if (!(k in jscpu)) { jsn[$3]++; jsr[$3, jsn[$3]] = $2; jsp[k] = $15; jsk[k] = $12 }
+    jscpu[k] += $5; jsrss[k] += $7
+}
+function jobs_json(   i, j, b, t, out, ss, k, m, r) {
+    for (i = 1; i <= njob; i++) {
+        b = i
+        for (j = i + 1; j <= njob; j++) if (jcpu[jord[j]] > jcpu[jord[b]]) b = j
+        t = jord[i]; jord[i] = jord[b]; jord[b] = t
+    }
+    out = ""
+    for (i = 1; i <= njob; i++) {
+        j = jord[i]; ss = ""
+        for (m = 1; m <= jsn[j]; m++) {
+            r = jsr[j, m]; k = j SUBSEP r
+            ss = ss (m > 1 ? "," : "") sprintf("{\"pid\":%d,\"project\":%s,\"kind\":%s,\"cpu\":%s,\"rss_kib\":%d}", r, opt(jsp[k]), opt(jsk[k]), c1(jscpu[k]), jsrss[k])
+        }
+        out = out (i > 1 ? "," : "") sprintf("{\"job\":%s,\"cpu\":%s,\"rss_kib\":%d,\"processes\":%d,\"sessions\":[%s]}", js(j), c1(jcpu[j]), jrss[j], jproc[j], ss)
+    }
+    return out
+}
+'
+
+# --- History: sampling ---
+# `agents sample` appends one row per job, project and session to history.tsv:
+#   epoch job project session cpu_s rss_kib procs
+# session is the agent kind (claude, codex; the Codex daemon counts as codex),
+# "-" for a stale tree. cpu_s is the CPU time used since the previous sample:
+# each process's cputime minus the one sample.state recorded for it, keyed by
+# pid@start (a reused pid starts afresh); a process that started since then
+# counts whole, one seen for the first time otherwise counts from now on.
+# rss_kib and procs are the moment's. Rows without CPU are left out. A process
+# that ends between two samples loses its last interval, so short runs count
+# low. today.tsv keeps today's totals for the menu ("day<TAB>cpu_s", then
+# "job<TAB>cpu_s" lines, busiest first), sample.stamp the last sample's epoch.
+
+# agents_sample — take one sample (a no-op with AGENTS_HISTORY=0). One at a
+# time: a second one while the first runs returns at once.
+agents_sample() {
+    [[ "$AGENTS_HISTORY" == 1 ]] || return 0
+    local lock="$AGENTS_DATA_DIR/sample.lock" rc
+    mkdir -p "$AGENTS_DATA_DIR" 2>/dev/null || { echo "agents: cannot create $AGENTS_DATA_DIR" >&2; return 1; }
+    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
+    mkdir "$lock" 2>/dev/null || return 0
+    _agents_sample_locked; rc=$?
+    rmdir "$lock" 2>/dev/null
+    return "$rc"
+}
+
+_agents_sample_locked() {
+    local dir="$AGENTS_DATA_DIR" now day ps recs type pid rest
+    read -r now day <<<"$(date '+%s %Y-%m-%d')"
+    # The stamp first: a failing sample is retried a minute later, not at once.
+    printf '%s\n' "$now" > "$dir/sample.stamp.$$" && mv -f "$dir/sample.stamp.$$" "$dir/sample.stamp"
+    ps="$(agents_snapshot)"
+    [[ -n "$ps" ]] || { echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2; return 1; }
+    recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC=1 agents_classify "" "$(_agents_keep_pids "$ps")")"
+    set --
+    while IFS=$'\t' read -r type pid rest; do
+        case "$type" in agent|stale) set -- "$@" "$pid" ;; esac
+    done <<<"$recs"
+    { printf '%s\n' "$recs" | agents_enrich "$(_agents_cwds "$@")" "" ""; printf '%s\n' "$recs"; } \
+        | _agents_sample_rows "$now" "$day" "$dir" >> "$dir/history.tsv" || return 1
+    mv -f "$dir/sample.state.new" "$dir/sample.state" && mv -f "$dir/today.tsv.new" "$dir/today.tsv"
+    _agents_history_prune "$now" "$day"
+}
+
+# _agents_sample_rows NOW DAY DIR < ENRICHED_AND_JP_RECORDS — the history rows
+# (stdout); writes DIR/sample.state.new and DIR/today.tsv.new.
+_agents_sample_rows() {
+    LC_ALL=C awk -F '\t' -v now="$1" -v day="$2" -v sf="$3/sample.state" -v tf="$3/today.tsv" '
+BEGIN {
+    last = 0; n = 0
+    while ((getline line < sf) > 0) {
+        if (n++ == 0) { last = line + 0; continue }
+        if (split(line, f, "\t") >= 2) prev[f[1]] = f[2] + 0
+    }
+    close(sf)
+    tday = ""; ttot = 0
+    while ((getline line < tf) > 0) {
+        split(line, f, "\t")
+        if (tday == "") { tday = f[1]; ttot = f[2] + 0 } else tj[f[1]] = f[2] + 0
+    }
+    close(tf)
+    if (tday != day) { ttot = 0; split("", tj) }
+}
+($1 == "agent" || $1 == "stale") && NF >= 15 { proj[$2] = $15; sess[$2] = ($1 == "stale" ? "-" : ($3 == "daemon" ? "codex" : $3)) }
+$1 == "jp" && NF >= 8 { np++; jk[np] = $2 "@" $3; jr[np] = $4; jj[np] = $5; jc[np] = $6 + 0; jm[np] = $7 + 0; ja[np] = $8 + 0 }
+END {
+    out = sf ".new"; print now > out
+    for (i = 1; i <= np; i++) {
+        k = jk[i]; c = jc[i]
+        print k "\t" c > out
+        if (k in prev) d = c - prev[k]
+        else if (last > 0 && ja[i] <= now - last) d = c
+        else d = 0
+        if (d < 0) d = 0
+        r = jr[i]; g = jj[i] SUBSEP (r in proj ? proj[r] : "-") SUBSEP (r in sess ? sess[r] : "-")
+        if (!(g in gc)) go[++ng] = g
+        gc[g] += d; gm[g] += jm[i]; gn[g]++
+    }
+    close(out)
+    for (i = 1; i <= ng; i++) {
+        g = go[i]
+        if (gc[g] <= 0) continue
+        split(g, f, SUBSEP)
+        printf "%d\t%s\t%s\t%s\t%d\t%d\t%d\n", now, f[1], f[2], f[3], gc[g], gm[g], gn[g]
+        if (!(f[1] in tj)) tj[f[1]] = 0
+        tj[f[1]] += gc[g]; ttot += gc[g]
+    }
+    nj = 0
+    for (j in tj) jo[++nj] = j
+    for (i = 1; i <= nj; i++) {
+        b = i
+        for (j = i + 1; j <= nj; j++) if (tj[jo[j]] > tj[jo[b]]) b = j
+        t = jo[i]; jo[i] = jo[b]; jo[b] = t
+    }
+    out = tf ".new"
+    printf "%s\t%d\n", day, ttot > out
+    for (i = 1; i <= nj; i++) printf "%s\t%d\n", jo[i], tj[jo[i]] > out
+    close(out)
+}'
+}
+
+# _agents_history_prune NOW DAY — drop history and events older than
+# AGENTS_HISTORY_DAYS, at most once a day.
+_agents_history_prune() {
+    local stamp="" f
+    [[ -r "$AGENTS_DATA_DIR/prune.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/prune.stamp"
+    [[ "$stamp" != "$2" ]] || return 0
+    for f in history events; do
+        _agents_prune_file "$AGENTS_DATA_DIR/$f.tsv" $(( $1 - AGENTS_HISTORY_DAYS * 86400 ))
+    done
+    printf '%s\n' "$2" > "$AGENTS_DATA_DIR/prune.stamp"
+}
+
+# _agents_prune_file FILE CUTOFF — keep the lines from CUTOFF on, rewriting the
+# file atomically. agents_event appends without a lock, so lines added while
+# this runs are carried over.
+_agents_prune_file() {
+    local file="$1" tmp="$1.prune.$$" seen kept
+    [[ -f "$file" ]] || return 0
+    read -r seen kept <<<"$(LC_ALL=C awk -F '\t' -v cut="$2" -v out="$tmp" '
+        ($1 + 0) >= cut { print > out; k++ } END { close(out); print NR + 0, k + 0 }' "$file")"
+    if [[ ! "$seen" =~ ^[0-9]+$ || "$seen" == "$kept" ]]; then rm -f "$tmp"; return 0; fi
+    [[ -f "$tmp" ]] || : > "$tmp"
+    tail -n "+$((seen + 1))" "$file" >> "$tmp" 2>/dev/null
+    mv -f "$tmp" "$file"
+}
+
+# _agents_sample_due [NOW] — true when history is on and the last sample is a
+# minute old or more.
+_agents_sample_due() {
+    [[ "$AGENTS_HISTORY" == 1 ]] || return 1
+    local now="${1:-}" stamp=""
+    [[ -n "$now" ]] || now="$(date +%s)"
+    [[ -r "$AGENTS_DATA_DIR/sample.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/sample.stamp"
+    [[ "$stamp" =~ ^[0-9]+$ ]] || stamp=0
+    [[ $((now - stamp)) -ge 60 ]]
+}
+
+# _agents_sample_kick — sample in the background when one is due (agents watch).
+_agents_sample_kick() {
+    _agents_sample_due || return 0
+    ( trap '' HUP; agents_sample ) </dev/null >/dev/null 2>&1 &
+    disown $! 2>/dev/null
+    return 0
+}
+
+# _agents_hist_line — the menu's history line, from small files only:
+#   hist STATE TODAY_CPU_S TOP_JOB TOP_JOB_CPU_S
+# STATE: off (AGENTS_HISTORY=0), due (the menu then runs `agents sample` in the
+# background) or ok.
+_agents_hist_line() {
+    local now day d="" tot=0 top="-" tops=0 state=ok
+    if [[ "$AGENTS_HISTORY" != 1 ]]; then printf 'hist\toff\t0\t-\t0\n'; return 0; fi
+    read -r now day <<<"$(date '+%s %Y-%m-%d')"
+    if [[ -r "$AGENTS_DATA_DIR/today.tsv" ]]; then
+        { IFS=$'\t' read -r d tot; IFS=$'\t' read -r top tops; } < "$AGENTS_DATA_DIR/today.tsv"
+    fi
+    if [[ "$d" != "$day" || ! "$tot" =~ ^[0-9]+$ ]]; then tot=0 top=- tops=0; fi
+    [[ "$top" =~ ^[a-z]+$ && "$tops" =~ ^[0-9]+$ ]] || { top=-; tops=0; }
+    _agents_sample_due "$now" && state=due
+    printf 'hist\t%s\t%s\t%s\t%s\n' "$state" "$tot" "$top" "$tops"
+}
+
+# --- History: agents report ---
+
+# agents_report [--since 24h|7d|30d|today] [--json] — where the CPU went (by
+# job, project, session and hour of day) and what was cleaned up, from
+# history.tsv and events.tsv.
+agents_report() {
+    local since=24h json="" now z off=0 start secs
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --json)    json=1 ;;
+            --since)   [[ $# -ge 2 ]] || { _agents_report_usage; return 2; }
+                       since="$2"; shift ;;
+            --since=*) since="${1#--since=}" ;;
+            *)         _agents_report_usage; return 2 ;;
+        esac
+        shift
+    done
+    read -r now z <<<"$(date '+%s %z')"
+    if [[ "$z" =~ ^([+-])([0-9][0-9])([0-9][0-9])$ ]]; then
+        off=$(( 10#${BASH_REMATCH[2]} * 3600 + 10#${BASH_REMATCH[3]} * 60 ))
+        [[ "${BASH_REMATCH[1]}" == + ]] || off=$((-off))
+    fi
+    if [[ "$since" == today ]]; then
+        start=$(( now - (now + off) % 86400 ))
+    elif secs="$(agents_parse_duration "$since")"; then
+        start=$((now - secs))
+    else
+        echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2
+    fi
+    _agents_report_awk "$start" "$now" "$off" "$since" "$json"
+}
+_agents_report_usage() { echo "usage: agents report [--since 24h|7d|30d|today] [--json]" >&2; }
+
+# _agents_report_awk START NOW UTC_OFFSET_S LABEL JSON
+_agents_report_awk() {
+    B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" LC_ALL=C awk -F '\t' \
+        -v start="$1" -v now="$2" -v off="$3" -v label="$4" -v json="$5" -v hist="$AGENTS_HISTORY" \
+        -v hf="$AGENTS_DATA_DIR/history.tsv" -v ef="$AGENTS_DATA_DIR/events.tsv" '
+function jstr(s,   o, i, c, n) {
+    n = length(s); o = ""
+    for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") o = o "\\\\"; else if (c == "\"") o = o "\\\""; else if (c >= " ") o = o c
+    }
+    return "\"" o "\""
+}
+function jopt(s) { return (s == "-" || s == "") ? "null" : jstr(s) }
+# h: CPU seconds in the unit of the report (CPU-h, or CPU-min below an hour in all).
+function h(s) { return sprintf("%.2f", s / unit) }
+function pc1(a, b) { return sprintf("%.1f", b > 0 ? 100 * a / b : 0) }
+function pct(a, b) { return sprintf("%d%%", b > 0 ? 100 * a / b + 0.5 : 0) }
+function bar(p,   k, o) { k = int(p / 5 + 0.5); o = ""; while (k-- > 0) o = o "\342\226\210"; return o }
+function sess(s) { return s == "-" ? "stale" : s }
+function proj(s) { return s == "-" ? "(none)" : s }
+# sortk ARR KEYS N — KEYS[1..N], busiest (largest ARR[key]) first.
+function sortk(arr, keys, cnt,   i, j, b, t) {
+    for (i = 1; i <= cnt; i++) {
+        b = i
+        for (j = i + 1; j <= cnt; j++) if (arr[keys[j]] > arr[keys[b]]) b = j
+        t = keys[i]; keys[i] = keys[b]; keys[b] = t
+    }
+}
+# line KEYS N ARR FMT — "a 1.00 · b 0.50" (FMT "h": CPU-h, else counts).
+function line(keys, cnt, arr, fmt, lim,   i, o) {
+    o = ""
+    for (i = 1; i <= cnt && i <= lim; i++) o = o (i > 1 ? " \302\267 " : "") keys[i] " " (fmt == "h" ? h(arr[keys[i]]) : arr[keys[i]])
+    return o
+}
+function jlist(keys, cnt, arr, name, val,   i, o) {
+    o = ""
+    for (i = 1; i <= cnt; i++) o = o (i > 1 ? "," : "") sprintf("{\"%s\":%s,\"%s\":%d}", name, jopt(keys[i]), val, arr[keys[i]])
+    return "[" o "]"
+}
+BEGIN {
+    b = ENVIRON["B"]; dim = ENVIRON["DIM"]; e = ENVIRON["N"]
+    while ((getline ln < hf) > 0) {
+        if (split(ln, f, "\t") < 7) continue
+        t = f[1] + 0; c = f[5] + 0; any++
+        if (t < start || f[2] == "") continue
+        rows++; tot += c
+        if (!(f[2] in jc)) jo[++nj] = f[2]; jc[f[2]] += c
+        if (!(f[3] in pc)) po[++np] = f[3]; pc[f[3]] += c; pj[f[3], f[2]] += c
+        if (!(f[4] in sc)) so[++ns] = f[4]; sc[f[4]] += c
+        hr = int(((t + off) % 86400) / 3600); hc[hr] += c
+    }
+    close(hf)
+    while ((getline ln < ef) > 0) {
+        if (split(ln, f, "\t") < 7) continue
+        any++; if (f[1] + 0 < start) continue
+        ev++
+        if (!(f[3] in er)) ro[++nr] = f[3]; er[f[3]]++
+        if (!(f[2] in ek)) ko[++nk] = f[2]; ek[f[2]]++
+        if (f[3] != "manual" && f[6] != "-" && f[6] != "") { if (!(f[6] in ep)) eo[++ne] = f[6]; ep[f[6]]++ }
+    }
+    close(ef)
+    sortk(jc, jo, nj); sortk(pc, po, np); sortk(sc, so, ns); sortk(er, ro, nr); sortk(ek, ko, nk); sortk(ep, eo, ne)
+    for (i = 1; i <= np; i++) {
+        p = po[i]; mj[p] = "-"; mv[p] = 0
+        for (k = 1; k <= nj; k++) if (pj[p, jo[k]] > mv[p]) { mv[p] = pj[p, jo[k]]; mj[p] = jo[k] }
+    }
+    nh = 0
+    for (i = 0; i < 24; i++) if (hc[i] > 0) ho[++nh] = i
+    if (json) {
+        o = sprintf("{\"schema_version\":1,\"since\":%d,\"until\":%d,\"window\":%s,\"history\":%s,\"cpu_s\":%d,\"jobs\":[", start, now, jstr(label), (hist == 1 ? "true" : "false"), tot)
+        for (i = 1; i <= nj; i++) o = o (i > 1 ? "," : "") sprintf("{\"job\":%s,\"cpu_s\":%d,\"pct\":%s}", jstr(jo[i]), jc[jo[i]], pc1(jc[jo[i]], tot))
+        o = o "],\"projects\":["
+        for (i = 1; i <= np; i++) {
+            p = po[i]; s = ""
+            for (k = 1; k <= nj; k++) if (pj[p, jo[k]] > 0) s = s (s == "" ? "" : ",") sprintf("{\"job\":%s,\"cpu_s\":%d}", jstr(jo[k]), pj[p, jo[k]])
+            o = o (i > 1 ? "," : "") sprintf("{\"project\":%s,\"cpu_s\":%d,\"pct\":%s,\"main_job\":%s,\"main_job_pct\":%s,\"jobs\":[%s]}", jopt(p), pc[p], pc1(pc[p], tot), jopt(mj[p]), pc1(mv[p], pc[p]), s)
+        }
+        o = o "],\"sessions\":["
+        for (i = 1; i <= ns; i++) o = o (i > 1 ? "," : "") sprintf("{\"session\":%s,\"cpu_s\":%d,\"pct\":%s}", jopt(so[i]), sc[so[i]], pc1(sc[so[i]], tot))
+        o = o "],\"hours\":["
+        for (i = 1; i <= nh; i++) o = o (i > 1 ? "," : "") sprintf("{\"hour\":%d,\"cpu_s\":%d}", ho[i], hc[ho[i]])
+        o = o sprintf("],\"cleanups\":{\"total\":%d,\"by_reason\":%s,\"by_kind\":%s,\"projects\":%s}}", ev, jlist(ro, nr, er, "reason", "count"), jlist(ko, nk, ek, "kind", "count"), jlist(eo, ne, ep, "project", "count"))
+        print o
+        exit
+    }
+    when = (label == "today" ? "today" : "last " label)
+    if (!any) {
+        if (hist != 1) print "agents report: history is off (AGENTS_HISTORY=0 in agents.conf); nothing is recorded"
+        else print "agents report: no history yet; it starts within a minute of the menu running (or of agents watch; agents sample takes one now)"
+        exit
+    }
+    printf "%sagents report%s %s\302\267 %s%s\n", b, e, dim, when, e
+    if (hist != 1) printf "%shistory is off (AGENTS_HISTORY=0): this is what was recorded before%s\n", dim, e
+    print ""
+    unit = (tot >= 3600 ? 3600 : 60); un = (unit == 3600 ? "CPU-h" : "CPU-min")
+    if (rows) {
+        printf "%sCPU%s %s %s of agent work\n\n", b, e, h(tot), un
+        printf "%s  %-16s %8s %6s%s\n", dim, "JOB", un, "%", e
+        for (i = 1; i <= nj; i++) printf "  %-16s %8s %6s  %s\n", jo[i], h(jc[jo[i]]), pct(jc[jo[i]], tot), bar(tot > 0 ? 100 * jc[jo[i]] / tot : 0)
+        print ""
+        printf "%s  %-24s %8s %6s  %s%s\n", dim, "PROJECT", un, "%", "MAIN JOB", e
+        for (i = 1; i <= np && i <= 8; i++) {
+            p = po[i]; nm = proj(p); if (length(nm) > 24) nm = substr(nm, 1, 21) "..."
+            printf "  %-24s %8s %6s  %s %s\n", nm, h(pc[p]), pct(pc[p], tot), mj[p], pct(mv[p], pc[p])
+        }
+        if (np > 8) printf "%s  ... %d more (agents report --json)%s\n", dim, np - 8, e
+        print ""
+        for (i = 1; i <= ns; i++) { sk[i] = sess(so[i]); scs[sk[i]] = sc[so[i]] }
+        printf "%sSESSIONS%s       %s %s%s%s\n", b, e, line(sk, ns, scs, "h", 8), dim, un, e
+        for (i = 1; i <= nh; i++) hk[i] = sprintf("%02d:00", ho[i])
+        for (i = 1; i <= nh; i++) hcs[hk[i]] = hc[ho[i]]
+        sortk(hcs, hk, nh)
+        printf "%sBUSIEST HOURS%s  %s %s%s%s\n", b, e, line(hk, nh, hcs, "h", 3), dim, un, e
+    } else print "no CPU samples in this window"
+    print ""
+    printf "%sCLEANUPS (%d)%s\n", b, ev, e
+    if (ev) {
+        printf "  why          %s\n", line(ro, nr, er, "n", 8)
+        printf "  how          %s\n", line(ko, nk, ek, "n", 8)
+        if (ne) printf "  left behind  %s\n", line(eo, ne, ep, "n", 5)
+    } else print "  none"
+}'
+}
+
 # --- Output --------------------------------------------------------------------
 
 _agents_colors() {
@@ -2285,7 +2751,7 @@ agents_json() {
     lvl="$(agents_thermal_level)"
     sys="$(agents_system)"
     AW_PID="$pid" AW_MODE="$mode" AW_UNTIL="$until" TH="${lvl:-}" TH_NAME="$(agents_thermal_name "${lvl:--}")" \
-    PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LID="$(_agents_lid_json)" LC_ALL=C awk -F '\t' '
+    PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LID="$(_agents_lid_json)" LC_ALL=C awk -F '\t' "$_AGENTS_AWK_JOBS_JSON"'
 function js(s,   o, i, c, n) {
     n = length(s); o = ""
     for (i = 1; i <= n; i++) {
@@ -2319,29 +2785,29 @@ function fl(s,   n, a, i, o) { if (s == "-" || s == "") return "[]"; n = split(s
 function c1(v) { return sprintf("%.1f", v + 0) }
 # What session r runs. Units are its direct children; nested sessions sit
 # inside a unit, so they are listed but not added again.
-function activity(r, tcpu, trss,   i, f, cs, ct, cm, co, rt, rm, ro, n, nm, mo, mn, mp, mr, mc, tl, sl, k) {
+function activity(r, tcpu, trss,   i, f, cs, ct, cm, co, rt, rm, ro, n, nm, mo, mn, mp, mr, mc, mj, tl, sl, k) {
     ct = cm = co = rt = rm = ro = 0; tl = ""; sl = ""; nm = 0
-    split("", mp); split("", mr); split("", mc)
+    split("", mp); split("", mr); split("", mc); split("", mj)
     for (i = 1; i <= nx; i++) {
         split(x[i], f, "\t")
         if (f[11] != r) continue
         if (f[3] == "session") {
-            sl = sl (sl == "" ? "" : ",") sprintf("{\"pid\":%d,\"start\":%s,\"start_epoch\":%d,\"token\":%s,\"depth\":%s,\"age_s\":%d,\"cpu\":%s,\"rss_kib\":%d,\"command\":%s}",
+            sl = sl (sl == "" ? "" : ",") sprintf("{\"pid\":%d,\"start\":%s,\"start_epoch\":%d,\"token\":%s,\"depth\":%s,\"age_s\":%d,\"cpu\":%s,\"rss_kib\":%d,\"command\":%s,\"job\":\"agent\"}",
                 f[2], js(f[9]), ENVIRON["NOW"] - f[4], js(f[2] "@" f[9]), js(f[12]), f[4], c1(f[5]), f[7], js(f[14]))
             if (f[12] == "nested") continue
         }
         if (f[3] == "mcp") {
             cm += f[5]; rm += f[7]
-            if (!(f[12] in mp)) mo[++nm] = f[12]
+            if (!(f[12] in mp)) { mo[++nm] = f[12]; mj[f[12]] = ujob[f[2]] }
             mp[f[12]] += f[8] + 1; mr[f[12]] += f[7]; mc[f[12]] += f[5]
         } else if (f[3] == "tool") {
             ct += f[5]; rt += f[7]
-            tl = tl (tl == "" ? "" : ",") sprintf("{\"pid\":%d,\"start\":%s,\"start_epoch\":%d,\"token\":%s,\"cmd\":%s,\"origin\":%s,\"cwd\":%s,\"age_s\":%d,\"cpu\":%s,\"rss_kib\":%d,\"processes\":%d,\"ports\":%s,\"flags\":%s,\"dup_count\":%d%s}",
-                f[2], js(f[9]), ENVIRON["NOW"] - f[4], js(f[2] "@" f[9]), js(f[14]), opt(f[15]), opt(f[13]), f[4], c1(f[5]), f[7], f[8] + 1, ports(f[10]), fl(f[16]), f[17], vfields(f[2]))
+            tl = tl (tl == "" ? "" : ",") sprintf("{\"pid\":%d,\"start\":%s,\"start_epoch\":%d,\"token\":%s,\"cmd\":%s,\"origin\":%s,\"cwd\":%s,\"age_s\":%d,\"cpu\":%s,\"rss_kib\":%d,\"processes\":%d,\"ports\":%s,\"flags\":%s,\"dup_count\":%d,\"job\":%s%s}",
+                f[2], js(f[9]), ENVIRON["NOW"] - f[4], js(f[2] "@" f[9]), js(f[14]), opt(f[15]), opt(f[13]), f[4], c1(f[5]), f[7], f[8] + 1, ports(f[10]), fl(f[16]), f[17], opt(ujob[f[2]]), vfields(f[2]))
         } else { co += f[5]; ro += f[7] }
     }
     mn = ""
-    for (k = 1; k <= nm; k++) mn = mn (k > 1 ? "," : "") sprintf("{\"name\":%s,\"procs\":%d,\"cpu\":%s,\"rss_kib\":%d}", js(mo[k]), mp[mo[k]], c1(mc[mo[k]]), mr[mo[k]])
+    for (k = 1; k <= nm; k++) mn = mn (k > 1 ? "," : "") sprintf("{\"name\":%s,\"procs\":%d,\"cpu\":%s,\"rss_kib\":%d,\"job\":%s}", js(mo[k]), mp[mo[k]], c1(mc[mo[k]]), mr[mo[k]], opt(mj[mo[k]]))
     cs = tcpu - ct - cm - co; if (cs < 0) cs = 0
     return sprintf("{\"cpu\":{\"self\":%s,\"tools\":%s,\"mcp\":%s,\"other\":%s},\"rss_kib\":{\"self\":%d,\"tools\":%d,\"mcp\":%d,\"other\":%d},\"mcp\":[%s],\"tools\":[%s],\"child_sessions\":[%s]}",
         c1(cs), c1(ct), c1(cm), c1(co), (trss - rt - rm - ro > 0 ? trss - rt - rm - ro : 0), rt, rm, ro, mn, tl, sl)
@@ -2356,18 +2822,24 @@ $1 == "evid" {
 $1 == "total" { total = $5; next }
 $1 == "act" { x[++nx] = $0; next }
 $1 == "agent" && NF >= 14 { ag[++na] = $0; next }
-NF >= 14 { o[$1] = o[$1] (o[$1] == "" ? "" : ",") obj($0) }
+$1 == "job" && NF >= 14 { jobrow(); next }
+NF >= 14 { orw[++nor] = $0 }      # built at the end, once the job rows are in
 END {
+    for (i = 1; i <= nor; i++) {
+        split(orw[i], f, "\t"); s = obj(orw[i])
+        if (f[1] == "stale") s = substr(s, 1, length(s) - 1) ",\"job\":" opt(ujob[f[2]]) "}"
+        o[f[1]] = o[f[1]] (o[f[1]] == "" ? "" : ",") s
+    }
     aw = ENVIRON["AW_PID"] == "" ? "{\"active\":false}" : sprintf("{\"active\":true,\"pid\":%d,\"mode\":%s,\"until\":%d}", ENVIRON["AW_PID"], js(ENVIRON["AW_MODE"]), ENVIRON["AW_UNTIL"])
     split(ENVIRON["SYS"], y, "\t")
     sys = sprintf("{\"cpu_pct\":%s,\"load1\":%s,\"cores\":%s,\"mem_free_pct\":%s,\"mem_pressure\":%s,\"battery_pct\":%s,\"battery_state\":%s}",
         (total == "" ? "null" : int(total / (y[2] > 0 ? y[2] : 1) + 0.5)), num(y[1]), num(y[2]), num(y[3]), opt(y[4]), num(y[5]), opt(y[6]))
     for (i = 1; i <= na; i++) {
         split(ag[i], f, "\t"); s = obj(ag[i])
-        o["agent"] = o["agent"] (i > 1 ? "," : "") substr(s, 1, length(s) - 1) ",\"activity\":" activity(f[2], f[5], f[7]) "}"
+        o["agent"] = o["agent"] (i > 1 ? "," : "") substr(s, 1, length(s) - 1) ",\"activity\":" activity(f[2], f[5], f[7]) ",\"job\":\"agent\"}"
     }
-    printf "{\"schema_version\":1,\"agents\":[%s],\"stale\":[%s],\"hogs\":[%s],\"top\":[%s],\"system\":%s,\"awake\":%s,\"lid\":%s,\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}\n",
-        o["agent"], o["stale"], o["hog"], o["top"], sys, aw, ENVIRON["LID"], (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"])
+    printf "{\"schema_version\":1,\"agents\":[%s],\"stale\":[%s],\"hogs\":[%s],\"top\":[%s],\"jobs\":[%s],\"system\":%s,\"awake\":%s,\"lid\":%s,\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}\n",
+        o["agent"], o["stale"], o["hog"], o["top"], jobs_json(), sys, aw, ENVIRON["LID"], (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"])
 }'
 }
 
@@ -2390,6 +2862,7 @@ _agents_lid_json() {
 # total, act, watched), then:
 #   sys  cpu_pct load1 cores mem_free_pct mem_pressure battery_pct battery_state
 #   awake mode pid until · thermal level name · power mode
+#   hist state today_cpu_s top_job top_job_cpu_s  (_agents_hist_line)
 #   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar: Herdr is read from its cache (never waited on), and
@@ -2407,6 +2880,7 @@ agents_tsv() {
     printf 'awake\t%s\t%s\t%s\n' "$mode" "$pid" "$until"
     printf 'thermal\t%s\t%s\n' "${lvl:--}" "$(agents_thermal_name "${lvl:--}")"
     printf 'power\t%s\n' "$(agents_powermode)"
+    _agents_hist_line
     lmax="$(agents_parse_duration "$AGENTS_LID_MAX")" || lmax=28800
     if state="$(agents_lid_state)"; then
         read -r lpid luntil _ <<<"$state"; printf 'lid\ton\t%s\t%s\t%s\n' "$lpid" "$luntil" "$lmax"
@@ -2459,6 +2933,7 @@ agents_watch() {
     tput civis 2>/dev/null
     while :; do
         _agents_awake_prime
+        _agents_sample_kick          # history, where no menu bar samples it
         out="$(r="$(agents_collect)"; printf '%s\n' "$r" | agents_render "agents stale hogs quiet"; echo; _agents_footer "$r")"
         printf '\033[H\033[2J%sagents · %s · every %ss · q quit%s\n\n%s\n' "$C_DIM" "$(date +%H:%M:%S)" "$secs" "$C_0" "$out"
         if [[ -t 0 ]]; then
@@ -2888,6 +3363,14 @@ LOOK
                                and a verdict: safe to stop, check first, leave
                                it, informational; --copy puts it on the clipboard
 
+HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
+  agents report [--since 24h|7d|30d|today] [--json]
+                               where the CPU went: CPU-hours by job (test, build,
+                               server, browser, mcp, agent, wait, other), project,
+                               session and hour, and what was cleaned up (default 24h)
+  agents sample                record one sample; the menu bar and 'agents watch'
+                               do it every minute (cron it where neither runs)
+
 ACT
   agents kill [OPTS] PID...    SIGTERM the whole tree, descendants first, then
                                SIGKILL whatever is left after ${AGENTS_GRACE}s
@@ -2944,7 +3427,9 @@ SETTINGS
   bar's AGENTS_BAR_TITLE
   AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. The same
   names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
-  AGENTS_ORPHAN_PATTERNS at the top of $AGENTS_PATH
+  AGENTS_ORPHAN_PATTERNS at the top of $AGENTS_PATH. History: AGENTS_HISTORY
+  AGENTS_HISTORY_DAYS; extra job patterns (EREs): AGENTS_JOB_TEST AGENTS_JOB_BUILD
+  AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Data: $AGENTS_DATA_DIR
 
 SAFETY
   Never signals pid 1, this shell or its parents, another user's process
@@ -3039,6 +3524,8 @@ agents_main() {
                   _agents_with_needs "$r" | agents_json ;;
         why)      agents_why "$@" ;;
         tsv)      agents_tsv ;;
+        report)   agents_report "$@" ;;
+        sample)   agents_sample ;;
         config)   agents_config "$@" ;;
         cwd)      agents_token_cwd "$@" ;;
         copy-path) local c; c="$(agents_token_cwd "$@")" || return 1
