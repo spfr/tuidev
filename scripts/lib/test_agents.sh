@@ -459,6 +459,10 @@ fi
     || fail "json escaping of quotes and backslashes"
 pass "json escapes quotes and backslashes"
 
+# Terminal width: a number, 120 without a terminal (never tput's blind 80).
+[[ "$(_agents_term_cols)" =~ ^[1-9][0-9]*$ ]] || fail "terminal width: $(_agents_term_cols)"
+pass "terminal width is read from the tty"
+
 # 7. The SwiftBar plugin, against a stub `agents` that replays a snapshot.
 mkdir -p "$HOME/.local/bin"
 # shellcheck disable=SC2016  # $1 belongs to the stub

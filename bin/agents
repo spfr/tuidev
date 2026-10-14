@@ -1724,12 +1724,20 @@ SAFETY
 EOF
 }
 
+# _agents_term_cols — the terminal's width, 120 when there is none. Inside
+# $( ) with stderr silenced, `tput cols` sees no terminal and answers 80.
+_agents_term_cols() {
+    local size
+    size="$(stty size 2>/dev/null </dev/tty)"
+    if [[ "$size" =~ ^[0-9]+\ ([0-9]+)$ && "${BASH_REMATCH[1]}" -gt 0 ]]; then echo "${BASH_REMATCH[1]}"; else echo 120; fi
+}
+
 agents_main() {
     local cmd="${1:-ls}"
     [[ $# -gt 0 ]] && shift
     AGENTS_DRY_RUN=false AGENTS_YES=false AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false
     _agents_colors
-    if [[ -t 1 ]]; then AGENTS_WIDTH="${COLUMNS:-$(tput cols 2>/dev/null || echo 120)}"; else AGENTS_WIDTH=160; fi
+    if [[ -t 1 ]]; then AGENTS_WIDTH="${COLUMNS:-$(_agents_term_cols)}"; else AGENTS_WIDTH=160; fi
     case "$cmd" in
         kill|reap|term)
             # As root every process is "yours": refuse rather than guess.
