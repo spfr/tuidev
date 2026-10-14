@@ -461,6 +461,9 @@ pass "json escapes quotes and backslashes"
 
 # Terminal width: a number, 120 without a terminal (never tput's blind 80).
 [[ "$(_agents_term_cols)" =~ ^[1-9][0-9]*$ ]] || fail "terminal width: $(_agents_term_cols)"
+if ! (: </dev/tty) 2>/dev/null; then
+    [[ "$(_agents_term_cols)" == 120 ]] || fail "no terminal: width $(_agents_term_cols), not 120"
+fi
 pass "terminal width is read from the tty"
 
 # 7. The SwiftBar plugin, against a stub `agents` that replays a snapshot.
