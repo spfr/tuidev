@@ -145,7 +145,7 @@ Run these locally, in this order. `make ci-test` runs the first four.
 make lint              # shellcheck -x over every shell file (the list lives in the Makefile)
 make validate-configs  # JSON, TOML, Lua, zsh/sh syntax (CI adds --strict)
 make check-links       # every relative link in every tracked .md resolves
-make test-lib          # scripts/lib/test_*.sh: agents, agents_history, config_write, container, contract, migrations, pkg, profile, theme
+make test-lib          # scripts/lib/test_*.sh: agents, agents_history, agents_hooks, agents_needs, config_write, container, contract, gitconfig, migrations, orchestration, pkg, profile, theme, update_packages
 make test-core         # core-tagged tests against this machine
 make container-test    # core-tagged tests in an Alpine container (tests scripts and configs, not the installer)
 ```

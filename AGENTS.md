@@ -82,7 +82,7 @@ On a tuidev machine, you usually run under your CLI's own native sandbox now (Cl
 - **Network:** TCP 443, DNS and loopback only. Package installs over other ports need `sbx --profile standard`. Ask the human rather than escalating yourself.
 - **`gh` fails under `sbx`**, because its token is denied. Ask the human to run it outside `sbx`, or (under the native sandbox) rely on its `excludedCommands` entry for `gh *`.
 - **Herdr:** if `HERDR_ENV=1`, you are inside a Herdr pane. Use `herdr agent list` and the socket API, never the TUI, and never launch `herdr` again. Under `strict`, the socket is reachable only with `sbx --allow-herdr`.
-- **Long-running processes** (dev servers, watchers) belong in a tmux pane, not a backgrounded `&` job. Run tests and builds in the foreground, never poll in a `sleep` loop, and stop what you started before you report done.
+- **Long-running processes** (dev servers, watchers) belong in a tmux pane, not a backgrounded `&` job. Run tests and builds in the foreground, or as a background task the harness reports on when it finishes; never poll in a `sleep` loop, and stop what you started before you report done.
 - **Interactive TUIs are for the human.** Don't drive `lazygit`, `btm`, `lazydocker`, `fzf` or `atuin`. Use `git`, `gh`, `rg`, `fd` and `jq`.
 
 Details: [docs/sandboxing.md](docs/sandboxing.md).
