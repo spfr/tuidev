@@ -55,7 +55,7 @@ Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever 
 
 [Agent workflows](docs/agent-workflows.md)
 
-### Agents that clean up after themselves, and a view of where your CPU goes
+### Agents that clean up after themselves
 
 `agents` (`--pack monitoring`) lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, and flags what a crashed or finished session left behind: MCP and dev servers, and polling loops stuck waiting for output that will never come. Every flagged process comes with a verdict and its evidence: "safe to stop: what it waits for already finished (exited with code 0, 5h ago)", or "check first: dev server on :3000, its session is still active". `agents why PID` prints the evidence, and `agents reap --stuck` stops the stuck loops. Kills go descendants first, re-checking each process's start time before every signal.
 
