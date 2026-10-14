@@ -181,7 +181,7 @@ activity_submenu() {   # PID
         params="param1=kill param2=--confirm-gui param3=--notify"; i=4
         for tk in $toks; do params+=" param$i=$tk"; i=$((i + 1)); done
         sh60 "${cmd#*$'\037'}"
-        SUB+="--Stop duplicates: $g× $REPLY (keep newest)… | $ACT $params sfimage=xmark.octagon symbolize=false"$'\n'
+        SUB+="--Stop duplicates: ${g}× $REPLY (keep newest)… | $ACT $params sfimage=xmark.octagon symbolize=false"$'\n'
     done <<<"$(dup_groups "${!v}")"
 }
 
@@ -312,7 +312,7 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
         n_attn=$((n_attn + 1))
         params="param1=kill param2=--confirm-gui param3=--notify"; i=4
         for tk in $toks; do params+=" param$i=$tk"; i=$((i + 1)); done
-        needs_menu+="$name: $g× $(short "${cmd#*$'\037'}") running | sfimage=square.stack.3d.up $DOT_ORANGE $ROW symbolize=false"$'\n'
+        needs_menu+="$name: ${g}× $(short "${cmd#*$'\037'}") running | sfimage=square.stack.3d.up $DOT_ORANGE $ROW symbolize=false"$'\n'
         needs_menu+="--Stop duplicates (keep newest)… | $ACT $params sfimage=xmark.octagon"$'\n'
     done <<<"$(dup_groups "$(aget dups "$pid")")"
     while IFS=$'\t' read -r cmd lage tk; do

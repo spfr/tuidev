@@ -755,6 +755,12 @@ pass "agents ls shows each session's MCP line and busiest commands; agents ps li
 [[ "$(printf '%s\n' "$act_fixture" | agents_tree 1010 | cut -f1 | tr '\n' ' ')" == "1012 1011 1013 1010 " ]] || fail "tool shell tree"
 pass "a tool shell can be stopped: zsh -c is not an interactive shell"
 
+# bash 3.2 can read a UTF-8 byte as part of a variable name: "$n×" printed
+# "\x97" on macOS CI. Every variable before a non-ASCII character is braced.
+bad="$(LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~]' "$REPO_DIR/bin/agents" "$REPO_DIR/configs/swiftbar/agents.10s.sh" || true)"
+[[ -z "$bad" ]] || fail "unbraced variable before a non-ASCII character: $bad"
+pass "variables before non-ASCII text are braced (bash 3.2)"
+
 # The menu: CPU split hint, Running list with Stop command…, duplicates.
 act_menu_recs="$(printf '%s\n' "$act_enr" | awk -F '\t' '$1 == "agent" || $1 == "act"')"
 menu="$(plugin "$act_menu_recs" "")"
