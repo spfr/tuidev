@@ -26,7 +26,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 UI_CASKS=(
     rectangle
-    stats
     maccy
 )
 

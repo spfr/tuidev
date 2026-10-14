@@ -24,7 +24,7 @@ With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `m
 | Component | minimal | desktop | remote |
 |-----------|:-------:|:-------:|:------:|
 | Shell, prompt, CLI tools (core) | ✓ | ✓ | ✓ |
-| Ghostty config, Rectangle, Stats, Maccy (ui) | | ✓ | |
+| Ghostty config, Rectangle, Maccy (ui) | | ✓ | |
 | `sbx` + Seatbelt profiles (sandbox, macOS) | | ✓ | ✓ |
 | Tailscale, mosh, SSH client and sshd config (remote) | | | ✓ |
 | tmux, the `tuidev-tmux` block, TPM (`--pack tmux`) | | | ✓ |
@@ -40,7 +40,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 : `bat`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `jq`, `ripgrep`, `shellcheck`, `starship`, `yq`, `zoxide`, and the zsh plugins `zsh-autosuggestions`, `zsh-completions` and `zsh-syntax-highlighting`. On macOS it also installs the Ghostty app. The installer then writes the managed blocks for `~/.zshrc` and `~/.config/starship.toml`, and sets [git defaults](#git-defaults).
 
 **`--ui`** (macOS only)
-: The Ghostty config (as a managed block), and the Rectangle, Stats and Maccy casks. Menu-bar items are hidden natively in System Settings. The hotkeys are in the [cheatsheet](CHEATSHEET.md#macos-hotkeys-desktop-profile).
+: The Ghostty config (as a managed block), and the Rectangle and Maccy casks. Menu-bar items are hidden natively in System Settings. For CPU, memory, battery and thermal readings in the menu bar, add `--pack monitoring` (its SwiftBar menu replaces a stats app). The hotkeys are in the [cheatsheet](CHEATSHEET.md#macos-hotkeys-desktop-profile).
 
 **`--sandbox`** (macOS only)
 : `sbx` in `~/.local/bin` and the Seatbelt profiles in `~/.config/tuidev/sandbox/`. See [sandboxing.md](sandboxing.md).
