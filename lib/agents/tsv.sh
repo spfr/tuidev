@@ -22,6 +22,9 @@
 # minute between samples are recorded too.
 agents_tsv() {
     local recs state pid="-" mode="off" until=0 lvl sys key val cores lmax lpid luntil
+    # One clock for the whole refresh (_agents_now), unless the caller set it.
+    local AGENTS_NOW="${AGENTS_NOW:-}"
+    [[ -n "$AGENTS_NOW" ]] || AGENTS_NOW="$(date +%s)"
     _agents_awake_prime
     recs="$(AGENTS_HERDR_MODE=async _AGENTS_FEED=1 agents_collect)" || return 1
     _agents_with_needs "$recs"

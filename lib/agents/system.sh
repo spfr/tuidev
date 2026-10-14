@@ -3,7 +3,7 @@
 #
 # Owns: thermal pressure, the energy mode and whether sleep is disabled
 #   (cached for a minute), load, memory, battery and the machine's CPU%.
-# Uses: config.sh (AGENTS_RUN_DIR).
+# Uses: config.sh (AGENTS_RUN_DIR), util.sh (_agents_now).
 # Public: agents_thermal_level, agents_thermal_name, agents_powermode,
 #   agents_sleep_disabled, agents_system, _agents_cpu_pct.
 
@@ -31,7 +31,7 @@ agents_powermode() { local m sd; _agents_pm_read; echo "$m"; }
 agents_sleep_disabled() { local m sd; _agents_pm_read; echo "$sd"; }
 _agents_pm_read() {   # sets m and sd in the caller (dynamic scope)
     local cache="$AGENTS_RUN_DIR/powermode" ts="" now
-    now="$(date +%s)"; m="" sd=""
+    _agents_now now; m="" sd=""
     [[ -r "$cache" ]] && read -r ts m sd < "$cache"
     [[ "$ts" =~ ^[0-9]+$ ]] || ts=0
     [[ -n "$m" && -n "$sd" && $((now - ${ts:-0})) -lt 60 ]] && return 0

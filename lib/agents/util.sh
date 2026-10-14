@@ -7,7 +7,7 @@
 #   directories, epoch stamps, replacing or removing a file safely.
 # Uses: _AGENTS_AWK_DIR (set by bin/agents).
 # Public: _agents_awk, _agents_awk_eval, agents_parse_duration,
-#   _agents_window, _agents_clock, _agents_field, _agents_timeout,
+#   _agents_window, _agents_now, _agents_clock, _agents_field, _agents_timeout,
 #   _agents_detach, _agents_lock, _agents_unlock, _agents_stamp_age, _agents_replace,
 #   _agents_rm_if_same.
 
@@ -130,6 +130,10 @@ _agents_rm_if_same() {
     [[ "$now" == "$2" ]] && rm -f "$1"
     return 0
 }
+
+# _agents_now VAR — set VAR to the epoch: AGENTS_NOW when it is set (the one
+# clock of an `agents tsv` refresh, or a test's fixed one), else date's.
+_agents_now() { printf -v "$1" '%s' "${AGENTS_NOW:-$(date +%s)}"; }
 
 _agents_field() { local a; read -r -a a <<<"$2"; echo "${a[$1 - 1]}"; }   # N WORDS
 _agents_clock() { date -r "$1" +%H:%M 2>/dev/null || date -d "@$1" +%H:%M 2>/dev/null; }

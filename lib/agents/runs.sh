@@ -34,7 +34,8 @@
 #                OUT: its Claude Code task output file or "-". Both stay here
 #                and are dropped when the run ends.
 #   $AGENTS_RUN_DIR/runs.feed/EPOCH.PID  one menu refresh's observation
-#                (awk/runs_obs.awk), 700/600, removed by the sample that reads it.
+#                (awk/runs_obs.awk), in a 700 directory, removed by the
+#                sample that reads it.
 #
 # Uses: config.sh, util.sh, watched.sh (_agents_last_line, _agents_mtimes),
 #   transcript.sh (whose task it was); awk/runs_obs.awk, awk/runs.awk,
@@ -55,19 +56,18 @@ _agents_runs_observe() {
 
 # _agents_runs_feed ENRICHED RECORDS PATHS — a menu refresh's share: what its
 # snapshot shows of the runs, into the spool for the next sample. Nothing
-# when no run is alive or the spool is full.
+# when no run is alive or the spool is full. It runs every 10 s, so it forks
+# little: the refresh's clock (_agents_now), one awk, one mv; the spool is
+# made private (700) once, which keeps the files in it private too.
 _agents_runs_feed() {
-    local now obs spool="$AGENTS_RUN_DIR/runs.feed"
-    now="$(date +%s)"
-    obs="$( { printf '%s\n' "$1"; printf '%s\n' "$2"; } | _agents_runs_observe "$now" "$3")"
+    local now obs spool="$AGENTS_RUN_DIR/runs.feed" files
+    _agents_now now
+    obs="$(_agents_runs_observe "$now" "$3" <<<"$1"$'\n'"$2")"
     [[ -n "$obs" ]] || return 0
-    (
-        umask 077
-        [[ -d "$spool" ]] || mkdir -p "$spool" 2>/dev/null || exit 0
-        files=("$spool"/[0-9]*.[0-9]*)
-        [[ ${#files[@]} -lt $_AGENTS_RUNS_SPOOL_MAX ]] || exit 0
-        _agents_replace "$spool/$now.$$" "$obs"
-    )
+    [[ -d "$spool" ]] || ( umask 077; mkdir -p "$spool" ) 2>/dev/null || return 0
+    files=("$spool"/[0-9]*.[0-9]*)
+    [[ ${#files[@]} -lt $_AGENTS_RUNS_SPOOL_MAX ]] || return 0
+    _agents_replace "$spool/$now.$$" "$obs"
     return 0
 }
 

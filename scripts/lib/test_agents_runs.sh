@@ -279,13 +279,13 @@ rc=0; agents_runs --bogus 2>/dev/null || rc=$?; [[ $rc == 2 ]] || fail "unknown 
 [[ "$(agents_main runs --since 1h | head -1)" == "Runs ended in the last 1h: 6"* ]] || fail "agents runs is not a command"
 pass "agents runs: newest first, aligned columns, --since today, bad options refused, friendly lines without data"
 
-# 3. Privacy: the data dir 700, its files 600; the feed 700/600.
+# 3. Privacy: the data dir 700, its files 600; the feed's directory 700 (no
+# one else can reach the files in it, so they are not chmodded each time).
 perm() { if [[ "$(uname)" == Darwin ]]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi; }
 for f in runs.tsv runs.state; do [[ "$(perm "$AGENTS_DATA_DIR/$f")" == 600 ]] || fail "$f mode $(perm "$AGENTS_DATA_DIR/$f")"; done
 fd="$AGENTS_RUN_DIR/runs.feed"
 rm -rf "$fd"; at 130; feed
 [[ "$(perm "$fd")" == 700 ]] || fail "feed dir mode $(perm "$fd")"
-for f in "$fd"/*; do [[ "$(perm "$f")" == 600 ]] || fail "feed file mode $(perm "$f")"; done
 [[ "$(ls "$fd")" == "$((T0 + 130)).$$" ]] || fail "feed file name: $(ls "$fd")"
 ! grep -qE 'pnpm test|git status' "$fd"/* || fail "the feed holds a command line"
 # The menu's own call: agents tsv feeds the spool (the system probes stubbed).
@@ -300,7 +300,7 @@ for f in "$fd"/*; do [[ "$(perm "$f")" == 600 ]] || fail "feed file mode $(perm 
     grep -q $'^run\t'$((T0 + 135))$'\t310@' "$fd/$((T0 + 135)).$$" || fail "agents tsv fed nothing"
 )
 ! grep -qE 'pnpm test|go test|/Users/NAME' "$AGENTS_DATA_DIR/runs.tsv" || fail "runs.tsv holds a command line or a path"
-pass "private: runs.tsv and runs.state 600, the feed agents tsv writes 700/600; names only, never arguments or paths"
+pass "private: runs.tsv and runs.state 600, the feed agents tsv writes in a 700 directory; names only, never arguments or paths"
 
 # 4. The feed stops at 64 waiting refreshes; nothing is fed or sampled with history off.
 rm -rf "$fd"; mkdir -p "$fd"
@@ -314,7 +314,11 @@ rm -rf "$fd"
     [[ ! -e "$fd" && ! -e "$tmp/off" ]] || fail "AGENTS_HISTORY=0 fed or sampled"
     [[ "$(agents_runs)" == "history is off (AGENTS_HISTORY=0): no runs are recorded" ]] || fail "runs with history off: $(agents_runs)"
 )
-pass "the feed is bounded (64 refreshes); AGENTS_HISTORY=0 feeds, samples and records nothing"
+# With no tool command or stale tree, a refresh has nothing to feed: no awk, no file.
+( _agents_runs_observe() { echo "observe called" >&2; }
+  { base 150; } > "$tmp/snap"; at 150
+  [[ -z "$(feed 2>&1)" && ! -e "$fd" ]] ) || fail "an idle refresh fed the spool"
+pass "the feed is bounded (64 refreshes); an idle refresh feeds nothing; AGENTS_HISTORY=0 feeds, samples and records nothing"
 
 # 5. Prune: runs.tsv with history, by end_epoch.
 pd="$tmp/prune"; mkdir -p "$pd"

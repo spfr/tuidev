@@ -96,7 +96,7 @@ _agents_herdr() {
 # when the cache is stale.
 _agents_herdr_cached() {
     local cache="$AGENTS_RUN_DIR/herdr.tsv" now age
-    now="$(date +%s)"
+    _agents_now now
     _agents_stamp_age age "$cache" "$now"    # a damaged cache counts as stale
     if [[ $age -lt 10 || ( "$1" == async && $age -lt 60 ) ]]; then
         _agents_herdr_show "$cache"
@@ -170,19 +170,21 @@ agents_collect() {
     fi
     listen="$(_agents_listeners)" || lprobe=fail
     recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$(_agents_keep_pids "$ps")")"
-    local type pid kind rest watch=""
+    local type pid kind rest watch="" runs=""
     set --
     while IFS=$'\t' read -r type pid kind rest; do
         case "$type" in
-            agent|stale|cand) set -- "$@" "$pid" ;;
-            act) [[ "$kind" == tool ]] && set -- "$@" "$pid" ;;   # its origin
+            agent|cand) set -- "$@" "$pid" ;;
+            stale) set -- "$@" "$pid"; runs=1 ;;
+            act) [[ "$kind" == tool ]] && { set -- "$@" "$pid"; runs=1; } ;;   # its origin
             watch) watch+="$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;  # kind: the path; rest: read|exists
         esac
     done <<<"$recs"
     pids="$(_agents_cwds ${feed:+--stdout} "$@")"
     enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_watched "$watch")")"
     [[ -z "$enr" ]] || printf '%s\n' "$enr"
-    [[ -z "$feed" ]] || _agents_runs_feed "$enr" "$recs" "$pids"
+    # Runs are tool commands and stale trees: with neither, nothing to feed.
+    [[ -z "$feed" || -z "$runs" ]] || _agents_runs_feed "$enr" "$recs" "$pids"
     _agents_watch_info "$watch"     # "watched" rows: the evidence agents_assess reads
     printf 'probe\tlisten\t%s\n' "$lprobe"
 }

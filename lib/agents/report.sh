@@ -75,9 +75,10 @@ agents_insight_write() {
 #   insight VIEW TEXT  while it is current; nothing otherwise.
 _agents_insight_line() {
     [[ "$AGENTS_HISTORY" == 1 && -r "$AGENTS_DATA_DIR/insight.txt" ]] || return 0
-    local was="" until="" view="" text=""
+    local was="" until="" view="" text="" now
     IFS=$'\t' read -r was until view text < "$AGENTS_DATA_DIR/insight.txt"
     [[ "$until" =~ ^[0-9]+$ && -n "$text" && " $_AGENTS_REPORT_VIEWS " == *" $view "* ]] || return 0
-    [[ "$(date +%s)" -lt "$until" ]] || return 0
+    _agents_now now
+    [[ $now -lt $until ]] || return 0
     printf 'insight\t%s\t%s\n' "$view" "$text"
 }
