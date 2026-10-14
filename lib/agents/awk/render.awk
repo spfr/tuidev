@@ -1,17 +1,8 @@
 # lib/agents/awk/render.awk — agents_render: the human table (sessions with
-# what they run, stale processes, hogs).
+# what they run, stale processes, hogs). Needs lib_fmt.
 
-function age(s) {
-    if (s < 60) return s "s"
-    if (s < 3600) return int(s / 60) "m"
-    if (s < 86400) return sprintf("%dh%02dm", s / 3600, (s % 3600) / 60)
-    return sprintf("%dd%02dh", s / 86400, (s % 86400) / 3600)
-}
-function mem(k) { return k >= 1048576 ? sprintf("%.1fG", k / 1048576) : k >= 1024 ? sprintf("%dM", k / 1024) : k "K" }
 function tilde(p) { return (p != "-" && index(p, home) == 1) ? "~" substr(p, length(home) + 1) : p }
-function cut(s, n) { return n < 8 ? "" : length(s) > n ? substr(s, 1, n - 3) "..." : s }
 function has(x) { return index(want, " " x " ") > 0 }
-function dur(s) { return s < 3600 ? sprintf("%dm%02ds", s / 60, s % 60) : age(s) }
 function flags(f,   o) {
     o = ""
     if (index("," f[16] ",", ",dup,")) o = o "  " ENVIRON["Y"] "x" f[17] " dup" e

@@ -24,8 +24,8 @@
 #
 # Uses: config.sh (AGENTS_HOOK_REAP, _AGENTS_HOOK_DRY), util.sh, snapshot.sh,
 #   classify.sh (agents_project), kill.sh (agents_kill_tokens), events.sh
-#   (agents_event), notify.sh; awk/hook_claude.awk, awk/hook_children.awk,
-#   awk/hook_match.awk.
+#   (agents_event), notify.sh, transcript.sh (the transcript reads);
+#   awk/hook_claude.awk, awk/hook_children.awk, awk/hook_match.awk.
 # Public: agents_hook.
 
 # _agents_hook_input < HOOK_JSON — one tab-separated line: event session
@@ -36,44 +36,23 @@ _agents_hook_input() {
         | map(if type == "string" and . != "" then gsub("[\t\n]"; " ") else "-" end) | join("\t")' 2>/dev/null
 }
 
-# _agents_hook_path PATH — PATH with a leading ~/ expanded; "-" stays "-".
-_agents_hook_path() {
-    case "$1" in \~/*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;; *) printf '%s\n' "$1" ;; esac
-}
-
-# Transcripts run to tens of megabytes (85 MB has been seen), and a session
-# can have dozens of subagents, so each file is read as few times as
-# possible, by grep under LC_ALL=C with fixed strings; jq and awk see only the
-# lines it finds, and jq runs only for tasks that may still be running.
-
-# The key on every transcript line that names a background task.
-_AGENTS_HOOK_TASK_KEY='"backgroundTaskId"'
-
-# _agents_hook_started TRANSCRIPT — the lines that name a background task.
-_agents_hook_started() {
-    [[ -f "$1" && -r "$1" ]] || return 0
-    LC_ALL=C grep -F "$_AGENTS_HOOK_TASK_KEY" "$1" 2>/dev/null
-}
-
-# _agents_hook_ids < LINES — every background task id they name.
-_agents_hook_ids() {
-    LC_ALL=C grep -oE '"backgroundTaskId": ?"[A-Za-z0-9_-]+"' | LC_ALL=C sed -E 's/.*"([A-Za-z0-9_-]+)"$/\1/'
-}
+# Transcripts are read as transcript.sh says (a fixed-string grep first); jq
+# runs only for tasks that may still be running.
 
 # _agents_hook_tasks TRANSCRIPT [STARTED] — "id<TAB>path" for each
 # background command the transcript's agent started (run_in_background, or
 # moved to the background) that it does not show as ended (a task
 # notification) or stopped (TaskStop). path: the output file its result
-# names, or "-". STARTED: its _agents_hook_started lines, when the caller
+# names, or "-". STARTED: its _agents_tx_started lines, when the caller
 # already has them.
 _agents_hook_tasks() {
     local f="$1" started open gone
     [[ -f "$f" && -r "$f" ]] || return 0
-    if [[ $# -ge 2 ]]; then started="$2"; else started="$(_agents_hook_started "$f")"; fi
+    if [[ $# -ge 2 ]]; then started="$2"; else started="$(_agents_tx_started "$f")"; fi
     [[ -n "$started" ]] || return 0
     # Ids started and not ended: most tasks end, and then jq never runs.
     gone="$(LC_ALL=C grep -F '<task-id>' "$f" 2>/dev/null | LC_ALL=C grep -oE '<task-id>[A-Za-z0-9_-]+</task-id>' | LC_ALL=C sed -E 's:</?task-id>::g')"
-    open="$(printf '%s\n' "$started" | _agents_hook_ids | H_GONE="$gone" LC_ALL=C awk '
+    open="$(printf '%s\n' "$started" | _agents_tx_ids | H_GONE="$gone" LC_ALL=C awk '
         BEGIN { n = split(ENVIRON["H_GONE"], t, "\n"); for (i = 1; i <= n; i++) g[t[i]] = 1 }
         $0 != "" && !($0 in g) && !s[$0]++')"
     [[ -n "$open" ]] || return 0
@@ -116,14 +95,14 @@ _agents_hook_final() {
 # forked from (its parentAgentId's transcript, else MAIN), task results
 # included. MAIN_IDS: MAIN's ids, when the caller already has them.
 _agents_hook_inherited() {
-    local meta="${1%.jsonl}.meta.json" id=""
-    [[ -r "$meta" ]] && id="$(jq -r '.parentAgentId // empty' "$meta" 2>/dev/null)"
+    local id
+    id="$(_agents_tx_meta "${1%.jsonl}.meta.json" parentAgentId)"
     if [[ "$id" =~ ^[A-Za-z0-9_-]+$ && "${1%/*}/agent-$id.jsonl" != "$1" ]]; then
-        _agents_hook_started "${1%/*}/agent-$id.jsonl" | _agents_hook_ids
+        _agents_tx_started "${1%/*}/agent-$id.jsonl" | _agents_tx_ids
     elif [[ $# -ge 3 ]]; then
         printf '%s\n' "$3"
     elif [[ "$2" != "$1" ]]; then
-        _agents_hook_started "$2" | _agents_hook_ids
+        _agents_tx_started "$2" | _agents_tx_ids
     fi
 }
 
@@ -189,7 +168,7 @@ _agents_hook_collect() {
     case "$event" in
         subagent-stop)
             if [[ ! -f "$agent" ]]; then _agents_hook_say "no subagent transcript ($agent): nothing to do"; return 1; fi
-            if ! LC_ALL=C grep -qF "$_AGENTS_HOOK_TASK_KEY" "$agent" 2>/dev/null; then
+            if ! LC_ALL=C grep -qF "$_AGENTS_TX_TASK_KEY" "$agent" 2>/dev/null; then
                 _agents_hook_say "the subagent started no background commands"; return 1
             fi
             _agents_hook_own_tasks "$agent" "$main" all ;;
@@ -201,12 +180,13 @@ _agents_hook_collect() {
             # The main transcript is read once for its tasks and ids, and one
             # grep reads every subagent's task lines (prefixed with its file).
             local started ids subs=() all sf
-            started="$(_agents_hook_started "$main")"
-            ids="$(printf '%s\n' "$started" | _agents_hook_ids)"
+            started="$(_agents_tx_started "$main")"
+            ids="$(printf '%s\n' "$started" | _agents_tx_ids)"
             _agents_hook_tasks "$main" "$started" | awk '{ print $0 "\twait" }'
-            for f in "${main%.jsonl}"/subagents/agent-*.jsonl; do [[ -f "$f" ]] && subs+=("$f"); done
-            [[ ${#subs[@]} -gt 0 ]] || return 0
-            all="$(LC_ALL=C grep -HF "$_AGENTS_HOOK_TASK_KEY" "${subs[@]}" 2>/dev/null)"
+            _agents_tx_subagents "$main"
+            [[ ${#_AGENTS_TX_SUBS[@]} -gt 0 ]] || return 0
+            subs=("${_AGENTS_TX_SUBS[@]}")
+            all="$(LC_ALL=C grep -HF "$_AGENTS_TX_TASK_KEY" "${subs[@]}" 2>/dev/null)"
             for f in "${subs[@]}"; do
                 [[ "$all" == *"$f:"* ]] || continue
                 sf="$(printf '%s\n' "$all" | H_F="$f:" LC_ALL=C awk '
@@ -237,7 +217,7 @@ agents_hook() {
     fields="$(_agents_hook_input)"
     [[ -n "$fields" ]] || { _agents_hook_say "no hook JSON on stdin"; return 0; }
     IFS=$'\t' read -r _ev _sid main _aid atype agent cwd reason <<<"$fields"
-    main="$(_agents_hook_path "$main")"; agent="$(_agents_hook_path "$agent")"
+    main="$(_agents_tx_path "$main")"; agent="$(_agents_tx_path "$agent")"
     local tasks snap claude kids matches
     tasks="$(_agents_hook_collect "$event" "$main" "$agent" "$reason")" || return 0
     [[ -n "$tasks" ]] || { _agents_hook_say "no background commands left running"; return 0; }

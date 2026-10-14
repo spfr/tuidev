@@ -4,14 +4,12 @@
 
 function norm(s) { gsub(/\/\/+/, "/", s); sub(/^\/private\//, "/", s); return s }
 function ends(s, t) { return length(s) >= length(t) && substr(s, length(s) - length(t) + 1) == t }
-function firstword(s,   w) { w = s; sub(/^[( ]+/, "", w); sub(/[ ;&|)].*$/, "", w); sub(/.*\//, "", w); return w == "" ? "command" : w }
 function hit(p, i,   s, w) {
     if (taken[p]++) return
     done[i] = 1
     s = tool_cmd(av[p]); w = waits(s) ? 1 : 0
     if (ts[i] == "wait" && !w) return
-    gsub(/\t/, " ", s)
-    printf "%d@%s\t%s\toutput\t%s\t%d\n", p, st[p], tid[i], (w ? "wait-loop" : firstword(s)), w
+    printf "%d@%s\t%s\toutput\t%s\t%d\n", p, st[p], tid[i], cmd_name(s), w
 }
 BEGIN {
     n = split(ENVIRON["H_TASKS"], t, "\n")
