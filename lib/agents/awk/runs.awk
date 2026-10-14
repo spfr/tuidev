@@ -58,6 +58,7 @@ $1 == "run" && NF >= 12 {
 $1 == "runp" && NF >= 5 { proc($3, $4, $5) }
 END {
     out = sf ".new"
+    printf "" > out          # written even when no run is alive: the caller moves it in place
     for (i = 1; i <= np; i++) cpu[pr[i]] += pc[po[i]]
     for (i = 1; i <= nr; i++) {
         k = ro[i]

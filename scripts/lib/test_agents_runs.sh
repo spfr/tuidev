@@ -318,6 +318,10 @@ rm -rf "$fd"
 ( _agents_runs_observe() { echo "observe called" >&2; }
   { base 150; } > "$tmp/snap"; at 150
   [[ -z "$(feed 2>&1)" && ! -e "$fd" ]] ) || fail "an idle refresh fed the spool"
+# A sample with no run alive still writes its (empty) state, quietly.
+( AGENTS_DATA_DIR="$tmp/idle"; { base 150; } > "$tmp/snap"; at 150
+  err="$(agents_sample 2>&1)" && [[ -z "$err" && -f "$AGENTS_DATA_DIR/runs.state" && ! -s "$AGENTS_DATA_DIR/runs.state" ]] ) \
+    || fail "a sample with no run alive: no runs.state, or it complained"
 pass "the feed is bounded (64 refreshes); an idle refresh feeds nothing; AGENTS_HISTORY=0 feeds, samples and records nothing"
 
 # 5. Prune: runs.tsv with history, by end_epoch.
