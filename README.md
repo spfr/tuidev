@@ -55,9 +55,15 @@ Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever 
 
 [Agent workflows](docs/agent-workflows.md)
 
-### See and stop what agents run
+### Agents that clean up after themselves, and a view of where your CPU goes
 
-`agents` (`--pack monitoring`) lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, and flags the MCP and dev servers a crashed session left running, and polling loops stuck waiting for output that will never come (`agents reap --stuck` stops them). It kills a tree, descendants first, re-checking each process's start time before every signal. With Herdr, sessions waiting for you come first. On macOS its SwiftBar menu shows the same, keeps the Mac awake while agents run, and shows CPU, memory, battery and thermal pressure. It can keep the Mac awake with the lid closed too: each time it asks for your password, it is always time-boxed, and a guard turns lid sleep back on at timeout, on low battery or when the Mac runs hot. [Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
+`agents` (`--pack monitoring`) lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, and flags what a crashed or finished session left behind: MCP and dev servers, and polling loops stuck waiting for output that will never come. Every flagged process comes with a verdict and its evidence: "safe to stop: what it waits for already finished (exited with code 0, 5h ago)", or "check first: dev server on :3000, its session is still active". `agents why PID` prints the evidence, and `agents reap --stuck` stops the stuck loops. Kills go descendants first, re-checking each process's start time before every signal.
+
+- **Fixed at the source.** Claude Code hooks stop the background commands a subagent left running once it hands back its report, and a rule in the orchestration pack tells agents not to poll in sleep loops and to stop what they start. Opt-in `AGENTS_AUTO_REAP=1` cleans up only the high-trust cases.
+- **Where the CPU goes.** CPU by job type (tests, builds, dev servers, browsers, MCP, agents, polling loops) per project and session, in the menu and in `agents json`. `agents report` adds CPU-hours over time and which projects leave processes behind, from a local history of names only, never command lines (`AGENTS_HISTORY=0` turns it off).
+- **Menu bar (macOS).** The SwiftBar menu shows the same, with Stop, Copy details and Show session on each flagged item, sessions waiting for you first with Herdr, and CPU, memory, battery and thermal pressure. It keeps the Mac awake while agents run, and with the lid closed too: each time it asks for your password, it is always time-boxed, and a guard turns lid sleep back on at timeout, on low battery or when the Mac runs hot.
+
+[Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 
 <img src="docs/assets/agents.png" width="800" alt="The agents command in a terminal. Three sessions: a Claude Code session in api, blocked and waiting for input, whose health-check polling loop has run 1h12m and is flagged wait and stuck; a working Claude Code session in myapp with two MCP servers and three commands, two of them from subagents in their own worktrees; an idle Codex session in web running a dev server on port 5173. Below them, two stale processes a crashed session left behind, one CPU hog, and a status line with CPU, memory, battery, thermal pressure and keep-awake.">
 
@@ -120,7 +126,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 |---------------|------|
 | `ai-clis` | Claude Code and Codex settings with their native sandboxes on, and git and gh write gates |
 | `orchestration` | Tiered subagents and the delegation skill for Claude Code and Codex |
-| `monitoring` | `agents`, its SwiftBar menu (macOS), `lazydocker` and `bottom` |
+| `monitoring` | `agents` (cleanup verdicts, CPU by job), its SwiftBar menu (macOS), `lazydocker` and `bottom` |
 | `tmux`, `herdr` | Durable sessions; Herdr's agent-aware runtime |
 | `nvim`, `vim` | LazyVim, or a zero-plugin vimrc for servers |
 | `sandbox-container` | Tier 2 sandboxing in a container runtime (Apple `container`, Podman or Docker) |
@@ -133,7 +139,7 @@ What each profile and pack installs is in [docs/profiles.md](docs/profiles.md). 
 ```bash
 claude | codex                           # AI CLIs, sandboxed by their own native settings
 claude -w NAME                           # Claude Code in its own git worktree, for parallel agents
-agents                                   # sessions, stale processes, hogs (--pack monitoring)
+agents [why PID | report]                # sessions, what's safe to stop, CPU by job (--pack monitoring)
 sbx -- CMD                               # any command under the strict Seatbelt profile (macOS)
 t [NAME]                                 # attach-or-create a tmux session (--pack tmux)
 make check                               # health check for the installed profile
