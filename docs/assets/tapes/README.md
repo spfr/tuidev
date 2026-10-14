@@ -11,7 +11,7 @@ make screenshots TAPES="agents menu"     # some, by name (menu = scripts/render_
 |--------|-------|-------|
 | `tour.tape` | `tour.gif` | The README hero: a short tour of the shell, `agents` and `sbx` in one demo home |
 | `herdr.tape` | `herdr.gif`, `herdr.png` | Herdr's sidebar over three machines (this Mac, and `devbox` and `workbox`, two Linux containers saved as SSH machines), six agent stand-ins; it jumps to the blocked one on `devbox`, answers it, then opens `workbox` |
-| `cleanup.tape` | `cleanup.gif` | `agents` with a polling loop stuck for 5h, `agents why 2120` (safe to stop: what it waits for already finished), then `agents report` |
+| `cleanup.tape` | `cleanup.gif` | `agents` with a polling loop stuck for 5h, `agents why 2120` (safe to stop: what it waits for already finished), then `agents report` with its Top insights |
 | `cli.tape` | `cli.gif` | The shipped zsh in the `~/api` demo repo: autosuggestions, `z`, `lt` (eza tree), `cat` (bat), Ctrl-T (fzf with a bat preview), Ctrl-R (atuin), `tokei` |
 | `shell.tape` | `shell.png` | The real Starship prompt, `ll src` (eza with icons and a git column), `rg` and `git diff` through delta, in the `~/api` demo repo |
 | `agents.tape` | `agents.png` | `agents` over the fixture process table |
@@ -28,7 +28,7 @@ Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https:/
 
 - picks a time zone where it is mid-afternoon now, so the made-up history below has a working day behind its "Today", whenever the shots are rendered;
 - builds that home with `demo-setup.sh`: three projects (`myapp`, `api`, `web`), fake `~/.ssh/id_ed25519`, `~/.aws/credentials` and `~/.zshrc` for `sbx` to protect, a `make test` target in `myapp`, a `~/.claude/settings.json`, and the state `agents` reads (a keep-awake record and a Herdr socket);
-- writes the background-task output that the `api` session's polling loop watches (its last line is Claude Code's `[exited with code 0]`, dated 5 hours ago), and, with `demo-history.sh`, a made-up week of `agents sample` history and cleanups (fixed noise, ending now) for `agents report` and the menu's Today line;
+- writes the background-task output that the `api` session's polling loop watches (its last line is Claude Code's `[exited with code 0]`, dated 5 hours ago), and, with `demo-history.sh`, a made-up week of `agents sample` history, cleanups and finished runs (`runs.tsv`; fixed noise, ending now) for `agents report`, its Top insights and the menu's Today and insight lines (the insight is written by the real `agents` code, as a sample would);
 - sets `HOME` to it and draws a two-line prompt shaped like the shipped Starship one, without Starship (the `shell`, `cli` and `tour` tapes start the real one, below);
 - puts `bin/agents` (the demo wrapper) and the repo's `bin/sbx` first on `PATH`.
 

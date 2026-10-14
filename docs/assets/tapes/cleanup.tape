@@ -3,8 +3,8 @@
 # the demo fixtures and their made-up history. Render: make screenshots
 Source docs/assets/tapes/theme.tape
 Output docs/assets/cleanup.gif
-Set Width 1250
-Set Height 800
+Set Width 1440
+Set Height 960
 Set FontSize 15
 Set Framerate 10
 Set TypingSpeed 30ms

@@ -2,9 +2,11 @@
 # Write a made-up week of `agents` history into a demo home
 # (docs/assets/tapes/README.md): demo-history.sh HOME. Idempotent: an existing
 # history is kept. It fills what `agents sample` and the cleanups would have
-# recorded (history.tsv, events.tsv, today.tsv, sample.stamp), so `agents
-# report` and the menu's Today line have numbers. The rows follow a working
-# day in the current time zone, with fixed noise (srand 7), ending now.
+# recorded (history.tsv, events.tsv, today.tsv, runs.tsv, sample.stamp), so
+# `agents report` and the menu's Today line have numbers, then has the real
+# `agents` code write the menu's top insight (insight.txt) from them. The rows
+# follow a working day in the current time zone, with fixed noise (srand 7),
+# ending now.
 set -eo pipefail
 
 home="${1:?usage: demo-history.sh HOME}"
@@ -56,5 +58,56 @@ BEGIN {
         printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\n", now - f[1] * 3600, f[2], f[3], f[4], f[5], f[6], f[7] > ef
     }
 }'
+# The run ledger (runs.tsv: end start job project session agent cmd duration
+# cpu peak exit dup cleaned), a week of working days at the same hours. Today
+# tells three stories for Top insights: Explore subagents left polling loops
+# running until a hook stopped them, myapp's tests ran twice at once, and
+# api's build got slower than yesterday's.
+LC_ALL=C awk -v now="$now" -v midnight="$midnight" -v rf="$dir/runs.tsv" '
+function run(st, d, job, p, sess, a, cmd, cpu, peak, ex, dup, cl) {
+    if (st + d > now - 60) return
+    printf "%d\t%d\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\t%d\t%d\n", st + d, st, job, p, sess, a, cmd, d, cpu, peak, ex, dup, cl > rf
+}
+BEGIN {
+    srand(7)
+    for (day = 6; day >= 0; day--) {
+        b = midnight - day * 86400
+        # myapp: vitest through pnpm, ten a day; one failure re-run at once.
+        for (i = 0; i < 10; i++) {
+            st = b + int((9.2 + i * 0.55) * 3600 + rand() * 300); d = 170 + int(rand() * 60)
+            dup = (day == 0 ? (i == 2 || i == 3 || i == 6 || i == 7) : (i == 3))
+            ex = (i == 5 ? 1 : 0)
+            run(st, d, "test", "myapp", "claude:1201", (i % 2 ? "implementor-complex" : "main"), "pnpm", int(d * 1.5), 520000, ex, dup, 0)
+            if (ex) run(st + d + 40, d, "test", "myapp", "claude:1201", "main", "pnpm", int(d * 1.5), 520000, 0, 0, 0)
+        }
+        # api: go build (slower and more often today) and go test.
+        nb = (day == 0 ? 8 : 6)
+        for (i = 0; i < nb; i++) {
+            st = b + int((9.5 + i * (day == 0 ? 0.7 : 1)) * 3600 + rand() * 120)
+            if (day == 0) run(st, 150 + int(rand() * 20), "build", "api", "claude:2101", "main", "go", 190, 310000, 0, 0, 0)
+            else run(st, 55 + int(rand() * 15), "build", "api", "claude:2101", "main", "go", 55, 260000, 0, 0, 0)
+        }
+        for (i = 0; i < 4; i++)
+            run(b + int((10 + i * 1.2) * 3600), 90 + int(rand() * 20), "test", "api", "claude:2101", "Explore", "go", 120, 210000, 0, 0, 0)
+        # Polling loops: short ones in main; today three Explore ones that
+        # waited hours, until the hook stopped them.
+        for (i = 0; i < 2; i++)
+            run(b + int((11 + i * 2) * 3600), 600, "wait", "api", "claude:2101", "main", "wait-loop", 1, 2000, "-", 0, 0)
+        if (day == 0) {
+            run(b + 9.5 * 3600, 9000, "wait", "api", "claude:2101", "Explore", "wait-loop", 2, 2000, "-", 0, 1)
+            run(b + 10.5 * 3600, 9700, "wait", "api", "claude:2101", "Explore", "wait-loop", 2, 2000, "-", 0, 1)
+            run(b + 11 * 3600, 9000, "wait", "api", "claude:2101", "Explore", "wait-loop", 2, 2000, "-", 0, 1)
+        }
+        # web: the dev server, a working day long, in the Codex session.
+        run(b + 9 * 3600, 8 * 3600, "server", "web", "codex:3101", "-", "npm", 420, 180000, "-", 0, 0)
+    }
+}'
 chmod 600 "$dir"/*.tsv
 echo "$now" > "$dir/sample.stamp"
+# The menu's top insight, as `agents sample` writes it, by the real code.
+(
+    export HOME="$home" AGENTS_CONF=/dev/null AGENTS_DATA_DIR="$dir" AGENTS_HISTORY=1
+    # shellcheck source=../../../bin/agents disable=SC1091
+    . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/bin/agents"
+    agents_insight_write
+)
