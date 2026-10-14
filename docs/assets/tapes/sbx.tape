@@ -33,3 +33,4 @@ Type "sbx -- make test"
 Enter
 Sleep 2s
 Screenshot docs/assets/sbx.png
+Sleep 500ms
