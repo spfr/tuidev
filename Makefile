@@ -223,7 +223,7 @@ theme: ## Apply a theme: make theme NAME=catppuccin-mocha
 # Docs
 # ----------------------------------------------------------------------------
 
-screenshots: ## Re-render docs/assets/*.png from their VHS tapes (TAPES="agents sbx" for some)
+screenshots: ## Re-render docs/assets/*.png and tour.gif from their VHS tapes (TAPES="agents sbx" for some)
 	@./scripts/screenshots.sh $(TAPES)
 
 # ----------------------------------------------------------------------------
