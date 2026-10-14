@@ -32,6 +32,7 @@ AGENTS_UID=501 AGENTS_SELF=9999
 # A fixed clock: `date` answers from FAKE_NOW / FAKE_DAY for the formats
 # bin/agents asks for, and falls through to the real one otherwise.
 FAKE_NOW=1760400000 FAKE_DAY=2026-10-14
+# shellcheck disable=SC2317,SC2329  # called by the functions under test
 date() {
     case "$*" in
         '+%s %Y-%m-%d') echo "$FAKE_NOW $FAKE_DAY" ;;
@@ -164,6 +165,7 @@ fi
 
 # 2. Sampling: cputime deltas across samples, keyed by pid@start.
 agents_snapshot() { cat "$tmp/snap"; }
+# shellcheck disable=SC2317,SC2329  # called by the functions under test
 _agents_keep_pids() { :; }
 _agents_cwds() { local p; for p in "$@"; do case "$p" in 300|500) printf '%s\t%s\n' "$p" /Users/NAME/code/app ;; 400) printf '%s\t%s\n' "$p" /Users/NAME/code/svc ;; esac; done; }
 {
@@ -211,7 +213,7 @@ want="$(printf '%s\n' \
 [[ "$(cut -f1 "$AGENTS_DATA_DIR/history.tsv" | sort -u)" == "$FAKE_NOW" ]] || fail "history rows carry the sample's epoch"
 pass "sample: CPU since the last sample per job, project and session; new processes count whole, first-seen old ones from now on"
 pass "sample: a reused pid (new start time) starts afresh; ended processes drop out; rows without CPU are left out"
-[[ "$(cat "$AGENTS_DATA_DIR/today.tsv")" == "$FAKE_DAY"$'\t75\ntest\t40\nbuild\t15\nagent\t15\nmcp\t3\nserver\t2' ]] \
+[[ "$(cat "$AGENTS_DATA_DIR/today.tsv")" == "$FAKE_DAY"$'\t75\ntest\t40\nagent\t15\nbuild\t15\nmcp\t3\nserver\t2' ]] \
     || fail "today.tsv: $(cat "$AGENTS_DATA_DIR/today.tsv")"
 FAKE_NOW=$((FAKE_NOW + 60)) FAKE_DAY=2026-10-15
 agents_sample || fail "third sample failed"
@@ -231,6 +233,7 @@ pass "sample: one at a time (lock dir)"
 # once its session ends and it is orphaned; one never seen there has none.
 (
     AGENTS_DATA_DIR="$tmp/prov"
+    # shellcheck disable=SC2317,SC2329  # called by the functions under test
     agents_snapshot() { cat "$tmp/snap.prov"; }
     {
         psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd
@@ -354,8 +357,8 @@ out="$(AGENTS_DATA_DIR="$rd" agents_report)"
 [[ "$out" != *old* ]] || fail "report counts rows outside the window"
 [[ "$out" == *"SESSIONS       claude 1.50 · codex 0.50 · stale 0.05"* ]] || fail "report sessions:"$'\n'"$out"
 [[ "$out" == *"BUSIEST HOURS  22:00 1.50 · 19:00 0.50 · 23:00 0.05"* ]] || fail "report hours:"$'\n'"$out"
-[[ "$out" == *"CLEANUPS (4)"* && "$out" == *"why          stale 2 · session-end 1 · manual 1"* ]] || fail "report cleanups:"$'\n'"$out"
-[[ "$out" == *"how          "*"reap 1"*"auto 1"* && "$out" == *"left behind  app 2 · svc 1"* ]] || fail "report cleanup kinds and projects:"$'\n'"$out"
+[[ "$out" == *"CLEANUPS (4)"* && "$out" == *"why          stale 2 · manual 1 · session-end 1"* ]] || fail "report cleanups:"$'\n'"$out"
+[[ "$out" == *"how          auto 1 · hook 1 · kill 1 · reap 1"* && "$out" == *"left behind  app 2 · svc 1"* ]] || fail "report cleanup kinds and projects:"$'\n'"$out"
 pass "report: CPU-h by job with %, projects with their main job, sessions, busiest hours, cleanups"
 json="$(AGENTS_DATA_DIR="$rd" agents_report --since 7d --json)"
 if command -v jq >/dev/null 2>&1; then

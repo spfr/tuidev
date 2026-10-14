@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-10-14
+
+### Fixed
+- **`agents json` and `agents report --json` on Debian and Ubuntu.** Their
+  default awk (mawk) caps a single `sprintf` at 8 KiB, so a busy machine
+  (many flagged commands, each with its verdict and evidence) aborted the
+  JSON. Lists are now joined, not formatted.
+- **Ties sort the same everywhere.** Job, project and cleanup lists that
+  tie on CPU or count are ordered by name, so BSD, GNU, mawk and BusyBox
+  agree (`today.tsv`, the menu and `agents report`).
+- No `/proc/PID/cgroup` noise on Linux when a process exits mid-scan.
+- CI: the new test harnesses are clean under the runner's shellcheck.
+
 ## [3.5.0] - 2026-10-14
 
 Needs you now explains itself, agents stop leaving processes behind, and

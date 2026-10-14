@@ -826,7 +826,7 @@ _agents_keep_pids() {
         launchctl list 2>/dev/null | _agents_launchd_pids
     elif [[ -r /proc/self/cgroup ]]; then
         for p in $(printf '%s\n' "$1" | awk '$2 == 1 { print $1 }'); do
-            _agents_cgroup_service < "/proc/$p/cgroup" 2>/dev/null && echo "$p"
+            _agents_cgroup_service 2>/dev/null < "/proc/$p/cgroup" && echo "$p"
         done
     fi
     return 0
@@ -2337,7 +2337,7 @@ function jobs_json(   i, j, b, t, out, ss, k, m, r) {
             r = jsr[j, m]; k = j SUBSEP r
             ss = ss (m > 1 ? "," : "") sprintf("{\"pid\":%d,\"project\":%s,\"kind\":%s,\"cpu\":%s,\"rss_kib\":%d}", r, opt(jsp[k]), opt(jsk[k]), c1(jscpu[k]), jsrss[k])
         }
-        out = out (i > 1 ? "," : "") sprintf("{\"job\":%s,\"cpu\":%s,\"rss_kib\":%d,\"processes\":%d,\"sessions\":[%s]}", js(j), c1(jcpu[j]), jrss[j], jproc[j], ss)
+        out = out (i > 1 ? "," : "") sprintf("{\"job\":%s,\"cpu\":%s,\"rss_kib\":%d,\"processes\":%d,\"sessions\":[", js(j), c1(jcpu[j]), jrss[j], jproc[j]) ss "]}"
     }
     return out
 }
@@ -2441,7 +2441,7 @@ END {
     for (j in tj) jo[++nj] = j
     for (i = 1; i <= nj; i++) {
         b = i
-        for (j = i + 1; j <= nj; j++) if (tj[jo[j]] > tj[jo[b]]) b = j
+        for (j = i + 1; j <= nj; j++) if (tj[jo[j]] > tj[jo[b]] || (tj[jo[j]] == tj[jo[b]] && jo[j] < jo[b])) b = j
         t = jo[i]; jo[i] = jo[b]; jo[b] = t
     }
     out = tf ".new"
@@ -2572,10 +2572,11 @@ function bar(p,   k, o) { k = int(p / 5 + 0.5); o = ""; while (k-- > 0) o = o "\
 function sess(s) { return s == "-" ? "stale" : s }
 function proj(s) { return s == "-" ? "(none)" : s }
 # sortk ARR KEYS N — KEYS[1..N], busiest (largest ARR[key]) first.
+# Busiest first; ties by name, so every awk (BSD, gawk, mawk, BusyBox) agrees.
 function sortk(arr, keys, cnt,   i, j, b, t) {
     for (i = 1; i <= cnt; i++) {
         b = i
-        for (j = i + 1; j <= cnt; j++) if (arr[keys[j]] > arr[keys[b]]) b = j
+        for (j = i + 1; j <= cnt; j++) if (arr[keys[j]] > arr[keys[b]] || (arr[keys[j]] == arr[keys[b]] && keys[j] < keys[b])) b = j
         t = keys[i]; keys[i] = keys[b]; keys[b] = t
     }
 }
@@ -2626,13 +2627,13 @@ BEGIN {
         for (i = 1; i <= np; i++) {
             p = po[i]; s = ""
             for (k = 1; k <= nj; k++) if (pj[p, jo[k]] > 0) s = s (s == "" ? "" : ",") sprintf("{\"job\":%s,\"cpu_s\":%d}", jstr(jo[k]), pj[p, jo[k]])
-            o = o (i > 1 ? "," : "") sprintf("{\"project\":%s,\"cpu_s\":%d,\"pct\":%s,\"main_job\":%s,\"main_job_pct\":%s,\"jobs\":[%s]}", jopt(p), pc[p], pc1(pc[p], tot), jopt(mj[p]), pc1(mv[p], pc[p]), s)
+            o = o (i > 1 ? "," : "") sprintf("{\"project\":%s,\"cpu_s\":%d,\"pct\":%s,\"main_job\":%s,\"main_job_pct\":%s,\"jobs\":[", jopt(p), pc[p], pc1(pc[p], tot), jopt(mj[p]), pc1(mv[p], pc[p])) s "]}"
         }
         o = o "],\"sessions\":["
         for (i = 1; i <= ns; i++) o = o (i > 1 ? "," : "") sprintf("{\"session\":%s,\"cpu_s\":%d,\"pct\":%s}", jopt(so[i]), sc[so[i]], pc1(sc[so[i]], tot))
         o = o "],\"hours\":["
         for (i = 1; i <= nh; i++) o = o (i > 1 ? "," : "") sprintf("{\"hour\":%d,\"cpu_s\":%d}", ho[i], hc[ho[i]])
-        o = o sprintf("],\"cleanups\":{\"total\":%d,\"by_reason\":%s,\"by_kind\":%s,\"projects\":%s}}", ev, jlist(ro, nr, er, "reason", "count"), jlist(ko, nk, ek, "kind", "count"), jlist(eo, ne, ep, "project", "count"))
+        o = o sprintf("],\"cleanups\":{\"total\":%d,\"by_reason\":", ev) jlist(ro, nr, er, "reason", "count") ",\"by_kind\":" jlist(ko, nk, ek, "kind", "count") ",\"projects\":" jlist(eo, ne, ep, "project", "count") "}}"
         print o
         exit
     }
@@ -2909,9 +2910,8 @@ function opt(s) { return s == "-" || s == "" ? "null" : js(s) }
 function ports(s,   n, a, i, o) { if (s == "-") return "[]"; n = split(s, a, ","); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? "," : "") (a[i] + 0); return "[" o "]" }
 function obj(r,   f) {
     split(r, f, "\t")
-    return sprintf("{\"pid\":%d,\"kind\":%s,\"age_s\":%d,\"cpu\":%s,\"avg_cpu\":%s,\"rss_kib\":%d,\"children\":%d,\"start\":%s,\"start_epoch\":%d,\"ports\":%s,\"user\":%s,\"herdr\":%s,\"cwd\":%s,\"project\":%s,\"command\":%s%s}",
-        f[2], js(f[3]), f[4], f[5] + 0, f[6] + 0, f[7], f[8], js(f[9]), ENVIRON["NOW"] - f[4], ports(f[10]), js(f[11]), opt(f[12]), opt(f[13]), opt(f[15]), js(f[14]),
-        (f[1] == "stale" ? vfields(f[2]) : ""))
+    return sprintf("{\"pid\":%d,\"kind\":%s,\"age_s\":%d,\"cpu\":%s,\"avg_cpu\":%s,\"rss_kib\":%d,\"children\":%d,\"start\":%s,\"start_epoch\":%d,\"ports\":%s,\"user\":%s,\"herdr\":%s,\"cwd\":%s,\"project\":%s,\"command\":%s",
+        f[2], js(f[3]), f[4], f[5] + 0, f[6] + 0, f[7], f[8], js(f[9]), ENVIRON["NOW"] - f[4], ports(f[10]), js(f[11]), opt(f[12]), opt(f[13]), opt(f[15]), js(f[14])) (f[1] == "stale" ? vfields(f[2]) : "") "}"
 }
 function num(s) { return s == "-" || s == "" ? "null" : s + 0 }
 # vfields(p) — ",verdict:{…},evidence:{…}" for an item agents_assess judged
@@ -2953,8 +2953,8 @@ function activity(r, tcpu, trss,   i, f, cs, ct, cm, co, rt, rm, ro, n, nm, mo, 
     mn = ""
     for (k = 1; k <= nm; k++) mn = mn (k > 1 ? "," : "") sprintf("{\"name\":%s,\"procs\":%d,\"cpu\":%s,\"rss_kib\":%d,\"job\":%s}", js(mo[k]), mp[mo[k]], c1(mc[mo[k]]), mr[mo[k]], opt(mj[mo[k]]))
     cs = tcpu - ct - cm - co; if (cs < 0) cs = 0
-    return sprintf("{\"cpu\":{\"self\":%s,\"tools\":%s,\"mcp\":%s,\"other\":%s},\"rss_kib\":{\"self\":%d,\"tools\":%d,\"mcp\":%d,\"other\":%d},\"mcp\":[%s],\"tools\":[%s],\"child_sessions\":[%s]}",
-        c1(cs), c1(ct), c1(cm), c1(co), (trss - rt - rm - ro > 0 ? trss - rt - rm - ro : 0), rt, rm, ro, mn, tl, sl)
+    return sprintf("{\"cpu\":{\"self\":%s,\"tools\":%s,\"mcp\":%s,\"other\":%s},\"rss_kib\":{\"self\":%d,\"tools\":%d,\"mcp\":%d,\"other\":%d},\"mcp\":[",
+        c1(cs), c1(ct), c1(cm), c1(co), (trss - rt - rm - ro > 0 ? trss - rt - rm - ro : 0), rt, rm, ro) mn "],\"tools\":[" tl "],\"child_sessions\":[" sl "]}"
 }
 $1 == "need" { nd[$2] = $0; next }
 $1 == "evid" {
@@ -2982,8 +2982,9 @@ END {
         split(ag[i], f, "\t"); s = obj(ag[i])
         o["agent"] = o["agent"] (i > 1 ? "," : "") substr(s, 1, length(s) - 1) ",\"activity\":" activity(f[2], f[5], f[7]) ",\"job\":\"agent\"}"
     }
-    printf "{\"schema_version\":1,\"agents\":[%s],\"stale\":[%s],\"hogs\":[%s],\"top\":[%s],\"jobs\":[%s],\"system\":%s,\"awake\":%s,\"lid\":%s,\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}\n",
-        o["agent"], o["stale"], o["hog"], o["top"], jobs_json(), sys, aw, ENVIRON["LID"], (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"])
+    # Lists are joined, not passed through %s: mawk caps one sprintf/printf at 8 KiB.
+    print "{\"schema_version\":1,\"agents\":[" o["agent"] "],\"stale\":[" o["stale"] "],\"hogs\":[" o["hog"] "],\"top\":[" o["top"] "],\"jobs\":[" jobs_json() "],\"system\":" sys ",\"awake\":" aw ",\"lid\":" ENVIRON["LID"] \
+        sprintf(",\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}", (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"]))
 }'
 }
 

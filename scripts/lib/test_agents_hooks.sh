@@ -207,7 +207,7 @@ grep -q "dry run: would send SIGTERM" "$tmp/out" || fail "no dry-run summary"
 pass "subagent-stop -n: only that subagent's live tasks, by their output file; not one whose stdout can't be read, another subagent's, the main session's, ended tasks, nested sessions or another claude's"
 
 ( _AGENTS_HOOK_DRY=true run_hook subagent-stop "$(hook_json SubagentStop aaa)"
-  grep -q "dry run: would send SIGTERM" "$tmp/out" && [[ ! -f "$tmp/signals" ]] || fail "AGENTS_DRY_RUN=true is not a dry run" )
+  { grep -q "dry run: would send SIGTERM" "$tmp/out" && [[ ! -f "$tmp/signals" ]]; } || fail "AGENTS_DRY_RUN=true is not a dry run" )
 # The variable is read when agents starts (agents_main resets AGENTS_DRY_RUN):
 # a separate process, whose explanation goes to stderr; nothing it reads is real.
 err="$(hook_json SubagentStop aaa | AGENTS_DRY_RUN=true bash "$REPO_DIR/bin/agents" hook subagent-stop 2>&1 >/dev/null)" \
@@ -285,6 +285,7 @@ run_hook subagent-stop '{"session_id": "x", "agent_transcript_path": '; quiet_ok
 run_hook subagent-stop 'not json at all'; quiet_ok "not JSON"
 run_hook subagent-stop ''; quiet_ok "empty stdin"
 run_hook bogus-event "$(hook_json SubagentStop aaa)"; quiet_ok "unknown event"
+# shellcheck disable=SC2317,SC2329  # called by the hook under test
 ( agents_snapshot() { :; }; run_hook subagent-stop "$(hook_json SubagentStop aaa)"; quiet_ok "no process table" )
 ( SNAP="$(printf '%s\n' "$SNAP" | sed 's/claude --continue/node server.js/')"
   run_hook subagent-stop "$(hook_json SubagentStop aaa)"; quiet_ok "no claude above the hook" )
