@@ -2,7 +2,7 @@
 # with its depth (the caller sorts deepest first). Needs lib_proc.
 
 NF >= 14 {
-    p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; st[p] = $9 "_" $10 "_" $11 "_" $12 "_" $13
+    p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; st[p] = lstart()
     s = argv($0); nm[p] = pname(s); cr[p] = critical(s); kids[pp[p]] = kids[pp[p]] " " p
 }
 END {

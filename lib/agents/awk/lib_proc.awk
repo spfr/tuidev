@@ -2,7 +2,7 @@
 # program that reads an agents_snapshot record (pid ppid uid user %cpu rss
 # time etime lstart(5 words) args):
 #   secs, base, pname, critical, agent_kind, interactive_shell, supervisor,
-#   hosts, argv.
+#   hosts, argv, lstart, ancestors.
 # Reads ENVIRON: AGENTS_NAMES, AGENTS_SUPERVISOR_NAMES, AGENTS_SHELL_NAMES,
 # AGENTS_DAEMON_PATTERN, AGENTS_CRITICAL_NAMES, AGENTS_CRITICAL_PATH.
 
@@ -68,4 +68,13 @@ function argv(line,   s, i, p, k) {
     p = 1
     for (i = 1; i <= 13; i++) { k = index(substr(line, p), $i); p += k - 1 + length($i) }
     s = substr(line, p); sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s
+}
+# lstart(): the current record's start time (its 5 lstart words) as one token,
+# Wed_Oct_14_08:00:00_2026: what PID@START names a process by.
+function lstart() { return $9 "_" $10 "_" $11 "_" $12 "_" $13 }
+# ancestors(p): anc[q] = 1 for p and every process above it, by the
+# program's parent table pp[] (at most 64 levels).
+function ancestors(p,   d) {
+    p += 0; d = 0
+    while (p > 0 && (p in pp) && d++ < 64) { anc[p] = 1; p = pp[p] }
 }

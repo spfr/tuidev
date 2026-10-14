@@ -39,7 +39,7 @@ _agents_report_usage() { echo "usage: agents report [--since 24h|7d|30d|today] [
 
 # _agents_report_awk START NOW UTC_OFFSET_S LABEL JSON
 _agents_report_awk() {
-    B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" _agents_awk report -F '\t' \
+    B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" _agents_awk "lib_json lib_sort report" -F '\t' \
         -v start="$1" -v now="$2" -v off="$3" -v label="$4" -v json="$5" -v hist="$AGENTS_HISTORY" \
         -v hf="$AGENTS_DATA_DIR/history.tsv" -v ef="$AGENTS_DATA_DIR/events.tsv"
 }

@@ -1,5 +1,5 @@
 # lib/agents/awk/json.awk — agents_json: the whole snapshot as one JSON
-# object. The schema is a contract (docs/agent-workflows.md).
+# object. The schema is a contract (docs/agent-workflows.md). Needs lib_json.
 
 # jobrow, jobs_json: the job of each tool and MCP server, and the top-level
 # "jobs" list (busiest first, each with its sessions).
@@ -28,16 +28,6 @@ function jobs_json(   i, j, b, t, out, ss, k, m, r) {
     }
     return out
 }
-function js(s,   o, i, c, n) {
-    n = length(s); o = ""
-    for (i = 1; i <= n; i++) {
-        c = substr(s, i, 1)
-        if (c == "\\") o = o "\\\\"; else if (c == "\"") o = o "\\\""; else if (c == "\t") o = o "\\t"
-        else if (c >= " ") o = o c
-    }
-    return "\"" o "\""
-}
-function opt(s) { return s == "-" || s == "" ? "null" : js(s) }
 function ports(s,   n, a, i, o) { if (s == "-") return "[]"; n = split(s, a, ","); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? "," : "") (a[i] + 0); return "[" o "]" }
 function obj(r,   f) {
     split(r, f, "\t")

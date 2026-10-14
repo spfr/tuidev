@@ -2,7 +2,7 @@
 # lib/agents/events.sh — the local log of cleanups.
 #
 # Owns: the private data directory and events.tsv, with its lock.
-# Uses: config.sh (AGENTS_DATA_DIR, AGENTS_HISTORY).
+# Uses: config.sh (AGENTS_DATA_DIR, AGENTS_HISTORY), util.sh (_agents_lock).
 # Public: agents_event, _agents_log_cleanups, _agents_data_dir,
 #   _agents_events_lock, _agents_events_unlock.
 #
@@ -29,19 +29,8 @@ _agents_data_dir() {
 # taken over. agents_event appends and _agents_history_prune rewrites
 # events.tsv only under it, so a prune never drops a line. False when it
 # could not be had.
-_agents_events_lock() {
-    local lock="$AGENTS_DATA_DIR/events.lock" i=0
-    while [[ $i -lt 20 ]]; do
-        mkdir "$lock" 2>/dev/null && return 0
-        if [[ $i -eq 0 && -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; then
-            rmdir "$lock" 2>/dev/null; i=$((i + 1)); continue
-        fi
-        sleep 0.05 2>/dev/null || sleep 1
-        i=$((i + 1))
-    done
-    return 1
-}
-_agents_events_unlock() { rmdir "$AGENTS_DATA_DIR/events.lock" 2>/dev/null; return 0; }
+_agents_events_lock() { _agents_lock "$AGENTS_DATA_DIR/events.lock" 20 0.05; }
+_agents_events_unlock() { _agents_unlock "$AGENTS_DATA_DIR/events.lock"; }
 
 # _agents_tsv_field TEXT — one TSV field: tabs and newlines become spaces, empty is "-".
 _agents_tsv_field() {

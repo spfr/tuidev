@@ -44,9 +44,7 @@ agents_main() {
     case "$cmd" in
         kill|reap|term)
             # As root every process is "yours": refuse rather than guess.
-            local euid="$EUID"
-            [[ -z "${AGENTS_TESTING:-}" ]] || euid="${AGENTS_EUID:-$EUID}"
-            if [[ "$euid" -eq 0 ]]; then
+            if _agents_is_root; then
                 echo "agents: refusing to $cmd as root; run it as yourself" >&2
                 return 2
             fi

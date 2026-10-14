@@ -36,7 +36,7 @@ NF >= 14 {
     if (p in pp) next
     ord[++n] = p
     pp[p] = $2 + 0; uid[p] = $3; usr[p] = $4; cpu[p] = $5 + 0; rss[p] = $6 + 0
-    ct[p] = secs($7); et[p] = secs($8); st[p] = $9 "_" $10 "_" $11 "_" $12 "_" $13
+    ct[p] = secs($7); et[p] = secs($8); st[p] = lstart()
     s = argv($0); gsub(/\t/, " ", s)
     av[p] = s
 }
@@ -47,8 +47,7 @@ END {
         kind[p] = isd[p] ? "daemon" : agent_kind(av[p])
     }
     # This process and its ancestors: never a hog, never stale, never killed.
-    q = self; d = 0
-    while (q > 0 && (q in pp) && d++ < 64) { anc[q] = 1; q = pp[q] }
+    ancestors(self)
     # Walk up from every process: its topmost agent ancestor (the root of its
     # agent tree) and whether it runs under this process; then add it to every
     # ancestor subtree sums, leaving out the subtree of this process (ps, us).

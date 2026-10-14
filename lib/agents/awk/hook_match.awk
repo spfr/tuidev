@@ -22,11 +22,10 @@ BEGIN {
     n = split(ENVIRON["H_OUTS"], t, "\n")
     for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 2 && f[2] ~ /^\//) out[f[1] + 0] = norm(f[2])
 }
-NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; st[p] = $9 "_" $10 "_" $11 "_" $12 "_" $13; av[p] = argv($0); ord[++np] = p }
+NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; st[p] = lstart(); av[p] = argv($0); ord[++np] = p }
 END {
     c += 0; if (c <= 1 || !(c in pp) || nt == 0) exit
-    q = self + 0; d = 0
-    while (q > 0 && (q in pp) && d++ < 64) { anc[q] = 1; q = pp[q] }
+    ancestors(self)
     for (k = 1; k <= np; k++) {
         p = ord[k]
         if (pp[p] != c || anc[p] || uid[p] != me || !(p in out)) continue

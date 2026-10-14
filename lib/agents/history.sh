@@ -29,10 +29,9 @@ agents_sample() {
         umask 077
         lock="$AGENTS_DATA_DIR/sample.lock"
         _agents_data_dir || { echo "agents: cannot create $AGENTS_DATA_DIR" >&2; exit 1; }
-        [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
-        mkdir "$lock" 2>/dev/null || exit 0
+        _agents_lock "$lock" || exit 0
         _agents_sample_locked; rc=$?
-        rmdir "$lock" 2>/dev/null
+        _agents_unlock "$lock"
         exit "$rc"
     )
 }
@@ -41,7 +40,7 @@ _agents_sample_locked() {
     local dir="$AGENTS_DATA_DIR" now day ps recs type pid rest
     read -r now day <<<"$(date '+%s %Y-%m-%d')"
     # The stamp first: a failing sample is retried a minute later, not at once.
-    printf '%s\n' "$now" > "$dir/sample.stamp.$$" && mv -f "$dir/sample.stamp.$$" "$dir/sample.stamp"
+    _agents_replace "$dir/sample.stamp" "$now"
     ps="$(agents_snapshot)"
     [[ -n "$ps" ]] || { echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2; return 1; }
     recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC=1 agents_classify "" "$(_agents_keep_pids "$ps")")"
@@ -58,7 +57,7 @@ _agents_sample_locked() {
 # _agents_sample_rows NOW DAY DIR < ENRICHED_AND_JP_RECORDS — the history rows
 # (stdout); writes DIR/sample.state.new and DIR/today.tsv.new.
 _agents_sample_rows() {
-    _agents_awk sample -F '\t' -v now="$1" -v day="$2" -v sf="$3/sample.state" -v tf="$3/today.tsv"
+    _agents_awk "lib_sort sample" -F '\t' -v now="$1" -v day="$2" -v sf="$3/sample.state" -v tf="$3/today.tsv"
 }
 
 # _agents_history_prune NOW DAY — drop history and events older than
@@ -95,18 +94,16 @@ _agents_prune_file() {
 # minute old or more.
 _agents_sample_due() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 1
-    local now="${1:-}" stamp=""
+    local now="${1:-}" age
     [[ -n "$now" ]] || now="$(date +%s)"
-    [[ -r "$AGENTS_DATA_DIR/sample.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/sample.stamp"
-    [[ "$stamp" =~ ^[0-9]+$ ]] || stamp=0
-    [[ $((now - stamp)) -ge 60 ]]
+    _agents_stamp_age age "$AGENTS_DATA_DIR/sample.stamp" "$now"
+    [[ $age -ge 60 ]]
 }
 
 # _agents_sample_kick — sample in the background when one is due (agents watch).
 _agents_sample_kick() {
     _agents_sample_due || return 0
-    ( trap '' HUP; agents_sample ) </dev/null >/dev/null 2>&1 &
-    disown $! 2>/dev/null
+    _agents_detach agents_sample
     return 0
 }
 

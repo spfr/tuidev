@@ -9,7 +9,7 @@
 #   watched.sh (_agents_watched, _agents_watch_info), awake.sh
 #   (_agents_awake_pid).
 # Public: agents_snapshot, agents_collect, agents_secs, _agents_start,
-#   _agents_cwds.
+#   _agents_cwds, _agents_proc_paths.
 
 # One line per process: pid ppid uid user %cpu rss(KiB) cputime etime
 # lstart(5 words) args. BSD option syntax, which macOS and procps both take.
@@ -47,16 +47,24 @@ _agents_listeners() {
 }
 
 # _agents_cwds PID... — "pid<TAB>cwd" lines.
-_agents_cwds() {
+_agents_cwds() { _agents_proc_paths cwd "$@"; }
+
+# _agents_proc_paths cwd|FD PID... — "pid<TAB>path" for each process's
+# working directory or open file descriptor FD: from /proc on Linux ("-" when
+# it can't be read), else one lsof for all of them (-b: never block on a
+# stale mount).
+_agents_proc_paths() {
+    local what="$1" p link
+    shift
     [[ $# -gt 0 ]] || return 0
-    local p
-    if [[ -d /proc/self ]]; then
+    if [[ -d /proc/self/fd ]]; then
+        link="$what"; [[ "$what" == cwd ]] || link="fd/$what"
         for p in "$@"; do
-            printf '%s\t%s\n' "$p" "$(readlink "/proc/$p/cwd" 2>/dev/null || echo -)"
+            printf '%s\t%s\n' "$p" "$(readlink "/proc/$p/$link" 2>/dev/null || echo -)"
         done
     elif command -v lsof >/dev/null 2>&1; then
         local IFS=,
-        lsof -b -w -a -d cwd -Fpn -p "$*" 2>/dev/null | awk '/^p/ { p = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) }'
+        lsof -b -w -a -d "$what" -Fpn -p "$*" 2>/dev/null | awk '/^p/ { p = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) }'
     fi
 }
 
@@ -78,33 +86,38 @@ _agents_herdr() {
 # old) and refreshes it in the background. sync (the terminal) asks Herdr
 # when the cache is stale.
 _agents_herdr_cached() {
-    local cache="$AGENTS_RUN_DIR/herdr.tsv" ts="" now age line
+    local cache="$AGENTS_RUN_DIR/herdr.tsv" now age
     now="$(date +%s)"
-    [[ -r "$cache" ]] && read -r ts < "$cache"
-    [[ "$ts" =~ ^[0-9]+$ ]] || ts=0          # a damaged cache counts as stale
-    age=$((now - ${ts:-0}))
+    _agents_stamp_age age "$cache" "$now"    # a damaged cache counts as stale
     if [[ $age -lt 10 || ( "$1" == async && $age -lt 60 ) ]]; then
-        { read -r _; while IFS= read -r line; do printf '%s\n' "$line"; done; } < "$cache"
+        _agents_herdr_show "$cache"
         [[ $age -lt 10 ]] && return 0
     fi
     if [[ "$1" == async ]]; then
-        ( _agents_herdr_refresh ) </dev/null >/dev/null 2>&1 &
+        _agents_detach _agents_herdr_refresh
         return 0
     fi
     _agents_herdr_refresh
-    [[ -r "$cache" ]] && { read -r _; while IFS= read -r line; do printf '%s\n' "$line"; done; } < "$cache"
+    [[ -r "$cache" ]] && _agents_herdr_show "$cache"
     return 0
+}
+
+# _agents_herdr_show CACHE — its answer: every line after the epoch.
+_agents_herdr_show() {
+    local line
+    { read -r _; while IFS= read -r line; do printf '%s\n' "$line"; done; } < "$1"
 }
 
 # Rewrite the cache from a fresh query; one refresh at a time.
 _agents_herdr_refresh() {
-    local cache="$AGENTS_RUN_DIR/herdr.tsv" lock="$AGENTS_RUN_DIR/herdr.lock"
+    local lock="$AGENTS_RUN_DIR/herdr.lock" now out
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 0
-    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
-    mkdir "$lock" 2>/dev/null || return 0
-    { date +%s; _agents_herdr_query; } > "$cache.$$" 2>/dev/null && mv -f "$cache.$$" "$cache"
-    rm -f "$cache.$$"
-    rmdir "$lock" 2>/dev/null
+    _agents_lock "$lock" || return 0
+    now="$(date +%s)"
+    if out="$(_agents_herdr_query)"; then
+        _agents_replace "$AGENTS_RUN_DIR/herdr.tsv" "$now${out:+$'\n'$out}"
+    fi
+    _agents_unlock "$lock"
     return 0
 }
 

@@ -7,7 +7,8 @@
 # Uses: config.sh, util.sh, snapshot.sh, classify.sh (agents_project),
 #   events.sh (_agents_log_cleanups), notify.sh; awk/refusal.awk,
 #   awk/tree.awk, awk/new_members.awk.
-# Public: agents_refusal, agents_tree, agents_kill_tokens.
+# Public: agents_refusal, agents_tree, agents_kill_tokens,
+#   _agents_kill_unattended.
 
 # agents_refusal PID [SNAPSHOT] — why PID must not be signalled (exit 0 and a
 # reason), or nothing (exit 1). Refuses pid <= 1, this process and its
@@ -43,11 +44,18 @@ _agents_signal() {
     kill "-$1" "$2" 2>/dev/null
 }
 
+# _agents_kill_unattended TOKEN... — agents_kill_tokens on whole trees, with
+# no question asked and no notification (auto-reap and the hooks; the
+# caller's AGENTS_DRY_RUN still holds).
+_agents_kill_unattended() {
+    AGENTS_YES=true AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false agents_kill_tokens true "$@"
+}
+
 # _agents_plan TOKEN SNAPSHOT TREE — print the planned victims ("pid start
 # name" lines, the root last) for TOKEN = PID or PID@START; complain and fail
 # otherwise. Tree members owned by someone else, or critical, are skipped.
 _agents_plan() {
-    local token="$1" snap="$2" tree="$3" pid want why now
+    local token="$1" snap="$2" tree="$3" pid want why now members
     pid="${token%%@*}"; want=""
     [[ "$token" == *@* ]] && want="${token#*@}"
     if why="$(agents_refusal "$pid" "$snap")"; then
@@ -57,16 +65,17 @@ _agents_plan() {
     if [[ -n "$want" && "$now" != "$want" ]]; then
         echo "  refuse $pid: not the process that was listed (its start time changed)" >&2; return 1
     fi
+    members="$(printf '%s\n' "$snap" | agents_tree "$pid")"
     if [[ "$tree" == true ]]; then
-        if printf '%s\n' "$snap" | agents_tree "$pid" | awk -F '\t' -v s="$AGENTS_SELF" '$1 == s { f = 1 } END { exit !f }'; then
+        if printf '%s\n' "$members" | awk -F '\t' -v s="$AGENTS_SELF" '$1 == s { f = 1 } END { exit !f }'; then
             echo "  refuse $pid: this shell runs inside that tree" >&2; return 1
         fi
-        printf '%s\n' "$snap" | agents_tree "$pid" | awk -F '\t' -v me="$AGENTS_UID" '
+        printf '%s\n' "$members" | awk -F '\t' -v me="$AGENTS_UID" '
             $5 == 1  { printf "  skip %s (%s): a system or session process\n", $1, $4 > "/dev/stderr"; next }
             $3 == me { print $1 "\t" $2 "\t" $4; next }
             { printf "  skip %s (%s): another user owns it\n", $1, $4 > "/dev/stderr" }'
     else
-        printf '%s\n' "$snap" | agents_tree "$pid" | awk -F '\t' -v t="$pid" '$1 == t { print $1 "\t" $2 "\t" $4 }'
+        printf '%s\n' "$members" | awk -F '\t' -v t="$pid" '$1 == t { print $1 "\t" $2 "\t" $4 }'
     fi
 }
 

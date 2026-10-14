@@ -15,7 +15,7 @@ agents_json() {
     lvl="$(agents_thermal_level)"
     sys="$(agents_system)"
     AW_PID="$pid" AW_MODE="$mode" AW_UNTIL="$until" TH="${lvl:-}" TH_NAME="$(agents_thermal_name "${lvl:--}")" \
-    PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LID="$(_agents_lid_json)" _agents_awk json -F '\t'
+    PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LID="$(_agents_lid_json)" _agents_awk "lib_json json" -F '\t'
 }
 
 # _agents_lid_json — the "lid" object of agents json: numbers and booleans only.

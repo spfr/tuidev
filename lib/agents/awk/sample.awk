@@ -1,6 +1,6 @@
 # lib/agents/awk/sample.awk — _agents_sample_rows: one history sample from
 # enriched records and jp lines, against the previous sample.state
-# (history.sh documents the files).
+# (history.sh documents the files). Needs lib_sort.
 
 BEGIN {
     last = 0; n = 0
@@ -43,11 +43,7 @@ END {
     }
     nj = 0
     for (j in tj) jo[++nj] = j
-    for (i = 1; i <= nj; i++) {
-        b = i
-        for (j = i + 1; j <= nj; j++) if (tj[jo[j]] > tj[jo[b]] || (tj[jo[j]] == tj[jo[b]] && jo[j] < jo[b])) b = j
-        t = jo[i]; jo[i] = jo[b]; jo[b] = t
-    }
+    sortk(tj, jo, nj)
     out = tf ".new"
     printf "%s\t%d\n", day, ttot > out
     for (i = 1; i <= nj; i++) printf "%s\t%d\n", jo[i], tj[jo[i]] > out

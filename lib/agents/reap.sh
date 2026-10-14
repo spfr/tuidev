@@ -4,8 +4,8 @@
 # Owns: the reap plan (stale trees; with --stuck, stuck polling loops),
 #   each item's reason for the event log, and auto-reap (only what
 #   agents_assess calls safe for it, at most once a minute from the menu).
-# Uses: config.sh, snapshot.sh (agents_collect), assess.sh (agents_assess),
-#   kill.sh (agents_kill_tokens), notify.sh.
+# Uses: config.sh, util.sh (_agents_lock, the auto-reap stamp), snapshot.sh
+#   (agents_collect), assess.sh (agents_assess), kill.sh, notify.sh.
 # Public: agents_reap, agents_reap_auto, agents_reap_tokens,
 #   agents_reap_reasons, agents_auto_tokens.
 
@@ -37,16 +37,13 @@ agents_auto_tokens() {
 # written under a lock (mkdir is atomic), so two overlapping menu runs never
 # both start a reap; a lock older than a minute is a leftover and is removed.
 _agents_auto_due() {
-    local f="$AGENTS_RUN_DIR/auto-reap" lock="$AGENTS_RUN_DIR/auto-reap.lock" ts="" now rc=1
+    local f="$AGENTS_RUN_DIR/auto-reap" lock="$AGENTS_RUN_DIR/auto-reap.lock" now age rc=1
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
-    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
-    mkdir "$lock" 2>/dev/null || return 1
+    _agents_lock "$lock" || return 1
     now="$(date +%s)"
-    [[ -r "$f" ]] && read -r ts < "$f"
-    [[ "$ts" =~ ^[0-9]+$ ]] || ts=0
-    if [[ $((now - ts)) -ge 60 ]] && printf '%s\n' "$now" > "$f.$$" 2>/dev/null && mv -f "$f.$$" "$f"; then rc=0; fi
-    rm -f "$f.$$"
-    rmdir "$lock" 2>/dev/null
+    _agents_stamp_age age "$f" "$now"
+    if [[ $age -ge 60 ]] && _agents_replace "$f" "$now"; then rc=0; fi
+    _agents_unlock "$lock"
     return $rc
 }
 
@@ -70,8 +67,7 @@ agents_reap_auto() {
         tokens+=" $t"; reasons+="${t%%@*}"$'\t'"$r"$'\t'"$s"$'\n'
     done <<<"$plan"
     # shellcheck disable=SC2086  # one token per word, none has spaces
-    AGENTS_YES=true AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false _AGENTS_EV_KIND=auto _AGENTS_EV_REASONS="$reasons" \
-        agents_kill_tokens true $tokens || return $?
+    _AGENTS_EV_KIND=auto _AGENTS_EV_REASONS="$reasons" _agents_kill_unattended $tokens || return $?
     [[ "${_AGENTS_EV_N:-0}" -gt 0 ]] || return 0
     AGENTS_NOTIFY="$notify" _agents_notify "Auto-reap stopped $_AGENTS_EV_N: $_AGENTS_EV_DONE"
 }

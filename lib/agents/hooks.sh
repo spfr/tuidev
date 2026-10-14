@@ -24,7 +24,8 @@
 #
 # Uses: config.sh (AGENTS_HOOK_REAP, _AGENTS_HOOK_DRY), util.sh, snapshot.sh,
 #   classify.sh (agents_project), kill.sh (agents_kill_tokens), events.sh
-#   (agents_event), notify.sh; awk/hook_claude.awk, awk/hook_match.awk.
+#   (agents_event), notify.sh; awk/hook_claude.awk, awk/hook_children.awk,
+#   awk/hook_match.awk.
 # Public: agents_hook.
 
 # _agents_hook_input < HOOK_JSON — one tab-separated line: event session
@@ -45,10 +46,13 @@ _agents_hook_path() {
 # possible, by grep under LC_ALL=C with fixed strings; jq and awk see only the
 # lines it finds, and jq runs only for tasks that may still be running.
 
+# The key on every transcript line that names a background task.
+_AGENTS_HOOK_TASK_KEY='"backgroundTaskId"'
+
 # _agents_hook_started TRANSCRIPT — the lines that name a background task.
 _agents_hook_started() {
     [[ -f "$1" && -r "$1" ]] || return 0
-    LC_ALL=C grep -F '"backgroundTaskId"' "$1" 2>/dev/null
+    LC_ALL=C grep -F "$_AGENTS_HOOK_TASK_KEY" "$1" 2>/dev/null
 }
 
 # _agents_hook_ids < LINES — every background task id they name.
@@ -152,27 +156,11 @@ _agents_hook_claude() {
 # _agents_hook_children SNAPSHOT CLAUDE — CLAUDE's direct children, without
 # this process's own ancestors (the hook's shell).
 _agents_hook_children() {
-    printf '%s\n' "$1" | LC_ALL=C awk -v self="$AGENTS_SELF" -v c="$2" '
-        NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; ord[++n] = p }
-        END {
-            q = self + 0; d = 0
-            while (q > 0 && (q in pp) && d++ < 64) { anc[q] = 1; q = pp[q] }
-            for (k = 1; k <= n; k++) if (pp[ord[k]] == c + 0 && !anc[ord[k]]) print ord[k]
-        }'
+    printf '%s\n' "$1" | _agents_awk "lib_proc hook_children" -v self="$AGENTS_SELF" -v c="$2"
 }
 
 # _agents_hook_stdouts PID... — "pid<TAB>path" of each one's stdout (fd 1).
-# One lsof for all of them (-b: never block on a stale mount); /proc on Linux.
-_agents_hook_stdouts() {
-    [[ $# -gt 0 ]] || return 0
-    local p
-    if [[ -d /proc/self/fd ]]; then
-        for p in "$@"; do printf '%s\t%s\n' "$p" "$(readlink "/proc/$p/fd/1" 2>/dev/null || echo -)"; done
-    elif command -v lsof >/dev/null 2>&1; then
-        local IFS=,
-        lsof -b -w -a -d 1 -Fpn -p "$*" 2>/dev/null | awk '/^p/ { p = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) }'
-    fi
-}
+_agents_hook_stdouts() { _agents_proc_paths 1 "$@"; }
 
 # _agents_hook_match SNAPSHOT CLAUDE TASKS STDOUTS — one line per task that
 # runs as a direct child of CLAUDE:
@@ -201,7 +189,7 @@ _agents_hook_collect() {
     case "$event" in
         subagent-stop)
             if [[ ! -f "$agent" ]]; then _agents_hook_say "no subagent transcript ($agent): nothing to do"; return 1; fi
-            if ! LC_ALL=C grep -qF '"backgroundTaskId"' "$agent" 2>/dev/null; then
+            if ! LC_ALL=C grep -qF "$_AGENTS_HOOK_TASK_KEY" "$agent" 2>/dev/null; then
                 _agents_hook_say "the subagent started no background commands"; return 1
             fi
             _agents_hook_own_tasks "$agent" "$main" all ;;
@@ -218,7 +206,7 @@ _agents_hook_collect() {
             _agents_hook_tasks "$main" "$started" | awk '{ print $0 "\twait" }'
             for f in "${main%.jsonl}"/subagents/agent-*.jsonl; do [[ -f "$f" ]] && subs+=("$f"); done
             [[ ${#subs[@]} -gt 0 ]] || return 0
-            all="$(LC_ALL=C grep -HF '"backgroundTaskId"' "${subs[@]}" 2>/dev/null)"
+            all="$(LC_ALL=C grep -HF "$_AGENTS_HOOK_TASK_KEY" "${subs[@]}" 2>/dev/null)"
             for f in "${subs[@]}"; do
                 [[ "$all" == *"$f:"* ]] || continue
                 sf="$(printf '%s\n' "$all" | H_F="$f:" LC_ALL=C awk '
@@ -243,9 +231,7 @@ agents_hook() {
     esac
     [[ "$AGENTS_HOOK_REAP" == 1 ]] || { _agents_hook_say "AGENTS_HOOK_REAP=$AGENTS_HOOK_REAP: off"; return 0; }
     command -v jq >/dev/null 2>&1 || return 0
-    local euid="$EUID"
-    [[ -z "${AGENTS_TESTING:-}" ]] || euid="${AGENTS_EUID:-$EUID}"
-    [[ "$euid" -ne 0 ]] || return 0
+    if _agents_is_root; then return 0; fi
     if [[ -t 0 ]]; then echo "agents hook: pipe the hook's JSON to stdin" >&2; return 0; fi
     local fields _ev _sid main _aid atype agent cwd reason
     fields="$(_agents_hook_input)"
@@ -286,11 +272,11 @@ _agents_hook_reap() {
             printf '  task %s: %s, pid %s (matched by %s)\n' "$id" "$name" "${token%@*}" "$how"
         done <<<"$matches"
         # shellcheck disable=SC2086  # one PID@START token per word
-        AGENTS_DRY_RUN=true AGENTS_YES=true AGENTS_NOTIFY=false agents_kill_tokens true $tokens 2>&1
+        AGENTS_DRY_RUN=true _agents_kill_unattended $tokens 2>&1
         return 0
     fi
     # shellcheck disable=SC2086
-    out="$(AGENTS_DRY_RUN=false AGENTS_YES=true AGENTS_NOTIFY=false AGENTS_CONFIRM_GUI=false agents_kill_tokens true $tokens 2>&1)"
+    out="$(AGENTS_DRY_RUN=false _agents_kill_unattended $tokens 2>&1)"
     planned="$(printf '%s\n' "$out" | awk '/^  [0-9]+ / { print $1 }')"
     while IFS=$'\t' read -r token id how name _w; do
         [[ $'\n'"$planned"$'\n' == *$'\n'"${token%@*}"$'\n'* ]] || continue

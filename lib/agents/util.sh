@@ -2,10 +2,14 @@
 # lib/agents/util.sh — small helpers the other modules share.
 #
 # Owns: running the awk programs in awk/, durations and clock times, a word
-#   of a line, a command with a timeout, removing a state file safely.
+#   of a line, a command with a timeout or in the background, and the state
+#   files in the run and data directories: lock directories, epoch stamps,
+#   replacing or removing a file safely.
 # Uses: _AGENTS_AWK_DIR (set by bin/agents).
 # Public: _agents_awk, _agents_awk_eval, agents_parse_duration,
-#   _agents_clock, _agents_field, _agents_timeout, _agents_rm_if_same.
+#   _agents_clock, _agents_field, _agents_timeout, _agents_detach,
+#   _agents_lock, _agents_unlock, _agents_stamp_age, _agents_replace,
+#   _agents_rm_if_same.
 
 # _agents_awk "FILE..." [AWK_OPTION...] — awk, under LC_ALL=C, running the
 # concatenation of awk/FILE.awk... (the shared lib_*.awk first, then the
@@ -51,6 +55,48 @@ _agents_timeout() {
     wait "$pid"; rc=$?
     kill "$watcher" 2>/dev/null
     return "$rc"
+}
+
+# _agents_detach CMD... — run CMD in the background, immune to hangups, with
+# no terminal, and forget it (no job to wait for). Its pid is in $!.
+_agents_detach() {
+    ( trap '' HUP; "$@" ) </dev/null >/dev/null 2>&1 &
+    disown $! 2>/dev/null
+}
+
+# _agents_lock DIR [TRIES [PAUSE]] — take the lock DIR (mkdir is atomic),
+# trying TRIES times (default 1), PAUSE seconds apart (default 0.1). A lock
+# older than a minute was left by a run that died: the first failed try takes
+# it over. False when it could not be had; _agents_unlock DIR releases it.
+_agents_lock() {
+    local lock="$1" tries="${2:-1}" pause="${3:-0.1}" i=0
+    until mkdir "$lock" 2>/dev/null; do
+        if [[ $i -eq 0 && -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; then
+            rmdir "$lock" 2>/dev/null; i=1; continue
+        fi
+        i=$((i + 1))
+        [[ $i -lt $tries ]] || return 1
+        sleep "$pause" 2>/dev/null || sleep 1
+    done
+}
+_agents_unlock() { rmdir "$1" 2>/dev/null; return 0; }
+
+# _agents_stamp_age VAR FILE NOW — set VAR to the seconds from the epoch on
+# FILE's first line to NOW; NOW itself when FILE is missing or damaged (the
+# stamp then counts as long ago).
+_agents_stamp_age() {
+    local _stamp=""
+    [[ -r "$2" ]] && read -r _stamp < "$2"
+    [[ "$_stamp" =~ ^[0-9]+$ ]] || _stamp=0
+    printf -v "$1" '%s' "$(( $3 - _stamp ))"
+}
+
+# _agents_replace FILE TEXT — FILE now holds TEXT (and a newline): written
+# beside it and renamed over it, so a reader never sees half of it.
+_agents_replace() {
+    { printf '%s\n' "$2" > "$1.$$"; } 2>/dev/null && mv -f "$1.$$" "$1" && return 0
+    rm -f "$1.$$"
+    return 1
 }
 
 # _agents_rm_if_same FILE CONTENT — remove FILE only if it still holds CONTENT,

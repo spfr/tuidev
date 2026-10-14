@@ -31,7 +31,7 @@ agents_tsv() {
     printf 'thermal\t%s\t%s\n' "${lvl:--}" "$(agents_thermal_name "${lvl:--}")"
     printf 'power\t%s\n' "$(agents_powermode)"
     _agents_hist_line
-    lmax="$(agents_parse_duration "$AGENTS_LID_MAX")" || lmax=28800
+    lmax="$(_agents_lid_max)"
     if state="$(agents_lid_state)"; then
         read -r lpid luntil _ <<<"$state"; printf 'lid\ton\t%s\t%s\t%s\n' "$lpid" "$luntil" "$lmax"
     elif agents_lid_stale; then

@@ -7,7 +7,7 @@
 #   (agents_sleep_disabled), awake.sh (the holder it runs alongside),
 #   notify.sh (_agents_notify).
 # Public: agents_awake_lid, agents_lid_stop, agents_lid_state,
-#   agents_lid_stale, _agents_lid_warning, _AGENTS_LID_FIX.
+#   agents_lid_stale, _agents_lid_max, _agents_lid_warning, _AGENTS_LID_FIX.
 #
 # caffeinate never keeps a closed lid awake (except in closed-display mode).
 # `agents awake lid DURATION` does, with `pmset -a disablesleep 1`, which
@@ -118,21 +118,16 @@ _agents_lid_supported() {
 # same checks as agents_awake_state: cleared once it is really gone or its
 # pid names another process; a root process answers kill -0 with EPERM).
 agents_lid_state() {
-    local file="$AGENTS_RUN_DIR/lid" content pid start until now err verified=0
+    local file="$AGENTS_RUN_DIR/lid" content pid start until verified=0
     [[ -f "$file" ]] || return 1
     content="$(cat "$file" 2>/dev/null)"
     read -r pid start until <<<"$content" || true
-    if [[ ! "$pid" =~ ^[0-9]+$ ]]; then _agents_rm_if_same "$file" "$content"; return 1; fi
-    if ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; then
-        _agents_rm_if_same "$file" "$content"; return 1
-    fi
-    if [[ -n "$start" && "$start" != - ]]; then
-        now="$(_agents_start "$pid" 2>/dev/null)"
-        if [[ -n "$now" ]]; then
-            if [[ "$now" != "$start" ]]; then _agents_rm_if_same "$file" "$content"; return 1; fi
-            verified=1
-        fi
-    else
+    _agents_holder_check "$file" "$content" "$pid" "$start"
+    case $? in
+        0) verified=1 ;;
+        1) return 1 ;;
+    esac
+    if [[ $verified -eq 0 && ( -z "$start" || "$start" == - ) ]]; then
         # No start time was recorded: only root's agents-lid-guard counts. A
         # pid that now names something else is dropped; when ps answers
         # nothing, it can't be told, and the guard is not counted as live.
@@ -159,6 +154,9 @@ _agents_lid_is_guard() {
     printf '%s\n' "$out" | awk 'NR == 1 && $1 == 0 { r = 1 } / agents-lid-guard / { g = 1 } END { exit !(r && g) }'
 }
 
+# _agents_lid_max — AGENTS_LID_MAX in seconds (8h if it does not parse).
+_agents_lid_max() { agents_parse_duration "$AGENTS_LID_MAX" || echo 28800; }
+
 # agents_lid_stale — true when sleep is disabled and no guard of ours will
 # turn it back on (a reboot killed it, or someone ran pmset by hand).
 agents_lid_stale() {
@@ -180,7 +178,7 @@ agents_awake_lid() {
         echo "usage: agents awake lid DURATION (30m, 3h; at most $AGENTS_LID_MAX)" >&2; return 2
     fi
     secs="$(agents_parse_duration "$dur")" || { echo "agents: bad duration '$dur' (try 30m, 3h, 1h30m)" >&2; return 2; }
-    max="$(agents_parse_duration "$AGENTS_LID_MAX")" || max=28800
+    max="$(_agents_lid_max)"
     if [[ $secs -gt $max ]]; then
         echo "agents: $dur is longer than AGENTS_LID_MAX ($AGENTS_LID_MAX); lid mode is always time-boxed" >&2; return 2
     fi
@@ -220,9 +218,8 @@ agents_awake_lid() {
     printf '%s %s %s\n' "$gpid" "${start:--}" "$until" > "$AGENTS_RUN_DIR/lid"
     rm -f "$AGENTS_RUN_DIR/powermode"
     _agents_awake_off_holder >/dev/null || true
-    ( trap '' HUP; _agents_hold "$secs" ) </dev/null >/dev/null 2>&1 &
+    _agents_detach _agents_hold "$secs"
     pid=$!
-    disown "$pid" 2>/dev/null
     _agents_awake_write "$pid" lid "$until"
     echo "awake: on with the lid closed until $(_agents_clock "$until") (guard pid $gpid): lid sleep comes back then, below ${AGENTS_LID_MIN_BATTERY}% battery off AC, or when the Mac runs hot (heavy thermal pressure)"
     _agents_notify "Awake with the lid closed until $(_agents_clock "$until")"

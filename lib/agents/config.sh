@@ -8,7 +8,7 @@
 # The only module that does work when sourced: it reads agents.conf and
 #   checks what the environment set (bin/agents sources it first).
 # Uses: nothing.
-# Public: agents_conf_load, agents_config; the settings themselves, and
+# Public: agents_conf_load, agents_config, _agents_is_root; the settings, and
 #   AGENTS_ORPHAN_PATTERNS (extend it here; it is not a setting).
 
 # Precedence: environment, then the config file, then the defaults below. The
@@ -215,6 +215,14 @@ if [[ -n "${AGENTS_TESTING:-}" ]]; then
 else
     AGENTS_SELF=$$ AGENTS_UID="$UID"
 fi
+
+# _agents_is_root — true when running as root (the test harness may say so
+# with AGENTS_EUID).
+_agents_is_root() {
+    local euid="$EUID"
+    [[ -z "${AGENTS_TESTING:-}" ]] || euid="${AGENTS_EUID:-$EUID}"
+    [[ "$euid" -eq 0 ]]
+}
 
 # 1 (the default) lets the hooks stop what they find; 0 turns them off.
 AGENTS_HOOK_REAP="${AGENTS_HOOK_REAP:-1}"

@@ -10,7 +10,7 @@
 # Public: agents_awake, agents_awake_state, agents_awake_line,
 #   agents_awake_holders, _agents_awake_prime, _agents_awake_now,
 #   _agents_awake_pid; and, for lid.sh, _agents_hold, _agents_awake_write,
-#   _agents_awake_off_holder, _agents_inhibitor.
+#   _agents_awake_off_holder, _agents_inhibitor, _agents_holder_check.
 #
 # State: $AGENTS_RUN_DIR/awake holds "pid start mode until_epoch". The start
 # time guards against a reused pid after a reboot or a crash.
@@ -24,43 +24,43 @@ _agents_awake_file() { echo "$AGENTS_RUN_DIR/awake"; }
 # such process", or the pid now names a process with another start time. A
 # permission error (EPERM) proves nothing and keeps the record.
 agents_awake_state() {
-    local file content pid start mode until now="" err verified=0
+    local file content pid start mode until verified=0
     file="$(_agents_awake_file)"
     [[ -f "$file" ]] || return 1
     content="$(cat "$file" 2>/dev/null)"
     read -r pid start mode until <<<"$content" || true
-    if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
-        _agents_rm_if_same "$file" "$content"; return 1
-    fi
-    if ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; then
-        _agents_rm_if_same "$file" "$content"; return 1
-    fi
-    now="$(_agents_start "$pid" 2>/dev/null)"
-    if [[ -n "$now" && -n "$start" && "$start" != - ]]; then
-        if [[ "$now" != "$start" ]]; then
-            _agents_rm_if_same "$file" "$content"; return 1      # the pid was reused
-        fi
-        verified=1
-    fi
+    _agents_holder_check "$file" "$content" "$pid" "$start"
+    case $? in 0) verified=1 ;; 1) return 1 ;; esac
     echo "$pid $mode ${until:-0} $verified"
 }
 
-# Serialize on/off/agents with a lock directory (mkdir is atomic). A lock left
-# by a crashed run is broken after a minute.
-_agents_lock() {
-    local lock="$AGENTS_RUN_DIR/awake.lock" i=0
-    mkdir -p "$AGENTS_RUN_DIR" || return 1
-    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
-    until mkdir "$lock" 2>/dev/null; do
-        i=$((i + 1))
-        if [[ $i -ge 50 ]]; then
-            echo "agents: keep-awake is busy (remove $lock if no other agents runs)" >&2
-            return 1
-        fi
-        sleep 0.1
-    done
+# _agents_holder_check FILE CONTENT PID START — is PID, which the state file
+# FILE (holding CONTENT) records with start time START, still that process?
+# 0: yes, its start time matches. 1: no: kill -0 says "No such process", or
+# the pid now names a process with another start time (a reused pid); FILE
+# is removed if it still holds CONTENT. 2: it exists, but START is unknown
+# ("-") or ps can't tell (a permission error, EPERM, also proves nothing).
+_agents_holder_check() {
+    local file="$1" content="$2" pid="$3" start="$4" err now
+    if [[ ! "$pid" =~ ^[0-9]+$ ]] || { ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; }; then
+        _agents_rm_if_same "$file" "$content"; return 1
+    fi
+    [[ -n "$start" && "$start" != - ]] || return 2
+    now="$(_agents_start "$pid" 2>/dev/null)"
+    [[ -n "$now" ]] || return 2
+    [[ "$now" == "$start" ]] && return 0
+    _agents_rm_if_same "$file" "$content"; return 1
 }
-_agents_unlock() { rmdir "$AGENTS_RUN_DIR/awake.lock" 2>/dev/null; return 0; }
+
+# Serialize on/off/agents with a lock directory, waiting up to five seconds
+# (a lock left by a crashed run is broken after a minute).
+_agents_awake_lock() {
+    mkdir -p "$AGENTS_RUN_DIR" || return 1
+    _agents_lock "$AGENTS_RUN_DIR/awake.lock" 50 0.1 && return 0
+    echo "agents: keep-awake is busy (remove $AGENTS_RUN_DIR/awake.lock if no other agents runs)" >&2
+    return 1
+}
+_agents_awake_unlock() { _agents_unlock "$AGENTS_RUN_DIR/awake.lock"; }
 
 # The platform's sleep inhibitor, or fail with a message.
 _agents_inhibitor() {
@@ -132,9 +132,8 @@ agents_awake_on() {
     # Only the holder is replaced: lid mode, when on, keeps running until it
     # times out or `awake off` / `awake restore` ends it (no dialog here).
     _agents_awake_off_holder >/dev/null || return 1
-    ( trap '' HUP; _agents_hold "$secs" ) </dev/null >/dev/null 2>&1 &
+    _agents_detach _agents_hold "$secs"
     pid=$!
-    disown "$pid" 2>/dev/null
     if [[ -n "$secs" ]]; then mode=timed; else mode=on; fi
     _agents_awake_write "$pid" "$mode" "$until"
     if [[ -n "$secs" ]]; then echo "awake: on until $(_agents_clock "$until") (pid $pid)"; else echo "awake: on until 'agents awake off' (pid $pid)"; fi
@@ -166,7 +165,7 @@ _agents_awake_loop() {
     trap '[[ -n "$hold" ]] && kill "$hold" 2>/dev/null; [[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT HUP
     while [[ "$(_agents_count)" -gt 0 ]]; do
         if [[ -z "$hold" ]] || ! kill -0 "$hold" 2>/dev/null; then
-            ( trap '' HUP; _agents_hold "" "$$" ) </dev/null >/dev/null 2>&1 &
+            _agents_detach _agents_hold "" "$$"
             hold=$!
         fi
         sleep "$AGENTS_AWAKE_POLL" &
@@ -222,11 +221,11 @@ agents_awake() {
     local rc
     case "${1:-status}" in
         on|off|agents|lid|restore)
-            _agents_lock || return 1
+            _agents_awake_lock || return 1
             # Release the lock however this ends (an error exit, Ctrl-C, kill).
-            trap '_agents_unlock' EXIT
-            trap '_agents_unlock; exit 130' INT
-            trap '_agents_unlock; exit 143' TERM
+            trap '_agents_awake_unlock' EXIT
+            trap '_agents_awake_unlock; exit 130' INT
+            trap '_agents_awake_unlock; exit 143' TERM
             case "$1" in
                 on)      agents_awake_on "${2:-}" ;;
                 off)     agents_awake_off ;;
@@ -235,7 +234,7 @@ agents_awake() {
                 restore) agents_lid_stop --always ;;
             esac
             rc=$?
-            _agents_unlock
+            _agents_awake_unlock
             trap - EXIT INT TERM
             return "$rc"
             ;;

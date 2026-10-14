@@ -3,8 +3,8 @@
 
 NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; usr[p] = $4; av[p] = argv($0); ord[++n] = p }
 END {
-    q = self + 0; d = 0
-    while (q > 0 && (q in pp) && d++ < 64) { if (q == t) { print "this shell or one of its parents"; exit } q = pp[q] }
+    ancestors(self)
+    if ((t + 0) in anc) { print "this shell or one of its parents"; exit }
     if (!(t in pp)) { print "no such process"; exit }
     if (critical(av[t])) { print "a system or session process (" pname(av[t]) "): quit it yourself if you mean it"; exit }
     # A terminal, editor or multiplexer hosting shells or agents (Warp,

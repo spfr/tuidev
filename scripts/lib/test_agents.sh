@@ -1350,4 +1350,20 @@ rm -rf "$ev"; AGENTS_HISTORY=0 AGENTS_DATA_DIR="$ev" agents_event kill manual 1 
 [[ ! -e "$ev" ]] || fail "events: written with AGENTS_HISTORY=0"
 pass "events: one sanitized line per cleanup; AGENTS_HISTORY=0 writes nothing"
 
+# The state-file helpers every lock and stamp goes through (util.sh).
+lk="$tmp/locks" age=""; mkdir -p "$lk"
+_agents_lock "$lk/a" || fail "lock: a free lock not taken"
+! _agents_lock "$lk/a" || fail "lock: a held lock taken twice"
+! _agents_lock "$lk/a" 3 0.05 || fail "lock: a held lock taken on a retry"
+_agents_unlock "$lk/a"; [[ ! -e "$lk/a" ]] || fail "unlock left the lock"
+mkdir "$lk/old"; touch -t 202001010000 "$lk/old"
+_agents_lock "$lk/old" || fail "lock: a leftover lock (older than a minute) not taken over"
+_agents_stamp_age age "$lk/none" 1000; [[ "$age" == 1000 ]] || fail "stamp: a missing file is not long ago: $age"
+printf 'junk\n' > "$lk/s"; _agents_stamp_age age "$lk/s" 1000; [[ "$age" == 1000 ]] || fail "stamp: a damaged file is not long ago: $age"
+_agents_replace "$lk/s" 940 || fail "replace failed"
+_agents_stamp_age age "$lk/s" 1000
+[[ "$age" == 60 && "$(cat "$lk/s")" == 940 && ! -e "$lk/s.$$" ]] || fail "replace + stamp age: $age, $(cat "$lk/s")"
+! _agents_replace "$lk/nodir/x" 1 || fail "replace into a missing directory succeeded"
+pass "state files: one lock holder, retries, a leftover lock taken over; epoch stamps; whole-file replace"
+
 echo "All agents tests passed."
