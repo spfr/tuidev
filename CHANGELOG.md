@@ -13,6 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reap` still kills stale trees only.
 - **`AGENTS_WAIT_STUCK`** (minutes, default 60; `0` turns it off) in
   `~/.config/agents.conf`.
+- **Keep awake with the lid closed, opt-in (macOS): `agents awake lid 3h`.**
+  `caffeinate` can't keep a closed lid awake, so this runs `pmset -a
+  disablesleep 1` after macOS's own admin dialog, every time. No sudo rights
+  are stored. It is always time-boxed (`AGENTS_LID_MAX`, default 8h). The
+  same root command starts a small root-owned guard, which turns lid sleep
+  back on when the time is up, below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or
+  when thermal pressure rises above nominal. The usual `caffeinate -di` holder
+  runs alongside for the same time. `agents awake off` ends it early (one more
+  dialog), and `agents awake restore` turns lid sleep back on whatever
+  disabled it. macOS keeps the setting across a reboot that kills the guard,
+  so `agents`, `agents awake status`, the menu (a red Restore lid sleep…) and
+  `make check` warn: "lid sleep disabled with nothing to restore it". The
+  menu's Lid closed too… group (1h, 3h, 8h) shows only with `AGENTS_LID=1`.
+  Linux reports it as unsupported. `agents json` gains a `lid` object, and
+  `awake.mode` can be `lid` (still `schema_version` 1).
 
 ### Fixed
 - **A polling loop that never ends no longer reads as a calm "waiting".**

@@ -119,6 +119,7 @@ me="${USER:-$(id -un)}"
 n_agents=0 n_blocked=0 n_stale=0 n_hogs=0
 needs_menu="" agents_menu="" daemon_menu="" stale_menu="" hogs_menu="" top_menu="" stale_tokens=""
 awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
+lid_state=off lid_until=0 lid_max=28800 BAR_LID=0
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents stale hogs awake system" BAR_ICON=terminal CONF=""
 
@@ -263,12 +264,14 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         awake)   awake_mode="$pid"; awake_until="$age_s" ;;   # awake MODE PID UNTIL
         thermal) thermal="$pid"; thermal_name="$kind" ;;
         power)   power="$pid" ;;
+        lid)     lid_state="$pid"; lid_until="$age_s"; lid_max="$pcpu" ;;   # lid STATE PID UNTIL MAX
         conf)
             [[ "$kind" == - ]] && kind=""
             case "$pid" in
                 AGENTS_BAR_TITLE)    BAR_TITLE="$kind" ;;
                 AGENTS_BAR_SECTIONS) BAR_SECTIONS="$kind" ;;
                 AGENTS_BAR_ICON)     BAR_ICON="${kind:-terminal}" ;;
+                AGENTS_LID)          BAR_LID="$kind" ;;
                 AGENTS_CONF)         CONF="$kind" ;;
             esac
             ;;
@@ -334,6 +337,13 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     done <<<"$(aget stucks "$pid")"
 done
 
+# Sleep disabled with no guard to restore it (a reboot killed it): a Mac in a
+# bag would never sleep. First in Needs you, and the icon turns red.
+if [[ "$lid_state" == stale ]]; then
+    n_attn=$((n_attn + 1))
+    needs_menu="Restore lid sleep (disabled, nothing restores it)… | sfimage=exclamationmark.triangle.fill $DOT_RED $ACT param1=awake param2=restore symbolize=false"$'\n'"$needs_menu"
+fi
+
 # --- Title -------------------------------------------------------------------------
 # The icon, the session count, and how many sessions wait for you. The icon is
 # tinted only when something needs a look: orange for a blocked session, stale
@@ -342,7 +352,7 @@ done
 
 attention=""
 if [[ $n_attn -gt 0 || $n_stale -gt 0 || $n_hogs -gt 0 || "$mempress" == warn ]]; then attention="$ORANGE"; fi
-if { num "$thermal" && [[ $thermal -ge 2 ]]; } || [[ "$mempress" == critical ]]; then attention="$RED"; fi
+if { num "$thermal" && [[ $thermal -ge 2 ]]; } || [[ "$mempress" == critical || "$lid_state" == stale ]]; then attention="$RED"; fi
 
 bar_title() {
     local t=":$BAR_ICON:" tok
@@ -400,17 +410,36 @@ section_awake() {
     case "$awake_mode" in
         off)    text="Awake: off" ;;
         agents) text="Awake: while agents run" ;;
-        timed)  num "$awake_until" || awake_until=0
+        timed|lid) num "$awake_until" || awake_until=0
                 left=$((awake_until - $(date +%s)))
                 if [[ $left -lt 60 ]]; then text="Awake: <1m left"; else text="Awake: $(age "$left") left"; fi ;;
         *)      text="Awake: on until turned off" ;;
     esac
+    # Lid mode reads its time from the guard's record.
+    if [[ "$lid_state" == on ]]; then
+        num "$lid_until" || lid_until=0
+        left=$((lid_until - $(date +%s)))
+        if [[ $left -lt 60 ]]; then text="Awake: lid closed · <1m left"; else text="Awake: lid closed · $(age "$left") left"; fi
+    fi
     ck() { [[ "$awake_mode" == "$1" ]] && printf ' checked=true'; }
-    echo "$text | sfimage=cup.and.saucer $ROW"
+    if [[ "$lid_state" == stale ]]; then
+        echo "Lid sleep disabled, nothing restores it | sfimage=exclamationmark.triangle.fill $DOT_RED $ROW"
+        echo "Restore lid sleep… | $ACT param1=awake param2=restore sfimage=lock.open"
+    fi
+    echo "$text | sfimage=$([[ "$lid_state" == on ]] && echo laptopcomputer || echo cup.and.saucer) $ROW"
     echo "--Until turned off | $ACT param1=awake param2=on$(ck on)"
     echo "--For 1 hour | $ACT param1=awake param2=on param3=1h"
     echo "--For 3 hours | $ACT param1=awake param2=on param3=3h"
     echo "--While agents run | $ACT param1=awake param2=agents$(ck agents)"
+    # Opt-in (AGENTS_LID=1): disables lid sleep as root, time-boxed.
+    if [[ "$BAR_LID" == 1 ]]; then
+        echo "--Lid closed too… | sfimage=laptopcomputer $ROW"
+        num "$lid_max" || lid_max=28800
+        [[ $lid_max -ge 3600 ]] && echo "----For 1 hour | $ACT param1=awake param2=lid param3=1h"
+        [[ $lid_max -ge 10800 ]] && echo "----For 3 hours | $ACT param1=awake param2=lid param3=3h"
+        [[ $lid_max -ge 28800 ]] && echo "----For 8 hours | $ACT param1=awake param2=lid param3=8h"
+        echo "----Asks for your password; restores on timeout or low battery | size=11"
+    fi
     echo "--Off | $ACT param1=awake param2=off$(ck off)"
     echo "-----"
     echo "--Who holds the Mac awake? | $TERM_OPEN param2=--hold param3=awake param4=status"

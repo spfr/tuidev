@@ -293,6 +293,38 @@ check_extras() {
 }
 
 # ---------------------------------------------------------------------------
+# Category: power (macOS): sleep disabled with nothing to restore it
+# ---------------------------------------------------------------------------
+
+# `agents awake lid` disables sleep (pmset disablesleep 1) for a while and a
+# root guard turns it back on. macOS keeps the setting across a reboot, which
+# kills the guard: then the Mac never sleeps, lid closed or not.
+check_power() {
+    if ! is_macos || ! have_cmd pmset; then return 0; fi
+    print_header "Power (macOS)"
+    if ! LC_ALL=C pmset -g 2>/dev/null | awk '$1 == "SleepDisabled" && $2 == 1 { f = 1 } END { exit !f }'; then
+        print_success "Sleep is enabled (a closed lid sleeps)"
+        return 0
+    fi
+    if lid_guard_running; then
+        print_info "Sleep disabled by 'agents awake lid'; its guard turns it back on"
+        return 0
+    fi
+    print_error "${RED}Lid sleep disabled with nothing to restore it${NC} (pmset disablesleep 1, no agents awake lid guard)"
+    print_info "Fix: sudo pmset -a disablesleep 0   (or: agents awake restore)"
+    OPT_WARN=$((OPT_WARN + 1))
+}
+
+# The guard `agents awake lid` recorded is still running: root's, and named
+# agents-lid-guard.
+lid_guard_running() {
+    local pid
+    read -r pid _ < "${AGENTS_RUN_DIR:-$TUIDEV_STATE_DIR/run}/lid" 2>/dev/null || return 1
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+    LC_ALL=C ps -ww -o uid=,args= -p "$pid" 2>/dev/null | awk 'NR == 1 && $1 == 0 { r = 1 } / agents-lid-guard / { g = 1 } END { exit !(r && g) }'
+}
+
+# ---------------------------------------------------------------------------
 # Category: packs (optional, manifest-driven)
 # ---------------------------------------------------------------------------
 
@@ -394,6 +426,7 @@ run_checks() {
     # Extras + packs are never required.
     check_extras
     check_packs
+    check_power
 }
 
 print_summary() {

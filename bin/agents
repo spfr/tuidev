@@ -8,8 +8,8 @@
 #   stale     orphans an agent left behind: MCP servers, `npm exec`/npx
 #             helpers, `caffeinate`, and dev servers still listening;
 #   hogs      runaway processes of any owner (a Messages.app at 100% for days).
-# Plus keep-awake (`caffeinate`, never `pmset disablesleep` or sudo) and
-# thermal pressure. Installed by `./install.sh --pack monitoring`; the
+# Plus keep-awake (`caffeinate`; `pmset disablesleep` only through the explicit,
+# time-boxed `awake lid`, never by default) and thermal pressure. Installed by `./install.sh --pack monitoring`; the
 # SwiftBar plugin (configs/swiftbar/agents.10s.sh) reads `agents tsv`.
 #
 # Standalone on purpose: it runs from ~/.local/bin without the repo. bash 3.2;
@@ -25,6 +25,7 @@ _AGENTS_CONF_KEYS="AGENTS_HOG_PCT AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP A
 _AGENTS_CONF_KEYS+=" AGENTS_AWAKE_POLL AGENTS_NAMES AGENTS_NO_HERDR AGENTS_TERMINAL AGENTS_BAR_TITLE"
 _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH"
 _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
+_AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
 _AGENTS_BAR_SECTION_NAMES="needs agents stale hogs awake system"
 
@@ -37,6 +38,9 @@ _agents_conf_valid() {
         AGENTS_NAMES)       [[ "$2" =~ ^[A-Za-z0-9._\ -]+$ ]] ;;
         AGENTS_NO_HERDR)    [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
+        AGENTS_LID)         [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
+        AGENTS_LID_MIN_BATTERY) [[ "$2" =~ ^([0-9]|[1-9][0-9]|100)$ ]] ;;
         AGENTS_BAR_ICON)    [[ "$2" =~ ^[a-z0-9.]+$ ]] ;;
         AGENTS_BAR_REFRESH) [[ "$2" =~ ^[1-9][0-9]*[smhd]$ ]] ;;
         AGENTS_BAR_TITLE)    allowed="$_AGENTS_BAR_TOKENS" ;;
@@ -88,6 +92,12 @@ AGENTS_LS_TOOLS="${AGENTS_LS_TOOLS:-5}"    # tool commands listed per session in
 AGENTS_WAIT_STUCK="${AGENTS_WAIT_STUCK:-60}"  # minutes before a polling loop counts as stuck (0: never)
 AGENTS_GRACE="${AGENTS_GRACE:-3}"        # seconds between SIGTERM and SIGKILL
 AGENTS_AWAKE_POLL="${AGENTS_AWAKE_POLL:-60}"  # `awake agents` re-check, seconds
+# `awake lid` (macOS, asks for an admin password): the longest it may run, the
+# battery % below which its guard restores lid sleep, and whether the menu
+# offers it at all (the command works either way).
+AGENTS_LID="${AGENTS_LID:-0}"
+AGENTS_LID_MAX="${AGENTS_LID_MAX:-8h}"
+AGENTS_LID_MIN_BATTERY="${AGENTS_LID_MIN_BATTERY:-20}"
 AGENTS_NAMES="${AGENTS_NAMES:-claude codex}"  # argv[0] basenames that are agents
 AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
 # Menu bar (SwiftBar plugin): what the title shows, which sections the menu
@@ -778,27 +788,37 @@ agents_thermal_name() {
     esac
 }
 # Energy mode: 0 automatic, 1 low, 2 high (macOS); the power profile on Linux.
-# It rarely changes, so the answer is kept in the run dir for a minute.
-agents_powermode() {
-    local cache="$AGENTS_RUN_DIR/powermode" ts="" mode="" now
-    now="$(date +%s)"
-    [[ -r "$cache" ]] && read -r ts mode < "$cache"
+# It rarely changes, so the answer is kept in the run dir for a minute, with
+# whether sleep is disabled outright (pmset disablesleep, from the same pmset
+# -g; `awake lid` drops the cache when it changes that).
+agents_powermode() { local m sd; _agents_pm_read; echo "$m"; }
+# agents_sleep_disabled — 1 when macOS has sleep disabled (the lid too), 0
+# when not, - when unknown (not macOS).
+agents_sleep_disabled() { local m sd; _agents_pm_read; echo "$sd"; }
+_agents_pm_read() {   # sets m and sd in the caller (dynamic scope)
+    local cache="$AGENTS_RUN_DIR/powermode" ts="" now
+    now="$(date +%s)"; m="" sd=""
+    [[ -r "$cache" ]] && read -r ts m sd < "$cache"
     [[ "$ts" =~ ^[0-9]+$ ]] || ts=0
-    if [[ -n "$mode" && $((now - ${ts:-0})) -lt 60 ]]; then echo "$mode"; return 0; fi
-    mode="$(_agents_powermode_probe)"
-    { mkdir -p "$AGENTS_RUN_DIR" && printf '%s %s\n' "$now" "$mode" > "$cache"; } 2>/dev/null
-    echo "$mode"
+    [[ -n "$m" && -n "$sd" && $((now - ${ts:-0})) -lt 60 ]] && return 0
+    read -r m sd <<<"$(_agents_powermode_probe)"
+    { mkdir -p "$AGENTS_RUN_DIR" && printf '%s %s %s\n' "$now" "$m" "$sd" > "$cache"; } 2>/dev/null
+    return 0
 }
+# _agents_powermode_probe — "MODE SLEEP_DISABLED". pmset -g lists
+# SleepDisabled under its system-wide settings only while it is 1.
 _agents_powermode_probe() {
+    local p
     if command -v pmset >/dev/null 2>&1; then
         LC_ALL=C pmset -g 2>/dev/null | LC_ALL=C awk '
-            $1 == "powermode"    { m = ($2 == 1 ? "low" : $2 == 2 ? "high" : "automatic"); print m; exit }
+            $1 == "powermode" && m == "" { m = ($2 == 1 ? "low" : $2 == 2 ? "high" : "automatic") }
             $1 == "lowpowermode" { lp = ($2 == 1 ? "low" : "automatic") }
-            END { if (m == "") print (lp == "" ? "unknown" : lp) }'
+            $1 == "SleepDisabled" { sd = ($2 == 1 ? 1 : 0) }
+            END { if (NR == 0) { print "unknown -"; exit } if (m == "") m = (lp == "" ? "unknown" : lp); print m, (sd == "" ? 0 : sd) }'
     elif command -v powerprofilesctl >/dev/null 2>&1; then
-        powerprofilesctl get 2>/dev/null || echo unknown
+        p="$(powerprofilesctl get 2>/dev/null)"; echo "${p:-unknown} -"
     else
-        echo unknown
+        echo "unknown -"
     fi
 }
 
@@ -903,7 +923,186 @@ _agents_awake_write() {   # PID MODE UNTIL
     printf '%s %s %s %s\n' "$1" "${start:--}" "$2" "$3" > "$(_agents_awake_file)"
 }
 
+# --- Keep-awake with the lid closed (macOS, opt-in) ------------------------------
+# caffeinate never keeps a closed lid awake (except in closed-display mode).
+# `agents awake lid DURATION` does, with `pmset -a disablesleep 1`, which
+# needs root: one admin dialog (osascript `with administrator privileges`, no
+# sudo rights are stored) sets it and starts a root-owned guard that sets it
+# back when the time is up, the battery runs low off AC, or the Mac heats up.
+# `awake off` ends it early with one more dialog. macOS keeps disablesleep
+# across a reboot that killed the guard: agents_lid_stale notices.
+# State: $AGENTS_RUN_DIR/lid holds "guard_pid start until_epoch".
+
+# The guard, run as root by bash: $1 seconds, $2 the battery floor in %. It
+# polls once a minute; SIGUSR1 retires it without touching the setting (a new
+# `awake lid` replaces it). Fixed text, passed in single quotes, so it must
+# never hold one; only numbers checked in _agents_lid_cmd go around it.
+# shellcheck disable=SC2016  # expanded by the root bash, not here
+_AGENTS_LID_GUARD='end=$(( $(/bin/date +%s) + $1 )); min=$2; re="([0-9]+)%;"
+restore() { /usr/bin/pmset -a disablesleep 0; exit 0; }
+trap restore TERM INT HUP
+trap "exit 0" USR1
+while [ "$(/bin/date +%s)" -lt "$end" ]; do
+    b="$(/usr/bin/pmset -g batt)"
+    case "$b" in
+        *"AC Power"*) ;;
+        *) if [[ $b =~ $re ]] && [ "${BASH_REMATCH[1]}" -lt "$min" ]; then restore; fi ;;
+    esac
+    t="$(/usr/bin/notifyutil -g com.apple.system.thermalpressurelevel 2>/dev/null)"
+    t="${t##* }"
+    case "$t" in
+        ""|*[!0-9]*) ;;
+        *) if [ "$t" -gt 0 ]; then restore; fi ;;
+    esac
+    /bin/sleep 60 &
+    wait $!
+done
+restore'
+
+# _agents_lid_cmd start SECS BATTERY [OLD_GUARD] | stop [GUARD] — the command
+# `do shell script` runs as root. Only the numbers checked here are added to
+# fixed text; anything else is refused (exit 2). A guard pid is signalled only
+# while it is root's and still named agents-lid-guard.
+_agents_lid_cmd() {
+    local what="$1" secs="" batt="" old="" retire=""
+    case "$what" in
+        start) secs="${2:-}" batt="${3:-}" old="${4:-}"
+               [[ "$secs" =~ ^[1-9][0-9]{0,6}$ && "$batt" =~ ^([0-9]|[1-9][0-9]|100)$ ]] || return 2 ;;
+        stop)  old="${2:-}" ;;
+        *)     return 2 ;;
+    esac
+    if [[ -n "$old" ]]; then
+        [[ "$old" =~ ^[1-9][0-9]{0,7}$ ]] || return 2
+        retire="if [ \"\$(/bin/ps -o uid= -p $old)\" -eq 0 ] 2>/dev/null && /bin/ps -ww -o args= -p $old | /usr/bin/grep -q \" agents-lid-guard \"; then /bin/kill -USR1 $old; fi"
+    fi
+    [[ "$_AGENTS_LID_GUARD" != *"'"* ]] || return 2
+    if [[ "$what" == stop ]]; then
+        printf '/usr/bin/pmset -a disablesleep 0%s\n' "${retire:+; $retire}"
+    else
+        # env -i: the root bash reads nothing from the caller's environment (BASH_ENV).
+        printf "%s/usr/bin/pmset -a disablesleep 1 || exit 1; /usr/bin/nohup /usr/bin/env -i /bin/bash -c '%s' agents-lid-guard %s %s </dev/null >/dev/null 2>&1 & echo \$!\n" \
+            "${retire:+$retire; }" "$_AGENTS_LID_GUARD" "$secs" "$batt"
+    fi
+}
+
+# _agents_admin_run COMMAND PROMPT — run COMMAND as root after macOS's own
+# password dialog (PROMPT says why). Both travel as arguments, never inside
+# AppleScript source. Fails when the dialog is cancelled.
+_agents_admin_run() {
+    command -v osascript >/dev/null 2>&1 || { echo "agents: no osascript to ask for an administrator password" >&2; return 1; }
+    osascript -e 'on run argv' \
+        -e 'do shell script (item 1 of argv) with prompt (item 2 of argv) with administrator privileges' \
+        -e 'end run' "$1" "$2" 2>/dev/null
+}
+
+_agents_lid_supported() {
+    command -v pmset >/dev/null 2>&1 && command -v osascript >/dev/null 2>&1 && return 0
+    echo "agents: keeping awake with the lid closed is macOS only (it needs pmset and osascript)" >&2
+    return 2
+}
+
+# agents_lid_state — "pid until verified" while the recorded guard runs (the
+# same checks as agents_awake_state: cleared once it is really gone or its
+# pid names another process; a root process answers kill -0 with EPERM).
+agents_lid_state() {
+    local file="$AGENTS_RUN_DIR/lid" content pid start until now err verified=0
+    [[ -f "$file" ]] || return 1
+    content="$(cat "$file" 2>/dev/null)"
+    read -r pid start until <<<"$content" || true
+    if [[ ! "$pid" =~ ^[0-9]+$ ]]; then _agents_rm_if_same "$file" "$content"; return 1; fi
+    if ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; then
+        _agents_rm_if_same "$file" "$content"; return 1
+    fi
+    now="$(_agents_start "$pid" 2>/dev/null)"
+    if [[ -n "$now" && -n "$start" && "$start" != - ]]; then
+        if [[ "$now" != "$start" ]]; then _agents_rm_if_same "$file" "$content"; return 1; fi
+        verified=1
+    fi
+    echo "$pid ${until:-0} $verified"
+}
+
+# agents_lid_stale — true when sleep is disabled and no guard of ours will
+# turn it back on (a reboot killed it, or someone ran pmset by hand).
+agents_lid_stale() {
+    [[ "$(agents_sleep_disabled)" == 1 ]] || return 1
+    ! agents_lid_state >/dev/null
+}
+_AGENTS_LID_FIX="agents awake restore (or: sudo pmset -a disablesleep 0)"
+_agents_lid_warning() {
+    agents_lid_stale || return 0
+    printf '%sWARNING: lid sleep disabled with nothing to restore it. Fix: %s%s\n' "${C_R:-}${C_B:-}" "$_AGENTS_LID_FIX" "${C_0:-}"
+}
+
+# agents_awake_lid DURATION — keep awake with the lid closed for DURATION (at
+# most AGENTS_LID_MAX), plus the usual caffeinate holder for the same time.
+agents_awake_lid() {
+    local dur="${1:-}" secs max cmd out gpid old="" state until start pid v
+    _agents_lid_supported || return 2
+    if [[ -z "$dur" ]]; then
+        echo "usage: agents awake lid DURATION (30m, 3h; at most $AGENTS_LID_MAX)" >&2; return 2
+    fi
+    secs="$(agents_parse_duration "$dur")" || { echo "agents: bad duration '$dur' (try 30m, 3h, 1h30m)" >&2; return 2; }
+    max="$(agents_parse_duration "$AGENTS_LID_MAX")" || max=28800
+    if [[ $secs -gt $max ]]; then
+        echo "agents: $dur is longer than AGENTS_LID_MAX ($AGENTS_LID_MAX); lid mode is always time-boxed" >&2; return 2
+    fi
+    if ! [[ "$AGENTS_LID_MIN_BATTERY" =~ ^([0-9]|[1-9][0-9]|100)$ ]]; then
+        echo "agents: AGENTS_LID_MIN_BATTERY must be 0-100" >&2; return 2
+    fi
+    _agents_inhibitor || return 1
+    # Refuse before the dialog what we could not clean up after it.
+    if state="$(agents_awake_state)" && [[ "${state##* }" != 1 ]]; then
+        echo "awake: can't verify the current keep-awake holder (pid ${state%% *}); run 'agents awake off' first" >&2; return 1
+    fi
+    if state="$(agents_lid_state)"; then
+        read -r pid _ v <<<"$state"; [[ "$v" == 1 ]] && old="$pid"
+    fi
+    cmd="$(_agents_lid_cmd start "$secs" "$AGENTS_LID_MIN_BATTERY" "$old")" || { echo "agents: refusing to build the root command" >&2; return 2; }
+    if ! out="$(_agents_admin_run "$cmd" "agents wants to keep your Mac awake with the lid closed for $dur. Lid sleep comes back after that, below ${AGENTS_LID_MIN_BATTERY}% battery, or when the Mac heats up.")"; then
+        echo "awake: cancelled (no administrator rights); nothing changed" >&2; return 1
+    fi
+    rm -f "$AGENTS_RUN_DIR/powermode"
+    gpid="${out##*$'\n'}"
+    if [[ ! "$gpid" =~ ^[0-9]+$ ]]; then
+        echo "awake: lid sleep may be off with no guard to restore it: run '$_AGENTS_LID_FIX'" >&2; return 1
+    fi
+    until=$(( $(date +%s) + secs ))
+    mkdir -p "$AGENTS_RUN_DIR"
+    start="$(_agents_start "$gpid")"
+    printf '%s %s %s\n' "$gpid" "${start:--}" "$until" > "$AGENTS_RUN_DIR/lid"
+    _agents_awake_off_holder >/dev/null || true
+    ( trap '' HUP; _agents_hold "$secs" ) </dev/null >/dev/null 2>&1 &
+    pid=$!
+    disown "$pid" 2>/dev/null
+    _agents_awake_write "$pid" lid "$until"
+    echo "awake: on with the lid closed until $(_agents_clock "$until") (guard pid $gpid): lid sleep comes back then, below ${AGENTS_LID_MIN_BATTERY}% battery off AC, or when the Mac heats up"
+}
+
+# agents_lid_stop [--always] — turn lid sleep back on (one admin dialog) and
+# retire our guard. Without --always, only when a guard of ours runs.
+agents_lid_stop() {
+    local state pid="" v cmd
+    if state="$(agents_lid_state)"; then
+        read -r pid _ v <<<"$state"; [[ "$v" == 1 ]] || pid=""
+    elif [[ "${1:-}" != --always ]]; then
+        return 0
+    fi
+    _agents_lid_supported || return 2
+    cmd="$(_agents_lid_cmd stop "$pid")" || { echo "agents: refusing to build the root command" >&2; return 2; }
+    if ! _agents_admin_run "$cmd" "agents wants to let your Mac sleep with the lid closed again." >/dev/null; then
+        echo "awake: cancelled; lid sleep is still disabled" >&2; return 1
+    fi
+    rm -f "$AGENTS_RUN_DIR/lid" "$AGENTS_RUN_DIR/powermode"
+    echo "awake: lid sleep restored"
+}
+
+# agents_awake_off — release: lid mode first (when on), then the holder.
 agents_awake_off() {
+    agents_lid_stop || return 1
+    _agents_awake_off_holder
+}
+
+_agents_awake_off_holder() {
     local state pid file content
     file="$(_agents_awake_file)"
     content="$(cat "$file" 2>/dev/null)"
@@ -977,7 +1176,8 @@ _agents_awake_loop() {
 _agents_clock() { date -r "$1" +%H:%M 2>/dev/null || date -d "@$1" +%H:%M 2>/dev/null; }
 
 agents_awake_line() {
-    local state pid mode until verified
+    local state pid mode until verified lid=""
+    lid="$(agents_lid_state)" || lid=""
     if state="$(_agents_awake_now)"; then
         read -r pid mode until verified <<<"$state"
         local note="pid $pid"
@@ -985,8 +1185,13 @@ agents_awake_line() {
         case "$mode" in
             timed)  echo "awake: on until $(_agents_clock "$until") ($note)" ;;
             agents) echo "awake: while agents run ($note)" ;;
+            lid)    if [[ -n "$lid" ]]; then echo "awake: lid closed too, until $(_agents_clock "$until") ($note; guard pid ${lid%% *})"
+                    else echo "awake: on until $(_agents_clock "$until") ($note; lid mode ended, a closed lid sleeps again)"; fi ;;
             *)      echo "awake: on ($note)" ;;
         esac
+    elif [[ -n "$lid" ]]; then
+        read -r pid until _ <<<"$lid"
+        echo "awake: lid closed, until $(_agents_clock "$until") (guard pid $pid)"
     else
         echo "awake: off"
     fi
@@ -1011,16 +1216,18 @@ agents_awake_holders() {
 agents_awake() {
     local rc
     case "${1:-status}" in
-        on|off|agents)
+        on|off|agents|lid|restore)
             _agents_lock || return 1
             # Release the lock however this ends (an error exit, Ctrl-C, kill).
             trap '_agents_unlock' EXIT
             trap '_agents_unlock; exit 130' INT
             trap '_agents_unlock; exit 143' TERM
             case "$1" in
-                on)     agents_awake_on "${2:-}" ;;
-                off)    agents_awake_off ;;
-                agents) agents_awake_agents ;;
+                on)      agents_awake_on "${2:-}" ;;
+                off)     agents_awake_off ;;
+                agents)  agents_awake_agents ;;
+                lid)     agents_awake_lid "${2:-}" ;;
+                restore) agents_lid_stop --always ;;
             esac
             rc=$?
             _agents_unlock
@@ -1031,8 +1238,9 @@ agents_awake() {
             agents_awake_line
             local h; h="$(agents_awake_holders)"
             [[ -z "$h" ]] || echo "held awake by: $h"
+            _agents_lid_warning
             ;;
-        *) echo "usage: agents awake [on [DURATION]|off|agents|status]" >&2; return 2 ;;
+        *) echo "usage: agents awake [on [DURATION]|lid DURATION|off|agents|restore|status]" >&2; return 2 ;;
     esac
 }
 
@@ -1373,6 +1581,7 @@ _agents_footer() {
         "$([[ "$level" == - || "$level" == normal ]] || echo " ($level pressure)")" \
         "$([[ "$batt" == - ]] || echo " · battery: $batt% $state")"
     printf 'thermal: %s · energy: %s · %s\n' "$(agents_thermal_name "${lvl:--}")" "$(agents_powermode)" "$(agents_awake_line)"
+    _agents_lid_warning
 }
 
 # agents_render SECTIONS < RECORDS — the human table. SECTIONS: any of
@@ -1497,7 +1706,7 @@ agents_json() {
     lvl="$(agents_thermal_level)"
     sys="$(agents_system)"
     AW_PID="$pid" AW_MODE="$mode" AW_UNTIL="$until" TH="${lvl:-}" TH_NAME="$(agents_thermal_name "${lvl:--}")" \
-    PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LC_ALL=C awk -F '\t' '
+    PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LID="$(_agents_lid_json)" LC_ALL=C awk -F '\t' '
 function js(s,   o, i, c, n) {
     n = length(s); o = ""
     for (i = 1; i <= n; i++) {
@@ -1559,19 +1768,34 @@ END {
         split(ag[i], f, "\t"); s = obj(ag[i])
         o["agent"] = o["agent"] (i > 1 ? "," : "") substr(s, 1, length(s) - 1) ",\"activity\":" activity(f[2], f[5], f[7]) "}"
     }
-    printf "{\"schema_version\":1,\"agents\":[%s],\"stale\":[%s],\"hogs\":[%s],\"top\":[%s],\"system\":%s,\"awake\":%s,\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}\n",
-        o["agent"], o["stale"], o["hog"], o["top"], sys, aw, (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"])
+    printf "{\"schema_version\":1,\"agents\":[%s],\"stale\":[%s],\"hogs\":[%s],\"top\":[%s],\"system\":%s,\"awake\":%s,\"lid\":%s,\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}\n",
+        o["agent"], o["stale"], o["hog"], o["top"], sys, aw, ENVIRON["LID"], (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"])
 }'
+}
+
+# _agents_lid_json — the "lid" object of agents json: numbers and booleans only.
+_agents_lid_json() {
+    local st pid=0 until=0 sd active=false stale=false
+    if st="$(agents_lid_state)"; then active=true; read -r pid until _ <<<"$st"; fi
+    sd="$(agents_sleep_disabled)"
+    case "$sd" in 1) sd=true ;; 0) sd=false ;; *) sd=null ;; esac
+    [[ "$active" == false && "$sd" == true ]] && stale=true
+    if [[ "$active" == true ]]; then
+        printf '{"active":true,"pid":%d,"until":%d,"sleep_disabled":%s,"stale":false}' "$pid" "$until" "$sd"
+    else
+        printf '{"active":false,"sleep_disabled":%s,"stale":%s}' "$sd" "$stale"
+    fi
 }
 
 # agents_tsv — the records (agent, stale, hog, top, total), then:
 #   sys  cpu_pct load1 cores mem_free_pct mem_pressure battery_pct battery_state
 #   awake mode pid until · thermal level name · power mode
+#   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar: Herdr is read from its cache (never waited on), and
 # the keep-awake state is read once.
 agents_tsv() {
-    local recs state pid="-" mode="off" until=0 lvl sys key val cores
+    local recs state pid="-" mode="off" until=0 lvl sys key val cores lmax lpid luntil
     _agents_awake_prime
     recs="$(AGENTS_HERDR_MODE=async agents_collect)" || return 1
     [[ -z "$recs" ]] || printf '%s\n' "$recs"
@@ -1583,7 +1807,15 @@ agents_tsv() {
     printf 'awake\t%s\t%s\t%s\n' "$mode" "$pid" "$until"
     printf 'thermal\t%s\t%s\n' "${lvl:--}" "$(agents_thermal_name "${lvl:--}")"
     printf 'power\t%s\n' "$(agents_powermode)"
-    for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_CONF; do
+    lmax="$(agents_parse_duration "$AGENTS_LID_MAX")" || lmax=28800
+    if state="$(agents_lid_state)"; then
+        read -r lpid luntil _ <<<"$state"; printf 'lid\ton\t%s\t%s\t%s\n' "$lpid" "$luntil" "$lmax"
+    elif agents_lid_stale; then
+        printf 'lid\tstale\t-\t0\t%s\n' "$lmax"
+    else
+        printf 'lid\toff\t-\t0\t%s\n' "$lmax"
+    fi
+    for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF; do
         val="${!key}"
         printf 'conf\t%s\t%s\n' "$key" "${val:--}"
     done
@@ -1773,7 +2005,14 @@ KEEP AWAKE
   agents awake on [DURATION]   hold system and display awake (30m, 2h, 1h30m);
                                no DURATION = until 'agents awake off'
   agents awake agents          hold while any claude/codex runs, then release
-  agents awake off             release
+  agents awake lid DURATION    macOS: also keep awake with the lid closed, for at
+                               most AGENTS_LID_MAX ($AGENTS_LID_MAX). Asks for an admin
+                               password each time; a root guard restores lid sleep
+                               when DURATION ends, below ${AGENTS_LID_MIN_BATTERY}% battery off AC,
+                               or when thermal pressure rises above nominal
+  agents awake off             release (ends lid mode too: one more password)
+  agents awake restore         let a closed lid sleep again (pmset disablesleep 0),
+                               e.g. after a reboot killed the guard
 
 SETTINGS
   agents config [--edit]       effective settings, and the file they came from;
@@ -1781,7 +2020,8 @@ SETTINGS
   $AGENTS_CONF (KEY=value; AGENTS_CONF picks another file). Keys: AGENTS_HOG_PCT
   AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP AGENTS_GRACE AGENTS_AWAKE_POLL
   AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK AGENTS_NAMES AGENTS_NO_HERDR
-  AGENTS_TERMINAL, and the menu bar's AGENTS_BAR_TITLE
+  AGENTS_TERMINAL AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY, and the menu
+  bar's AGENTS_BAR_TITLE
   AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. The same
   names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
   AGENTS_ORPHAN_PATTERNS at the top of $AGENTS_PATH
@@ -1794,9 +2034,11 @@ SAFETY
   it. Refuses to run as root. Re-checks each process's start time before every
   signal. Never marks as stale anything that hosts a session (an agent, a
   shell, tmux/screen/zellij/herdr/pm2), a launchd job or a systemd service.
-  Keep-awake uses caffeinate (macOS) or systemd-inhibit (Linux), never sudo or
-  'pmset disablesleep'; a closed lid still sleeps unless the Mac is on AC with
-  an external display (closed-display mode).
+  Keep-awake uses caffeinate (macOS) or systemd-inhibit (Linux); a closed lid
+  still sleeps unless the Mac is on AC with an external display (closed-display
+  mode). Only 'awake lid' uses 'pmset disablesleep', after macOS's own admin
+  dialog, time-boxed, with a root guard that restores it; no sudo rights are
+  stored. 'agents' warns when sleep is disabled with no guard to restore it.
 EOF
 }
 

@@ -194,6 +194,7 @@ agents kill PID           # one tree, descendants first
 agents term PID           # one process only (a hog), SIGTERM
 agents awake on 2h        # keep the Mac and display awake (30m, 1h30m; no duration = until off)
 agents awake agents       # stay awake while any claude or codex runs, then release
+agents awake lid 3h       # macOS, opt-in: awake with the lid closed too (asks for your password)
 agents awake status       # our hold, plus who else holds the Mac awake (pmset -g assertions)
 agents json               # machine-readable; `agents tsv` feeds the menu-bar plugin
 ```
@@ -238,20 +239,28 @@ agents json               # machine-readable; `agents tsv` feeds the menu-bar pl
   - running as root at all.
 
   Before every signal they re-check the process's start time, so a reused pid is never hit, and `PID@START` (from `json` or `tsv`) pins the exact process that was listed. A tree kill returns as soon as everything exited after SIGTERM; after the grace period it SIGKILLs the survivors, plus, if the tree's root is still running then, anything that root's tree spawned meanwhile. Without a terminal they need `-y`.
-- **Keep-awake** is `caffeinate -di` (system and display idle sleep), never `pmset disablesleep` or sudo. The holder's pid lives in `~/.config/tuidev/run/awake`, and `on`, `off` and `agents` take a lock (released on any exit), so two clicks never leave two holders. The record is dropped only when the holder is really gone; if its start time can't be checked (`ps` blocked, as in a sandbox), `awake off` refuses to signal the pid and tells you how to stop it yourself. Without `caffeinate` or `systemd-inhibit`, `awake on` fails with a message. `./uninstall.sh` runs `agents awake off` before it removes the helper. `awake agents` re-checks every minute, which also covers Claude Code's own gap between stopping one `caffeinate` and starting the next. A closed lid still sleeps the Mac unless it runs on power with an external display attached (Apple's closed-display mode). On Linux, `systemd-inhibit` holds the same locks.
+- **Keep-awake** is `caffeinate -di` (system and display idle sleep). By default it never uses `pmset disablesleep` or sudo; `awake lid` (below) is the explicit opt-in. The holder's pid lives in `~/.config/tuidev/run/awake`, and `on`, `off` and `agents` take a lock (released on any exit), so two clicks never leave two holders. The record is dropped only when the holder is really gone; if its start time can't be checked (`ps` blocked, as in a sandbox), `awake off` refuses to signal the pid and tells you how to stop it yourself. Without `caffeinate` or `systemd-inhibit`, `awake on` fails with a message. `./uninstall.sh` runs `agents awake off` before it removes the helper. `awake agents` re-checks every minute, which also covers Claude Code's own gap between stopping one `caffeinate` and starting the next. A closed lid still sleeps the Mac unless it runs on power with an external display attached (Apple's closed-display mode). On Linux, `systemd-inhibit` holds the same locks.
+- **Keep awake with the lid closed** (`agents awake lid DURATION`, macOS only; Linux reports it as unsupported). For when you want an agent to keep working in a closed laptop for a few hours. If you can, use closed-display mode instead (power plus an external display), which needs no root. Otherwise:
+  - it runs `pmset -a disablesleep 1`, which needs root. It asks for your administrator password each time, in macOS's own dialog (`osascript … with administrator privileges`). No sudo rights or sudoers file are stored;
+  - it is always time-boxed: a duration is required, and one longer than `AGENTS_LID_MAX` (8h) is refused;
+  - the same root command starts a small root-owned guard, which turns lid sleep back on (`pmset -a disablesleep 0`) when the time is up, when the battery falls below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or when thermal pressure rises above nominal. It checks once a minute. The guard is fixed text in `bin/agents`: only the checked duration in seconds and the battery number are added to the root command;
+  - the usual `caffeinate -di` holder runs for the same time, so the display and idle behaviour match `awake on`;
+  - `agents awake off` ends it early, which asks for your password once more: it restores the setting and retires the guard (after checking that the pid is still root's guard). `agents awake restore` restores the setting whatever ran it.
+
+  **Reboot caveat:** macOS keeps `disablesleep` across a reboot (it's a system-wide setting, stored in `/Library/Preferences/com.apple.PowerManagement.*.plist`; `man pmset` doesn't document it), but the reboot kills the guard. `agents`, `agents awake status`, the menu and `make check` (`scripts/health_check.sh`) all notice sleep disabled with no live guard: `WARNING: lid sleep disabled with nothing to restore it`. The fix is `agents awake restore`, or `sudo pmset -a disablesleep 0`. A Mac in a bag can overheat, so the menu offers lid mode only with `AGENTS_LID=1`.
 - **Thermal** shows the kernel's thermal pressure (`nominal`, `moderate`, `heavy`, `trapping`, `sleeping`, from `notifyutil -g com.apple.system.thermalpressurelevel`) and the energy mode (`automatic`, `low`, `high`). Both are read-only: macOS runs the fans, and `agents` never changes the energy mode.
 
 ### Menu bar (SwiftBar, macOS)
 
 On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents.10s.sh` plugin, which also stands in for a system-stats menu bar app. If SwiftBar already has a plugin folder, the plugin goes there; otherwise the pack sets the folder to `~/.config/swiftbar/plugins`. Open SwiftBar once (`open -a SwiftBar`) and turn on **Launch at login** in its settings. The pack doesn't add login items. Uninstalling removes the plugin but leaves SwiftBar's plugin-folder setting as it is.
 
-- **Title:** by default an SF Symbol and the number of sessions, plus `· N blocked` when sessions wait for you and a cup while keep-awake is on. The icon turns orange when something needs a look (a blocked session, stale processes, a hog, memory pressure) and red for heavy thermal pressure or critical memory pressure; otherwise it follows the menu bar's colors. The session count is the same in the title, the menu and `agents ls`; the Codex daemon is listed separately and not counted.
+- **Title:** by default an SF Symbol and the number of sessions, plus `· N blocked` when sessions wait for you and a cup while keep-awake is on. The icon turns orange when something needs a look (a blocked session, stale processes, a hog, memory pressure) and red for heavy thermal pressure, critical memory pressure, or sleep disabled with nothing to restore it; otherwise it follows the menu bar's colors. The session count is the same in the title, the menu and `agents ls`; the Codex daemon is listed separately and not counted.
 - **Menu**, in the order of `AGENTS_BAR_SECTIONS` (sections with nothing to show are left out):
   - **Needs you:** sessions Herdr reports as blocked, waiting for input or a permission; commands running more than once (`myapp: 3× go test running`, with Stop duplicates (keep newest)…) commands running longer than `AGENTS_TOOL_LONG` (with Stop command…), and polling loops flagged `stuck` (`myapp: until tail -1 $F … · stuck 3h27m`, an orange hourglass, with Stop command…). A polling loop that is not stuck stays out of it. Stuck loops and long or duplicate commands tint the icon orange, but only blocked sessions count in the title's `· N blocked`.
   - **Agents:** one line per session: project, kind, status, CPU and memory, with a dot colored by status (orange blocked, green working, gray idle). When its commands use most of the CPU the row says so (`735% (tools 728%)`). Clicking it shows the project in Finder. Its submenu holds the full path, pid, age, children and ports; Running (N), one line per command (command, age, CPU, origin, flags) with Stop command… (asks first); the MCP servers on one line; Stop duplicates (keep newest)… when a command runs twice; and Kill session…, Copy path, Open in Finder and Copy PID. The Codex daemon follows on its own line with a gear.
   - **Stale:** each with Kill tree, plus Reap all stale, which kills exactly the processes listed, not whatever is stale when you click.
   - **Hogs:** each with Terminate (SIGTERM, your own processes only).
-  - **Awake:** the state (off, while agents run, time left), with a check mark on the active choice among Until turned off, For 1 hour, For 3 hours, While agents run and Off, plus who holds the Mac awake.
+  - **Awake:** the state (off, while agents run, time left, `lid closed · 2h41m left`), with a check mark on the active choice among Until turned off, For 1 hour, For 3 hours, While agents run and Off, plus who holds the Mac awake. With `AGENTS_LID=1`, a Lid closed too… group offers 1, 3 and 8 hours (up to `AGENTS_LID_MAX`), each running `agents awake lid` and asking for your password. When sleep is disabled with nothing to restore it, a red Restore lid sleep… item leads Needs you and the Awake section.
   - **System**, two lines: CPU (the sum of `%cpu` over the `ps` snapshot, divided by the cores), memory used (`memory_pressure -Q`) and the load, which opens `agents watch`, with the busiest processes in its submenu (each opens Activity Monitor); then battery and charging (`pmset -g batt`), thermal pressure and energy mode, which opens System Settings › Battery, where Energy Mode lives.
   - Then Open agents watch, Edit settings (opens `~/.config/agents.conf`) and Refresh.
 - Every action runs `agents` with the `PID@START` it listed, so a menu opened before a pid was reused can't kill the wrong process. Menu parameters carry only fixed words and such tokens, never a path or a name a process controls: Copy path and Open in Finder run `agents copy-path|reveal PID@START`, which looks the directory up when you click (`agents cwd PID@START` prints it). Killing a live session asks first in a macOS dialog (`--confirm-gui`, Cancel is the default) naming the project, pid and child count; stale processes and hogs, already filtered, go in one click. Each action reports its result as a notification (`--notify`).
@@ -281,7 +290,9 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents
   }],
   "stale": [same fields as an agent, without activity], "hogs": [...], "top": [...],
   "system": {"cpu_pct", "load1", "cores", "mem_free_pct", "mem_pressure", "battery_pct", "battery_state"},
-  "awake": {"active", "pid", "mode", "until"}, "thermal": {"level", "name"}, "powermode"
+  "awake": {"active", "pid", "mode" ("on"|"timed"|"agents"|"lid"), "until"},
+  "lid": {"active", "pid", "until", "sleep_disabled" (true|false|null), "stale"},
+  "thermal": {"level", "name"}, "powermode"
 }
 ```
 
@@ -303,6 +314,9 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_NAMES` | `claude codex` | Process names (argv[0] basenames) that count as agent sessions |
 | `AGENTS_GRACE` | `3` | Seconds between SIGTERM and SIGKILL when killing a tree |
 | `AGENTS_AWAKE_POLL` | `60` | Seconds between checks in `agents awake agents` |
+| `AGENTS_LID` | `0` | `1` offers Lid closed too… in the menu. `agents awake lid` works either way |
+| `AGENTS_LID_MAX` | `8h` | The longest `agents awake lid` may run; longer requests are refused |
+| `AGENTS_LID_MIN_BATTERY` | `20` | Battery % (off AC) below which the lid guard turns lid sleep back on |
 | `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup |
 | `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
 | `AGENTS_BAR_TITLE` | `count awake` | Title tokens after the icon: `count` (sessions, and how many are blocked), `cpu`, `mem`, `load`, `battery`, `thermal` (only above nominal), `awake`, `warn` (a triangle as well as the tint). Empty shows the icon alone |
