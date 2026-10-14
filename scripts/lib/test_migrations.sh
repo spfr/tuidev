@@ -358,6 +358,20 @@ out="$(HOME="$v3_home" NVM_DIR='' PATH=/usr/bin:/bin bash "$fnm_mig" 2>&1)" || f
 [[ -z "$out" ]] || fail "fnm-only migration spoke without nvm: $out"
 pass "fnm-only migration warns nvm users and touches nothing"
 
+# 14k. The tailscale cask record becomes tailscale-app, once, idempotently.
+ts_mig="$SCRIPT_DIR/../migrations/202610141200_tailscale_app_cask.sh"
+ts_manifest="$v3_home/.config/tuidev/manifest"
+printf 'pack remote\ncask tailscale\nformula mosh\n' > "$ts_manifest"
+HOME="$v3_home" TUIDEV_STATE_DIR='' TUIDEV_MANIFEST_FILE='' bash "$ts_mig" >/dev/null || fail "tailscale-app migration failed"
+HOME="$v3_home" TUIDEV_STATE_DIR='' TUIDEV_MANIFEST_FILE='' bash "$ts_mig" >/dev/null || fail "tailscale-app migration not re-runnable"
+[[ "$(cat "$ts_manifest")" == "$(printf 'pack remote\ncask tailscale-app\nformula mosh')" ]] \
+    || fail "tailscale record not renamed: $(cat "$ts_manifest")"
+printf 'cask tailscale-app\ncask tailscale\n' > "$ts_manifest"
+HOME="$v3_home" TUIDEV_STATE_DIR='' TUIDEV_MANIFEST_FILE='' bash "$ts_mig" >/dev/null || fail "tailscale-app migration failed on a duplicate"
+[[ "$(cat "$ts_manifest")" == "cask tailscale-app" ]] || fail "duplicate tailscale record kept: $(cat "$ts_manifest")"
+rm -f "$ts_manifest"
+pass "tailscale-app migration renames the cask record, idempotently"
+
 # ---------------------------------------------------------------------------
 # manifest.sh
 # ---------------------------------------------------------------------------

@@ -440,7 +440,7 @@ ts-status() {
   if command -v tailscale &>/dev/null; then
     tailscale status
   else
-    echo "Tailscale is not installed. Install with: brew install --cask tailscale"
+    echo "Tailscale is not installed. Install with: brew install --cask tailscale-app"
   fi
 }
 
@@ -449,7 +449,7 @@ ts-ip() {
   if command -v tailscale &>/dev/null; then
     tailscale ip -4
   else
-    echo "Tailscale is not installed. Install with: brew install --cask tailscale"
+    echo "Tailscale is not installed. Install with: brew install --cask tailscale-app"
   fi
 }
 

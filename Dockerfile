@@ -13,7 +13,7 @@
 # tests the scripts, configs, and tool contract on Linux, not the installer.
 # ============================================================================
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 # Distro packages only. `yq-go` is the Go yq the configs expect (Alpine's
 # plain `yq` name is not packaged; Debian's is the incompatible Python one).

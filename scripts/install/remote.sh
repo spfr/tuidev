@@ -29,7 +29,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Casks (macOS only).
 REMOTE_CASKS=(
-    tailscale
+    tailscale-app
 )
 
 # Formulae (Homebrew names; pkg.sh maps them for apt/dnf/pacman).
