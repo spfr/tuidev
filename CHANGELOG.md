@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-10-14
+
+### Fixed
+- **Duplicate counts in the agents menu read `2×` again.** Under macOS's
+  `/bin/bash` 3.2, which SwiftBar runs the plugin with, "Stop duplicates"
+  and the Needs you line showed a garbled character instead of the count.
+- **CI is green on macOS again.** The apt package-update test now runs on a
+  Mac too, and the shellcheck job accepts the runner's older shellcheck.
+
 ## [3.3.0] - 2026-10-14
 
 ### Added
