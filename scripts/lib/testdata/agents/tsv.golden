@@ -165,7 +165,7 @@ act	1004	mcp	3600	0.0	0.0	50000	0	Wed_Oct_14_08:00:01_2026	-	1000	example-agent-
 act	1005	keepawake	60	0.0	0.0	1900	0	Wed_Oct_14_08:59:00_2026	-	1000	-	-	caffeinate -i -t 300	-	-	1
 act	1010	tool	120	100.0	0.0	274000	3	Wed_Oct_14_08:58:00_2026	-	1000	/Users/NAME/repo/.claude/worktrees/feat-a	/Users/NAME/repo/.claude/worktrees/feat-a	go test -race ./internal/web	feat-a	dup,hot	3
 act	1020	tool	240	0.0	0.0	3000	0	Wed_Oct_14_08:56:00_2026	-	1000	/Users/NAME/repo/.claude/worktrees/feat-a	/Users/NAME/repo/.claude/worktrees/feat-a	go test -race ./internal/web	feat-a	dup	3
-act	1030	tool	3120	0.0	0.0	2000	0	Wed_Oct_14_08:08:00_2026	-	1000	-	/Users/NAME/repo	until [ -s /tmp/x ]; do sleep 5; done	main	wait	1
+act	1030	tool	3120	0.0	0.0	2000	0	Wed_Oct_14_08:08:00_2026	-	1000	-	/Users/NAME/repo	until [ -s /nonexistent/x ]; do sleep 5; done	main	wait	1
 act	1040	tool	180	2.0	0.0	302000	1	Wed_Oct_14_08:57:00_2026	-	1000	-	-	claude -p hello	-	-	1
 act	1041	session	180	2.0	1.7	300000	0	Wed_Oct_14_08:57:00_2026	-	1000	nested	-	claude -p hello	-	-	1
 act	1050	other	180	0.0	0.0	2000	0	Wed_Oct_14_08:57:00_2026	-	1000	-	-	/usr/local/bin/some-helper --serve	-	-	1
@@ -249,7 +249,7 @@ job	100	browser	0	40.0	0	150000	1	Wed_Oct_14_08:00:00_2026	sub	144	codex	/Users/
 job	200	mcp	0	0.0	0	90000	1	Wed_Oct_14_08:10:00_2026	own	200	-	@HOME@/work/app	-	app
 job	200	mcp	0	0.0	0	80000	1	Wed_Oct_14_08:10:00_2026	own	201	-	@HOME@/work/app	-	app
 job	200	browser	0	3.0	0	150000	1	Wed_Oct_14_08:10:00_2026	sub	201	-	@HOME@/work/app	-	app
-watched	1030	/tmp/x	1791739633	-	exists
+watched	1030	/nonexistent/x	-	-	exists
 watched	5010	@TMP@/w/done.output	1577851200	[exited with code 0]	read
 watched	5020	@TMP@/w/build.log	1577863800	compiling 3/9	read
 watched	5040	@TMP@/w/missing.out	-	-	exists

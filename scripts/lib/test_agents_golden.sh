@@ -39,7 +39,8 @@ mkdir -p "$HOME" "$TMPDIR" "$AGENTS_DATA_DIR" "$AGENTS_RUN_DIR" "$tmp/out"
 # --- The clock and the files polling loops watch ------------------------------------
 # "Now" is 2020-01-01 09:00 UTC. done.output ended 5h ago with Claude Code's
 # exit line, build.log has been quiet 1h30m, fail.out ended 2h10m ago with a
-# failed test; live.log is dated in the future, so it is always fresh.
+# failed test; live.log is dated in the future, so it is always fresh. Every
+# other path a loop watches never exists: no golden depends on this machine.
 W="$tmp/w"; mkdir -p "$W"
 printf 'building\nok\n[exited with code 0]\n\n' > "$W/done.output"
 printf 'compiling 3/9\n' > "$W/build.log"
@@ -112,7 +113,7 @@ FIX_PS="$(cat <<'EOF'
  1012  1011   501 me   99.0 180000  1:50.00 01:55 Wed Oct 14 08:58:05 2026     /tmp/go-build1/b001/web.test -test.paniconexit0
  1013  1010   501 me    0.0   1000  0:00.00 02:00 Wed Oct 14 08:58:00 2026     tail -30
  1020  1000   501 me    0.0   3000  0:00.10 04:00 Wed Oct 14 08:56:00 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'cd /Users/NAME/repo/.claude/worktrees/feat-a && go test -race ./internal/web/ 2>&1 | tail -30' < /dev/null && pwd -P >| /tmp/cwd-2
- 1030  1000   501 me    0.0   2000  0:00.10 52:00 Wed Oct 14 08:08:00 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'until [ -s /tmp/x ]; do sleep 5; done' < /dev/null && pwd -P >| /tmp/cwd-3
+ 1030  1000   501 me    0.0   2000  0:00.10 52:00 Wed Oct 14 08:08:00 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'until [ -s /nonexistent/x ]; do sleep 5; done' < /dev/null && pwd -P >| /tmp/cwd-3
  1040  1000   501 me    0.0   2000  0:00.10 03:00 Wed Oct 14 08:57:00 2026     bash -lc claude -p hello
  1041  1040   501 me    2.0 300000  0:03.00 03:00 Wed Oct 14 08:57:00 2026     claude -p hello
  1050  1000   501 me    0.0   2000  0:00.10 03:00 Wed Oct 14 08:57:00 2026     /usr/local/bin/some-helper --serve

@@ -4,7 +4,7 @@ AGENTS (1)
       mcp: 2 servers · 4 procs · 302M (chrome-devtools-mcp, example-agent-mcp)
       1010    go test -race ./internal/web · 2m00s · 100% · feat-a  x3 dup  hot
       1040    claude -p hello · 3m00s · 2% · -
-      1030    until [ -s /tmp/x ]; do sleep 5; done · 52m00s · 0% · main  wait
+      1030    until [ -s /nonexistent/x ]; do sleep 5; done · 52m00s · 0% · main  wait
       1020    go test -race ./internal/web · 4m00s · 0% · feat-a  x3 dup
       1060    go vet ./... · 0m30s · 0% · -
       1080    make serve · 45m00s · 0% · -  long

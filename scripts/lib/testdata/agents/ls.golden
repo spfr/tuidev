@@ -8,7 +8,7 @@ AGENTS (6) + codex daemon
       mcp: 2 servers · 4 procs · 302M
       └ go test -race ./internal/web · 2m00s · 100% · feat-a  x3 dup  hot
       └ claude -p hello · 3m00s · 2% · -
-      └ until [ -s /tmp/x ]; do sleep 5; done · 52m00s · 0% · main  wait
+      └ until [ -s /nonexistent/x ]; do sleep 5; done · 52m00s · 0% · main  wait
       └ go test -race ./internal/web · 4m00s · 0% · feat-a  x3 dup
       └ go vet ./... · 0m30s · 0% · -
       ... 1 more (agents ps 1000)

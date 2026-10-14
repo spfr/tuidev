@@ -1,5 +1,5 @@
 polling loop · pid 1030@Wed_Oct_14_08:08:00_2026
-  until [ -s /tmp/x ]; do sleep 5; done
+  until [ -s /nonexistent/x ]; do sleep 5; done
 
 verdict: informational — waiting 52m (stuck after 1h0m)
 confidence: high
@@ -7,12 +7,9 @@ confidence: high
 evidence:
   owner: claude 1000 in repo
   waiting 52m · 0% CPU
-  watches /tmp/x
-  its condition only tests whether the file exists, so how long it has been quiet says nothing
-  file changed just now
+  watches /nonexistent/x, which no longer exists
 
 next:
-  look at it: ls -l /tmp/x
   stopping it ends only the loop: the session sees the command fail and carries on
   stop it: agents kill 1030@Wed_Oct_14_08:08:00_2026
   auto-reap never stops this: it is not stuck
