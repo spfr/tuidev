@@ -1,6 +1,6 @@
 #!/bin/bash
 # <xbar.title>agents</xbar.title>
-# <xbar.version>v1.2</xbar.version>
+# <xbar.version>v1.3</xbar.version>
 # <xbar.desc>Agentic-coding sessions (blocked first), stale helpers, CPU hogs, keep-awake and a compact system view, from tuidev's `agents` command.</xbar.desc>
 # <xbar.dependencies>bash,agents</xbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
@@ -207,9 +207,66 @@ session_submenu() {   # PID START KIND AGE KIDS PORTS CWD
     SUB+="--Copy PID | $CALLBACK param1=copy param2=$pid sfimage=number"$'\n'
 }
 
+# --- Needs you: verdicts ------------------------------------------------------------
+# `agents tsv` starts with a verdict for each item that needs you (need rows,
+# from agents_assess) and its evidence (evid rows), kept here in N_<what>_<pid>
+# and A_ev_<pid>. An item without one (an older agents) keeps the plain menu.
+
+# need_submenu PID TOKEN STOP_LINE — under an item: the verdict, the evidence,
+# then Stop (STOP_LINE), Copy details (`agents why --copy`) and, while its
+# session runs, Show session (`agents ps` of that session in your terminal).
+# Sets SUB.
+need_submenu() {
+    local p="$1" v o look=info.circle
+    SUB=""
+    v="N_act_$p"
+    case "${!v-}" in
+        stop)  look=checkmark.circle ;;
+        check) look=questionmark.circle ;;
+        leave) look=hand.raised ;;
+    esac
+    v="N_text_$p"; cl "${!v-}"
+    SUB+="--$REPLY | $ROW sfimage=$look symbolize=false"$'\n'
+    v="A_ev_$p"; SUB+="${!v-}"
+    SUB+="-----"$'\n'"$3"$'\n'
+    SUB+="--Copy details | $NOREF param1=why param2=--copy param3=$2 sfimage=doc.on.doc"$'\n'
+    v="N_owner_$p"; o="${!v-}"
+    if num "$o"; then SUB+="--Show session | $TERM_OPEN param2=--hold param3=ps param4=$o sfimage=terminal"$'\n'; fi
+}
+
+# need_item SYMBOL TEXT TOKEN — one command in Needs you: its verdict at a
+# glance on the line (orange for safe to stop and check first, gray for leave
+# it and informational), the rest in its submenu. Appends to needs_menu.
+need_item() {
+    local p="${3%%@*}" v dot="$DOT_ORANGE" stop
+    stop="--Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$3 sfimage=xmark.octagon"
+    v="N_short_$p"
+    if [[ -z "${!v-}" ]]; then
+        needs_menu+="$2 | sfimage=$1 $DOT_ORANGE $ROW symbolize=false"$'\n'"$stop"$'\n'
+        return 0
+    fi
+    cl "${!v}"; v="N_act_$p"
+    [[ "${!v-}" == stop || "${!v-}" == check ]] || dot="$DOT_GRAY"
+    needs_menu+="$2 · $REPLY | sfimage=$1 $dot $ROW symbolize=false"$'\n'
+    need_submenu "$p" "$3" "$stop"
+    needs_menu+="$SUB"
+}
+
+n_auto=0 BAR_AUTO=0
 agent_rows=()
 while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user herdr cwd args project aflags adup; do
     case "$type" in
+        need)   # need PID START FLAG ACTION CONF CODE AUTO OWNER SHORT VERDICT …
+            num "$pid" || continue
+            printf -v "N_short_$pid" '%s' "$ports"; printf -v "N_text_$pid" '%s' "$user"
+            printf -v "N_act_$pid" '%s' "$pcpu"; printf -v "N_owner_$pid" '%s' "$start"
+            [[ "$kids" == 1 ]] && n_auto=$((n_auto + 1))
+            ;;
+        evid)   # evid PID fact|next|auto TEXT: the facts and the auto-reap note
+            num "$pid" || continue
+            [[ "$kind" == fact || "$kind" == auto ]] || continue
+            cl "$age_s"; aadd ev "$pid" "--$REPLY | symbolize=false"$'\n'
+            ;;
         agent) agent_rows+=("$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$start"$'\t'"$ports"$'\t'"$herdr"$'\t'"$cwd"$'\t'"$project") ;;
         act)   # act PID CLASS AGE CPU AVG RSS KIDS START PORTS ROOT LABEL CWD CMD ORIGIN FLAGS DUPS
             r="$user"; num "$r" || continue
@@ -242,10 +299,12 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             ;;
         stale)
             n_stale=$((n_stale + 1))
-            stale_menu+="$(clean "${args:0:60}") · $(age "$age_s") · $(mem "$rss") | $ROW symbolize=false sfimage=$([[ "$kind" == server ]] && echo network || echo puzzlepiece.extension)"$'\n'
+            v="N_short_$pid"; vs=""; [[ -n "${!v-}" ]] && { cl "${!v}"; vs=" · $REPLY"; }
+            stale_menu+="$(clean "${args:0:60}") · $(age "$age_s") · $(mem "$rss")$vs | $ROW symbolize=false sfimage=$([[ "$kind" == server ]] && echo network || echo puzzlepiece.extension)"$'\n'
             stale_menu+="--$kind · pid $pid$([[ "$cwd" != - ]] && echo " · $(clean "$cwd")")$([[ "$ports" != - ]] && echo " · ports $(clean "$ports")") | symbolize=false"$'\n'
             if t="$(tok "$pid" "$start")"; then
-                stale_menu+="--Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
+                kl="--Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"
+                if [[ -n "$vs" ]]; then need_submenu "$pid" "$t" "$kl"; stale_menu+="$SUB"; else stale_menu+="$kl"$'\n'; fi
                 stale_tokens+=" $t"
             fi
             ;;
@@ -273,10 +332,18 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                 AGENTS_BAR_ICON)     BAR_ICON="${kind:-terminal}" ;;
                 AGENTS_LID)          BAR_LID="${kind:-1}" ;;
                 AGENTS_CONF)         CONF="$kind" ;;
+                AGENTS_AUTO_REAP)    BAR_AUTO="${kind:-0}" ;;
             esac
             ;;
     esac
 done <<<"$data"
+
+# Auto-reap (AGENTS_AUTO_REAP=1): when something here is safe to stop on its
+# own, `agents reap --auto` runs in the background, at most once a minute
+# (--throttle), and never holds up the menu.
+if [[ "$BAR_AUTO" == 1 && $n_auto -gt 0 ]]; then
+    ( "$AGENTS" reap --auto --throttle --notify </dev/null >/dev/null 2>&1 & )
+fi
 # `sys` packs battery state into the kids column, which can hold spaces.
 [[ "$bstate" == - ]] && bstate=""
 
@@ -326,14 +393,12 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     while IFS=$'\t' read -r cmd lage tk; do
         [[ -n "$tk" ]] || continue
         n_attn=$((n_attn + 1))
-        needs_menu+="$name: $(short "$cmd") · running $(age "$lage") | sfimage=clock $DOT_ORANGE $ROW symbolize=false"$'\n'
-        needs_menu+="--Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$tk sfimage=xmark.octagon"$'\n'
+        need_item clock "$name: $(short "$cmd") · running $(age "$lage")" "$tk"
     done <<<"$(aget longs "$pid")"
     while IFS=$'\t' read -r cmd lage tk; do
         [[ -n "$tk" ]] || continue
         n_attn=$((n_attn + 1))
-        needs_menu+="$name: $(short "$cmd") · stuck $(age "$lage") | sfimage=hourglass $DOT_ORANGE $ROW symbolize=false"$'\n'
-        needs_menu+="--Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$tk sfimage=xmark.octagon"$'\n'
+        need_item hourglass "$name: $(short "$cmd") · stuck $(age "$lage")" "$tk"
     done <<<"$(aget stucks "$pid")"
 done
 

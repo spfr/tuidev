@@ -190,6 +190,8 @@ agents ps 90419           # everything one session runs (all sessions without a 
 agents reap -n            # what `reap` would kill: every stale tree
 agents reap -n --stuck    # the same, plus the polling loops flagged stuck
 agents reap               # SIGTERM each stale tree, SIGKILL what's left after 3s (asks first)
+agents reap --auto -n     # what auto-reap would stop on its own (see below)
+agents why PID            # why an item is listed, the evidence, and whether it is safe to stop
 agents kill PID           # one tree, descendants first
 agents term PID           # one process only (a hog), SIGTERM
 agents awake on 2h        # keep the Mac and display awake (30m, 1h30m; no duration = until off)
@@ -218,7 +220,7 @@ agents json               # machine-readable; `agents tsv` feeds the menu-bar pl
   - `dup`: the same command runs more than once in the same directory, within a session or across sessions. A command's directory is where it `cd`s first, so parallel worktree subagents running the same `go test` in their own worktrees are not duplicates;
   - `long`: running longer than `AGENTS_TOOL_LONG` (20 minutes);
   - `wait`: a polling loop the agent waits on (`until …; do sleep 5; done`). It is never `dup` or `long`; the menu marks it with a gray hourglass, and it can still be stopped;
-  - `stuck` (with `wait`): a polling loop that has run `AGENTS_WAIT_STUCK` (60 minutes) or longer, unless the file it watches changed within that time: then its producer is alive (a long build's log), and the loop stays a plain `wait`. The watched file is the first absolute path the loop's condition gives to `tail`, `head`, `grep`, `cat`, `test`, `[` or `[[`, directly (`until grep -q ok /tmp/x.log`) or through an assignment before the loop (`F=/tmp/x.output; until tail -1 $F | …`); paths other commands take (`docker exec db /usr/bin/pg_isready`, `curl --unix-socket …`) don't count. `agents` checks every such file with one `find -mmin`. A loop with no watched file, or whose file doesn't exist, is judged by its age alone. A stuck loop usually waits for a line that will never come: it needs you. `agents reap --stuck` stops every stuck loop along with the stale trees;
+  - `stuck` (with `wait`): a polling loop that has run `AGENTS_WAIT_STUCK` (60 minutes) or longer, unless the file it watches changed within that time: then its producer is alive (a long build's log), and the loop stays a plain `wait`. The watched file is the first absolute path the loop's condition gives to `tail`, `head`, `grep`, `cat`, `test`, `[` or `[[`, directly (`until grep -q ok /tmp/x.log`) or through an assignment before the loop (`F=/tmp/x.output; until tail -1 $F | …`); paths other commands take (`docker exec db /usr/bin/pg_isready`, `curl --unix-socket …`) don't count. `agents` checks every such file with one `find -mmin`. A loop with no watched file, or whose file doesn't exist, is judged by its age alone. A stuck loop usually waits for a line that will never come: it needs you, and `agents why PID` shows the file's last line and how long it has been quiet ([Needs you](#needs-you-is-it-safe-to-stop)). `agents reap --stuck` stops every stuck loop along with the stale trees;
   - `hot`: its subtree uses `AGENTS_HOG_NOW` CPU or more.
 
   For agent authors: Claude Code appends `[exited with code N]` as the last line of a background task's `.output` file, so a loop such as `until tail -1 "$F" | grep -qE '^(ok|FAIL)'` never ends once the task has finished. Match the exit line too (`grep -qE '^(ok|FAIL)|^\[exited with code'`), or cap the tries (`for i in $(seq 120); do …; sleep 5; done`).
@@ -251,15 +253,66 @@ agents json               # machine-readable; `agents tsv` feeds the menu-bar pl
   **Reboot caveat:** macOS keeps `disablesleep` across a reboot (it's a system-wide setting, stored in `/Library/Preferences/com.apple.PowerManagement.*.plist`; `man pmset` doesn't document it), but the reboot kills the guard. `agents`, `agents awake status`, the menu and `make check` (`scripts/health_check.sh`) all notice sleep disabled with no live guard and call it a failure: `WARNING: lid sleep is disabled and nothing will restore it`. The fix is the menu's Restore lid sleep…, `agents awake restore`, or `sudo pmset -a disablesleep 0`.
 - **Thermal** shows the kernel's thermal pressure (`nominal`, `moderate`, `heavy`, `trapping`, `sleeping`, from `notifyutil -g com.apple.system.thermalpressurelevel`) and the energy mode (`automatic`, `low`, `high`). Both are read-only: macOS runs the fans, and `agents` never changes the energy mode.
 
+### Needs you: is it safe to stop?
+
+A flag says why an item is listed, not that it should be killed. Each one is a different kind of signal:
+
+| Flag | Means | Trust | What to do |
+|------|-------|-------|------------|
+| `stale` | Reparented to pid 1: the session that started it ended | High: no session will use it again. But a server it left behind may be the one open in your browser | Helpers (MCP, npx, `caffeinate`): stop them. A server: check its port first |
+| `stuck` | A polling loop that has waited `AGENTS_WAIT_STUCK` (60 minutes) while its watched file stayed quiet | High with a watched file, higher still when the file's last line says the work finished; medium when only its age counts | Read the file's last line, then stop the loop: the session sees the command fail and carries on |
+| `long` | A command running longer than `AGENTS_TOOL_LONG` (20 minutes) | Informational: builds, test suites and dev servers run long on purpose | Nothing, unless you expected it to end |
+| `dup` | The same command runs more than once in one directory | Medium | Keep the newest (Stop duplicates) |
+
+For each item, `agents why PID` (or `PID@START`) prints the evidence and a verdict, and the menu shows the same. One function (`agents_assess`) makes the verdict for every surface: `why`, `json`, the menu and auto-reap. The evidence is the owner (the session's kind, pid, project and Herdr status, or that its session ended), age and CPU, listening ports and directory, and, for a polling loop, the file it watches, that file's last line and how long ago it changed. The last line comes from the last 2 KB of a regular file, with control characters removed, cut to 80 characters. The verdicts:
+
+- **safe to stop** (high confidence): a helper whose session ended (`safe to stop — its session ended`). A stuck loop whose watched file ends in a completion marker (`[exited with code N]`, `exit N`, `ok`, `PASS`, `FAIL`, `--- FAIL`, a pytest or cargo summary, `done`, `error`), so what it waits for already happened and its condition will never match: `safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)`. Or a stuck loop whose file nothing has written to since.
+- **check first** (medium): anything listening on a port, whether its session ended or not (`check first — dev server on :3000, its session is still active`); a stuck loop judged by its age alone, or whose file is gone; a young loop whose file already says it finished; duplicates; hogs.
+- **leave it**: a loop whose watched file changed recently, so whatever writes it is alive.
+- **informational**: a long command that is none of the above (`informational — running 25m; its session is still active`), and a loop that has not waited `AGENTS_WAIT_STUCK` yet.
+
+```
+$ agents why 5010
+stuck polling loop · pid 5010@Wed_Oct_14_05:33:00_2026
+  until tail -1 $F | grep -qE "^(ok|FAIL)"; do sleep 5; done
+
+verdict: safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+confidence: high
+
+evidence:
+  owner: claude 5000 in myapp (working)
+  waiting 5h10m · 0% CPU
+  watches /…/tasks/b1.output
+  last line: [exited with code 0] (a completion marker)
+  file quiet for 5h0m
+
+next:
+  look at it: tail -5 /private/tmp/claude-UID/…/tasks/b1.output
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5010@Wed_Oct_14_05:33:00_2026
+  auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
+```
+
+`agents why --copy PID@START` puts that text on the clipboard instead. `why` refuses a `PID@START` whose pid now names another process.
+
+**Auto-reap** (`AGENTS_AUTO_REAP=1`, off by default) stops, without asking, only the two high-trust cases:
+
+- stale trees that listen on no port: the MCP servers, npx helpers and `caffeinate` of ended sessions. A stale server is never auto-reaped: one an agent started for you may still be wanted;
+- stuck polling loops with a watched file that has been quiet for twice `AGENTS_WAIT_STUCK` (two hours by default).
+
+Never a long or duplicate command, anything listening on a port, or a loop stuck by age alone. The menu runs `agents reap --auto --throttle --notify` in the background, at most once a minute, when a refresh shows something it may stop; the menu never waits for it. Without the menu (Linux, a headless box), run `agents reap --auto` from cron; running it is the opt-in, whatever `AGENTS_AUTO_REAP` says, and `agents reap --auto -n` shows what it would stop. It uses the same `PID@START` kill and grace period as `agents kill`, and one notification sums up what it stopped.
+
+Every cleanup is logged to `~/.local/state/tuidev/agents/events.tsv` (`AGENTS_HISTORY=0` turns that off): `kill manual` for `agents kill` and `term` and the menu's Stop and Kill items, `reap stale` or `reap stuck` for `agents reap`, and `auto stale` or `auto stuck` for auto-reap, each with the process name, project and owning session (`claude:PID`), never a command line.
+
 ### Menu bar (SwiftBar, macOS)
 
 On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents.10s.sh` plugin, which also stands in for a system-stats menu bar app. If SwiftBar already has a plugin folder, the plugin goes there; otherwise the pack sets the folder to `~/.config/swiftbar/plugins`. Open SwiftBar once (`open -a SwiftBar`) and turn on **Launch at login** in its settings. The pack doesn't add login items. Uninstalling removes the plugin but leaves SwiftBar's plugin-folder setting as it is.
 
 - **Title:** by default an SF Symbol and the number of sessions, plus `· N blocked` when sessions wait for you and a cup while keep-awake is on. The icon turns orange when something needs a look (a blocked session, stale processes, a hog, memory pressure) and red for heavy thermal pressure, critical memory pressure, or sleep disabled with nothing to restore it; otherwise it follows the menu bar's colors. The session count is the same in the title, the menu and `agents ls`; the Codex daemon is listed separately and not counted.
 - **Menu**, in the order of `AGENTS_BAR_SECTIONS` (sections with nothing to show are left out):
-  - **Needs you:** sessions Herdr reports as blocked, waiting for input or a permission; commands running more than once (`myapp: 3× go test running`, with Stop duplicates (keep newest)…) commands running longer than `AGENTS_TOOL_LONG` (with Stop command…), and polling loops flagged `stuck` (`myapp: until tail -1 $F … · stuck 3h27m`, an orange hourglass, with Stop command…). A polling loop that is not stuck stays out of it. Stuck loops and long or duplicate commands tint the icon orange, but only blocked sessions count in the title's `· N blocked`.
+  - **Needs you:** sessions Herdr reports as blocked, waiting for input or a permission; commands running more than once (`myapp: 3× go test running`, with Stop duplicates (keep newest)…) commands running longer than `AGENTS_TOOL_LONG` (with Stop command…), and polling loops flagged `stuck` (`myapp: until tail -1 $F … · stuck 3h27m`, an orange hourglass, with Stop command…). A polling loop that is not stuck stays out of it. Stuck loops and long or duplicate commands tint the icon orange, but only blocked sessions count in the title's `· N blocked`. Each stuck or long command ends with its verdict (`· safe to stop`, `· check first`, `· informational`; orange for the first two, gray otherwise; see [Needs you](#needs-you-is-it-safe-to-stop)), and its submenu holds the full verdict, the evidence and the auto-reap note, then Stop command… (asks first), Copy details (`agents why --copy`) and Show session (`agents ps` of the owning session in your terminal). Stopping is one choice among those, not the only one.
   - **Agents:** one line per session: project, kind, status, CPU and memory, with a dot colored by status (orange blocked, green working, gray idle). When its commands use most of the CPU the row says so (`735% (tools 728%)`). Clicking it shows the project in Finder. Its submenu holds the full path, pid, age, children and ports; Running (N), one line per command (command, age, CPU, origin, flags) with Stop command… (asks first); the MCP servers on one line; Stop duplicates (keep newest)… when a command runs twice; and Kill session…, Copy path, Open in Finder and Copy PID. The Codex daemon follows on its own line with a gear.
-  - **Stale:** each with Kill tree, plus Reap all stale, which kills exactly the processes listed, not whatever is stale when you click.
+  - **Stale:** each with its verdict (a helper is safe to stop; a server is check first), the evidence, Kill tree and Copy details, plus Reap all stale, which kills exactly the processes listed, not whatever is stale when you click.
   - **Hogs:** each with Terminate (SIGTERM, your own processes only).
   - **Awake:** the state (off, while agents run, time left, `lid closed · 2h41m left`), with a check mark on the active choice among Until turned off, For 1 hour, For 3 hours, While agents run and Off, plus who holds the Mac awake. A Lid closed too… group offers 1, 3 and 8 hours (up to `AGENTS_LID_MAX`; `AGENTS_LID=0` hides it), each running `agents awake lid` and asking for your password. While lid mode is on, End lid mode now… ends it (one dialog). When sleep is disabled with nothing to restore it, a red Restore lid sleep… item leads Needs you and the Awake section. A menu action has no terminal, so lid mode's results come back as macOS notifications: on, failed to start (and that sleep was restored), cancelled, restored.
   - **System**, two lines: CPU (the sum of `%cpu` over the `ps` snapshot, divided by the cores), memory used (`memory_pressure -Q`) and the load, which opens `agents watch`, with the busiest processes in its submenu (each opens Activity Monitor); then battery and charging (`pmset -g batt`), thermal pressure and energy mode, which opens System Settings › Battery, where Energy Mode lives.
@@ -285,11 +338,12 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents
       "mcp":   [{"name", "procs", "cpu", "rss_kib"}],
       "tools": [{"pid", "start", "start_epoch", "token" ("PID@START"), "cmd", "origin" ("main"|worktree|null),
                  "cwd", "age_s", "cpu", "rss_kib", "processes", "ports": [n],
-                 "flags": ["dup"|"long"|"hot"|"wait"|"stuck"], "dup_count"}],
+                 "flags": ["dup"|"long"|"hot"|"wait"|"stuck"], "dup_count",
+                 "verdict", "evidence" (both only on a stuck, long or dup command: see below)}],
       "child_sessions": [{"pid", "start", "start_epoch", "token", "depth" ("direct"|"nested"), "age_s", "cpu", "rss_kib", "command"}]
     }
   }],
-  "stale": [same fields as an agent, without activity], "hogs": [...], "top": [...],
+  "stale": [same fields as an agent, without activity, plus "verdict" and "evidence"], "hogs": [...], "top": [...],
   "system": {"cpu_pct", "load1", "cores", "mem_free_pct", "mem_pressure", "battery_pct", "battery_state"},
   "awake": {"active", "pid", "mode" ("on"|"timed"|"agents"|"lid"), "until"},
   "lid": {"active", "pid", "until", "sleep_disabled" (true|false|null), "stale"},
@@ -297,7 +351,20 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents
 }
 ```
 
-`start` is the process start time as `ps` prints it (it is part of the `token`); `start_epoch` is the same moment in Unix seconds, derived from the elapsed time (±1 s). A tool's `cwd` is the directory its command `cd`s into, when it does. `flags` is an open set: a new flag value is added within a version (as `stuck` was, always alongside `wait`), so ignore values you don't know. A `token` is what `agents kill`, `term`, `cwd`, `copy-path` and `reveal` take: they refuse it once the pid names another process.
+`start` is the process start time as `ps` prints it (it is part of the `token`); `start_epoch` is the same moment in Unix seconds, derived from the elapsed time (±1 s). A tool's `cwd` is the directory its command `cd`s into, when it does. `flags` is an open set: a new flag value is added within a version (as `stuck` was, always alongside `wait`), so ignore values you don't know. A `token` is what `agents kill`, `term`, `why`, `cwd`, `copy-path` and `reveal` take: they refuse it once the pid names another process.
+
+A stale tree, and a command flagged `stuck`, `long` or `dup`, also carry the [Needs-you](#needs-you-is-it-safe-to-stop) verdict, the same one `agents why` prints:
+
+```
+"verdict":  {"action" ("stop"|"check"|"leave"|"info"), "short" ("safe to stop"|…), "text", "confidence" ("high"|"medium"|"low"),
+             "code" ("session-ended"|"server-orphan"|"finished"|"quiet"|"age-only"|"gone"|"server"|"long"|"dup"|…),
+             "auto_reap" (true when auto-reap may stop it), "auto_reap_note"},
+"evidence": {"flag", "session_ended", "owner" ({"pid", "kind", "project"} or null), "age_s", "cpu", "ports": [n],
+             "watched" (path or null), "watched_quiet_s", "last_line", "completion_marker" (true|false|null),
+             "lines": [the evidence as text], "next": [what to do, as text]}
+```
+
+`code` is an open set like `flags`.
 
 ### Settings: `~/.config/agents.conf`
 
@@ -321,7 +388,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup |
 | `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
 | `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |
-| `AGENTS_AUTO_REAP` | `0` | `1` cleans up, without asking, only the leftovers of ended sessions and polling loops stuck twice as long as `AGENTS_WAIT_STUCK` with a quiet file; each one is logged and notified |
+| `AGENTS_AUTO_REAP` | `0` | `1` lets the menu clean up, without asking and at most once a minute, only the leftovers of ended sessions that listen on no port and polling loops stuck twice as long as `AGENTS_WAIT_STUCK` with a quiet file; each one is logged and notified ([auto-reap](#needs-you-is-it-safe-to-stop)) |
 | `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
 | `AGENTS_BAR_TITLE` | `count awake` | Title tokens after the icon: `count` (sessions, and how many are blocked), `cpu`, `mem`, `load`, `battery`, `thermal` (only above nominal), `awake`, `warn` (a triangle as well as the tint). Empty shows the icon alone |
 | `AGENTS_BAR_SECTIONS` | `needs agents stale hogs awake system` | Menu sections, in order; `needs`, `stale` and `hogs` appear only when they have entries |
