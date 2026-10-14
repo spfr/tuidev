@@ -293,7 +293,7 @@ check_extras() {
 }
 
 # ---------------------------------------------------------------------------
-# Category: power (macOS): sleep disabled with nothing to restore it
+# Category: power (macOS): sleep disabled and nothing will restore it
 # ---------------------------------------------------------------------------
 
 # `agents awake lid` disables sleep (pmset disablesleep 1) for a while and a
@@ -310,7 +310,7 @@ check_power() {
         print_info "Sleep disabled by 'agents awake lid'; its guard turns it back on"
         return 0
     fi
-    print_warning "${RED}Lid sleep disabled with nothing to restore it${NC} (pmset disablesleep 1, no agents awake lid guard)"
+    print_warning "${RED}Lid sleep is disabled and nothing will restore it${NC} (pmset disablesleep 1, no agents awake lid guard)"
     print_info "Fix: sudo pmset -a disablesleep 0   (or: agents awake restore)"
     OPT_WARN=$((OPT_WARN + 1))
 }

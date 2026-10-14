@@ -15,12 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `~/.config/agents.conf`. A bad value for it, or for the `AGENTS_LID*` keys,
   set in the environment falls back to the default with one warning, as one
   in the file is ignored.
-- **Keep awake with the lid closed, opt-in (macOS): `agents awake lid 3h`.**
+- **Keep awake with the lid closed (macOS): Awake › Lid closed too… in the
+  menu, or `agents awake lid 3h`.**
   `caffeinate` can't keep a closed lid awake, so this runs `pmset -a
   disablesleep 1` after macOS's own admin dialog, every time. No sudo rights
   are stored. It is always time-boxed (`AGENTS_LID_MAX`, default 8h). The
-  same root command starts a small root-owned guard, which turns lid sleep
-  back on when the time is up, below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or
+  same root command starts a small root-owned guard in a session of its own
+  (perl's `setsid`), which turns lid sleep back on when the time is up, below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or
   when thermal pressure reaches heavy. The usual `caffeinate -di` holder
   runs alongside for the same time. `agents awake off` ends it early (one more
   dialog), and `agents awake restore` turns lid sleep back on whatever
@@ -28,10 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   holder and leave lid mode running. The dialog comes from
   `/usr/bin/osascript` started with an empty environment, and the root
   command uses absolute paths only. A guard is signalled, or counted as
-  running, only while it is root's (real uid) and named `agents-lid-guard`. macOS keeps the setting across a reboot that kills the guard,
-  so `agents`, `agents awake status`, the menu (a red Restore lid sleep…) and
-  `make check` warn: "lid sleep disabled with nothing to restore it". The
-  menu's Lid closed too… group (1h, 3h, 8h) shows only with `AGENTS_LID=1`.
+  running, only while it is root's (real uid) and named `agents-lid-guard`.
+  Lid mode is never left without a guard: the root command checks the guard
+  two seconds after starting it and restores sleep itself if it is gone, and
+  `agents` checks again after the dialog returns ("lid mode failed to start;
+  sleep restored"). macOS keeps the setting across a reboot that kills the
+  guard, so `agents`, `agents awake status`, the menu (a red Restore lid
+  sleep…) and `make check` warn: "lid sleep is disabled and nothing will
+  restore it"; `awake off` then restores it too. The menu's Lid closed too…
+  group (1h, 3h, 8h) shows by default (`AGENTS_LID=0` hides it), End lid mode
+  now… appears while it is on, and its results come back as notifications.
   Linux reports it as unsupported. `agents json` gains a `lid` object, and
   `awake.mode` can be `lid` (still `schema_version` 1).
 

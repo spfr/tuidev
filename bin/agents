@@ -94,8 +94,8 @@ AGENTS_GRACE="${AGENTS_GRACE:-3}"        # seconds between SIGTERM and SIGKILL
 AGENTS_AWAKE_POLL="${AGENTS_AWAKE_POLL:-60}"  # `awake agents` re-check, seconds
 # `awake lid` (macOS, asks for an admin password): the longest it may run, the
 # battery % below which its guard restores lid sleep, and whether the menu
-# offers it at all (the command works either way).
-AGENTS_LID="${AGENTS_LID:-0}"
+# offers it (by default it does; the command works either way).
+AGENTS_LID="${AGENTS_LID:-1}"
 AGENTS_LID_MAX="${AGENTS_LID_MAX:-8h}"
 AGENTS_LID_MIN_BATTERY="${AGENTS_LID_MIN_BATTERY:-20}"
 # A value from the environment skips the file's checks: for these keys a bad
@@ -106,7 +106,7 @@ _agents_env_check() {   # KEY DEFAULT
     printf -v "$1" '%s' "$2"
 }
 _agents_env_check AGENTS_WAIT_STUCK 60
-_agents_env_check AGENTS_LID 0
+_agents_env_check AGENTS_LID 1
 _agents_env_check AGENTS_LID_MAX 8h
 _agents_env_check AGENTS_LID_MIN_BATTERY 20
 AGENTS_NAMES="${AGENTS_NAMES:-claude codex}"  # argv[0] basenames that are agents
@@ -1003,16 +1003,32 @@ _agents_lid_cmd() {
     esac
     if [[ -n "$old" ]]; then
         [[ "$old" =~ ^[1-9][0-9]{0,7}$ ]] || return 2
-        retire="if /bin/test \"\$(/bin/ps -o ruid= -p $old)\" -eq 0 2>/dev/null && /bin/ps -ww -o args= -p $old | /usr/bin/grep -q \" agents-lid-guard \"; then /bin/kill -USR1 $old; fi"
+        retire="if $(_agents_lid_root_check "$old"); then /bin/kill -USR1 $old; fi"
     fi
-    [[ "$_AGENTS_LID_GUARD" != *"'"* ]] || return 2
+    [[ "$_AGENTS_LID_GUARD$_AGENTS_LID_SETSID" != *"'"* ]] || return 2
     if [[ "$what" == stop ]]; then
         printf '/usr/bin/pmset -a disablesleep 0%s\n' "${retire:+; $retire}"
     else
-        # env -i: the root bash reads nothing from the caller's environment (BASH_ENV).
-        printf "%sif /usr/bin/pmset -a disablesleep 1; then /usr/bin/nohup /usr/bin/env -i /bin/bash -c '%s' agents-lid-guard %s %s </dev/null >/dev/null 2>&1 & /bin/echo \$!; fi\n" \
-            "${retire:+$retire; }" "$_AGENTS_LID_GUARD" "$secs" "$batt"
+        # The guard starts in a session of its own (perl's setsid, then exec:
+        # macOS has no setsid command), so nothing that ends the dialog's
+        # process group takes it along; env -i, so the root bash reads nothing
+        # from the caller's environment (BASH_ENV). Two seconds later it must
+        # still run as root under its name, or sleep is turned back on right
+        # here and the command fails: lid mode is never left without a guard.
+        printf "%sif /usr/bin/pmset -a disablesleep 1; then /usr/bin/perl -MPOSIX -e '%s' /usr/bin/env -i /bin/bash -c '%s' agents-lid-guard %s %s </dev/null >/dev/null 2>&1 & g=\$!; /bin/sleep 2; if %s; then /bin/echo \$g; else /usr/bin/pmset -a disablesleep 0; /bin/echo \"%s\" >&2; /usr/bin/false; fi; else /bin/echo \"agents-lid: pmset failed; nothing changed\" >&2; /usr/bin/false; fi\n" \
+            "${retire:+$retire; }" "$_AGENTS_LID_SETSID" "$_AGENTS_LID_GUARD" "$secs" "$batt" \
+            "$(_agents_lid_root_check "\$g")" "$_AGENTS_LID_NOSTART"
     fi
+}
+
+# perl: become a session leader, then exec the guard (fixed text, no quotes).
+_AGENTS_LID_SETSID='POSIX::setsid() >= 0 or die "setsid: $!"; exec @ARGV; die "exec: $!"'
+_AGENTS_LID_NOSTART="agents-lid: the guard did not start; sleep restored"
+# _agents_lid_root_check PID — the root shell's test that PID (a number, or
+# $g) is root's agents-lid-guard: its real uid is 0 and its argv names it.
+_agents_lid_root_check() {
+    # shellcheck disable=SC2016  # expanded by the root shell, not here
+    printf '/bin/test "$(/bin/ps -o ruid= -p %s 2>/dev/null)" -eq 0 2>/dev/null && /bin/ps -ww -o args= -p %s 2>/dev/null | /usr/bin/grep -q " agents-lid-guard "' "$1" "$1"
 }
 
 # The osascript that asks for the password: always /usr/bin/osascript, except
@@ -1062,14 +1078,27 @@ agents_lid_state() {
         # No start time was recorded: only root's agents-lid-guard counts. A
         # pid that now names something else is dropped; when ps answers
         # nothing, it can't be told, and the guard is not counted as live.
-        now="$(LC_ALL=C ps -ww -o ruid=,args= -p "$pid" 2>/dev/null)"
-        [[ -n "$now" ]] || return 1
-        if ! printf '%s\n' "$now" | awk 'NR == 1 && $1 == 0 { r = 1 } / agents-lid-guard / { g = 1 } END { exit !(r && g) }'; then
-            _agents_rm_if_same "$file" "$content"; return 1
-        fi
-        verified=1
+        _agents_lid_is_guard "$pid"
+        case $? in
+            0) verified=1 ;;
+            1) _agents_rm_if_same "$file" "$content"; return 1 ;;
+            *) return 1 ;;
+        esac
     fi
     echo "$pid ${until:-0} $verified"
+}
+
+# _agents_lid_is_guard PID — 0 when PID is root's agents-lid-guard (real uid
+# 0, named in its argv), 1 when ps shows another process or none, 2 when ps
+# can't be asked.
+_agents_lid_is_guard() {
+    local out
+    out="$(LC_ALL=C ps -ww -o ruid=,args= -p "$1" 2>/dev/null)"
+    if [[ -z "$out" ]]; then
+        LC_ALL=C ps -o pid= -p "$$" >/dev/null 2>&1 && return 1
+        return 2
+    fi
+    printf '%s\n' "$out" | awk 'NR == 1 && $1 == 0 { r = 1 } / agents-lid-guard / { g = 1 } END { exit !(r && g) }'
 }
 
 # agents_lid_stale — true when sleep is disabled and no guard of ours will
@@ -1081,7 +1110,7 @@ agents_lid_stale() {
 _AGENTS_LID_FIX="agents awake restore (or: sudo pmset -a disablesleep 0)"
 _agents_lid_warning() {
     agents_lid_stale || return 0
-    printf '%sWARNING: lid sleep disabled with nothing to restore it. Fix: %s%s\n' "${C_R:-}${C_B:-}" "$_AGENTS_LID_FIX" "${C_0:-}"
+    printf '%sWARNING: lid sleep is disabled and nothing will restore it. Fix: %s%s\n' "${C_R:-}${C_B:-}" "$_AGENTS_LID_FIX" "${C_0:-}"
 }
 
 # agents_awake_lid DURATION — keep awake with the lid closed for DURATION (at
@@ -1116,9 +1145,16 @@ agents_awake_lid() {
     rm -f "$AGENTS_RUN_DIR/lid.err"
     gpid="${out##*$'\n'}"
     if [[ ! "$gpid" =~ ^[0-9]+$ ]]; then
-        rm -f "$AGENTS_RUN_DIR/powermode"
-        echo "awake: lid sleep may be off with no guard to restore it: run '$_AGENTS_LID_FIX'" >&2; return 1
+        _agents_lid_failed "the root step reported no guard"; return 1
     fi
+    # The root step checked the guard before it returned; check again now
+    # that it has, in case ending the dialog took the guard along.
+    sleep 1
+    _agents_lid_is_guard "$gpid"
+    case $? in
+        1) _agents_lid_failed "its guard (pid $gpid) stopped when the dialog ended"; return 1 ;;
+        2) echo "awake: can't run ps to check the guard (pid $gpid); see 'agents awake status'" >&2 ;;
+    esac
     until=$(( $(date +%s) + secs ))
     start="$(_agents_start "$gpid")"
     # The record first, then the cached SleepDisabled: never "disabled with no
@@ -1131,6 +1167,21 @@ agents_awake_lid() {
     disown "$pid" 2>/dev/null
     _agents_awake_write "$pid" lid "$until"
     echo "awake: on with the lid closed until $(_agents_clock "$until") (guard pid $gpid): lid sleep comes back then, below ${AGENTS_LID_MIN_BATTERY}% battery off AC, or when the Mac runs hot (heavy thermal pressure)"
+    _agents_notify "Awake with the lid closed until $(_agents_clock "$until")"
+}
+
+# _agents_lid_failed WHY — lid mode started but has no guard: say so, and turn
+# lid sleep back on (one more dialog).
+_agents_lid_failed() {
+    rm -f "$AGENTS_RUN_DIR/powermode"
+    echo "awake: lid mode failed to start: $1; turning lid sleep back on" >&2
+    if agents_lid_stop --always >/dev/null; then
+        echo "awake: lid mode failed to start; sleep restored" >&2
+        _agents_notify "Lid mode failed to start ($1); sleep restored"
+    else
+        echo "awake: lid sleep is disabled and nothing will restore it: run '$_AGENTS_LID_FIX'" >&2
+        _agents_notify "Lid mode failed and lid sleep is still disabled: use Restore lid sleep"
+    fi
 }
 
 # agents_lid_stop [--always] — turn lid sleep back on (one admin dialog) and
@@ -1140,7 +1191,10 @@ agents_lid_stop() {
     if state="$(agents_lid_state)"; then
         read -r pid _ v <<<"$state"; [[ "$v" == 1 ]] || pid=""
     elif [[ "${1:-}" != --always ]]; then
-        return 0
+        # No guard of ours: still act when sleep is disabled with nothing to
+        # restore it (a reboot or a crash killed the guard). Ask pmset afresh.
+        rm -f "$AGENTS_RUN_DIR/powermode"
+        [[ "$(agents_sleep_disabled)" == 1 ]] || return 0
     fi
     _agents_lid_supported || return 2
     cmd="$(_agents_lid_cmd stop "$pid")" || { echo "agents: refusing to build the root command" >&2; return 2; }
@@ -1153,6 +1207,7 @@ agents_lid_stop() {
     rm -f "$AGENTS_RUN_DIR/powermode"
     rm -f "$AGENTS_RUN_DIR/lid"
     echo "awake: lid sleep restored"
+    _agents_notify "Lid sleep restored"
 }
 
 # _agents_admin_failed WHAT — report a failed admin step with osascript's own
@@ -1163,7 +1218,17 @@ _agents_admin_failed() {
     err="$(cat "$AGENTS_RUN_DIR/lid.err" 2>/dev/null)"; rm -f "$AGENTS_RUN_DIR/lid.err" "$AGENTS_RUN_DIR/powermode"
     if [[ "$err" == *"(-128)"* ]]; then
         echo "awake: cancelled in the password dialog; $1, nothing ran as root" >&2
+        _agents_notify "Cancelled: $1"
+    elif [[ "$err" == *"$_AGENTS_LID_NOSTART"* || "$err" == *"agents-lid: pmset failed; nothing changed"* ]]; then
+        if [[ "$err" == *"$_AGENTS_LID_NOSTART"* ]]; then
+            echo "awake: lid mode failed to start: its guard did not start; sleep restored" >&2
+            _agents_notify "Lid mode failed to start (no guard); sleep restored"
+        else
+            echo "awake: lid mode failed to start: pmset refused; nothing changed" >&2
+            _agents_notify "Lid mode failed to start: pmset refused"
+        fi
     else
+        _agents_notify "Failed: $1; check Restore lid sleep in the menu"
         echo "awake: the administrator step failed${err:+: $err}" >&2
         echo "awake: $1 as asked, but part of it may have run: check 'pmset -g | grep SleepDisabled'; to be sure, run '$_AGENTS_LID_FIX'" >&2
     fi
@@ -1262,6 +1327,7 @@ agents_awake_line() {
             timed)  echo "awake: on until $(_agents_clock "$until") ($note)${lid:+; lid closed too until $(_agents_clock "$(_agents_field 2 "$lid")")}" ;;
             agents) echo "awake: while agents run ($note)${lid:+; lid closed too until $(_agents_clock "$(_agents_field 2 "$lid")")}" ;;
             lid)    if [[ -n "$lid" ]]; then echo "awake: lid closed too, until $(_agents_clock "$until") ($note; guard pid ${lid%% *})"
+                    elif agents_lid_stale; then echo "awake: on until $(_agents_clock "$until") ($note; lid sleep is disabled and nothing will restore it)"
                     else echo "awake: on until $(_agents_clock "$until") ($note; lid mode ended, a closed lid sleeps again)"; fi ;;
             *)      echo "awake: on ($note)" ;;
         esac
@@ -2089,6 +2155,7 @@ KEEP AWAKE
   agents awake off             release (ends lid mode too: one more password)
   agents awake restore         let a closed lid sleep again (pmset disablesleep 0),
                                e.g. after a reboot killed the guard
+    --notify                   report lid mode's results as macOS notifications
 
 SETTINGS
   agents config [--edit]       effective settings, and the file they came from;
@@ -2179,7 +2246,9 @@ agents_main() {
                   fi
                   # shellcheck disable=SC2086  # one token per word, none has spaces
                   agents_kill_tokens true $tokens ;;
-        awake)    agents_awake "$@" ;;
+        awake)    local aw=() a
+                  for a in "$@"; do if [[ "$a" == --notify ]]; then AGENTS_NOTIFY=true; else aw+=("$a"); fi; done
+                  agents_awake ${aw[@]+"${aw[@]}"} ;;
         thermal)  local lvl; lvl="$(agents_thermal_level)"
                   echo "thermal pressure: $(agents_thermal_name "${lvl:--}")${lvl:+ ($lvl)}"
                   echo "energy mode: $(agents_powermode)" ;;

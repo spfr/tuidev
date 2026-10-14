@@ -414,24 +414,29 @@ pass "keep-awake lock is released by its EXIT trap"
 lidbin="$tmp/lidbin"; mkdir -p "$lidbin"
 # shellcheck disable=SC2016  # the stubs expand their own variables
 {
-    printf '#!/bin/bash\nd=%q\nprintf "%%s" "$7" > "$d/lid.cmd"; printf "%%s" "$8" > "$d/lid.prompt"\nprintf "%%s\\n" "$0" "$@" > "$d/osa.argv"; /usr/bin/env > "$d/osa.env"\n[[ ! -e "$d/osa.cancel" ]] || { echo "execution error: User canceled. (-128)" >&2; exit 1; }\n[[ ! -e "$d/osa.fail" ]] || { echo "execution error: pmset: failed (1)" >&2; exit 1; }\ncase "$7" in *"disablesleep 1"*) cat "$d/osa.pid" ;; esac\nexit 0\n' "$tmp" > "$lidbin/osascript"
+    printf '#!/bin/bash\nd=%q\ncase "$4" in *"display notification"*) printf "%%s\\n" "$7" >> "$d/notify.log"; exit 0 ;; esac\nprintf "%%s" "$7" > "$d/lid.cmd"; printf "%%s" "$8" > "$d/lid.prompt"\nprintf "%%s\\n" "$0" "$@" > "$d/osa.argv"; /usr/bin/env > "$d/osa.env"\n[[ ! -e "$d/osa.cancel" ]] || { echo "execution error: User canceled. (-128)" >&2; exit 1; }\n[[ ! -e "$d/osa.fail" ]] || { echo "execution error: pmset: failed (1)" >&2; exit 1; }\n[[ ! -e "$d/osa.nostart" ]] || { echo "execution error: agents-lid: the guard did not start; sleep restored (1)" >&2; exit 1; }\ncase "$7" in *"disablesleep 1"*) cat "$d/osa.pid" ;; esac\nexit 0\n' "$tmp" > "$lidbin/osascript"
     printf '#!/bin/bash\ncase "$*" in\n  -g) echo "System-wide power settings:"; [[ "$PMSET_SD" == 1 ]] && printf " SleepDisabled\\t\\t1\\n"; echo "Currently in use:"; echo " powermode            0" ;;\n  "-g batt") printf "%%b\\n" "$PMSET_BATT" ;;\n  -a\\ *) echo "$*" >> "$PMSET_LOG" ;;\nesac\nexit 0\n' > "$lidbin/pmset"
     printf '#!/bin/bash\necho "com.apple.system.thermalpressurelevel ${THERMAL:-0}"\n' > "$lidbin/notifyutil"
     printf '#!/bin/bash\nfields="" pid=""\nwhile [[ $# -gt 0 ]]; do case "$1" in -o) fields="$2"; shift 2 ;; -p) pid="$2"; shift 2 ;; *) shift ;; esac; done\n[[ -n "$pid" && -r "$PS_TABLE" ]] || exit 1\nwhile IFS=$'"'"'\\t'"'"' read -r p lst ru args; do\n    [[ "$p" == "$pid" ]] || continue\n    out=""; IFS=, read -r -a fs <<<"$fields"\n    for f in "${fs[@]}"; do case "$f" in pid=) v="$p" ;; lstart=) v="$lst" ;; ruid=|uid=) v="$ru" ;; args=) v="$args" ;; *) v="" ;; esac; out+="${out:+ }$v"; done\n    echo "$out"; exit 0\ndone < "$PS_TABLE"\nexit 1\n' > "$lidbin/ps"
 }
 chmod +x "$lidbin/osascript" "$lidbin/pmset" "$lidbin/notifyutil" "$lidbin/ps"
 export LID_LOG="$tmp/lid" PMSET_LOG="$tmp/pmset.log" PMSET_SD=0 PMSET_BATT="" THERMAL=0 PS_TABLE="$tmp/ps.table"
-: > "$PS_TABLE"
+# This shell's own row: ps works, so a pid it doesn't list is gone.
+self_row() { printf '%s\tWed Oct 14 08:00:00 2026\t501\tbash test\n' "$$" >> "$PS_TABLE"; }
+: > "$PS_TABLE"; self_row
 guard_row() { printf '%s\tWed Oct 14 09:00:00 2026\t0\t/bin/bash -c restore agents-lid-guard 3600 20\n' "$1" >> "$PS_TABLE"; }
 
 # The root command: fixed text around checked numbers only, every command an
 # absolute path (no echo, [ or exit an inherited function could replace).
 guard_q="'$_AGENTS_LID_GUARD'"
 [[ "$_AGENTS_LID_GUARD" != *"'"* ]] || fail "the guard body holds a single quote"
-start_cmd() { printf 'if /usr/bin/pmset -a disablesleep 1; then /usr/bin/nohup /usr/bin/env -i /bin/bash -c %s agents-lid-guard %s %s </dev/null >/dev/null 2>&1 & /bin/echo $!; fi' "$guard_q" "$1" "$2"; }
+# shellcheck disable=SC2016  # the literal root command, expanded by root's sh
+start_cmd() {
+    printf '%s' "if /usr/bin/pmset -a disablesleep 1; then /usr/bin/perl -MPOSIX -e 'POSIX::setsid() >= 0 or die \"setsid: \$!\"; exec @ARGV; die \"exec: \$!\"' /usr/bin/env -i /bin/bash -c $guard_q agents-lid-guard $1 $2 </dev/null >/dev/null 2>&1 & g=\$!; /bin/sleep 2; if /bin/test \"\$(/bin/ps -o ruid= -p \$g 2>/dev/null)\" -eq 0 2>/dev/null && /bin/ps -ww -o args= -p \$g 2>/dev/null | /usr/bin/grep -q \" agents-lid-guard \"; then /bin/echo \$g; else /usr/bin/pmset -a disablesleep 0; /bin/echo \"agents-lid: the guard did not start; sleep restored\" >&2; /usr/bin/false; fi; else /bin/echo \"agents-lid: pmset failed; nothing changed\" >&2; /usr/bin/false; fi"
+}
 [[ "$(_agents_lid_cmd start 10800 20)" == "$(start_cmd 10800 20)" ]] || fail "lid start command: $(_agents_lid_cmd start 10800 20)"
 # shellcheck disable=SC2016  # the literal root command, expanded by root's sh
-retire='if /bin/test "$(/bin/ps -o ruid= -p 777)" -eq 0 2>/dev/null && /bin/ps -ww -o args= -p 777 | /usr/bin/grep -q " agents-lid-guard "; then /bin/kill -USR1 777; fi'
+retire='if /bin/test "$(/bin/ps -o ruid= -p 777 2>/dev/null)" -eq 0 2>/dev/null && /bin/ps -ww -o args= -p 777 2>/dev/null | /usr/bin/grep -q " agents-lid-guard "; then /bin/kill -USR1 777; fi'
 [[ "$(_agents_lid_cmd start 60 5 777)" == "$retire; $(start_cmd 60 5)" ]] || fail "lid start command replacing a guard: $(_agents_lid_cmd start 60 5 777)"
 [[ "$(_agents_lid_cmd stop)" == "/usr/bin/pmset -a disablesleep 0" ]] || fail "lid stop command"
 [[ "$(_agents_lid_cmd stop 777)" == "/usr/bin/pmset -a disablesleep 0; $retire" ]] || fail "lid stop command with a guard: $(_agents_lid_cmd stop 777)"
@@ -451,6 +456,55 @@ bad_lid_cmd stop '1;id'
 bad_lid_cmd stop -1
 bad_lid_cmd go 60 20
 pass "lid: the root command is fixed text around checked numbers, with absolute paths only"
+
+# The root step's own fail-safe: a guard that is gone two seconds later means
+# sleep is turned back on in the same command, which then fails. Run as
+# yourself with the pmset writes logged (and the uid check made yours).
+sub_all() {   # TEXT FROM TO — every FROM replaced (variables: the same in bash 3.2)
+    local t="$1" from="$2" to="$3"
+    printf '%s' "${t//"$from"/$to}"
+}
+lid_test_cmd() {   # LOG CMD — the root command, made harmless and runnable as you
+    local c="$2"
+    c="$(sub_all "$c" "/usr/bin/pmset -a disablesleep 1" "/usr/bin/true")"
+    c="$(sub_all "$c" "/usr/bin/pmset -a disablesleep 0" "/bin/echo restored >> $1")"
+    c="$(sub_all "$c" "-eq 0 2>/dev/null" "-eq $(id -u) 2>/dev/null")"
+    c="$(sub_all "$c" "/bin/sleep 60" "/bin/sleep 1")"
+    [[ "$c" != *"pmset -a"* ]] || fail "a pmset write is left in the test command"
+    printf '%s' "$c"
+}
+if [[ -x /usr/bin/perl ]]; then
+    : > "$tmp/nostart.log"
+    c="$(lid_test_cmd "$tmp/nostart.log" "$(_agents_lid_cmd start 600 20)")"
+    c="$(sub_all "$c" "'end=" "'exit 3; end=")"; c="$(sub_all "$c" "/bin/sleep 2" "/bin/sleep 0.3")"
+    rc=0; /bin/sh -c "$c" >"$tmp/nostart.out" 2>"$tmp/nostart.err" || rc=$?
+    [[ $rc -ne 0 && ! -s "$tmp/nostart.out" && "$(cat "$tmp/nostart.err")" == "$_AGENTS_LID_NOSTART" && "$(cat "$tmp/nostart.log")" == restored ]] \
+        || fail "fail-safe: rc $rc, out '$(cat "$tmp/nostart.out")', err '$(cat "$tmp/nostart.err")', log '$(cat "$tmp/nostart.log")'"
+    pass "lid: when the guard is gone after two seconds, the root step restores sleep itself and fails"
+else
+    echo "SKIP: no /usr/bin/perl: lid fail-safe test not run"
+fi
+
+# The real detach: the guard starts in a session of its own, so killing the
+# group that launched it (what ending a privileged dialog can do) leaves it
+# running. Needs perl and a usable ps (not in a sandbox).
+if [[ -x /usr/bin/perl ]] && /bin/ps -o pid= -p $$ >/dev/null 2>&1; then
+    : > "$tmp/detach.log"
+    c="$(lid_test_cmd "$tmp/detach.log" "$(_agents_lid_cmd start 600 20)")"
+    ( set -m; /bin/sh -c "$c" >"$tmp/detach.out" 2>"$tmp/detach.err" & l=$!; wait "$l"; echo "$l" > "$tmp/detach.leader" )
+    g="$(cat "$tmp/detach.out")"
+    [[ "$g" =~ ^[0-9]+$ ]] || fail "detach: the launch reported no guard: $(cat "$tmp/detach.err")"
+    kill -KILL -- "-$(cat "$tmp/detach.leader")" 2>/dev/null || true
+    sleep 0.5
+    kill -0 "$g" 2>/dev/null || fail "detach: the guard died with the group that launched it"
+    [[ "$(/bin/ps -o pgid= -p "$g" | tr -d ' ')" == "$g" ]] || fail "detach: the guard does not lead its own group"
+    /bin/ps -ww -o args= -p "$g" | grep -q " agents-lid-guard 600 20" || fail "detach: the guard is not named agents-lid-guard"
+    kill -TERM "$g"; sleep 1
+    [[ "$(cat "$tmp/detach.log")" == restored ]] || fail "detach: SIGTERM did not restore: $(cat "$tmp/detach.log")"
+    pass "lid: the guard runs in its own session, survives its launcher's group being killed, restores on SIGTERM"
+else
+    echo "SKIP: no perl or ps here (sandbox?): live lid detach test not run"
+fi
 
 # The guard itself: valid, shellcheck-clean bash; restores on low battery off
 # AC, on heavy thermal pressure (not moderate) and when the time is up;
@@ -514,7 +568,25 @@ rc=0; out="$(lid lid 1h 2>&1)" || rc=$?
 rm -f "$tmp/osa.fail"
 [[ $rc -eq 1 && "$out" == *"pmset: failed (1)"*"may have run"*"agents awake restore"* && "$out" != *"nothing changed"* ]] \
     || fail "a failed root step: $out"
-out="$(AGENTS_LID_MAX=10h lid lid 9h)" || fail "awake lid 9h under AGENTS_LID_MAX=10h: $out"
+touch "$tmp/osa.nostart"
+rc=0; out="$(AGENTS_NOTIFY=true lid lid 1h 2>&1)" || rc=$?
+rm -f "$tmp/osa.nostart"
+[[ $rc -eq 1 && "$out" == *"lid mode failed to start: its guard did not start; sleep restored"* && ! -e "$tmp/lidrun/lid" ]] \
+    || fail "the root step's fail-safe: $out"
+grep -q "Lid mode failed to start (no guard); sleep restored" "$tmp/notify.log" || fail "no notification for a failed start: $(cat "$tmp/notify.log" 2>/dev/null)"
+# A guard that dies as the dialog ends: lid sleep is restored at once (one more
+# dialog), and the record never stays.
+sleep 60 & doomed=$!
+printf '%s\n' "$doomed" > "$tmp/osa.pid"
+rm -f "$LID_LOG.cmd"
+rc=0; out="$(lid lid 1h 2>&1)" || rc=$?
+[[ $rc -eq 1 && "$out" == *"stopped when the dialog ended"*"lid mode failed to start; sleep restored"* ]] || fail "a guard that died on return: $out"
+[[ "$(cat "$LID_LOG.cmd")" == "/usr/bin/pmset -a disablesleep 0" && ! -e "$tmp/lidrun/lid" ]] || fail "a dead guard left lid mode on: $(cat "$LID_LOG.cmd")"
+kill "$doomed" 2>/dev/null; wait "$doomed" 2>/dev/null || true
+printf '%s\n' "$fake_guard" > "$tmp/osa.pid"
+: > "$tmp/notify.log"
+out="$(AGENTS_NOTIFY=true AGENTS_LID_MAX=10h lid lid 9h)" || fail "awake lid 9h under AGENTS_LID_MAX=10h: $out"
+grep -q "Awake with the lid closed until" "$tmp/notify.log" || fail "no notification for lid mode on"
 [[ "$(cat "$LID_LOG.cmd")" == "$(_agents_lid_cmd start 32400 20)" ]] || fail "the dialog ran something else: $(cat "$LID_LOG.cmd")"
 [[ "$(cat "$LID_LOG.prompt")" == *"lid closed for 9h"*"below 20% battery"* ]] || fail "dialog prompt: $(cat "$LID_LOG.prompt")"
 # Exactly: /usr/bin/env -i <osascript> -e … -e … -e … COMMAND PROMPT, nothing inherited.
@@ -552,17 +624,18 @@ mkdir -p "$tmp/sdrun"
 [[ "$(PMSET_SD=1 sd _agents_powermode_probe)" == "automatic 1" && "$(PMSET_SD=0 sd _agents_powermode_probe)" == "automatic 0" ]] \
     || fail "pmset -g SleepDisabled parse: $(PMSET_SD=1 sd _agents_powermode_probe)"
 PMSET_SD=1 sd agents_lid_stale || fail "SleepDisabled 1 without a guard not stale"
-[[ "$(PMSET_SD=1 sd _agents_lid_warning)" == *"lid sleep disabled with nothing to restore it. Fix: agents awake restore"* ]] || fail "stale warning text"
+[[ "$(PMSET_SD=1 sd _agents_lid_warning)" == *"lid sleep is disabled and nothing will restore it. Fix: agents awake restore"* ]] || fail "stale warning text"
 ! PMSET_SD=0 sd agents_lid_stale || fail "sleep enabled reported stale"
 # A record without a start time: live only while ps shows root's agents-lid-guard.
 sleep 60 & live_guard=$!
 printf '%s - %s\n' "$live_guard" "$(( $(date +%s) + 600 ))" > "$tmp/sdrun/lid"
+: > "$PS_TABLE"   # ps answers nothing at all
 ! PMSET_SD=1 sd agents_lid_state >/dev/null || fail "a guard ps can't see counted as live"
 [[ -e "$tmp/sdrun/lid" ]] || fail "a record dropped when ps answered nothing"
-guard_row "$live_guard"
+self_row; guard_row "$live_guard"
 [[ "$(PMSET_SD=1 sd agents_lid_state)" == "$live_guard "*" 1" ]] || fail "root's agents-lid-guard without a start time not live"
 ! PMSET_SD=1 sd agents_lid_stale || fail "a live guard reported stale"
-printf '%s\tWed Oct 14 09:00:00 2026\t501\tsleep 60\n' "$live_guard" > "$PS_TABLE"
+: > "$PS_TABLE"; self_row; printf '%s\tWed Oct 14 09:00:00 2026\t501\tsleep 60\n' "$live_guard" >> "$PS_TABLE"
 ! PMSET_SD=1 sd agents_lid_state >/dev/null || fail "a pid that names another process counted as the guard"
 [[ ! -e "$tmp/sdrun/lid" ]] || fail "the record of a reused pid was kept"
 printf '%s - %s\n' "$live_guard" "$(( $(date +%s) + 600 ))" > "$tmp/sdrun/lid"
@@ -573,7 +646,22 @@ PMSET_SD=1 sd agents_lid_stale || fail "a dead guard's record still counts"
 rm -f "$LID_LOG.cmd"
 PMSET_SD=1 sd agents_awake restore >/dev/null || fail "awake restore"
 [[ "$(cat "$LID_LOG.cmd")" == "/usr/bin/pmset -a disablesleep 0" ]] || fail "awake restore ran: $(cat "$LID_LOG.cmd")"
-pass "stale SleepDisabled (no live guard) is detected; an unrecorded start needs root's agents-lid-guard; awake restore runs pmset"
+# awake off restores too when sleep is disabled with no guard and no record.
+rm -f "$LID_LOG.cmd" "$tmp/sdrun/lid"
+PMSET_SD=1 sd agents_awake off >/dev/null || fail "awake off with stale lid sleep"
+[[ "$(cat "$LID_LOG.cmd" 2>/dev/null)" == "/usr/bin/pmset -a disablesleep 0" ]] || fail "awake off left stale lid sleep alone"
+rm -f "$LID_LOG.cmd"
+PMSET_SD=0 sd agents_awake off >/dev/null || fail "awake off with sleep enabled failed"
+[[ ! -e "$LID_LOG.cmd" ]] || fail "awake off asked for a password with sleep enabled"
+# Status: a lid holder whose guard is gone while sleep stays disabled is a
+# failure, not "lid mode ended".
+sleep 60 & holder=$!
+printf '%s\tWed Oct 14 09:30:00 2026\t501\tsleep 60\n' "$holder" >> "$PS_TABLE"
+printf '%s Wed_Oct_14_09:30:00_2026 lid %s\n' "$holder" "$(( $(date +%s) + 600 ))" > "$tmp/sdrun/awake"
+[[ "$(PMSET_SD=1 sd agents_awake_line)" == *"lid sleep is disabled and nothing will restore it"* ]] || fail "status for a dead guard: $(PMSET_SD=1 sd agents_awake_line)"
+[[ "$(PMSET_SD=0 sd agents_awake_line)" == *"lid mode ended, a closed lid sleeps again"* ]] || fail "status after lid mode ended: $(PMSET_SD=0 sd agents_awake_line)"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null || true; rm -f "$tmp/sdrun/awake"
+pass "stale SleepDisabled is detected and named a failure; awake off and awake restore turn lid sleep back on"
 
 # Root is refused; AGENTS_SELF is a test-only override.
 out="$(AGENTS_TESTING=1 AGENTS_EUID=0 bash "$REPO_DIR/bin/agents" kill -n 123 2>&1)" && fail "kill ran as root"
@@ -715,6 +803,9 @@ check_actions() {   # MENU
                             [[ "$a" =~ ^(-y|--notify|--confirm-gui)$ || "$a" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || fail "$sub: bad argument '$a'"
                         done ;;
                     awake)
+                        local aw=() x
+                        for x in "$@"; do [[ "$x" == --notify ]] || aw+=("$x"); done
+                        set -- ${aw[@]+"${aw[@]}"}
                         [[ "${1:-}" =~ ^(on|off|agents|lid|restore)$ ]] || fail "awake: bad mode '${1:-}'"
                         [[ "${1:-}" != lid || $# -eq 2 ]] || fail "awake lid without a duration"
                         [[ $# -lt 2 ]] || agents_parse_duration "$2" >/dev/null || fail "awake $1: bad duration '$2'" ;;
@@ -827,29 +918,33 @@ menu="$(plugin "$enriched" "$sys_line")"
 [[ "$(printf '%s\n' "$menu" | grep -c '^Messages · ')" == 1 && "$menu" != *"--Messages · "* ]] || fail "a hog listed twice (hogs and top)"
 pass "SwiftBar sections follow AGENTS_BAR_SECTIONS; top processes skip the hogs"
 
-# Lid mode in the menu: the group only with AGENTS_LID=1 (choices up to
-# AGENTS_LID_MAX); the time left while on; a red restore item when stale.
+# Lid mode in the menu: the group by default, hidden with AGENTS_LID=0
+# (choices up to AGENTS_LID_MAX, each reporting by notification); the time
+# left and End lid mode now… while on; a red restore item when stale.
 lid_off=$'awake\toff\t-\t0\nlid\toff\t-\t0\t28800'
+menu="$(plugin "$calm" "$lid_off"$'\nconf\tAGENTS_LID\t0')"
+[[ "$menu" != *"Lid closed"* && "$menu" != *"param2=lid"* ]] || fail "lid group shown with AGENTS_LID=0"
 menu="$(plugin "$calm" "$lid_off")"
-[[ "$menu" != *"Lid closed"* && "$menu" != *"param2=lid"* ]] || fail "lid group shown without AGENTS_LID=1"
-menu="$(plugin "$calm" "$lid_off"$'\nconf\tAGENTS_LID\t1')"
-[[ "$menu" == *$'\n'"--Lid closed too… | sfimage=laptopcomputer refresh=true"$'\n'"----For 1 hour | bash="*" param1=awake param2=lid param3=1h"$'\n'"----For 3 hours | "*"param3=3h"$'\n'"----For 8 hours | "*"param3=8h"$'\n'"----Asks for your password; restores on timeout or low battery | size=11"$'\n'"--Off | "* ]] \
+[[ "$menu" == *$'\n'"--Lid closed too… | sfimage=laptopcomputer refresh=true"$'\n'"----For 1 hour | bash="*" param1=awake param2=lid param3=1h param4=--notify"$'\n'"----For 3 hours | "*"param3=3h param4=--notify"$'\n'"----For 8 hours | "*"param3=8h param4=--notify"$'\n'"----Asks for your password; restores on timeout or low battery | size=11"$'\n'"--Off | "* ]] \
     || fail "lid group: $(printf '%s\n' "$menu" | grep -A5 'Lid closed')"
 check_actions "$menu"
-menu="$(plugin "$calm" $'awake\toff\t-\t0\nlid\toff\t-\t0\t10800\nconf\tAGENTS_LID\t1')"
+menu="$(plugin "$calm" $'awake\toff\t-\t0\nlid\toff\t-\t0\t10800')"
 [[ "$menu" == *"param3=3h"* && "$menu" != *"----For 8 hours"* ]] || fail "lid choices above AGENTS_LID_MAX offered"
 lid_end=$(( $(date +%s) + 9700 ))
 menu="$(plugin "$calm" "awake"$'\t'"lid"$'\t'"8800"$'\t'"$lid_end"$'\n'"lid"$'\t'"on"$'\t'"4242"$'\t'"$lid_end"$'\t'"28800")"
 [[ "$menu" == *$'\n'"Awake: lid closed · 2h41m left | sfimage=laptopcomputer refresh=true"* || "$menu" == *$'\n'"Awake: lid closed · 2h42m left | sfimage=laptopcomputer refresh=true"* ]] \
     || fail "lid awake line: $(printf '%s\n' "$menu" | grep '^Awake')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2 :cup.and.saucer.fill:" ]] || fail "lid on is not a calm title"
+[[ "$menu" == *$'\n'"End lid mode now… | bash="*" param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"* ]] || fail "no End lid mode now… while on"
+check_actions "$menu"
+[[ "$(plugin "$calm" "$lid_off")" != *"End lid mode now"* ]] || fail "End lid mode now… shown with lid mode off"
 menu="$(plugin "$calm" $'awake\toff\t-\t0\nlid\tstale\t-\t0\t28800')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2 | sfcolor=#FF453A" ]] || fail "stale lid sleep does not turn the icon red"
-[[ "$(printf '%s\n' "$menu" | sed -n 3,4p)" == "Needs you (1) | size=12"$'\n'"Restore lid sleep (disabled, nothing restores it)… | sfimage=exclamationmark.triangle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" param1=awake param2=restore symbolize=false" ]] \
+[[ "$(printf '%s\n' "$menu" | sed -n 3,4p)" == "Needs you (1) | size=12"$'\n'"Restore lid sleep (disabled, nothing restores it)… | sfimage=exclamationmark.triangle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" param1=awake param2=restore param3=--notify symbolize=false" ]] \
     || fail "Restore lid sleep does not lead Needs you: $(printf '%s\n' "$menu" | sed -n 3,4p)"
-[[ "$menu" == *$'\n'"Restore lid sleep… | bash="*" param1=awake param2=restore sfimage=lock.open"* ]] || fail "Restore lid sleep missing from Awake"
+[[ "$menu" == *$'\n'"Restore lid sleep… | bash="*" param1=awake param2=restore param3=--notify sfimage=lock.open"* ]] || fail "Restore lid sleep missing from Awake"
 check_actions "$menu"
-pass "SwiftBar lid mode: the group only with AGENTS_LID=1 (up to the cap), time left while on, a red restore item when stale"
+pass "SwiftBar lid mode: the group by default (AGENTS_LID=0 hides it), End lid mode now… while on, a red restore item when stale"
 
 # 9. What sessions run: activity classification, flags, JSON, ls and menu.
 act_fixture="$(cat <<'EOF'
@@ -981,7 +1076,7 @@ st_late="$(printf '%s\n' "$st_recs" | AGENTS_WAIT_STUCK=300 agents_enrich "$st_c
 # Bad values from the environment fall back to the default, with one warning.
 out="$(AGENTS_CONF="$tmp/none" AGENTS_WAIT_STUCK=1h AGENTS_LID_MIN_BATTERY=abc AGENTS_LID_MAX=forever AGENTS_LID=yes \
     bash "$REPO_DIR/bin/agents" config 2>"$tmp/env.err")"
-[[ "$out" == *$'\nAGENTS_WAIT_STUCK=60\n'* && "$out" == *$'\nAGENTS_LID=0\n'* && "$out" == *$'\nAGENTS_LID_MAX=8h\n'* && "$out" == *$'\nAGENTS_LID_MIN_BATTERY=20'* ]] \
+[[ "$out" == *$'\nAGENTS_WAIT_STUCK=60\n'* && "$out" == *$'\nAGENTS_LID=1\n'* && "$out" == *$'\nAGENTS_LID_MAX=8h\n'* && "$out" == *$'\nAGENTS_LID_MIN_BATTERY=20'* ]] \
     || fail "bad environment values not replaced by defaults: $out"
 [[ "$(grep -c 'in the environment; using' "$tmp/env.err")" == 4 ]] || fail "one warning per bad environment value: $(cat "$tmp/env.err")"
 pass "stuck polling loops: AGENTS_WAIT_STUCK of age, unless the watched file is fresh; young loops stay wait; 0 disables"
