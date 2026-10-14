@@ -20,7 +20,7 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal 
 
 `./install.sh` sets up Ghostty, zsh with autosuggestions, syntax highlighting and completions, a Starship prompt, and the tools below, with aliases wired in: `cat` runs `bat`, `ls` and `ll` run `eza`, `cd` runs `zoxide`, `lg` runs `lazygit` and `top` runs `btm` once those are installed. One `palette.toml` colors Ghostty, tmux and Starship, and `make theme NAME=catppuccin-mocha` switches all three. [Profiles](docs/profiles.md) · [Cheatsheet](docs/CHEATSHEET.md) · [Theming](docs/theming.md)
 
-<img src="docs/assets/shell.png" width="800" alt="A terminal in a demo repo under the Starship prompt: ll lists README.md, src and tests with a git status column, and git diff shows a one-line change in delta, with line numbers and the changed words highlighted.">
+<img src="docs/assets/shell.png" width="800" alt="A terminal in a demo repo under the Starship prompt: ll src lists four Python files with icons and a git status column (new, staged, modified), rg finds three highlighted TODO matches across files, and git diff shows a change in delta, with line numbers and the changed words highlighted.">
 
 | Category | Tools |
 |----------|-------|

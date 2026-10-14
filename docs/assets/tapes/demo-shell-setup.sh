@@ -22,23 +22,52 @@ if [[ ! -d "$api/.git" ]]; then
 # api
 
 A made-up service for the tuidev screenshots.
+
+    make test    # run the tests
+    make run     # serve on :8080
 EOT
+    cat > "$api/pyproject.toml" <<'EOT'
+[project]
+name = "api"
+version = "1.4.0"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.27", "uvicorn>=0.30"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+EOT
+    printf 'test:\n\tpytest\n\nrun:\n\tuvicorn src.app:app --port 8080\n' > "$api/Makefile"
     cat > "$api/src/app.py" <<'EOT'
-from routes import handle
+"""Entry point for the made-up api."""
+from routes import handle, status
 
 
-def main():
-    print(handle("/health"))
+def app(path):
+    if path == "/status":
+        return status()
+    return handle(path)
 EOT
     cat > "$api/src/routes.py" <<'EOT'
-ROUTES = {"/health": "ok"}
+"""HTTP routes."""
+from db import connect
+
+ROUTES = {"/health": "ok", "/version": "1.4.0"}
 
 
 def handle(path):
+    """Return the body for a path."""
     # TODO: return a 404 for unknown paths
     return ROUTES.get(path, "")
+
+
+def status():
+    conn = connect("sqlite://demo")
+    return {"routes": len(ROUTES), "db": conn["url"]}
 EOT
     cat > "$api/src/db.py" <<'EOT'
+"""Database access."""
+
+
 def connect(url):
     # TODO: pool connections
     return {"url": url}
@@ -49,6 +78,10 @@ from routes import handle
 
 def test_health():
     assert handle("/health") == "ok"
+
+
+def test_version():
+    assert handle("/version") == "1.4.0"
 EOT
     (
         cd "$api"
@@ -56,24 +89,37 @@ EOT
         command git add -A
         GIT_AUTHOR_NAME=Demo GIT_AUTHOR_EMAIL=demo@example.com GIT_AUTHOR_DATE="2026-01-05T10:00:00Z" \
         GIT_COMMITTER_NAME=Demo GIT_COMMITTER_EMAIL=demo@example.com GIT_COMMITTER_DATE="2026-01-05T10:00:00Z" \
-            command git commit -q -m "feat: health route"
+            command git commit -q -m "feat: health and version routes"
     )
     # An unstaged edit, a staged edit and a new file.
     cat > "$api/src/routes.py" <<'EOT'
+"""HTTP routes."""
+from db import connect
+
 ROUTES = {"/health": "ok", "/version": "1.4.0"}
 
 
 def handle(path):
+    """Return the body for a path."""
     # TODO: return a 404 for unknown paths
-    return ROUTES.get(path, "")
+    body = ROUTES.get(path)
+    return body if body is not None else "not found"
+
+
+def status():
+    conn = connect("sqlite://demo")
+    return {"routes": len(ROUTES), "db": conn["url"]}
 EOT
     cat > "$api/src/db.py" <<'EOT'
+"""Database access."""
+
+
 def connect(url, timeout=5):
     # TODO: pool connections
     return {"url": url, "timeout": timeout}
 EOT
     command git -C "$api" add src/db.py
-    printf 'CACHE = {}\n\n\ndef get(key):\n    # TODO: expire entries\n    return CACHE.get(key)\n' > "$api/src/cache.py"
+    printf '"""A tiny cache."""\nCACHE = {}\n\n\ndef get(key):\n    # TODO: expire entries\n    return CACHE.get(key)\n' > "$api/src/cache.py"
     # Fixed times, so ll never shows when the shot was rendered.
     find "$api" -path "$api/.git" -prune -o -exec env TZ=UTC touch -t 202601051000 {} +
 fi

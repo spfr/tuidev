@@ -17,8 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and CONTRIBUTING open with the same description, and the social preview
   card's subtitle is no longer monitoring-centric.
 - **New images:** `docs/assets/tour.gif` (the hero) and `shell.png` (the real
-  Starship prompt with the shipped config and palette, `ll`, and `git diff`
-  through delta, in a demo repo), from `tour.tape` and `shell.tape`.
+  Starship prompt with the shipped config and palette, `ll src` with icons
+  and a git column, `rg`, and `git diff` through delta, in a demo repo), from
+  `tour.tape` and `shell.tape`. The tapes' font falls back to the Symbols
+  Nerd Font so the icons render; `make screenshots` warns when it is missing
+  (`brew install --cask font-symbols-only-nerd-font`).
 - **The `sbx` screenshot tells a before/after story.** It reads a made-up key
   without a sandbox, then shows `sbx` refusing that read, the AWS credentials
   and a write to `~/.zshrc`, while `make test` still runs. Its demo home is

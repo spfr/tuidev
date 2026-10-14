@@ -10,11 +10,13 @@ make screenshots TAPES="agents"     # one or more by name
 | Tape | Image | Shows |
 |------|-------|-------|
 | `tour.tape` | `tour.gif` | The README hero: a short tour of the shell, `agents` and `sbx` in one demo home |
-| `shell.tape` | `shell.png` | The real Starship prompt, `ll` (eza with a git column) and `git diff` through delta, in the `~/api` demo repo |
+| `shell.tape` | `shell.png` | The real Starship prompt, `ll src` (eza with icons and a git column), `rg` and `git diff` through delta, in the `~/api` demo repo |
 | `agents.tape` | `agents.png` | `agents` over the fixture process table |
 | `sbx.tape` | `sbx.png` | a key read without and under `sbx`, then refused credentials and a `~/.zshrc` write, while `make test` runs |
 | `social-preview.tape` | `social-preview.png` | The 1280×640 Open Graph card; its text is in `social-card.sh` |
 | `theme.tape` | | Shared settings: the Tokyo Night palette and the Ghostty font, sourced by the others |
+
+Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https://github.com/ryanoasis/nerd-fonts) (`brew install --cask font-symbols-only-nerd-font`): `theme.tape` lists it after JetBrains Mono as a fallback, so the file icons `eza` draws render as they do in Ghostty. Without it they show as blanks, and `make screenshots` warns.
 
 ## The demo environment
 
@@ -28,7 +30,7 @@ The `shell` and `tour` tapes source `demo-shell.sh` instead, which sources `demo
 
 - makes `~/api`, a small repo with a staged change, an unstaged one and an untracked file, with fixed file times;
 - installs the shipped `starship.toml` as a managed block and applies the Tokyo Night palette with `scripts/theme.sh`, as an install would, then starts the real Starship (the prompt shows `~/api` and the branch, never a user or host);
-- sets the git defaults tuidev ships (`delta` as the pager) in the demo home, and reads the `cat`, `ls` and `ll` aliases from `configs/zsh/.zshrc`, so they can't drift. The one override is `ll`: it adds `--icons=never` (the render font has no icon glyphs) and `--no-user --no-permissions` (the owner column would show whoever renders it).
+- sets the git defaults tuidev ships (`delta` as the pager) in the demo home, and reads the `cat`, `ls` and `ll` aliases from `configs/zsh/.zshrc`, so they can't drift. The one override is `ll`: it adds `--no-user --no-permissions`, because the owner column would show whoever renders it. The shipped Starship config has no branch icon (its `symbol` is a plain space), so the prompt shows none either.
 
 There is no Herdr shot: its UI shows live panes from a running server, and a truthful one would need real agent sessions, which the demo never starts. The `agents` shot shows Herdr's session status through a fixture instead.
 

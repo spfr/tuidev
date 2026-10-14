@@ -15,7 +15,7 @@ Sleep 2s
 Show
 
 # the shell
-Type "ll"
+Type "ll src"
 Enter
 Sleep 900ms
 Type "git diff"

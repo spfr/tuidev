@@ -21,6 +21,12 @@ TAPES_DIR="docs/assets/tapes"
 is_macos || die "make screenshots runs on macOS only: the sbx shot needs Seatbelt (sandbox-exec)"
 command_exists vhs || die "VHS is not installed: brew install vhs (https://github.com/charmbracelet/vhs)"
 
+# The shots show eza's file icons, which JetBrains Mono lacks. Ghostty draws
+# them out of the box; VHS needs the Symbols Nerd Font installed to fall back to.
+if ! ls "$HOME"/Library/Fonts/SymbolsNerdFont* /Library/Fonts/SymbolsNerdFont* >/dev/null 2>&1; then
+    print_warning "Symbols Nerd Font not found: icons in the shots will render as blanks (brew install --cask font-symbols-only-nerd-font)"
+fi
+
 cd "$REPO_DIR"
 
 tapes=()

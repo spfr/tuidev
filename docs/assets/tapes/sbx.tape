@@ -1,7 +1,7 @@
 # docs/assets/sbx.png: sbx (strict) in the demo home. Render: make screenshots (macOS)
 Source docs/assets/tapes/theme.tape
 Set Width 980
-Set Height 600
+Set Height 740
 
 Hide
 Type `source docs/assets/tapes/demo-env.sh && clear`
