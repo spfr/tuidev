@@ -2,7 +2,7 @@
 # lib/agents/report.sh — `agents report`: where the CPU went, and what was
 # cleaned up, from the history files.
 #
-# Uses: config.sh, util.sh (agents_parse_duration), render.sh (colors);
+# Uses: config.sh, util.sh (_agents_window), render.sh (colors);
 #   awk/report.awk.
 # Public: agents_report.
 
@@ -10,7 +10,7 @@
 # job, project, session and hour of day) and what was cleaned up, from
 # history.tsv and events.tsv.
 agents_report() {
-    local since=24h json="" now z off=0 start secs
+    local since=24h json="" win now off start
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --json)    json=1 ;;
@@ -21,18 +21,8 @@ agents_report() {
         esac
         shift
     done
-    read -r now z <<<"$(date '+%s %z')"
-    if [[ "$z" =~ ^([+-])([0-9][0-9])([0-9][0-9])$ ]]; then
-        off=$(( 10#${BASH_REMATCH[2]} * 3600 + 10#${BASH_REMATCH[3]} * 60 ))
-        [[ "${BASH_REMATCH[1]}" == + ]] || off=$((-off))
-    fi
-    if [[ "$since" == today ]]; then
-        start=$(( now - (now + off) % 86400 ))
-    elif secs="$(agents_parse_duration "$since")"; then
-        start=$((now - secs))
-    else
-        echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2
-    fi
+    win="$(_agents_window "$since")" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
+    read -r start now off <<<"$win"
     _agents_report_awk "$start" "$now" "$off" "$since" "$json"
 }
 _agents_report_usage() { echo "usage: agents report [--since 24h|7d|30d|today] [--json]" >&2; }
