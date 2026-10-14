@@ -1,14 +1,14 @@
 # shellcheck shell=bash
 # lib/agents/util.sh — small helpers the other modules share.
 #
-# Owns: running the awk programs in awk/, durations and clock times, a word
-#   of a line, a command with a timeout or in the background, and the state
-#   files in the run and data directories: lock directories, epoch stamps,
-#   replacing or removing a file safely.
+# Owns: running the awk programs in awk/, durations, --since windows and
+#   clock times, a word of a line, a command with a timeout or in the
+#   background, and the state files in the run and data directories: lock
+#   directories, epoch stamps, replacing or removing a file safely.
 # Uses: _AGENTS_AWK_DIR (set by bin/agents).
 # Public: _agents_awk, _agents_awk_eval, agents_parse_duration,
-#   _agents_clock, _agents_field, _agents_timeout, _agents_detach,
-#   _agents_lock, _agents_unlock, _agents_stamp_age, _agents_replace,
+#   _agents_window, _agents_clock, _agents_field, _agents_timeout,
+#   _agents_detach, _agents_lock, _agents_unlock, _agents_stamp_age, _agents_replace,
 #   _agents_rm_if_same.
 
 # _agents_awk "FILE..." [AWK_OPTION...] — awk, under LC_ALL=C, running the
@@ -43,6 +43,29 @@ agents_parse_duration() {
     done
     [[ $total -gt 0 ]] || return 1
     echo "$total"
+}
+
+# _agents_window SINCE — set the caller's start, now, off and period (declare
+# them local) for a --since window: a duration back from now (24h, 7d, 30m)
+# or today (since local midnight). The window is [start, now]; the one before
+# it is [start - period, now - period) (for today: yesterday up to this time
+# of day); off is the UTC offset in seconds. False on any other SINCE.
+# shellcheck disable=SC2034  # it sets the caller's variables
+_agents_window() {
+    local z secs
+    read -r now z <<<"$(date '+%s %z')"
+    off=0
+    if [[ "$z" =~ ^([+-])([0-9][0-9])([0-9][0-9])$ ]]; then
+        off=$(( 10#${BASH_REMATCH[2]} * 3600 + 10#${BASH_REMATCH[3]} * 60 ))
+        [[ "${BASH_REMATCH[1]}" == + ]] || off=$((-off))
+    fi
+    if [[ "$1" == today ]]; then
+        start=$(( now - (now + off) % 86400 )); period=86400
+    elif secs="$(agents_parse_duration "$1")"; then
+        start=$((now - secs)); period=$secs
+    else
+        return 1
+    fi
 }
 
 # _agents_timeout SECS CMD... — run CMD, killing it after SECS.

@@ -1,0 +1,9 @@
+Runs ended in the last 7d: 5 · 7m39s CPU · 2 stopped by agents · newest first
+
+ENDED          TOOK    CPU   PEAK  EXIT  PROJECT  SESSION      AGENT                CMD     JOB     FLAGS
+Jan  1 08:50  5m00s  4m05s   263M     1  myapp    claude:5000  implementor-complex  go      test    -
+Jan  1 08:40    30s    41s    72M     0  myapp    claude:5000  main                 make    build   dup
+Jan  1 08:10  1h56m  2m00s    87M     -  shop     codex:2000   -                    pnpm    server  cleaned
+Jan  1 07:36  1h06m     3s    48M     -  app      -            -                    npx     mcp     cleaned
+Dec 31 08:00  1m00s    50s  1000K     0  old      claude:1     -                    pytest  test    -
+[rc=0]

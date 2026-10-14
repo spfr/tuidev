@@ -1,6 +1,8 @@
 agents report · last 7d
 
-no runs recorded yet (runs.tsv): insights and the runs, waste, trends and agents views start with the first finished run
+TOP INSIGHTS
+  1. Sessions of unknown type left 2 runs running in 7d (3.1 h, 2 CPU-min) — have them stop what they start, or set AGENTS_AUTO_REAP=1
+  more: agents report --view runs|waste|trends|agents
 
 CPU 2.14 CPU-h of agent work
 

@@ -2,10 +2,10 @@
 # lib/agents/report.sh — `agents report`: where the CPU went, what was cleaned
 # up, and what the run ledger says is worth changing.
 #
-# Owns: the report's window, its views, and insight.txt (the menu's top
+# Owns: the report's views and insight.txt (the menu's top
 #   insight: "EPOCH<TAB>UNTIL<TAB>VIEW<TAB>TEXT", or just "EPOCH<TAB>UNTIL"
 #   when nothing stands out).
-# Uses: config.sh, util.sh (agents_parse_duration, _agents_replace),
+# Uses: config.sh, util.sh (_agents_window, _agents_replace),
 #   events.sh (_agents_data_dir), render.sh (colors); awk/report.awk and its
 #   parts (report_fmt, report_runs, report_insights, report_views).
 # Public: agents_report, agents_insight_write, _agents_insight_line.
@@ -37,34 +37,13 @@ agents_report() {
         *) echo "agents: bad --view '$view' (${_AGENTS_REPORT_VIEWS// /, })" >&2; return 2 ;;
     esac
     if [[ -z "$since" ]]; then since=24h; [[ "$view" != trends ]] || since=7d; fi
-    _agents_report_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
+    _agents_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
     _agents_report_awk "$view" "$since" "$json"
 }
 _agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents] [--since 24h|7d|30d|today] [--json]" >&2; }
 
-# _agents_report_window SINCE — set the caller's start, now, off (the UTC
-# offset, s) and period: the window is [start, now], the one before it
-# [start - period, now - period) (for today: yesterday by this hour). False
-# on a bad SINCE.
-_agents_report_window() {
-    local z secs
-    read -r now z <<<"$(date '+%s %z')"
-    off=0
-    if [[ "$z" =~ ^([+-])([0-9][0-9])([0-9][0-9])$ ]]; then
-        off=$(( 10#${BASH_REMATCH[2]} * 3600 + 10#${BASH_REMATCH[3]} * 60 ))
-        [[ "${BASH_REMATCH[1]}" == + ]] || off=$((-off))
-    fi
-    if [[ "$1" == today ]]; then
-        start=$(( now - (now + off) % 86400 )); period=86400
-    elif secs="$(agents_parse_duration "$1")"; then
-        start=$((now - secs)); period=$secs
-    else
-        return 1
-    fi
-}
-
 # _agents_report_awk VIEW LABEL JSON — report.awk over the data directory,
-# for the window the caller's _agents_report_window set.
+# for the window the caller's _agents_window set.
 _agents_report_awk() {
     B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" \
     _agents_awk "lib_json lib_sort report_fmt report_runs report_insights report_views report" -F '\t' \
@@ -82,7 +61,7 @@ agents_insight_write() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
     local f="$AGENTS_DATA_DIR/insight.txt" was="" until="" top start now off period
     [[ -r "$f" ]] && IFS=$'\t' read -r was until _ < "$f"
-    _agents_report_window today
+    _agents_window today
     if [[ "$was" =~ ^[0-9]+$ && "$until" =~ ^[0-9]+$ ]] && (( now >= was && now - was < 300 && now < until )); then
         return 0
     fi

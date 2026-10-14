@@ -57,7 +57,8 @@ agents_project() {
     esac
 }
 
-# agents_enrich CWDS HERDR < RECORDS — fill in cwd ("pid<TAB>cwd" lines) and
+# agents_enrich CWDS HERDR < RECORDS — fill in cwd ("pid<TAB>cwd" lines, or
+# _agents_cwds --stdout's, whose "pid<TAB>path<TAB>1" lines it skips) and
 # Herdr status ("kind<TAB>status<TAB>cwd" lines), and append column 15, the
 # project name (agents_project). A dev-server candidate is kept, as stale,
 # only when its cwd is under one of _agents_cwd_roots. Agent rows come first,

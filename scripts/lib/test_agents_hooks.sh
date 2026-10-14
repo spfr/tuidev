@@ -183,12 +183,12 @@ t="$(_agents_hook_tasks "$subs/agent-aaa.jsonl" | cut -f1 | tr '\n' ' ')"
 _agents_hook_final "$subs/agent-aaa.jsonl" || fail "a delivered report not final"
 ! _agents_hook_final "$subs/agent-ccc.jsonl" || fail "a turn end counted as final"
 ! _agents_hook_final "$subs/agent-ddd.jsonl" || fail "a refused handback counted as final"
-mids="$(_agents_hook_started "$main" | _agents_hook_ids)"
+mids="$(_agents_tx_started "$main" | _agents_tx_ids)"
 [[ "$(printf '%s\n' "$mids" | tr '\n' ' ')" == "m1task001 m2task002 " ]] || fail "main task ids: $mids"
 [[ -z "$(_agents_hook_own_tasks "$subs/agent-fff.jsonl" "$main" all)" ]] || fail "a fork owns the task it inherited"
-[[ -z "$(_agents_hook_own_tasks "$subs/agent-fff.jsonl" /nonexistent all "$(_agents_hook_started "$subs/agent-fff.jsonl")" "$mids")" ]] || fail "a fork owns the task it inherited (ids passed in)"
-[[ "$(_agents_hook_own_tasks "$subs/agent-bbb.jsonl" "$main" all "$(_agents_hook_started "$subs/agent-bbb.jsonl")" "$mids")" == "b1task001"$'\t'"$tasks_dir/b1task001.output"$'\t'"all" ]] \
-    || fail "own tasks: $(_agents_hook_own_tasks "$subs/agent-bbb.jsonl" "$main" all "$(_agents_hook_started "$subs/agent-bbb.jsonl")" "$mids")"
+[[ -z "$(_agents_hook_own_tasks "$subs/agent-fff.jsonl" /nonexistent all "$(_agents_tx_started "$subs/agent-fff.jsonl")" "$mids")" ]] || fail "a fork owns the task it inherited (ids passed in)"
+[[ "$(_agents_hook_own_tasks "$subs/agent-bbb.jsonl" "$main" all "$(_agents_tx_started "$subs/agent-bbb.jsonl")" "$mids")" == "b1task001"$'\t'"$tasks_dir/b1task001.output"$'\t'"all" ]] \
+    || fail "own tasks: $(_agents_hook_own_tasks "$subs/agent-bbb.jsonl" "$main" all "$(_agents_tx_started "$subs/agent-bbb.jsonl")" "$mids")"
 pass "transcripts: background tasks with their files, ended ones left out, final reports, fork inheritance"
 
 # --- subagent-stop ------------------------------------------------------------

@@ -7,7 +7,7 @@
 #   agents_collect, the full record set every view starts from.
 # Uses: config.sh, util.sh, classify.sh (agents_classify, agents_enrich),
 #   watched.sh (_agents_watched, _agents_watch_info), awake.sh
-#   (_agents_awake_pid).
+#   (_agents_awake_pid), runs.sh (_agents_runs_feed).
 # Public: agents_snapshot, agents_collect, agents_secs, _agents_start,
 #   _agents_cwds, _agents_proc_paths.
 
@@ -46,25 +46,34 @@ _agents_listeners() {
     fi
 }
 
-# _agents_cwds PID... — "pid<TAB>cwd" lines.
-_agents_cwds() { _agents_proc_paths cwd "$@"; }
+# _agents_cwds [--stdout] PID... — "pid<TAB>cwd" lines. With --stdout, each
+# one's stdout too, from the same lsof: then every line is
+# "pid<TAB>path<TAB>cwd|1" (agents_enrich reads both forms).
+_agents_cwds() {
+    if [[ "${1:-}" == --stdout ]]; then shift; _agents_proc_paths cwd,1 "$@"; else _agents_proc_paths cwd "$@"; fi
+}
 
-# _agents_proc_paths cwd|FD PID... — "pid<TAB>path" for each process's
+# _agents_proc_paths cwd|FD|cwd,FD PID... — "pid<TAB>path" for each process's
 # working directory or open file descriptor FD: from /proc on Linux ("-" when
 # it can't be read), else one lsof for all of them (-b: never block on a
-# stale mount).
+# stale mount). Asked for both (cwd,1), each line ends in a third column
+# naming which one it is: "pid<TAB>path<TAB>cwd|1".
 _agents_proc_paths() {
-    local what="$1" p link
+    local what="$1" p w link tag=""
     shift
     [[ $# -gt 0 ]] || return 0
+    [[ "$what" == *,* ]] && tag=1
     if [[ -d /proc/self/fd ]]; then
-        link="$what"; [[ "$what" == cwd ]] || link="fd/$what"
         for p in "$@"; do
-            printf '%s\t%s\n' "$p" "$(readlink "/proc/$p/$link" 2>/dev/null || echo -)"
+            for w in ${what//,/ }; do
+                link="$w"; [[ "$w" == cwd ]] || link="fd/$w"
+                printf '%s\t%s%s\n' "$p" "$(readlink "/proc/$p/$link" 2>/dev/null || echo -)" "${tag:+$'\t'$w}"
+            done
         done
     elif command -v lsof >/dev/null 2>&1; then
         local IFS=,
-        lsof -b -w -a -d "$what" -Fpn -p "$*" 2>/dev/null | awk '/^p/ { p = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) }'
+        lsof -b -w -a -d "$what" -Fpfn -p "$*" 2>/dev/null | awk -v tag="$tag" '
+            /^p/ { p = substr($0, 2) } /^f/ { f = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) (tag ? "\t" f : "") }'
     fi
 }
 
@@ -148,15 +157,19 @@ _agents_keep_pids() {
 # agents_collect — the full record set for this moment, ending in
 # "probe listen ok|fail": whether the listening ports could be listed (when
 # not, a stale tree's "no ports" proves nothing, and auto-reap leaves it).
+# With _AGENTS_FEED=1 (agents tsv) and history on, it also hands what it saw
+# to the run ledger (_agents_runs_feed): the same snapshot and lsof, plus the
+# tool shells' stdout from that lsof.
 agents_collect() {
-    local ps listen recs pids lprobe=ok
+    local ps listen recs pids lprobe=ok enr feed=""
+    [[ "${_AGENTS_FEED:-}" == 1 && "$AGENTS_HISTORY" == 1 ]] && feed=1
     ps="$(agents_snapshot)"
     if [[ -z "$ps" ]]; then
         echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2
         return 1
     fi
     listen="$(_agents_listeners)" || lprobe=fail
-    recs="$(printf '%s\n' "$ps" | agents_classify "$listen" "$(_agents_keep_pids "$ps")")"
+    recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$(_agents_keep_pids "$ps")")"
     local type pid kind rest watch=""
     set --
     while IFS=$'\t' read -r type pid kind rest; do
@@ -166,8 +179,10 @@ agents_collect() {
             watch) watch+="$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;  # kind: the path; rest: read|exists
         esac
     done <<<"$recs"
-    pids="$(_agents_cwds "$@")"
-    printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_watched "$watch")"
+    pids="$(_agents_cwds ${feed:+--stdout} "$@")"
+    enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_watched "$watch")")"
+    [[ -z "$enr" ]] || printf '%s\n' "$enr"
+    [[ -z "$feed" ]] || _agents_runs_feed "$enr" "$recs" "$pids"
     _agents_watch_info "$watch"     # "watched" rows: the evidence agents_assess reads
     printf 'probe\tlisten\t%s\n' "$lprobe"
 }

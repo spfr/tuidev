@@ -37,6 +37,10 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
                                (repeated and slowest commands), waste (duplicates,
                                leaks, polling, failed re-runs), trends (against the
                                window before; default 7d), agents (by agent type)
+  agents runs [--since 24h|7d|30d|today] [--json]
+                               finished commands, newest first: when, how long, CPU,
+                               peak memory, exit code, project, session, the agent
+                               that started it, dup, and whether agents stopped it
   agents sample                record one sample; the menu bar and 'agents watch'
                                do it every minute (cron it where neither runs)
 

@@ -1,6 +1,6 @@
 # lib/agents/awk/lib_activity.awk — what a session runs: tool shells and the
 # command they run, MCP servers, polling loops and the file they watch.
-#   tool_shell, is_mcp, mcp_name, waits, watched, tool_cmd.
+#   tool_shell, is_mcp, mcp_name, waits, watched, tool_cmd, cmd_name.
 # Needs lib_proc.awk (base, pname, hostinit and its name lists).
 
 # A tool shell: a shell running one command line, "/bin/zsh -c …" (the Claude
@@ -113,4 +113,14 @@ function tool_cmd(a,   q, i, j, s, k, t) {
     gsub(/\/ /, " ", s); sub(/\/$/, "", s)
     if (length(s) > 400) s = substr(s, 1, 397) "..."   # compared whole; shortened on display
     return s == "" ? pname(a) : s
+}
+# cmd_name: the name a tidied command goes by, never its arguments: "wait-loop"
+# for a polling loop, else its first word without a directory ("go" for
+# "go test ./...", "make" for "/usr/bin/make -j8"), in [A-Za-z0-9._+-] only,
+# at most 32 characters; "command" when nothing is left.
+function cmd_name(c,   w) {
+    if (waits(c)) return "wait-loop"
+    w = c; sub(/^[( ]+/, "", w); sub(/[ ;&|)].*$/, "", w); sub(/.*\//, "", w)
+    gsub(/[^A-Za-z0-9._+-]/, "", w)
+    return w == "" ? "command" : substr(w, 1, 32)
 }
