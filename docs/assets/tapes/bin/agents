@@ -25,6 +25,15 @@ export AGENTS_TESTING=1 AGENTS_UID=501 AGENTS_SELF=99999 AGENTS_EUID=501
 # shellcheck source=../../../../bin/agents disable=SC1091
 . "$repo/bin/agents"
 
+# Working directories come from the fixture only: on Linux, bin/agents would
+# read /proc/PID/cwd for the fixture's pids before asking lsof.
+_agents_cwds() {
+    [[ $# -gt 0 ]] || return 0
+    local IFS=,
+    sed "s|@HOME@|$HOME|g" "$DEMO_FIXTURES/cwds.tsv" \
+        | awk -F '\t' -v want=",$*," 'index(want, "," $1 ",") { print $1 "\t" $2 }'
+}
+
 # kill -0 (is the keep-awake holder alive?) says yes; anything else is a no-op.
 kill() {
     [[ "${1:-}" == -0 ]] && return 0

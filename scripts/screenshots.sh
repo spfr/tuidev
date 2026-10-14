@@ -4,10 +4,11 @@
 #
 # Usage: scripts/screenshots.sh [TAPE...]     e.g. scripts/screenshots.sh sbx
 #
-# Every tape runs in a throwaway HOME built by docs/assets/tapes/demo-setup.sh,
-# and `agents` reads fixture process tables, so nothing from this machine
-# reaches an image. Needs VHS (brew install vhs) and, for the sbx shot, macOS.
-# See docs/assets/tapes/README.md.
+# Each tape gets a throwaway HOME; the agents and sbx tapes build it with
+# docs/assets/tapes/demo-setup.sh, and `agents` reads fixture process tables,
+# so nothing from this machine reaches an image. macOS only (the sbx shot
+# needs Seatbelt, and the demo is only checked there); needs VHS
+# (brew install vhs). See docs/assets/tapes/README.md.
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,6 +18,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TAPES_DIR="docs/assets/tapes"
 
+is_macos || die "make screenshots runs on macOS only: the sbx shot needs Seatbelt (sandbox-exec)"
 command_exists vhs || die "VHS is not installed: brew install vhs (https://github.com/charmbracelet/vhs)"
 
 cd "$REPO_DIR"
@@ -42,8 +44,13 @@ for tape in "${tapes[@]}"; do
     name="$(basename "$tape" .tape)"
     print_step "rendering $tape"
     # A fresh demo home per tape; VHS also writes a GIF we don't keep.
-    DEMO_HOME="$work/$name/NAME" vhs -o "$work/$name.gif" "$tape" >"$work/$name.log" 2>&1 \
-        || die "vhs failed on $tape (inside a sandbox, VHS can't bind its local port)"
+    if ! DEMO_HOME="$work/$name/NAME" vhs -o "$work/$name.gif" "$tape" >"$work/$name.log" 2>&1; then
+        tail -20 "$work/$name.log" >&2
+        if grep -qiE 'randomPort|bind|operation not permitted' "$work/$name.log"; then
+            print_info "VHS could not listen on a local port: a sandbox that blocks binding one (Claude Code's native sandbox, by default) does this; run it outside"
+        fi
+        die "vhs failed on $tape (its log is above)"
+    fi
 done
 
 print_success "screenshots rendered:"

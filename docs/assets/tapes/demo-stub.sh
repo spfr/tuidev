@@ -35,21 +35,11 @@ stub_ps() {
         END { exit !found }'
 }
 
-# lsof -iTCP -sTCP:LISTEN -Fpn: listeners. lsof -a -d cwd -Fpn -p PIDS: cwds.
+# lsof -iTCP -sTCP:LISTEN -Fpn: listeners. (Working directories come from the
+# wrapper's own _agents_cwds, so no lsof cwd query reaches here.)
 stub_lsof() {
-    local pids="" listen=0 a
-    while [[ $# -gt 0 ]]; do
-        a="$1"; shift
-        case "$a" in
-            -iTCP) listen=1 ;;
-            -p) pids="${1:-}"; shift ;;
-        esac
-    done
-    if [[ $listen == 1 ]]; then
-        fixture listeners.txt | awk 'NF == 2 { print "p" $1; print "n*:" $2 }'
-    else
-        fixture cwds.tsv | awk -F '\t' -v want=",$pids," 'index(want, "," $1 ",") { print "p" $1; print "n" $2 }'
-    fi
+    [[ " $* " == *" -iTCP "* ]] || return 1
+    fixture listeners.txt | awk 'NF == 2 { print "p" $1; print "n*:" $2 }'
 }
 
 # herdr agent list: Herdr's JSON answer, from herdr.tsv.
