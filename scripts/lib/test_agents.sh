@@ -978,6 +978,12 @@ st_late="$(printf '%s\n' "$st_recs" | AGENTS_WAIT_STUCK=300 agents_enrich "$st_c
     && AGENTS_CONF="$tmp/stuck.conf" bash "$REPO_DIR/bin/agents" config | grep '^AGENTS_WAIT_STUCK=')" == AGENTS_WAIT_STUCK=90 ]] \
     || fail "AGENTS_WAIT_STUCK from the config file"
 ! _agents_conf_valid AGENTS_WAIT_STUCK 1h || fail "AGENTS_WAIT_STUCK=1h accepted (minutes only)"
+# Bad values from the environment fall back to the default, with one warning.
+out="$(AGENTS_CONF="$tmp/none" AGENTS_WAIT_STUCK=1h AGENTS_LID_MIN_BATTERY=abc AGENTS_LID_MAX=forever AGENTS_LID=yes \
+    bash "$REPO_DIR/bin/agents" config 2>"$tmp/env.err")"
+[[ "$out" == *$'\nAGENTS_WAIT_STUCK=60\n'* && "$out" == *$'\nAGENTS_LID=0\n'* && "$out" == *$'\nAGENTS_LID_MAX=8h\n'* && "$out" == *$'\nAGENTS_LID_MIN_BATTERY=20'* ]] \
+    || fail "bad environment values not replaced by defaults: $out"
+[[ "$(grep -c 'in the environment; using' "$tmp/env.err")" == 4 ]] || fail "one warning per bad environment value: $(cat "$tmp/env.err")"
 pass "stuck polling loops: AGENTS_WAIT_STUCK of age, unless the watched file is fresh; young loops stay wait; 0 disables"
 
 # watched(): only a path given to tail, head, grep, cat, test, [ or [[ (or

@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (dry run with `-n`; the same start-time checks as every kill). Plain
   `reap` still kills stale trees only.
 - **`AGENTS_WAIT_STUCK`** (minutes, default 60; `0` turns it off) in
-  `~/.config/agents.conf`.
+  `~/.config/agents.conf`. A bad value for it, or for the `AGENTS_LID*` keys,
+  set in the environment falls back to the default with one warning, as one
+  in the file is ignored.
 - **Keep awake with the lid closed, opt-in (macOS): `agents awake lid 3h`.**
   `caffeinate` can't keep a closed lid awake, so this runs `pmset -a
   disablesleep 1` after macOS's own admin dialog, every time. No sudo rights

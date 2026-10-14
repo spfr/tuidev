@@ -98,6 +98,17 @@ AGENTS_AWAKE_POLL="${AGENTS_AWAKE_POLL:-60}"  # `awake agents` re-check, seconds
 AGENTS_LID="${AGENTS_LID:-0}"
 AGENTS_LID_MAX="${AGENTS_LID_MAX:-8h}"
 AGENTS_LID_MIN_BATTERY="${AGENTS_LID_MIN_BATTERY:-20}"
+# A value from the environment skips the file's checks: for these keys a bad
+# one would break arithmetic, so it falls back to the default with a warning.
+_agents_env_check() {   # KEY DEFAULT
+    _agents_conf_valid "$1" "${!1}" && return 0
+    echo "agents: bad $1 ('${!1}') in the environment; using $2" >&2
+    printf -v "$1" '%s' "$2"
+}
+_agents_env_check AGENTS_WAIT_STUCK 60
+_agents_env_check AGENTS_LID 0
+_agents_env_check AGENTS_LID_MAX 8h
+_agents_env_check AGENTS_LID_MIN_BATTERY 20
 AGENTS_NAMES="${AGENTS_NAMES:-claude codex}"  # argv[0] basenames that are agents
 AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
 # Menu bar (SwiftBar plugin): what the title shows, which sections the menu
