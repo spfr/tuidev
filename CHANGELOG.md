@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.2] - 2026-10-14
+
+### Changed
+- **The `ui` pack no longer installs Stats.** The `monitoring` pack's
+  SwiftBar menu shows CPU, memory, load, battery, thermal pressure and the
+  energy mode, so a second stats app only duplicated it, and the health
+  check stops requiring `Stats.app`. Stats stays installed where it is;
+  remove it with `brew uninstall --cask stats` if you use the agents menu.
+
 ## [3.3.1] - 2026-10-14
 
 ### Fixed
