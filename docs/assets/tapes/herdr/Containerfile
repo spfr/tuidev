@@ -1,0 +1,36 @@
+# A throwaway Linux "machine" for the Herdr screenshot (docs/assets/tapes/README.md):
+# OpenSSH, Herdr and a user `dev`. herdr-demo.sh builds it, copies in the agent
+# stand-in (demo-agent.sh), runs it twice (devbox, workbox) and removes both after.
+FROM debian:trixie-slim
+
+ARG HERDR_VERSION
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssh-server bash ca-certificates curl jq git procps less \
+ && rm -rf /var/lib/apt/lists/*
+
+# Herdr's release binary, checked against the digest the release lists.
+RUN set -eu; \
+    test -n "${HERDR_VERSION}"; \
+    case "$(uname -m)" in aarch64|arm64) arch=aarch64 ;; *) arch=x86_64 ;; esac; \
+    asset="herdr-linux-${arch}"; \
+    want="$(curl -fsSL "https://api.github.com/repos/herdrdev/herdr/releases/tags/v${HERDR_VERSION}" \
+        | jq -r --arg a "$asset" '.assets[] | select(.name == $a) | .digest' | sed 's/^sha256://')"; \
+    test "${#want}" -eq 64; \
+    curl -fsSL -o /usr/local/bin/herdr "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/${asset}"; \
+    echo "${want}  /usr/local/bin/herdr" | sha256sum -c -; \
+    chmod 755 /usr/local/bin/herdr
+
+# Key-only SSH for `dev`; the demo's own key is added when a container starts.
+RUN useradd -m -s /bin/bash dev \
+ && mkdir -p /run/sshd ~dev/.ssh \
+ && printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nAllowUsers dev\n' > /etc/ssh/sshd_config.d/demo.conf \
+ && chown -R dev:dev ~dev/.ssh && chmod 700 ~dev/.ssh
+
+# A short prompt with no user or host in it; the Herdr sidebar names the machine.
+RUN printf '%s\n' "PS1='\\[\\e[1;36m\\]\\w\\[\\e[0m\\] \\[\\e[1;32m\\]❯\\[\\e[0m\\] '" 'export LANG=C.UTF-8' >> ~dev/.bashrc \
+ && printf '%s\n' '[ -f ~/.bashrc ] && . ~/.bashrc' > ~dev/.bash_profile \
+ && chown dev:dev ~dev/.bashrc ~dev/.bash_profile
+
+
+EXPOSE 22
+CMD ["/bin/sh", "-c", "ssh-keygen -A >/dev/null && exec /usr/sbin/sshd -D -e"]
