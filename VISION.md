@@ -1,6 +1,6 @@
 # Vision
 
-tuidev is an opinionated, minimal terminal setup for running AI coding agents: sandboxed by default, easy to watch, and installed in layers you can undo. macOS is the daily driver, and Linux nodes are first-class for the remote path. It is a sharp system with a small core, not a kitchen-sink bootstrapper.
+tuidev is an opinionated terminal dev environment for AI coding agents: modern CLI tools, Claude Code and Codex sandboxed by default and orchestrated, easy to watch, and installed in layers you can undo. macOS is the daily driver, and Linux nodes are first-class for the remote path. It is a sharp system with a small core, not a kitchen-sink bootstrapper.
 
 Priorities, in order:
 

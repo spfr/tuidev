@@ -1,6 +1,6 @@
 # tuidev
 
-**A terminal setup for running AI coding agents on macOS and Linux: Claude Code and Codex sandboxed by default (`--pack ai-clis`), easy to watch, and installed in layers you can undo.**
+**The terminal dev environment for AI coding agents: modern CLI tools, Claude Code and Codex sandboxed and orchestrated, sessions that outlive your laptop, and an install you can undo.**
 
 [![CI](https://github.com/spfr/tuidev/actions/workflows/ci.yml/badge.svg)](https://github.com/spfr/tuidev/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/spfr/tuidev?sort=semver)](https://github.com/spfr/tuidev/releases/latest)
@@ -8,25 +8,66 @@
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-![The agents command in a terminal. Three sessions: a Claude Code session in api, blocked and waiting for input, with its polling command; a working Claude Code session in myapp with two MCP servers and three commands, two of them from subagents in their own worktrees; an idle Codex session in web running a dev server on port 5173. Below them, two stale processes a crashed session left behind, one CPU hog, and a status line with CPU, memory, battery, thermal pressure and keep-awake.](docs/assets/agents.png)
+![A short terminal tour in three scenes. First, the Starship prompt in a repo, ll listing files with a git status column, and git diff through delta. Second, the agents command listing a blocked Claude Code session, a working one, an idle Codex session, stale processes and a CPU hog. Third, cat reading a demo SSH key without a sandbox, then sbx refusing the same read and a write to ~/.zshrc with "Operation not permitted" while make test still runs and passes.](docs/assets/tour.gif)
 
-<sub>`agents` (`--pack monitoring`) over demo fixtures: what your Claude Code and Codex sessions run, what they left behind, and what is eating the CPU. Rendered with `make screenshots`.</sub>
+<sub>The shell, `agents` and `sbx` in a demo home with made-up data, rendered with `make screenshots`.</sub>
 
-tuidev is shell scripts and configs for coding with AI agents from the terminal. Claude Code is the primary CLI and Codex the second: run them in a Ghostty tab and review the diff in VS Code or Cursor. It installs a small core, and everything else is an opt-in pack.
+tuidev is shell scripts and configs for coding with AI agents from the terminal on macOS and Linux. Claude Code is the primary CLI and Codex the second: run them in a Ghostty tab and review the diff in VS Code or Cursor. It installs a small core, and everything else is an opt-in pack.
 
-## Why tuidev
+## What you get
 
-- **Agents don't get your credentials.** `--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 21 paths on one [credential list](configs/sandbox/credential-paths.txt). For everything else, including Codex, whose sandbox limits writes and network but not reads, `sbx` runs any command under a macOS Seatbelt profile that denies the same list. A contract test keeps every copy of the list in step. [Sandboxing](docs/sandboxing.md)
-- **You see what your agents run, and can stop it.** `agents` lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, flags the MCP and dev servers a crashed session left running, and kills a tree, descendants first, re-checking each process's start time before every signal. With [Herdr](https://herdr.dev/), sessions waiting for you come first. On macOS its SwiftBar menu shows the same, keeps the Mac awake while agents run, and shows CPU, memory, battery and thermal pressure, standing in for Amphetamine and Stats. [Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
-- **Subagents on the cheapest tier that works.** `--pack orchestration` pins Claude Code and Codex subagents to tiers (on Claude: Haiku for search and command runs, Sonnet for standard implementation, Opus for complex work and review) and adds a delegation skill for parallel worktrees. It installs on its own, without the rest of tuidev. [Orchestration](docs/orchestration.md)
-- **An install you can preview and undo.** Pick a profile or compose packs, and `--dry-run` shows every change first. Config goes into managed blocks, so your own lines survive, and a config file you edited keeps your changes through updates. Every install is recorded, `./uninstall.sh` removes only what tuidev put there, and one-shot migrations clean up after older releases. [Updating](docs/updating.md)
-- **Sessions that outlive your laptop.** On an always-on machine you reach over Tailscale, SSH or mosh, tmux or Herdr keeps an agent running while you're away; `t NAME` re-attaches. [Remote](docs/remote.md)
-- **One palette.** One `palette.toml` colors Ghostty, tmux and Starship; `make theme NAME=catppuccin-mocha` switches all three. [Theming](docs/theming.md)
-- **Linux too.** `minimal` and `remote` install with `apt-get`, `dnf` or `pacman` when there's no Homebrew, and `agents` works there. `sbx` and the `ui` pack are macOS only. [Profiles](docs/profiles.md)
+### A modern terminal in one command
 
-![sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with "Operation not permitted", so does appending to ~/.zshrc, and make test in the project still runs and passes.](docs/assets/sbx.png)
+`./install.sh` sets up Ghostty, zsh with autosuggestions, syntax highlighting and completions, a Starship prompt, and the tools below, with aliases wired in: `cat` runs `bat`, `ls` and `ll` run `eza`, `cd` runs `zoxide`, `lg` runs `lazygit` and `top` runs `btm` once those are installed. One `palette.toml` colors Ghostty, tmux and Starship, and `make theme NAME=catppuccin-mocha` switches all three. [Profiles](docs/profiles.md) · [Cheatsheet](docs/CHEATSHEET.md) · [Theming](docs/theming.md)
+
+<img src="docs/assets/shell.png" width="800" alt="A terminal in a demo repo under the Starship prompt: ll lists README.md, src and tests with a git status column, and git diff shows a one-line change in delta, with line numbers and the changed words highlighted.">
+
+| Category | Tools |
+|----------|-------|
+| Terminal and shell | Ghostty, zsh plugins, Starship, zoxide; atuin (extras) |
+| Search and files | ripgrep, fd, fzf, bat, eza; broot, dust, duf, procs, sd (extras) |
+| Git and review | git, git-delta, gh; lazygit (extras); `hunk`, a review-first diff viewer (`--pack hunk`) |
+| Data and HTTP | jq, yq; xh (extras) |
+| Quality and speed | shellcheck; hyperfine, tokei, tealdeer, glow (extras) |
+| Python | uv (extras) |
+| Monitoring | bottom, lazydocker (`--pack monitoring`) |
+
+Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever your package manager lacks is skipped.
+
+### Agents sandboxed by default
+
+`--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper, and gates git and gh writes behind a prompt. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 21 paths on one [credential list](configs/sandbox/credential-paths.txt). Codex's sandbox limits writes and network but not reads, so for anything else `sbx` runs a command under a macOS Seatbelt profile that denies the same list. A contract test keeps every copy of the list in step. [Sandboxing](docs/sandboxing.md)
+
+<img src="docs/assets/sbx.png" width="800" alt="sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with &quot;Operation not permitted&quot;, so does appending to ~/.zshrc, and make test in the project still runs and passes.">
 
 <sub>Without a sandbox, any command an agent runs can read your keys. Under `sbx` (strict profile), the same read is refused, so are the other credentials and writes outside the project, and the project's own work still runs. Demo home with made-up files.</sub>
+
+### Subagents on the cheapest tier that works
+
+`--pack orchestration` pins Claude Code's subagents to tiers: Haiku for `Explore` and `executor` (search and command runs), Sonnet for `implementor-standard`, Opus for `implementor-complex` and `reviewer`. Codex gets the same roles in `~/.codex/agents`, without `Explore`. A `delegation` skill runs implementors in parallel git worktrees and brings their work back. It installs on its own, without the rest of tuidev. [Orchestration](docs/orchestration.md)
+
+### Agent workflow support
+
+- **Parallel work:** `claude -w NAME` starts a session in its own worktree, and subagents can too.
+- **Know when you're needed:** Claude Code hooks call `notify.sh`, which shows a Herdr toast, a tmux message, a macOS banner or a Linux desktop notification, and pushes to your phone through [ntfy](https://ntfy.sh) when you set `NTFY_URL`.
+- **Herdr** (`--pack herdr`) is an agent-aware multiplexer that marks each pane `working`, `blocked`, `done` or `idle`.
+- **Review first:** `hunk` for review-first diffs, and a starter [`AGENTS.md`](templates/AGENTS_TEMPLATE.md) for your own projects.
+
+[Agent workflows](docs/agent-workflows.md)
+
+### See and stop what agents run
+
+`agents` (`--pack monitoring`) lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, and flags the MCP and dev servers a crashed session left running. It kills a tree, descendants first, re-checking each process's start time before every signal. With Herdr, sessions waiting for you come first. On macOS its SwiftBar menu shows the same, keeps the Mac awake while agents run, and shows CPU, memory, battery and thermal pressure. [Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
+
+<img src="docs/assets/agents.png" width="800" alt="The agents command in a terminal. Three sessions: a Claude Code session in api, blocked and waiting for input, with its polling command; a working Claude Code session in myapp with two MCP servers and three commands, two of them from subagents in their own worktrees; an idle Codex session in web running a dev server on port 5173. Below them, two stale processes a crashed session left behind, one CPU hog, and a status line with CPU, memory, battery, thermal pressure and keep-awake.">
+
+### Sessions that outlive your laptop
+
+On an always-on machine you reach over Tailscale, SSH or mosh, tmux or Herdr keeps an agent running while you're away, and `t NAME` re-attaches. Blink Shell and Moshi on iOS are covered too. [Remote](docs/remote.md)
+
+### An install you can preview and undo
+
+Pick a profile or compose packs, and `--dry-run` shows every change first. Config goes into managed blocks, so your own lines survive, and a config file you edited keeps your changes through updates. Every install is recorded, `./uninstall.sh` removes only what tuidev put there, and one-shot migrations clean up after older releases. `minimal` and `remote` also install on Linux with `apt-get`, `dnf` or `pacman` when there's no Homebrew. [Updating](docs/updating.md)
 
 ## Who it's for
 
@@ -85,7 +126,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 | `sandbox-container` | Tier 2 sandboxing in a container runtime (Apple `container`, Podman or Docker) |
 | `fnm`, `hunk` | Node via fnm; a review-first diff viewer |
 
-What each profile and pack installs is in [docs/profiles.md](docs/profiles.md). macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it, and anything the distro lacks is skipped with a link to its upstream installer.
+What each profile and pack installs is in [docs/profiles.md](docs/profiles.md). macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it, and anything the distro lacks is skipped with a link to its upstream installer. `sbx` and the `ui` pack are macOS only.
 
 ## Everyday commands
 

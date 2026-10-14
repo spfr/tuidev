@@ -8,12 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **The README presents tuidev as a terminal dev environment for AI coding
+  agents, not a process monitor.** It opens with a short GIF tour (the shell,
+  `agents`, `sbx`) and seven pillars: the modern terminal and its tools (with
+  a table by category), sandboxed agents, tiered orchestration, agent
+  workflow support (worktrees, notifications, Herdr, `hunk`), `agents` and the
+  menu bar, remote sessions, and an undoable install. VISION, the quick start
+  and CONTRIBUTING open with the same description, and the social preview
+  card's subtitle is no longer monitoring-centric.
+- **New images:** `docs/assets/tour.gif` (the hero) and `shell.png` (the real
+  Starship prompt with the shipped config and palette, `ll`, and `git diff`
+  through delta, in a demo repo), from `tour.tape` and `shell.tape`.
 - **The `sbx` screenshot tells a before/after story.** It reads a made-up key
   without a sandbox, then shows `sbx` refusing that read, the AWS credentials
   and a write to `~/.zshrc`, while `make test` still runs. Its demo home is
   now `/Users/Shared/NAME` (strict lets `sbx` write to `$TMPDIR`, which would
-  have made the write denial false), and `make screenshots` deletes the old
-  PNG first, because VHS silently keeps an existing one.
+  have made the write denial false).
+- **`make screenshots` is stricter.** It deletes each tape's old images first
+  and fails if one is not written: VHS can drop a `Screenshot` that is a
+  tape's last command, so the tapes now end with a `Sleep`.
 
 ## [3.3.3] - 2026-10-14
 
