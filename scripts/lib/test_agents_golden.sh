@@ -367,7 +367,7 @@ mkdir -p "$tmp/sample"
 printf '%s\n1012@Wed_Oct_14_08:58:05_2026\t50\t1\n22443@Wed_Oct_14_09:11:12_2026\t100\t1\n6001@Wed_Oct_14_08:10:01_2026\t0\t1\n' \
     "$((FAKE_NOW - 60))" > "$tmp/sample/sample.state"
 ( AGENTS_DATA_DIR="$tmp/sample" case_ sample sample
-  for f in history.tsv today.tsv sample.state sample.stamp runs.state runs.tsv; do printf '== %s\n' "$f"; cat "$tmp/sample/$f" 2>/dev/null; done | norm >> "$tmp/out/sample" )
+  for f in history.tsv today.tsv sample.state sample.stamp runs.state runs.tsv insight.txt; do printf '== %s\n' "$f"; cat "$tmp/sample/$f" 2>/dev/null || true; done | norm >> "$tmp/out/sample" )
 if [[ -n "${HOOK_PS:-}" ]]; then
     hook_case() {   # NAME EVENT HOOK_JSON
         printf '%s\n' "$3" > "$tmp/hook.json"

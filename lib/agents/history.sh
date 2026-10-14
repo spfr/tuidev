@@ -17,10 +17,12 @@
 # "pid@start<TAB>cputime_s<TAB>agent" for each process in an agent tree or a
 # stale one; agent is 1 once a sample has seen it under an agent (kept while
 # it lives, so an orphan keeps it): the provenance auto-reap needs before it
-# stops a stale tree. Each sample also updates the run ledger (runs.sh).
+# stops a stale tree. Each sample also updates the run ledger (runs.sh) and
+# then the menu's top insight (report.sh: insight.txt).
 #
 # Uses: config.sh, util.sh, snapshot.sh, classify.sh, events.sh (the data
-#   directory and the events lock), runs.sh (the run ledger); awk/sample.awk.
+#   directory and the events lock), runs.sh (the run ledger), report.sh
+#   (agents_insight_write); awk/sample.awk.
 # Public: agents_sample, _agents_sample_kick, _agents_hist_line.
 
 # agents_sample — take one sample (a no-op with AGENTS_HISTORY=0). One at a
@@ -65,6 +67,8 @@ _agents_sample_locked() {
         && mv -f "$dir/runs.state.new" "$dir/runs.state"
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || rm -f "${_AGENTS_RUNS_FED[@]}"
     _agents_history_prune "$now" "$day"
+    # The menu's top insight, from the ledger this sample just updated.
+    agents_insight_write || true
 }
 
 # _agents_sample_rows NOW DAY DIR < ENRICHED_AND_JP_RECORDS [RUNP_LINES] — the

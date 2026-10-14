@@ -302,6 +302,19 @@ agents_sample
 [[ "$(_agents_hist_line | cut -f2)" == ok ]] || fail "hist line right after a sample"
 pass "tsv hist line: due a minute after the last sample, then ok"
 
+# A sample ends by refreshing the menu's top insight from the run ledger.
+(
+    FAKE_NOW=$((FAKE_NOW + 12 * 3600)); AGENTS_DATA_DIR="$tmp/insight"; mkdir -p "$AGENTS_DATA_DIR"
+    awk -F '\t' -v OFS='\t' -v n="$FAKE_NOW" '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { $1 = n - $1; $2 = n - $2 } { print }' \
+        "$SCRIPT_DIR/testdata/agents-runs.tsv" > "$AGENTS_DATA_DIR/runs.tsv"
+    agents_sample || fail "insight: sample failed"
+    IFS=$'\t' read -r was until view text < "$AGENTS_DATA_DIR/insight.txt" || fail "insight: no insight.txt after a sample"
+    [[ "$was" == "$FAKE_NOW" && "$until" == $((FAKE_NOW + 3600)) && " $_AGENTS_REPORT_VIEWS " == *" $view "* && -n "$text" ]] \
+        || fail "insight.txt after a sample: $(cat "$AGENTS_DATA_DIR/insight.txt")"
+    [[ "$(perm "$AGENTS_DATA_DIR/insight.txt")" == 600 && ! -e "$AGENTS_DATA_DIR/sample.lock" ]] || fail "insight.txt mode, or the lock left behind"
+)
+pass "sample: writes insight.txt (the menu's top insight) from the run ledger"
+
 # 3. Prune: at most once a day, history and events older than AGENTS_HISTORY_DAYS.
 pd="$tmp/prune"; mkdir -p "$pd"
 old=$((FAKE_NOW - 31 * 86400)) new=$((FAKE_NOW - 86400))

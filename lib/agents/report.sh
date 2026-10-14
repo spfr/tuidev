@@ -55,8 +55,8 @@ _agents_report_awk() {
 # agents_insight_write — refresh insight.txt with today's top insight (the
 # summary's first, from runs.tsv), for the menu. At most every 5 minutes, and
 # again once the last one expires (an hour after it was written, or at
-# midnight); a no-op with AGENTS_HISTORY=0. Meant to run after each
-# `agents sample`, in the background; it never prints.
+# midnight); a no-op with AGENTS_HISTORY=0. Runs at the end of each
+# `agents sample` (history.sh), under its lock; it never prints.
 agents_insight_write() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
     local f="$AGENTS_DATA_DIR/insight.txt" was="" until="" top start now off period
