@@ -219,14 +219,18 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                     [[ ",$aflags," == *,dup,* ]] && fl+=" · ${adup}× dup"
                     [[ ",$aflags," == *,long,* ]] && fl+=" · long"
                     [[ ",$aflags," == *,hot,* ]] && fl+=" · hot"
-                    # A polling loop the agent waits on: marked, never attention.
-                    look=""; [[ ",$aflags," == *,wait,* ]] && { fl+=" · waiting"; look=" sfimage=hourglass $DOT_GRAY"; }
+                    # A polling loop the agent waits on: marked, and attention
+                    # only once it is stuck (it has waited too long).
+                    look=""
+                    if [[ ",$aflags," == *,stuck,* ]]; then fl+=" · stuck"; look=" sfimage=hourglass $DOT_ORANGE"
+                    elif [[ ",$aflags," == *,wait,* ]]; then fl+=" · waiting"; look=" sfimage=hourglass $DOT_GRAY"; fi
                     sh60 "$args"; c="$REPLY"; agev "$age_s"; a="$REPLY"; cl "$project"
                     aadd tools "$r" "--$c · $a · ${pcpu%%.*}% · $REPLY$fl | $ROW$look symbolize=false"$'\n'"----Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
                     anum ntools "$r" 1; anum tcpu "$r" "${pcpu%%.*}"
                     # Duplicates are the same command in the same directory.
                     [[ ",$aflags," == *,dup,* ]] && aadd dups "$r" "$cwd"$'\037'"$args"$'\t'"$age_s"$'\t'"$t"$'\n'
                     [[ ",$aflags," == *,long,* ]] && aadd longs "$r" "$args"$'\t'"$age_s"$'\t'"$t"$'\n'
+                    [[ ",$aflags," == *,stuck,* ]] && aadd stucks "$r" "$args"$'\t'"$age_s"$'\t'"$t"$'\n'
                     ;;
                 mcp)
                     v="A_mcpnames_$r"
@@ -274,7 +278,8 @@ done <<<"$data"
 [[ "$bstate" == - ]] && bstate=""
 
 # Second pass: sessions, now that their activity is known. A blocked session,
-# a command running twice and a long-running command each need a look.
+# a command running twice, a long-running command and a stuck polling loop
+# each need a look.
 n_attn=0
 for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     IFS=$'\t' read -r pid kind age_s pcpu rss kids start ports herdr cwd project <<<"$row"
@@ -321,6 +326,12 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
         needs_menu+="$name: $(short "$cmd") · running $(age "$lage") | sfimage=clock $DOT_ORANGE $ROW symbolize=false"$'\n'
         needs_menu+="--Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$tk sfimage=xmark.octagon"$'\n'
     done <<<"$(aget longs "$pid")"
+    while IFS=$'\t' read -r cmd lage tk; do
+        [[ -n "$tk" ]] || continue
+        n_attn=$((n_attn + 1))
+        needs_menu+="$name: $(short "$cmd") · stuck $(age "$lage") | sfimage=hourglass $DOT_ORANGE $ROW symbolize=false"$'\n'
+        needs_menu+="--Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$tk sfimage=xmark.octagon"$'\n'
+    done <<<"$(aget stucks "$pid")"
 done
 
 # --- Title -------------------------------------------------------------------------

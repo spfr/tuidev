@@ -24,7 +24,7 @@ AGENTS_CONF="${AGENTS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/agents.conf}"
 _AGENTS_CONF_KEYS="AGENTS_HOG_PCT AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP AGENTS_GRACE"
 _AGENTS_CONF_KEYS+=" AGENTS_AWAKE_POLL AGENTS_NAMES AGENTS_NO_HERDR AGENTS_TERMINAL AGENTS_BAR_TITLE"
 _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH"
-_AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS"
+_AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
 _AGENTS_BAR_SECTION_NAMES="needs agents stale hogs awake system"
 
@@ -32,7 +32,7 @@ _AGENTS_BAR_SECTION_NAMES="needs agents stale hogs awake system"
 _agents_conf_valid() {
     local w allowed=""
     case "$1" in
-        AGENTS_HOG_PCT|AGENTS_HOG_MIN|AGENTS_HOG_NOW|AGENTS_HOG_TOP|AGENTS_GRACE|AGENTS_AWAKE_POLL|AGENTS_BAR_TOP|AGENTS_TOOL_LONG|AGENTS_LS_TOOLS)
+        AGENTS_HOG_PCT|AGENTS_HOG_MIN|AGENTS_HOG_NOW|AGENTS_HOG_TOP|AGENTS_GRACE|AGENTS_AWAKE_POLL|AGENTS_BAR_TOP|AGENTS_TOOL_LONG|AGENTS_LS_TOOLS|AGENTS_WAIT_STUCK)
             [[ "$2" =~ ^[0-9]+$ ]] ;;
         AGENTS_NAMES)       [[ "$2" =~ ^[A-Za-z0-9._\ -]+$ ]] ;;
         AGENTS_NO_HERDR)    [[ "$2" =~ ^[01]?$ ]] ;;
@@ -85,6 +85,7 @@ AGENTS_HOG_NOW="${AGENTS_HOG_NOW:-90}"   # current CPU% hog (outside agent trees
 AGENTS_HOG_TOP="${AGENTS_HOG_TOP:-5}"    # hogs listed
 AGENTS_TOOL_LONG="${AGENTS_TOOL_LONG:-20}"  # minutes before a tool command counts as long-running
 AGENTS_LS_TOOLS="${AGENTS_LS_TOOLS:-5}"    # tool commands listed per session in ls
+AGENTS_WAIT_STUCK="${AGENTS_WAIT_STUCK:-60}"  # minutes before a polling loop counts as stuck (0: never)
 AGENTS_GRACE="${AGENTS_GRACE:-3}"        # seconds between SIGTERM and SIGKILL
 AGENTS_AWAKE_POLL="${AGENTS_AWAKE_POLL:-60}"  # `awake agents` re-check, seconds
 AGENTS_NAMES="${AGENTS_NAMES:-claude codex}"  # argv[0] basenames that are agents
@@ -218,11 +219,44 @@ function mcp_name(a,   n, w, i, s) {
     sub(/.*\//, "", s); sub(/@[^@\/]*$/, "", s); sub(/\.(c|m)?js$|\.py$|\.ts$/, "", s)
     return s == "" ? pname(a) : s
 }
+# A polling loop a session waits on ("until …; do sleep 5; done"), given the
+# tidied command: never dup or long, it is how the agent waits for something.
+function waits(c) { return c ~ /^(until|while) .*; *do .*sleep [0-9.]+.*; *done/ }
+# watched: the file a polling loop waits on, "" when there is none: the first
+# absolute path argument of its condition, given directly or through a
+# VAR=/abs/path assignment before the loop ("F=/t/x.output; until tail -1 $F |
+# grep -q ok; do …"). /dev paths, globs and redirection targets do not count.
+function watched(s,   c, pre, j, n, w, i, t, cmd, k, q) {
+    q = sprintf("%c", 39)
+    gsub(/\\012/, " ; ", s)
+    if (!match(s, /(^|[;&(] *)(until|while) +/)) return ""
+    pre = substr(s, 1, RSTART - 1); c = substr(s, RSTART + RLENGTH)
+    j = match(c, / *; *do( |$)/); if (!j) return ""
+    c = substr(c, 1, j - 1)
+    split("", wv); gsub(/[;&|()]/, " ", pre); n = split(pre, w, " ")
+    for (i = 1; i <= n; i++) {
+        if (w[i] !~ /^[A-Za-z_][A-Za-z0-9_]*=./) continue
+        k = index(w[i], "="); t = substr(w[i], k + 1); gsub(/"/, "", t); gsub(q, "", t)
+        if (t ~ /^\//) wv[substr(w[i], 1, k - 1)] = t
+    }
+    gsub(/\|\||&&|[|!;()]/, " & ", c); n = split(c, w, " "); cmd = 1
+    for (i = 1; i <= n; i++) {
+        t = w[i]
+        if (t ~ /^(\|\||&&|[|!;()])$/) { cmd = 1; continue }
+        if (cmd) { cmd = 0; continue }
+        if (t ~ /[<>]/ || (i > 1 && w[i - 1] ~ /[<>]$/)) continue
+        gsub(/"/, "", t); gsub(q, "", t)
+        if (t ~ /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/) { gsub(/[${}]/, "", t); t = (t in wv) ? wv[t] : "" }
+        if (t ~ /^\// && t !~ /^\/dev\// && t !~ /[*?]|\[/) return t
+    }
+    return ""
+}
 # tool_cmd: the command a tool shell runs, tidied for display and comparison:
 # the string a Claude Code shell evals (or the -c string), without cd
 # prefixes, VAR=value assignments, 2>&1, </dev/null or a trailing | tail/head.
+# Sets tool_cd (the absolute directory it changes to first) and tool_watch.
 function tool_cmd(a,   q, i, j, s, k, t) {
-    q = sprintf("%c", 39); tool_cd = ""
+    q = sprintf("%c", 39); tool_cd = ""; tool_watch = ""
     i = index(a, " eval " q)
     if (i > 0) {
         s = substr(a, i + 7)
@@ -246,6 +280,7 @@ function tool_cmd(a,   q, i, j, s, k, t) {
         sub(/^ *cd +/, "", t); sub(/ *(&&|;) *$/, "", t)
         if (t ~ /^\//) tool_cd = t
     }
+    tool_watch = watched(s)
     while (match(s, /(^|[;&|] *)[A-Za-z_][A-Za-z0-9_]*=[^ ]* +/)) {
         t = substr(s, RSTART, RLENGTH); k = t; sub(/[A-Za-z_][A-Za-z0-9_]*=[^ ]* +$/, "", k)
         s = substr(s, 1, RSTART - 1) k substr(s, RSTART + RLENGTH)
@@ -301,7 +336,9 @@ agents_parse_duration() {
 # keep-awake holder). Prints tab-separated records, 14 columns:
 #   type pid kind age_s cpu avg rss_kib kids start ports user herdr cwd args
 # type is agent | stale | cand (a dev-server candidate agents_enrich confirms
-# by cwd) | hog. Unknown fields are "-".
+# by cwd) | hog. Unknown fields are "-". Plus three-column "watch PID PATH"
+# records: the file a polling loop waits on (agents_collect checks its age,
+# agents_enrich drops them).
 agents_classify() {
     local IFS=$'\n'
     AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
@@ -438,7 +475,10 @@ END {
         if (pp[p] != r) continue
         a = av[p]
         if (a ~ /(^|\/)caffeinate( |$)/) act(p, "keepawake", r, "-", a)
-        else if (tool_shell(a)) { c = tool_cmd(a); act(p, "tool", r, (tool_cd == "" ? "-" : tool_cd), c) }
+        else if (tool_shell(a)) {
+            c = tool_cmd(a); act(p, "tool", r, (tool_cd == "" ? "-" : tool_cd), c)
+            if (tool_watch != "" && waits(c)) { gsub(/\t/, " ", tool_watch); printf "watch\t%d\t%s\n", p, tool_watch }
+        }
         else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a), a)
         else act(p, "other", r, "-", a)
     }
@@ -480,12 +520,14 @@ agents_project() {
 # only when its cwd is under one of _agents_cwd_roots. Agent rows come first,
 # ordered by what needs you: blocked, working, idle/done, unknown, the daemon;
 # then activity rows, where column 15 is the origin (main, or the worktree a
-# subagent runs in), 16 the flags (dup, long, hot, wait) and 17 how many copies
-# of that command run in the same directory (in the session, or any session).
-# A tool's cwd is where it cd'"'"'s to first, if it does.
+# subagent runs in), 16 the flags (dup, long, hot, wait, stuck) and 17 how
+# many copies of that command run in the same directory (in the session, or
+# any session). A tool's cwd is where it cd'"'"'s to first, if it does. QUIET:
+# pids of polling loops whose watched file has gone quiet (agents_collect).
 agents_enrich() {
-    AGENTS_CWDS="$1" AGENTS_HERDR="$2" AGENTS_CWD_ROOTS="$(_agents_cwd_roots)" HOME="$HOME" \
-    AGENTS_TOOL_LONG="$AGENTS_TOOL_LONG" AGENTS_HOG_NOW="$AGENTS_HOG_NOW" LC_ALL=C awk -F '\t' -v OFS='\t' '
+    AGENTS_CWDS="$1" AGENTS_HERDR="$2" AGENTS_QUIET="${3:-}" AGENTS_CWD_ROOTS="$(_agents_cwd_roots)" HOME="$HOME" \
+    AGENTS_TOOL_LONG="$AGENTS_TOOL_LONG" AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_WAIT_STUCK="$AGENTS_WAIT_STUCK" \
+    LC_ALL=C awk -F '\t' -v OFS='\t' "$_AGENTS_AWK_LIB"'
 function project(c,   i) {
     if (c == "" || index(c, home "/Library/") == 1) return 0
     for (i = 1; i <= nr; i++) if (roots[i] != "" && index(c, roots[i]) == 1) return 1
@@ -498,9 +540,6 @@ function projname(c,   i, r, w, n, a) {
     if (i > 0) { r = substr(c, 1, i - 1); sub(/.*\//, "", r); w = substr(c, i + 19); sub(/\/.*/, "", w); return r "/" w }
     sub(/\/$/, "", c); n = split(c, a, "/"); return a[n]
 }
-# A polling loop a session waits on ("until …; do sleep 5; done"): never dup
-# or long, it is how the agent waits for something.
-function waits(c) { return c ~ /^(until|while) .*; *do .*sleep [0-9.]+.*; *done/ }
 function origin(c,   i, w) {
     if (c == "" || c == "-") return "-"
     i = index(c, "/.claude/worktrees/")
@@ -517,6 +556,7 @@ function rank(kind, status) {
 END {
     for (r = 0; r <= 4; r++) for (i = 1; i <= na; i++) if (ar[i] == r) print arow[i]
     longs = 60 * ENVIRON["AGENTS_TOOL_LONG"]; hot = ENVIRON["AGENTS_HOG_NOW"] + 0
+    stuck = 60 * ENVIRON["AGENTS_WAIT_STUCK"]
     for (i = 1; i <= nx; i++) {
         split(xrow[i], f, "\t")
         if (f[3] != "tool" || waits(f[14])) continue
@@ -525,7 +565,12 @@ END {
     }
     for (i = 1; i <= nx; i++) {
         $0 = xrow[i]; d = 1; fl = ""
-        if ($3 == "tool" && waits($14)) fl = "wait"
+        # A polling loop is stuck once it has run AGENTS_WAIT_STUCK minutes, or
+        # once the file it watches has been quiet that long.
+        if ($3 == "tool" && waits($14)) {
+            fl = "wait"
+            if (stuck > 0 && ($4 >= stuck || ($2 in quiet))) fl = fl ",stuck"
+        }
         else if ($3 == "tool") {
             d = same[$11, $13, $14]; if ($13 != "-" && here[$13, $14] > d) d = here[$13, $14]
             if (d > 1) fl = "dup"
@@ -544,6 +589,7 @@ BEGIN {
     for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 2) cwd[f[1]] = f[2]
     n = split(ENVIRON["AGENTS_HERDR"], t, "\n")
     for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 3 && !((f[1], f[3]) in hs)) hs[f[1], f[3]] = f[2]
+    n = split(ENVIRON["AGENTS_QUIET"], t, "\n"); for (i = 1; i <= n; i++) if (t[i] != "") quiet[t[i]] = 1
 }
 NF < 14 { next }
 $1 == "cand" {
@@ -683,16 +729,36 @@ agents_collect() {
     fi
     listen="$(_agents_listeners)"
     recs="$(printf '%s\n' "$ps" | agents_classify "$listen" "$(_agents_keep_pids "$ps")")"
-    local type pid kind rest
+    local type pid kind rest watch=""
     set --
     while IFS=$'\t' read -r type pid kind rest; do
         case "$type" in
             agent|stale|cand) set -- "$@" "$pid" ;;
             act) [[ "$kind" == tool ]] && set -- "$@" "$pid" ;;   # its origin
+            watch) watch+="$pid"$'\t'"$kind"$'\n' ;;              # kind: the path
         esac
     done <<<"$recs"
     pids="$(_agents_cwds "$@")"
-    printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")"
+    printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_quiet "$watch")"
+}
+
+# _agents_quiet "PID<TAB>PATH" lines — the pids of polling loops whose watched
+# file exists but has not changed for AGENTS_WAIT_STUCK minutes. One find for
+# all of them (-mmin works the same on macOS and Linux); a missing file says
+# nothing, and the loop is then judged by its age alone.
+_agents_quiet() {
+    local pid path paths=() old
+    [[ -n "$1" && "$AGENTS_WAIT_STUCK" -gt 0 ]] || return 0
+    while IFS=$'\t' read -r pid path; do
+        [[ "$pid" =~ ^[0-9]+$ && "$path" == /* ]] && paths+=("$path")
+    done <<<"$1"
+    [[ ${#paths[@]} -gt 0 ]] || return 0
+    old="$(find "${paths[@]}" -maxdepth 0 -mmin "+$AGENTS_WAIT_STUCK" -print 2>/dev/null)"
+    [[ -n "$old" ]] || return 0
+    while IFS=$'\t' read -r pid path; do
+        [[ -n "$path" && $'\n'"$old"$'\n' == *$'\n'"$path"$'\n'* ]] && echo "$pid"
+    done <<<"$1"
+    return 0
 }
 
 # --- Thermal and energy mode (display only) ----------------------------------
@@ -1205,6 +1271,13 @@ agents_kill_tokens() {
     fi
 }
 
+# agents_reap_tokens STUCK(true|false) < RECORDS — what reap kills: the
+# PID@START of every stale tree and, with STUCK, of every polling loop
+# flagged stuck (the loop's tool shell and its sleep).
+agents_reap_tokens() {
+    awk -F '\t' -v stuck="$1" '$1 == "stale" || (stuck == "true" && $1 == "act" && index("," $16 ",", ",stuck,")) { print $2 "@" $9 }'
+}
+
 # --- Output --------------------------------------------------------------------
 
 _agents_colors() {
@@ -1328,6 +1401,7 @@ function flags(f,   o) {
     if (index("," f[16] ",", ",long,")) o = o "  " ENVIRON["Y"] "long" e
     if (index("," f[16] ",", ",hot,")) o = o "  " ENVIRON["R"] "hot" e
     if (index("," f[16] ",", ",wait,")) o = o "  " ENVIRON["DIM"] "wait" e
+    if (index("," f[16] ",", ",stuck,")) o = o "  " ENVIRON["Y"] "stuck" e
     return o
 }
 # The activity lines under session r; full lists every unit with its pid.
@@ -1667,7 +1741,7 @@ LOOK
   agents watch [SECS]          the same, redrawn every SECS (default 2); q quits
   agents ps [PID]              everything a session runs: MCP servers, each command
                                (tool shell) with its origin (main or a worktree
-                               subagent) and flags (dup, long, hot, wait), nested
+                               subagent) and flags (dup, long, hot, wait, stuck), nested
                                sessions; all sessions without PID
   agents stale                 only stale processes: orphaned MCP servers, npx
                                helpers, caffeinate, dev servers (ppid 1)
@@ -1680,6 +1754,7 @@ ACT
   agents kill [OPTS] PID...    SIGTERM the whole tree, descendants first, then
                                SIGKILL whatever is left after ${AGENTS_GRACE}s
   agents reap [OPTS]           kill every stale tree
+    --stuck                    reap: also stop polling loops flagged stuck
   agents term [OPTS] PID...    SIGTERM one process (for hogs), not its tree
     -n, --dry-run              show what would be signalled
     -y, --yes                  don't ask (required when stdin is not a terminal)
@@ -1705,7 +1780,8 @@ SETTINGS
                                --edit opens the file in your text editor
   $AGENTS_CONF (KEY=value; AGENTS_CONF picks another file). Keys: AGENTS_HOG_PCT
   AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP AGENTS_GRACE AGENTS_AWAKE_POLL
-  AGENTS_NAMES AGENTS_NO_HERDR AGENTS_TERMINAL, and the menu bar's AGENTS_BAR_TITLE
+  AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK AGENTS_NAMES AGENTS_NO_HERDR
+  AGENTS_TERMINAL, and the menu bar's AGENTS_BAR_TITLE
   AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. The same
   names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
   AGENTS_ORPHAN_PATTERNS at the top of $AGENTS_PATH
@@ -1735,7 +1811,7 @@ _agents_term_cols() {
 agents_main() {
     local cmd="${1:-ls}"
     [[ $# -gt 0 ]] && shift
-    AGENTS_DRY_RUN=false AGENTS_YES=false AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false
+    AGENTS_DRY_RUN=false AGENTS_YES=false AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false AGENTS_STUCK=false
     _agents_colors
     if [[ -t 1 ]]; then AGENTS_WIDTH="${COLUMNS:-$(_agents_term_cols)}"; else AGENTS_WIDTH=160; fi
     case "$cmd" in
@@ -1754,6 +1830,8 @@ agents_main() {
                     -y|--yes)      AGENTS_YES=true ;;
                     --confirm-gui) AGENTS_CONFIRM_GUI=true ;;
                     --notify)      AGENTS_NOTIFY=true ;;
+                    --stuck)       [[ "$cmd" == reap ]] || { echo "agents: --stuck is a reap option" >&2; return 2; }
+                                   AGENTS_STUCK=true ;;
                     -*)            echo "agents: unknown option $a" >&2; return 2 ;;
                     *)             args+=("$a") ;;
                 esac
@@ -1776,8 +1854,11 @@ agents_main() {
                   agents_kill_tokens false "$@" ;;
         reap)     local recs tokens
                   recs="$(agents_collect)" || return 1
-                  tokens="$(printf '%s\n' "$recs" | awk -F '\t' '$1 == "stale" { print $2 "@" $9 }')"
-                  [[ -n "$tokens" ]] || { echo "no stale processes"; _agents_notify "No stale processes"; return 0; }
+                  tokens="$(printf '%s\n' "$recs" | agents_reap_tokens "$AGENTS_STUCK")"
+                  if [[ -z "$tokens" ]]; then
+                      if [[ "$AGENTS_STUCK" == true ]]; then echo "no stale processes or stuck polling loops"; else echo "no stale processes"; fi
+                      _agents_notify "Nothing to reap"; return 0
+                  fi
                   # shellcheck disable=SC2086  # one token per word, none has spaces
                   agents_kill_tokens true $tokens ;;
         awake)    agents_awake "$@" ;;

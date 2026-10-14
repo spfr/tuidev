@@ -188,6 +188,7 @@ agents watch              # the same, redrawn every 2s (q quits)
 agents open-term watch    # the same in a new window of your terminal (AGENTS_TERMINAL)
 agents ps 90419           # everything one session runs (all sessions without a pid)
 agents reap -n            # what `reap` would kill: every stale tree
+agents reap -n --stuck    # the same, plus the polling loops flagged stuck
 agents reap               # SIGTERM each stale tree, SIGKILL what's left after 3s (asks first)
 agents kill PID           # one tree, descendants first
 agents term PID           # one process only (a hog), SIGTERM
@@ -215,8 +216,11 @@ agents json               # machine-readable; `agents tsv` feeds the menu-bar pl
   A command's **origin** is the worktree subagent it runs for, from its directory (`<repo>/.claude/worktrees/<name>`), or `main`. Subagents run inside the session's own process, so the directory is the only reliable clue. Flags:
   - `dup`: the same command runs more than once in the same directory, within a session or across sessions. A command's directory is where it `cd`s first, so parallel worktree subagents running the same `go test` in their own worktrees are not duplicates;
   - `long`: running longer than `AGENTS_TOOL_LONG` (20 minutes);
-  - `wait`: a polling loop the agent waits on (`until …; do sleep 5; done`). It is never `dup` or `long` and never needs you; the menu marks it with an hourglass, and it can still be stopped;
+  - `wait`: a polling loop the agent waits on (`until …; do sleep 5; done`). It is never `dup` or `long`; the menu marks it with a gray hourglass, and it can still be stopped;
+  - `stuck` (with `wait`): a polling loop that has run longer than `AGENTS_WAIT_STUCK` (60 minutes), or whose watched file exists but has not changed for that long. The watched file is the first absolute path in the loop's condition, given directly (`until grep -q ok /tmp/x.log`) or through an assignment before the loop (`F=/tmp/x.output; until tail -1 $F | …`); `agents` checks every such file with one `find -mmin`, and judges a loop without one by its age alone. A stuck loop usually waits for a line that will never come: it needs you. `agents reap --stuck` stops every stuck loop along with the stale trees;
   - `hot`: its subtree uses `AGENTS_HOG_NOW` CPU or more.
+
+  For agent authors: Claude Code appends `[exited with code N]` as the last line of a background task's `.output` file, so a loop such as `until tail -1 "$F" | grep -qE '^(ok|FAIL)'` never ends once the task has finished. Match the exit line too (`grep -qE '^(ok|FAIL)|^\[exited with code'`), or cap the tries (`for i in $(seq 120); do …; sleep 5; done`).
 
   Stopping a command is an ordinary tree kill with every safety check: the session sees the command fail and carries on.
 - **Stale** means reparented to launchd (ppid 1), yours, and either matching an agent-helper pattern (MCP servers, `npm exec`/npx, `caffeinate`; the list is `AGENTS_ORPHAN_PATTERNS` at the top of the script) or a dev server: a process that listens on a TCP port itself or through its children (an orphaned `npm run dev` whose vite listens), started from a directory under `$HOME` (not `~/Library`), `$TMPDIR` or Claude Code's `/private/tmp/claude-UID` scratchpads. Never flagged:
@@ -243,7 +247,7 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents
 
 - **Title:** by default an SF Symbol and the number of sessions, plus `· N blocked` when sessions wait for you and a cup while keep-awake is on. The icon turns orange when something needs a look (a blocked session, stale processes, a hog, memory pressure) and red for heavy thermal pressure or critical memory pressure; otherwise it follows the menu bar's colors. The session count is the same in the title, the menu and `agents ls`; the Codex daemon is listed separately and not counted.
 - **Menu**, in the order of `AGENTS_BAR_SECTIONS` (sections with nothing to show are left out):
-  - **Needs you:** sessions Herdr reports as blocked, waiting for input or a permission; commands running more than once (`myapp: 3× go test running`, with Stop duplicates (keep newest)…) and commands running longer than `AGENTS_TOOL_LONG` (with Stop command…), but not the polling loops agents wait on.
+  - **Needs you:** sessions Herdr reports as blocked, waiting for input or a permission; commands running more than once (`myapp: 3× go test running`, with Stop duplicates (keep newest)…) commands running longer than `AGENTS_TOOL_LONG` (with Stop command…), and polling loops flagged `stuck` (`myapp: until tail -1 $F … · stuck 3h27m`, an orange hourglass, with Stop command…). A polling loop that is not stuck stays out of it. Stuck loops and long or duplicate commands tint the icon orange, but only blocked sessions count in the title's `· N blocked`.
   - **Agents:** one line per session: project, kind, status, CPU and memory, with a dot colored by status (orange blocked, green working, gray idle). When its commands use most of the CPU the row says so (`735% (tools 728%)`). Clicking it shows the project in Finder. Its submenu holds the full path, pid, age, children and ports; Running (N), one line per command (command, age, CPU, origin, flags) with Stop command… (asks first); the MCP servers on one line; Stop duplicates (keep newest)… when a command runs twice; and Kill session…, Copy path, Open in Finder and Copy PID. The Codex daemon follows on its own line with a gear.
   - **Stale:** each with Kill tree, plus Reap all stale, which kills exactly the processes listed, not whatever is stale when you click.
   - **Hogs:** each with Terminate (SIGTERM, your own processes only).
@@ -271,7 +275,7 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents
       "mcp":   [{"name", "procs", "cpu", "rss_kib"}],
       "tools": [{"pid", "start", "start_epoch", "token" ("PID@START"), "cmd", "origin" ("main"|worktree|null),
                  "cwd", "age_s", "cpu", "rss_kib", "processes", "ports": [n],
-                 "flags": ["dup"|"long"|"hot"|"wait"], "dup_count"}],
+                 "flags": ["dup"|"long"|"hot"|"wait"|"stuck"], "dup_count"}],
       "child_sessions": [{"pid", "start", "start_epoch", "token", "depth" ("direct"|"nested"), "age_s", "cpu", "rss_kib", "command"}]
     }
   }],
@@ -281,7 +285,7 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents
 }
 ```
 
-`start` is the process start time as `ps` prints it (it is part of the `token`); `start_epoch` is the same moment in Unix seconds, derived from the elapsed time (±1 s). A tool's `cwd` is the directory its command `cd`s into, when it does. A `token` is what `agents kill`, `term`, `cwd`, `copy-path` and `reveal` take: they refuse it once the pid names another process.
+`start` is the process start time as `ps` prints it (it is part of the `token`); `start_epoch` is the same moment in Unix seconds, derived from the elapsed time (±1 s). A tool's `cwd` is the directory its command `cd`s into, when it does. `flags` is an open set: a new flag value is added within a version (as `stuck` was, always alongside `wait`), so ignore values you don't know. A `token` is what `agents kill`, `term`, `cwd`, `copy-path` and `reveal` take: they refuse it once the pid names another process.
 
 ### Settings: `~/.config/agents.conf`
 
@@ -295,6 +299,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_HOG_TOP` | `5` | Hogs listed |
 | `AGENTS_TOOL_LONG` | `20` | Minutes before a session's command (a tool shell) is flagged `long` |
 | `AGENTS_LS_TOOLS` | `5` | Commands listed under each session in `agents ls` and `watch`; `agents ps` lists all |
+| `AGENTS_WAIT_STUCK` | `60` | Minutes before a polling loop (`wait`) is flagged `stuck`: the loop has run that long, or the file it watches has not changed for that long. `0` never flags one |
 | `AGENTS_NAMES` | `claude codex` | Process names (argv[0] basenames) that count as agent sessions |
 | `AGENTS_GRACE` | `3` | Seconds between SIGTERM and SIGKILL when killing a tree |
 | `AGENTS_AWAKE_POLL` | `60` | Seconds between checks in `agents awake agents` |

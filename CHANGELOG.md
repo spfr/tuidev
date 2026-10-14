@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`agents reap --stuck`** also stops the polling loops flagged `stuck`
+  (dry run with `-n`; the same start-time checks as every kill). Plain
+  `reap` still kills stale trees only.
+- **`AGENTS_WAIT_STUCK`** (minutes, default 60; `0` turns it off) in
+  `~/.config/agents.conf`.
+
+### Fixed
+- **A polling loop that never ends no longer reads as a calm "waiting".**
+  Claude Code ends a background task's `.output` with `[exited with code N]`,
+  so a subagent's `until tail -1 $F | grep -q ok; do sleep 5; done` spins
+  forever, and `agents` showed it as a gray hourglass for hours. A `wait`
+  loop is now also flagged `stuck` once it has run `AGENTS_WAIT_STUCK`
+  minutes, or once the file it watches (the first absolute path in its
+  condition, directly or through `F=/path` before the loop) has not changed
+  for that long; one `find -mmin` checks every such file. `agents ps` shows
+  `stuck`, `agents json` adds it to the tool's `flags` (still
+  `schema_version` 1: the flag is added next to `wait`), and the menu shows
+  an orange hourglass with Stop command… under Needs you, which tints the
+  icon but doesn't count as blocked. `docs/agent-workflows.md` tells agent
+  authors to match the exit line or cap their tries.
+
 ## [3.3.3] - 2026-10-14
 
 ### Added
