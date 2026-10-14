@@ -36,9 +36,10 @@ _agents_ere_ok() {
     [[ -n "$re" ]] || return 0
     [[ "$re" =~ ^[[:print:]]+$ ]] || return 1
     # Both must accept it: regcomp (status 2 = bad pattern) catches what
-    # BusyBox awk lets through; awk catches what only it rejects.
+    # BusyBox awk lets through; awk catches what only it rejects. Newer bash
+    # also says why on stderr: the caller's own message is enough.
     local rc
-    [[ "" =~ $re ]]; rc=$?
+    { [[ "" =~ $re ]]; rc=$?; } 2>/dev/null
     [[ $rc -ne 2 ]] || return 1
     err="$(_AGENTS_ERE="$re" LC_ALL=C awk 'BEGIN { if ("" ~ ENVIRON["_AGENTS_ERE"]) n++ }' 2>&1 </dev/null)" || return 1
     [[ -z "$err" ]]

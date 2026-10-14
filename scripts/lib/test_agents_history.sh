@@ -130,6 +130,7 @@ pass "job records: per unit and job, own vs. sub, root kind (- for a stale tree)
 _agents_conf_valid AGENTS_JOB_BUILD '(^| )just build( |$)' || fail "a good job pattern rejected"
 _agents_conf_valid AGENTS_JOB_BUILD '' || fail "an empty job pattern rejected"
 ! _agents_conf_valid AGENTS_JOB_BUILD '(unclosed' || fail "a pattern that does not compile accepted"
+[[ -z "$(_agents_conf_valid AGENTS_JOB_BUILD '(unclosed' 2>&1)" ]] || fail "checking a bad pattern printed to stderr"
 ! _agents_conf_valid AGENTS_JOB_BUILD $'tab\there' || fail "a pattern with a tab accepted"
 # Checked by the awk that uses it: bash's regcomp may take [[:<:]] (macOS),
 # while awk only warns about it on stderr and exits 0.
@@ -141,6 +142,7 @@ printf 'AGENTS_JOB_SERVER="(^| )foreman start( |$)"\nAGENTS_JOB_MCP=(broken\n' >
 out="$(AGENTS_CONF="$tmp/jobs.conf" bash "$REPO_DIR/bin/agents" config 2>"$tmp/jobs.err")"
 [[ "$out" == *'AGENTS_JOB_SERVER=(^| )foreman start( |$)'* ]] || fail "job pattern from the config file: $out"
 grep -q 'bad value for AGENTS_JOB_MCP' "$tmp/jobs.err" || fail "a broken job pattern in the config file is not reported"
+! grep -q 'regular expression' "$tmp/jobs.err" || fail "bash's regcomp error reached stderr: $(cat "$tmp/jobs.err")"
 pass "AGENTS_JOB_<JOB> patterns extend the defaults; broken ones are reported and ignored"
 
 # agents json: each entry's job, and the jobs summary.
