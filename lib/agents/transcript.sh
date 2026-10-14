@@ -19,7 +19,7 @@
 #   and which agent started a task.
 # Uses: nothing.
 # Public: _AGENTS_TX_TASK_KEY, _agents_tx_path, _agents_tx_started,
-#   _agents_tx_ids, _agents_tx_meta, _agents_tx_agent_type,
+#   _agents_tx_ids, _agents_tx_meta, _agents_tx_type_ok, _agents_tx_agent_type,
 #   _agents_tx_main_of, _agents_tx_task_owners.
 
 # The key on every transcript line that names a background task.
@@ -57,6 +57,15 @@ _agents_tx_meta() {
     LC_ALL=C grep -oE "\"$2\": ?\"[^\"\\\\]*\"" "$1" 2>/dev/null | head -1 | LC_ALL=C sed -E 's/^[^:]*: ?"(.*)"$/\1/'
 }
 
+# _agents_tx_type_ok TYPE — true when an agent type is a plain name: 1 to 64
+# of A-Z a-z 0-9 . _ : - (spelled out: a range can take in other letters in
+# some locales). Only such a name reaches runs.tsv, the report, the menu or a
+# notification; a type comes from files and hook input agents does not own.
+_AGENTS_TX_TYPE_CHARS='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-'
+_agents_tx_type_ok() {
+    [[ -n "$1" && ${#1} -le 64 && -z "${1//[$_AGENTS_TX_TYPE_CHARS]/}" ]]
+}
+
 # _agents_tx_agent_type TRANSCRIPT — the type of the subagent whose
 # transcript it is (customAgentType for a named one, else agentType: Explore,
 # implementor-complex, fork…), "-" when unknown or not a plain name.
@@ -64,7 +73,7 @@ _agents_tx_agent_type() {
     local meta="${1%.jsonl}.meta.json" t
     t="$(_agents_tx_meta "$meta" customAgentType)"
     [[ -n "$t" ]] || t="$(_agents_tx_meta "$meta" agentType)"
-    [[ "$t" =~ ^[A-Za-z0-9._:-]{1,64}$ ]] || t=-
+    _agents_tx_type_ok "$t" || t=-
     printf '%s\n' "$t"
 }
 

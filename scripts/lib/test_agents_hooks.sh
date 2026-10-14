@@ -215,6 +215,12 @@ err="$(hook_json SubagentStop aaa | AGENTS_DRY_RUN=true bash "$REPO_DIR/bin/agen
 [[ "$err" == *"agents hook:"* ]] || fail "AGENTS_DRY_RUN=true from the environment is not a dry run: $err"
 pass "AGENTS_DRY_RUN=true is a dry run too"
 
+# An agent type that is not a plain name never reaches the output.
+run_hook subagent-stop "$(hook_json SubagentStop aaa | jq -c '.agent_type = "x|$(touch y)\tz\nw"')" -n
+{ grep -q "^agents hook: background commands a subagent left running:" "$tmp/out" && ! grep -q 'touch' "$tmp/out"; } \
+    || fail "a hostile agent_type reached the output: $(cat "$tmp/out")"
+pass "a hook's agent_type is shown only when it is a plain name"
+
 run_hook subagent-stop "$(hook_json SubagentStop aaa)"
 [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "a real run is not quiet: rc $(cat "$tmp/rc"), $(cat "$tmp/out")"
 [[ "$(signalled)" == "5200 5201 5300 5301 " ]] || fail "signalled: $(signalled)"

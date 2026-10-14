@@ -242,6 +242,7 @@ _agents_hook_run() {
     [[ -n "$fields" ]] || { _agents_hook_say "no hook JSON on stdin"; return 0; }
     IFS=$'\t' read -r _ev _sid main _aid atype agent cwd reason <<<"$fields"
     main="$(_agents_tx_path "$main")"; agent="$(_agents_tx_path "$agent")"
+    _agents_tx_type_ok "$atype" || atype=-
     if [[ "$AGENTS_HOOK_LOG" == 1 ]]; then
         [[ "$_aid" =~ ^[A-Za-z0-9_-]+$ ]] && _AGENTS_HL_AID="$_aid"
         if [[ "$event" == subagent-stop ]]; then

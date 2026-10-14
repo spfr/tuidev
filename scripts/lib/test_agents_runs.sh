@@ -79,9 +79,24 @@ want="$(printf '%s\n' $'bdev1\tmain' $'bfk1\tfork' $'bgo1\timplementor-complex' 
 [[ "$(_agents_tx_agent_type "$subs/agent-zzz.jsonl")" == - ]] || fail "a subagent without meta has a type"
 printf '{"agentType":"bad name\\"x"}' > "$subs/agent-odd.meta.json"
 [[ "$(_agents_tx_agent_type "$subs/agent-odd.jsonl")" == - ]] || fail "an odd agentType is kept"
+# Hostile names are "-", and so is the task they would own: a tab, a raw
+# newline, JSON escapes, a command substitution, a pipe, a space, backquotes,
+# a non-ASCII letter (the check is locale-proof). agentType is no plain name
+# either, so nothing falls back to a type.
+# shellcheck disable=SC2016  # literal $( ) and backquotes, never run
+for bad in $'a\tb' $'a\nb' 'a\tb' '$(touch pwned)' 'a|b' 'a b' '`id`' $'caf\xc3\xa9'; do
+    printf '{"agentType":"x y","customAgentType":"%s"}' "$bad" > "$subs/agent-evl.meta.json"
+    t="$(_agents_tx_agent_type "$subs/agent-evl.jsonl")"
+    [[ "$t" == - ]] || fail "hostile customAgentType $bad: $t"
+done
+# shellcheck disable=SC2016
+printf '{"agentType":"$(id)|x"}' > "$subs/agent-evl.meta.json"; tl bevl > "$subs/agent-evl.jsonl"
+[[ "$(_agents_tx_task_owners "$main" bevl)" == $'bevl\t-' ]] || fail "a hostile type names a task's owner: $(_agents_tx_task_owners "$main" bevl)"
+rm -f "$subs/agent-evl.jsonl" "$subs/agent-evl.meta.json"
+[[ ! -e pwned ]] || fail "a type was run"
 [[ "$(_agents_tx_main_of "$tasks/bgo1.output")" == "$main" ]] || fail "main transcript of a task output: $(_agents_tx_main_of "$tasks/bgo1.output")"
 ! _agents_tx_main_of /tmp/x.log >/dev/null || fail "a non-task path has a transcript"
-pass "transcripts: a task's owner is main, a subagent's type (customAgentType first), fork, or - when ambiguous"
+pass "transcripts: a task's owner is main, a subagent's type (customAgentType first), fork, or - when ambiguous or not a plain name"
 
 # --- The process table ----------------------------------------------------------
 # claude 300 in ~/code/app runs: go test (301, a background task of subagent
