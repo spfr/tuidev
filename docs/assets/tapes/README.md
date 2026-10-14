@@ -10,15 +10,15 @@ make screenshots TAPES="agents"     # one or more by name
 | Tape | Image | Shows |
 |------|-------|-------|
 | `agents.tape` | `agents.png` | `agents` over the fixture process table (the README hero) |
-| `sbx.tape` | `sbx.png` | `sbx` reading the project, refused a credential and the CLI's settings |
+| `sbx.tape` | `sbx.png` | a key read without and under `sbx`, then refused credentials and a `~/.zshrc` write, while `make test` runs |
 | `social-preview.tape` | `social-preview.png` | The 1280×640 Open Graph card; its text is in `social-card.sh` |
 | `theme.tape` | | Shared settings: the Tokyo Night palette and the Ghostty font, sourced by the others |
 
 ## The demo environment
 
-`make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. `scripts/screenshots.sh` gives each tape a throwaway home in `$TMPDIR` and deletes it afterwards. The `agents` and `sbx` tapes source `demo-env.sh`, hidden, which:
+`make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. `scripts/screenshots.sh` gives each tape a throwaway home in `$TMPDIR` and deletes it afterwards. The `sbx` tape's home is `/Users/Shared/NAME` instead: strict lets `sbx` write to `$TMPDIR`, so a home there would make the "write outside the project" denial false, and `/Users/Shared/NAME` shows no real user in the error paths (the script refuses to run if it already exists). The `agents` and `sbx` tapes source `demo-env.sh`, hidden, which:
 
-- builds that home with `demo-setup.sh`: three projects (`myapp`, `api`, `web`), a fake `~/.ssh/id_ed25519` for `sbx` to refuse, a `~/.claude/settings.json`, and the state `agents` reads (a keep-awake record and a Herdr socket);
+- builds that home with `demo-setup.sh`: three projects (`myapp`, `api`, `web`), fake `~/.ssh/id_ed25519`, `~/.aws/credentials` and `~/.zshrc` for `sbx` to protect, a `make test` target in `myapp`, a `~/.claude/settings.json`, and the state `agents` reads (a keep-awake record and a Herdr socket);
 - sets `HOME` to it and draws a two-line prompt shaped like the shipped Starship one, without Starship (which would show the real user, host and git state);
 - puts `bin/agents` (the demo wrapper) and the repo's `bin/sbx` first on `PATH`.
 
@@ -41,7 +41,7 @@ To try the demo by hand, from the repo root in bash:
 source docs/assets/tapes/demo-env.sh
 agents
 agents ps 1201
-sbx -- cat ../.ssh/id_ed25519
+sbx -- cat ~/.ssh/id_ed25519
 ```
 
 Without `DEMO_HOME` set, `demo-env.sh` makes the home with `mktemp` and leaves it there: when you're done, close that shell and `rm -rf "$(dirname "$DEMO_HOME")"` (run it in the demo shell first to see the path, `echo "$DEMO_HOME"`). Set `DEMO_HOME` before sourcing to choose the place yourself.

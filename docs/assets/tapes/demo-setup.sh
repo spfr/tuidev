@@ -9,16 +9,26 @@ home="${1:?usage: demo-setup.sh DIR}"
 tapes="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 mkdir -p "$home/myapp/src" "$home/myapp/.claude/worktrees/agent-a3f9c1" "$home/myapp/.claude/worktrees/agent-7d20e4" \
-    "$home/api" "$home/web" "$home/.ssh" "$home/.config/tuidev/run" "$home/.demo/stubs"
+    "$home/api" "$home/web" "$home/.ssh" "$home/.aws" "$home/.config/tuidev/run" "$home/.demo/stubs"
 
 printf '# myapp\n\nA made-up project for the tuidev screenshots.\n' > "$home/myapp/README.md"
 printf 'export const answer = 42;\n' > "$home/myapp/src/index.ts"
+# `sbx -- make test` runs for real and prints a made-up passing result.
+printf 'test:\n\t@echo "✓ 12 passed"\n' > "$home/myapp/Makefile"
 
 # A fake key: sbx must refuse to read it, so nothing real is ever at stake.
 if [[ ! -f "$home/.ssh/id_ed25519" ]]; then
     printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nnot a real key: tuidev screenshot fixture\n-----END OPENSSH PRIVATE KEY-----\n' > "$home/.ssh/id_ed25519"
     chmod 700 "$home/.ssh"; chmod 600 "$home/.ssh/id_ed25519"
 fi
+
+# More made-up files outside the project: an AWS credentials file, and a shell
+# rc that sbx must not let anything append to.
+if [[ ! -f "$home/.aws/credentials" ]]; then
+    printf '[default]\naws_access_key_id = AKIAEXAMPLEFAKEKEY\naws_secret_access_key = not-a-real-secret\n' > "$home/.aws/credentials"
+    chmod 700 "$home/.aws"; chmod 600 "$home/.aws/credentials"
+fi
+[[ -f "$home/.zshrc" ]] || printf '# made-up shell rc\n' > "$home/.zshrc"
 
 # sbx keeps an agent's own settings read-only; the shot shows it.
 mkdir -p "$home/.claude"

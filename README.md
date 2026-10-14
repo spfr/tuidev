@@ -24,9 +24,9 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal.
 - **One palette.** One `palette.toml` colors Ghostty, tmux and Starship; `make theme NAME=catppuccin-mocha` switches all three. [Theming](docs/theming.md)
 - **Linux too.** `minimal` and `remote` install with `apt-get`, `dnf` or `pacman` when there's no Homebrew, and `agents` works there. `sbx` and the `ui` pack are macOS only. [Profiles](docs/profiles.md)
 
-![sbx in a terminal: reading the project's README works, reading ../.ssh/id_ed25519 fails with "Operation not permitted", touching ../.claude/settings.json fails with "Operation not permitted", and writing build.log inside the project works.](docs/assets/sbx.png)
+![sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with "Operation not permitted", so does appending to ~/.zshrc, and make test in the project still runs and passes.](docs/assets/sbx.png)
 
-<sub>`sbx` (strict profile) in a demo home: project files are readable and writable, credentials are denied, and an agent can't edit its own CLI settings.</sub>
+<sub>Without a sandbox, any command an agent runs can read your keys. Under `sbx` (strict profile), the same read is refused, so are the other credentials and writes outside the project, and the project's own work still runs. Demo home with made-up files.</sub>
 
 ## Who it's for
 

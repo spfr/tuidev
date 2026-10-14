@@ -38,13 +38,26 @@ else
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-screenshots.XXXXXX")"
-trap 'rm -rf "$work"' EXIT
+sbx_home=""
+trap 'rm -rf "$work"; [[ -z "$sbx_home" ]] || rm -rf "$sbx_home"' EXIT
 
 for tape in "${tapes[@]}"; do
     name="$(basename "$tape" .tape)"
     print_step "rendering $tape"
-    # A fresh demo home per tape; VHS also writes a GIF we don't keep.
-    if ! DEMO_HOME="$work/$name/NAME" vhs -o "$work/$name.gif" "$tape" >"$work/$name.log" 2>&1; then
+    # A fresh demo home per tape; VHS also writes a GIF we don't keep. The
+    # sbx tape's home can't live in $TMPDIR (strict lets sbx write there, so
+    # the "write outside the project" denial would be false) or under the real
+    # home (its path would show the user). /Users/Shared is neither, and
+    # /Users/Shared/NAME reads as a home in error messages.
+    # VHS silently keeps an existing PNG, so remove the old one first.
+    sed -n 's/^Screenshot //p' "$tape" | while IFS= read -r png; do rm -f "$png"; done
+    demo_home="$work/$name/NAME"
+    if [[ "$name" == sbx ]]; then
+        demo_home="/Users/Shared/NAME"
+        [[ ! -e "$demo_home" ]] || die "$demo_home already exists; remove it (a leftover demo home) and re-run"
+        sbx_home="$demo_home"
+    fi
+    if ! DEMO_HOME="$demo_home" vhs -o "$work/$name.gif" "$tape" >"$work/$name.log" 2>&1; then
         tail -20 "$work/$name.log" >&2
         if grep -qiE 'randomPort|bind|operation not permitted' "$work/$name.log"; then
             print_info "VHS could not listen on a local port: a sandbox that blocks binding one (Claude Code's native sandbox, by default) does this; run it outside"

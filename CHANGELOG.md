@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **The `sbx` screenshot tells a before/after story.** It reads a made-up key
+  without a sandbox, then shows `sbx` refusing that read, the AWS credentials
+  and a write to `~/.zshrc`, while `make test` still runs. Its demo home is
+  now `/Users/Shared/NAME` (strict lets `sbx` write to `$TMPDIR`, which would
+  have made the write denial false), and `make screenshots` deletes the old
+  PNG first, because VHS silently keeps an existing one.
+
 ## [3.3.3] - 2026-10-14
 
 ### Added
