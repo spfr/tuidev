@@ -233,11 +233,14 @@ function mcp_name(a,   n, w, i, s) {
 # tidied command: never dup or long, it is how the agent waits for something.
 function waits(c) { return c ~ /^(until|while) .*; *do .*sleep [0-9.]+.*; *done/ }
 # watched: the file a polling loop waits on, "" when there is none: the first
-# absolute path argument of its condition, given directly or through a
-# VAR=/abs/path assignment before the loop ("F=/t/x.output; until tail -1 $F |
-# grep -q ok; do …"). /dev paths, globs and redirection targets do not count.
-function watched(s,   c, pre, j, n, w, i, t, cmd, k, q) {
-    q = sprintf("%c", 39)
+# absolute path given to tail, head, grep, cat, test, [ or [[ in its condition,
+# directly or through a VAR=/abs/path assignment before the loop
+# ("F=/t/x.output; until tail -1 $F | grep -q ok; do …"). Arguments of any
+# other command (docker exec db /usr/bin/pg_isready, curl --unix-socket
+# /var/run/x.sock) never count, nor do /dev paths, globs and redirection
+# targets. A quoted word split at its spaces is joined back ("/tmp/my dir/x").
+function watched(s,   c, pre, j, n, w, i, t, cmd, cur, k, q, d, x) {
+    q = sprintf("%c", 39); d = "\""
     gsub(/\\012/, " ; ", s)
     if (!match(s, /(^|[;&(] *)(until|while) +/)) return ""
     pre = substr(s, 1, RSTART - 1); c = substr(s, RSTART + RLENGTH)
@@ -246,16 +249,25 @@ function watched(s,   c, pre, j, n, w, i, t, cmd, k, q) {
     split("", wv); gsub(/[;&|()]/, " ", pre); n = split(pre, w, " ")
     for (i = 1; i <= n; i++) {
         if (w[i] !~ /^[A-Za-z_][A-Za-z0-9_]*=./) continue
-        k = index(w[i], "="); t = substr(w[i], k + 1); gsub(/"/, "", t); gsub(q, "", t)
+        k = index(w[i], "="); t = substr(w[i], k + 1); x = substr(t, 1, 1)
+        if (x == q || x == d) {
+            if (length(t) < 2 || substr(t, length(t)) != x) continue    # a quoted value with spaces
+            t = substr(t, 2, length(t) - 2)
+        }
         if (t ~ /^\//) wv[substr(w[i], 1, k - 1)] = t
     }
-    gsub(/\|\||&&|[|!;()]/, " & ", c); n = split(c, w, " "); cmd = 1
+    gsub(/\|\||&&|[|;()]/, " & ", c); n = split(c, w, " "); cmd = 1; cur = ""
     for (i = 1; i <= n; i++) {
-        t = w[i]
-        if (t ~ /^(\|\||&&|[|!;()])$/) { cmd = 1; continue }
-        if (cmd) { cmd = 0; continue }
-        if (t ~ /[<>]/ || (i > 1 && w[i - 1] ~ /[<>]$/)) continue
-        gsub(/"/, "", t); gsub(q, "", t)
+        t = w[i]; x = substr(t, 1, 1)
+        if ((x == q || x == d) && (length(t) < 2 || substr(t, length(t)) != x))
+            while (i < n && (length(t) < 2 || substr(t, length(t)) != x)) t = t " " w[++i]
+        if (t ~ /^(\|\||&&|[|;()])$/) { cmd = 1; cur = ""; continue }
+        if (t == "!") continue
+        if (cmd) { cmd = 0; cur = t; sub(/.*\//, "", cur); continue }
+        if (cur !~ /^(tail|head|grep|egrep|fgrep|cat|test|\[|\[\[)$/) continue
+        if (t ~ /^[0-9]*[<>]/ || (i > 1 && w[i - 1] ~ /[<>]$/)) continue
+        x = substr(t, 1, 1)
+        if ((x == q || x == d) && length(t) >= 2 && substr(t, length(t)) == x) t = substr(t, 2, length(t) - 2)
         if (t ~ /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/) { gsub(/[${}]/, "", t); t = (t in wv) ? wv[t] : "" }
         if (t ~ /^\// && t !~ /^\/dev\// && t !~ /[*?]|\[/) return t
     }
@@ -576,13 +588,12 @@ END {
     }
     for (i = 1; i <= nx; i++) {
         $0 = xrow[i]; d = 1; fl = ""
-        # A polling loop is stuck once the file it watches has been quiet for
-        # AGENTS_WAIT_STUCK minutes, or, when it watches no file that exists,
-        # once it has run that long. A file written lately (a long build'"'"'s
-        # log) means the producer is alive: never stuck then.
+        # A polling loop is stuck once it has run AGENTS_WAIT_STUCK minutes,
+        # unless the file it watches changed within that time (a long
+        # build'"'"'s log: the producer is alive).
         if ($3 == "tool" && waits($14)) {
             fl = "wait"; w = ($2 in wst) ? wst[$2] : ""
-            if (stuck > 0 && (w == "quiet" || (w == "" && $4 >= stuck))) fl = fl ",stuck"
+            if (stuck > 0 && $4 >= stuck && w != "fresh") fl = fl ",stuck"
         }
         else if ($3 == "tool") {
             d = same[$11, $13, $14]; if ($13 != "-" && here[$13, $14] > d) d = here[$13, $14]

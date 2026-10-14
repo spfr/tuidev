@@ -931,8 +931,10 @@ pass "parallel worktree subagents running the same command are not duplicates; t
 # Stuck polling loops: one waiting 3h27m on a task output that will never end
 # with "ok" (Claude Code appends "[exited with code N]"), one young loop whose
 # watched file has been quiet for years, one young loop on a fresh file, one
-# without a file to watch, and a 2h loop on a log still being written (the
-# producer is alive: not stuck, whatever its age).
+# without a file to watch, a 2h loop on a log still being written (the
+# producer is alive: not stuck, whatever its age), and a 1h30m loop on the
+# quiet file. A loop is stuck only once it has run AGENTS_WAIT_STUCK minutes:
+# the young loop on the quiet file is not.
 mkdir -p "$tmp/w"; : > "$tmp/w/fresh.log"; : > "$tmp/w/quiet.out"; touch -t 202001010000 "$tmp/w/quiet.out"
 snap_pre='/bin/zsh -c source /Users/NAME/.claude/shell-snapshots/s.sh 2>/dev/null || true && eval'
 st_fixture="$(cat <<EOF
@@ -945,21 +947,23 @@ st_fixture="$(cat <<EOF
  5040  5000   501 me    0.0   2000  0:00.10 05:00 Wed Oct 14 08:55:00 2026     $snap_pre 'while kill -0 4242 2>/dev/null; do sleep 5; done' < /dev/null && pwd -P >| /tmp/c4
  5050  5000   501 me    0.0   2000  0:00.10 03:00:00 Wed Oct 14 06:00:00 2026     $snap_pre 'make serve > /tmp/serve.log' < /dev/null && pwd -P >| /tmp/c5
  5060  5000   501 me    0.0   2000  0:00.10 02:00:00 Wed Oct 14 07:00:00 2026     $snap_pre 'until grep -q "^done" $tmp/w/fresh.log; do sleep 30; done' < /dev/null && pwd -P >| /tmp/c6
+ 5070  5000   501 me    0.0   2000  0:00.10 01:30:00 Wed Oct 14 07:30:00 2026     $snap_pre 'Q=$tmp/w/quiet.out; until tail -1 "\$Q" | grep -q ok; do sleep 10; done' < /dev/null && pwd -P >| /tmp/c7
 EOF
 )"
 st_recs="$(printf '%s\n' "$st_fixture" | AGENTS_SELF=9999 agents_classify "" "")"
 st_watch="$(printf '%s\n' "$st_recs" | awk -F '\t' '$1 == "watch" { print $2 "\t" $3 }')"
-[[ "$st_watch" == "5010"$'\t'"/private/tmp/claude-501/myapp/tasks/b1.output"$'\n'"5020"$'\t'"$tmp/w/quiet.out"$'\n'"5030"$'\t'"$tmp/w/fresh.log"$'\n'"5060"$'\t'"$tmp/w/fresh.log" ]] \
+[[ "$st_watch" == "5010"$'\t'"/private/tmp/claude-501/myapp/tasks/b1.output"$'\n'"5020"$'\t'"$tmp/w/quiet.out"$'\n'"5030"$'\t'"$tmp/w/fresh.log"$'\n'"5060"$'\t'"$tmp/w/fresh.log"$'\n'"5070"$'\t'"$tmp/w/quiet.out" ]] \
     || fail "watched files of polling loops: $st_watch"
-[[ "$(_agents_watched "$st_watch")" == "5020"$'\t'"quiet"$'\n'"5030"$'\t'"fresh"$'\n'"5060"$'\t'"fresh" ]] \
+[[ "$(_agents_watched "$st_watch")" == "5020"$'\t'"quiet"$'\n'"5030"$'\t'"fresh"$'\n'"5060"$'\t'"fresh"$'\n'"5070"$'\t'"quiet" ]] \
     || fail "watched files: quiet or fresh; a missing one says nothing: $(_agents_watched "$st_watch")"
 [[ -z "$(AGENTS_WAIT_STUCK=0 _agents_watched "$st_watch")" ]] || fail "AGENTS_WAIT_STUCK=0 still checks files"
-st_cwds="$(for p in 5000 5010 5020 5030 5040 5050 5060; do printf "%s\t/Users/NAME/myapp\n" "$p"; done)"
+st_cwds="$(for p in 5000 5010 5020 5030 5040 5050 5060 5070; do printf "%s\t/Users/NAME/myapp\n" "$p"; done)"
 st_enr="$(printf '%s\n' "$st_recs" | agents_enrich "$st_cwds" "" "$(_agents_watched "$st_watch")")"
 [[ -z "$(printf '%s\n' "$st_enr" | awk -F '\t' '$1 == "watch"')" ]] || fail "watch records leak out of agents_enrich"
 stflags() { printf '%s\n' "$st_enr" | awk -F '\t' -v p="$1" '$1 == "act" && $2 == p { print $16 }'; }
 [[ "$(stflags 5010)" == wait,stuck ]] || fail "a 3h27m polling loop is not stuck: $(stflags 5010)"
-[[ "$(stflags 5020)" == wait,stuck ]] || fail "a young loop on a quiet file is not stuck: $(stflags 5020)"
+[[ "$(stflags 5020)" == wait ]] || fail "a 5-minute loop stuck (it can't have waited an hour): $(stflags 5020)"
+[[ "$(stflags 5070)" == wait,stuck ]] || fail "a 1h30m loop on a quiet file is not stuck: $(stflags 5070)"
 [[ "$(stflags 5030)" == wait ]] || fail "a young loop on a fresh file flagged: $(stflags 5030)"
 [[ "$(stflags 5040)" == wait ]] || fail "a young loop without a file flagged: $(stflags 5040)"
 [[ "$(stflags 5050)" == long ]] || fail "an ordinary long command: $(stflags 5050)"
@@ -974,7 +978,20 @@ st_late="$(printf '%s\n' "$st_recs" | AGENTS_WAIT_STUCK=300 agents_enrich "$st_c
     && AGENTS_CONF="$tmp/stuck.conf" bash "$REPO_DIR/bin/agents" config | grep '^AGENTS_WAIT_STUCK=')" == AGENTS_WAIT_STUCK=90 ]] \
     || fail "AGENTS_WAIT_STUCK from the config file"
 ! _agents_conf_valid AGENTS_WAIT_STUCK 1h || fail "AGENTS_WAIT_STUCK=1h accepted (minutes only)"
-pass "stuck polling loops: a quiet watched file, or age without one; a fresh file never; young loops stay wait; 0 disables"
+pass "stuck polling loops: AGENTS_WAIT_STUCK of age, unless the watched file is fresh; young loops stay wait; 0 disables"
+
+# watched(): only a path given to tail, head, grep, cat, test, [ or [[ (or
+# through VAR=/path) is a watched file; quoted paths with spaces are whole.
+wprobe() { printf '%s\n' "$1" | LC_ALL=C awk "$_AGENTS_AWK_LIB"'{ print watched($0) }'; }
+[[ "$(wprobe 'until docker exec db /usr/bin/pg_isready; do sleep 2; done')" == "" ]] || fail "watched: docker exec's program taken as the file"
+[[ "$(wprobe 'until curl --unix-socket /var/run/x.sock http://x/health; do sleep 2; done')" == "" ]] || fail "watched: curl's socket taken as the file"
+[[ "$(wprobe 'until [ -f "/tmp/my dir/done" ]; do sleep 2; done')" == "/tmp/my dir/done" ]] || fail "watched: quoted path with a space: $(wprobe 'until [ -f "/tmp/my dir/done" ]; do sleep 2; done')"
+[[ "$(wprobe 'until [ ! -s /tmp/q ]; do sleep 2; done')" == /tmp/q ]] || fail "watched: [ ! -s PATH ]"
+[[ "$(wprobe 'while ! /usr/bin/grep -q ok /tmp/log 2>/dev/null; do sleep 2; done')" == /tmp/log ]] || fail "watched: grep by absolute path"
+# shellcheck disable=SC2016  # a literal command line, $F included
+[[ "$(wprobe 'F="/tmp/a b"; until tail -1 $F | grep -q ok; do sleep 2; done')" == "" ]] || fail "watched: a quoted assignment with a space half-read"
+[[ "$(wprobe 'until grep -q ok /tmp/x > /tmp/out; do sleep 2; done')" == /tmp/x ]] || fail "watched: a redirect target taken first"
+pass "watched(): only tail/head/grep/cat/test/[ arguments; docker exec, curl --unix-socket ignored; quoted paths with spaces whole"
 
 _agents_colors
 st_detail="$(printf '%s\n' "$st_enr" | AGENTS_WIDTH=200 agents_render "agents detail")"
@@ -983,11 +1000,11 @@ st_detail="$(printf '%s\n' "$st_enr" | AGENTS_WIDTH=200 agents_render "agents de
 [[ "$st_detail" == *"5040    while kill -0 4242 2>/dev/null; do sleep 5; done · 5m00s · 0% · main  wait"$'\n'* ]] || fail "agents ps plain wait: $st_detail"
 if command -v jq >/dev/null 2>&1; then
     sj="$(printf '%s\n' "$st_enr" | agents_json)"
-    printf '%s' "$sj" | jq -e '.schema_version == 1 and ([.agents[0].activity.tools[] | select(.flags | index("stuck")) | .pid] | sort) == [5010, 5020]
+    printf '%s' "$sj" | jq -e '.schema_version == 1 and ([.agents[0].activity.tools[] | select(.flags | index("stuck")) | .pid] | sort) == [5010, 5070]
         and (.agents[0].activity.tools[] | select(.pid == 5030) | .flags) == ["wait"]' >/dev/null \
         || fail "json stuck flags: $(printf '%s' "$sj" | jq -c '[.agents[0].activity.tools[] | {pid, flags}]')"
 fi
-[[ "$(printf '%s\n' "$st_enr" | agents_reap_tokens true | tr '\n' ' ')" == "5010@Wed_Oct_14_05:33:00_2026 5020@Wed_Oct_14_08:55:00_2026 " ]] \
+[[ "$(printf '%s\n' "$st_enr" | agents_reap_tokens true | tr '\n' ' ')" == "5010@Wed_Oct_14_05:33:00_2026 5070@Wed_Oct_14_07:30:00_2026 " ]] \
     || fail "reap --stuck tokens: $(printf '%s\n' "$st_enr" | agents_reap_tokens true | tr '\n' ' ')"
 [[ -z "$(printf '%s\n' "$st_enr" | agents_reap_tokens false)" ]] || fail "plain reap picks polling loops"
 [[ "$(printf '%s\n' "$enriched" | agents_reap_tokens true | wc -l | tr -d ' ')" == 4 ]] || fail "reap --stuck lost the stale trees"
@@ -998,8 +1015,8 @@ reap_out="$(
     _agents_cwds() { :; }
     AGENTS_SELF=9999 AGENTS_UID=501 agents_main reap -n --stuck 2>&1
 )"
-[[ "$reap_out" == *"  5011    sleep"*"  5010    zsh"*"  5020    zsh"*"would send SIGTERM to 3 process(es)"* ]] || fail "reap -n --stuck: $reap_out"
-[[ "$reap_out" != *5030* && "$reap_out" != *5040* && "$reap_out" != *5050* && "$reap_out" != *5060* ]] || fail "reap --stuck picked a loop that is not stuck: $reap_out"
+[[ "$reap_out" == *"  5011    sleep"*"  5010    zsh"*"  5070    zsh"*"would send SIGTERM to 3 process(es)"* ]] || fail "reap -n --stuck: $reap_out"
+[[ "$reap_out" != *5020* && "$reap_out" != *5030* && "$reap_out" != *5040* && "$reap_out" != *5050* && "$reap_out" != *5060* ]] || fail "reap --stuck picked a loop that is not stuck: $reap_out"
 # shellcheck disable=SC2317,SC2329
 [[ "$(agents_collect() { printf '%s\n' "$st_enr"; }; agents_main reap -n 2>&1)" == "no stale processes" ]] || fail "plain reap stops polling loops"
 rc=0; agents_main kill -n --stuck 5010 >/dev/null 2>&1 || rc=$?
