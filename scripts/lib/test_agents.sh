@@ -397,7 +397,7 @@ kill "$live" 2>/dev/null; wait "$live" 2>/dev/null || true
 pass "keep-awake state: cleared only on ESRCH, kept on EPERM; an unverified pid is never killed"
 
 # The lock is released even when the command exits early.
-# shellcheck disable=SC2034,SC2329  # both are read by the sourced agents_awake
+# shellcheck disable=SC2034,SC2317,SC2329  # both are read by the sourced agents_awake
 ( AGENTS_RUN_DIR="$tmp/lock-run"; agents_awake_on() { exit 3; }; agents_awake on ) && fail "early exit not propagated"
 [[ ! -e "$tmp/lock-run/awake.lock" ]] || fail "the awake lock survived an early exit"
 pass "keep-awake lock is released by its EXIT trap"
@@ -495,10 +495,10 @@ title="$(printf '%s\n' "$menu" | head -1)"
 # key=value with a plain value (fixed words, numbers, colors, PID@START).
 # shellcheck disable=SC2016,SC1003  # literal attack strings, nothing to expand
 hostile=(
-    '/Users/me/a\" bash=/bin/sh param1=-c param2=open${IFS}-a${IFS}Calculator z=\"/w'
-    '/Users/me/pipe | bash=/bin/sh param1=-c param2=id'
-    '/Users/me/trailing\'
-    '/Users/me/new\nline" param1=x'
+    '/Users/NAME/a\" bash=/bin/sh param1=-c param2=open${IFS}-a${IFS}Calculator z=\"/w'
+    '/Users/NAME/pipe | bash=/bin/sh param1=-c param2=id'
+    '/Users/NAME/trailing\'
+    '/Users/NAME/new\nline" param1=x'
 )
 for h in "${hostile[@]}"; do
     rec=$'agent\t90419\tclaude\t60\t1.0\t1.0\t1000\t0\tWed_Oct_14_07:31:08_2026\t-\tme\t'"blocked\" bash=/bin/sh"$'\t'"$h"$'\tclaude --continue\t'"x\" param1=y"
@@ -766,7 +766,7 @@ menu="$(plugin "$act_menu_recs" "")"
 [[ "$menu" == *$'\n'"--go test -race ./internal/web · 2m · 100% · feat-a · 3× dup · hot | refresh=true symbolize=false"$'\n'"----Stop command… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=1010@Wed_Oct_14_08:58:00_2026 sfimage=xmark.octagon"* ]] \
     || fail "tool line with Stop command…"
 [[ "$menu" == *"Stop duplicates: 2× go test -race ./internal/web (keep newest)… | "*"param4=1020@Wed_Oct_14_08:56:00_2026 sfimage"* ]] \
-    || fail "Stop duplicates keeps the newest (1010) and stops the older (1020)"
+    || fail "Stop duplicates keeps the newest (1010) and stops the older (1020): $(printf '%s\n' "$menu" | grep -E 'Stop duplicates|internal/web')"
 [[ "$menu" == *$'\n'"repo: 2× go test -race ./internal/web running | "* && "$menu" == *$'\n'"repo: make serve · running 45m | "* ]] \
     || fail "Needs you: duplicates and long-running commands"
 [[ "$menu" != *"repo: until [ -s"* ]] || fail "a polling loop counted as needing attention"
@@ -870,7 +870,7 @@ fi
 
 # The Herdr cache: fresh answers are reused; the menu (async) never waits.
 cache_dir="$tmp/hrun"; mkdir -p "$cache_dir"
-# shellcheck disable=SC2329  # replaces the real query, called by the cache
+# shellcheck disable=SC2317,SC2329  # replaces the real query, called by the cache
 _agents_herdr_query() { echo "query" >> "$tmp/herdr.calls"; sleep 2; printf 'claude\tworking\t/p\n'; }
 printf '%s\nclaude\tblocked\t/p\n' "$(date +%s)" > "$cache_dir/herdr.tsv"
 [[ "$(AGENTS_RUN_DIR="$cache_dir" _agents_herdr_cached sync)" == $'claude\tblocked\t/p' && ! -e "$tmp/herdr.calls" ]] \

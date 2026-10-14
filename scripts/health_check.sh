@@ -341,7 +341,7 @@ check_packs() {
 }
 
 # Probe: the SwiftBar plugin the monitoring pack recorded is in place.
-# shellcheck disable=SC2329  # invoked through check_optional's eval
+# shellcheck disable=SC2317,SC2329  # invoked through check_optional's eval
 swiftbar_plugin_present() {
     local p
     while IFS= read -r p; do
