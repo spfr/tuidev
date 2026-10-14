@@ -1,0 +1,16 @@
+long-running command · pid 5070@Wed_Oct_14_08:35:00_2026
+  make test
+
+verdict: informational — running 25m; its session is still active
+confidence: high
+
+evidence:
+  owner: claude 5000 in myapp
+  running 25m · 12% CPU
+  in ~/work/myapp
+
+next:
+  builds, test suites and servers often run this long; look at it if you expected it to end
+  stop it: agents kill 5070@Wed_Oct_14_08:35:00_2026
+  auto-reap never stops this: it belongs to a live session and is not stuck
+[rc=0]

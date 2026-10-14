@@ -1,0 +1,9 @@
+agents hook: background commands a subagent (general-purpose) left running:
+  task a1task001: wait-loop, pid 5200 (matched by output)
+  task a2task002: npm, pid 5300 (matched by output)
+  5201    sleep
+  5200    zsh
+  5301    node
+  5300    zsh
+dry run: would send SIGTERM to 4 process(es), then SIGKILL to any left after 3s
+[rc=0]

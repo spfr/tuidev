@@ -1,0 +1,20 @@
+  5011    sleep
+  5010    zsh
+  5020    zsh
+  5030    zsh
+  5040    zsh
+  5080    zsh
+  5090    zsh
+  60872   chrome-devtools-mcp
+  60829   npm
+  60831   node
+  27681   caffeinate
+  4100    node
+  6001    chrome-devtools-mcp
+  6000    npm
+  6100    node
+  202     chrome-headless-shell
+  201     node
+  200     npm
+dry run: would send SIGTERM to 18 process(es), then SIGKILL to any left after 3s
+[rc=0]

@@ -1,0 +1,16 @@
+stuck polling loop · pid 5040@Wed_Oct_14_07:00:00_2026
+  until [ -s @TMP@/w/missing.out ]; do sleep 5; done
+
+verdict: check first — the file it watches is gone; waiting 2h0m
+confidence: medium
+
+evidence:
+  owner: claude 5000 in myapp
+  waiting 2h0m · 0% CPU
+  watches @TMP@/w/missing.out, which no longer exists
+
+next:
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5040@Wed_Oct_14_07:00:00_2026
+  auto-reap never stops this: nothing but its age says it is stuck
+[rc=0]

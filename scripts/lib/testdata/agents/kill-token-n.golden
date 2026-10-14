@@ -1,0 +1,4 @@
+  60872   chrome-devtools-mcp
+  60829   npm
+dry run: would send SIGTERM to 2 process(es), then SIGKILL to any left after 3s
+[rc=0]

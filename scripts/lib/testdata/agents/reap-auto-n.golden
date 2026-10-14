@@ -1,0 +1,7 @@
+  5011    sleep
+  5010    zsh
+  5080    zsh
+  6001    chrome-devtools-mcp
+  6000    npm
+dry run: would send SIGTERM to 5 process(es), then SIGKILL to any left after 3s
+[rc=0]

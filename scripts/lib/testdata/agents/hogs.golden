@@ -1,0 +1,5 @@
+HOGS (2)  CPU% now / lifetime average: agents term PID
+  PID     USER             AGE   NOW%   AVG%    MEM  PROCESS
+  41198   me            13d16h  116.0  117.0    38M  Messages
+  9100    me               40s   95.0   75.0    19M  yes
+[rc=0]

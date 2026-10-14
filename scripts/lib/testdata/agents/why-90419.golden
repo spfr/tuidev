@@ -1,0 +1,14 @@
+agent session · pid 90419@Wed_Oct_14_07:31:08_2026
+  claude --continue
+
+verdict: informational — a live agent session
+confidence: high
+
+evidence:
+  a claude session in app (working)
+  running 1h42m · 102% CPU · 4 child processes
+
+next:
+  kill it only when you are done with it: agents kill 90419@Wed_Oct_14_07:31:08_2026
+  auto-reap never stops this: it is a session
+[rc=0]

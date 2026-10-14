@@ -1,0 +1,2 @@
+osascript -e on\ run\ argv -e tell\ application\ \"Terminal\"\ to\ do\ script\ \(item\ 1\ of\ argv\) -e tell\ application\ \"Terminal\"\ to\ activate -e end\ run /usr/bin/env\ PATH=/usr/bin:/bin\ /bin/bash\ -c\ @REPO@/bin/agents\\\ report\\\ \\\;\\\ printf\\\ \\\'\\\\n\\\[press\\\ any\\\ key\\\ to\\\ close\\\]\\\ \\\'\\\;\\\ read\\\ -r\\\ -s\\\ -n\\\ 1\  
+[rc=0]

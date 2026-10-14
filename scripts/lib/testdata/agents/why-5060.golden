@@ -1,0 +1,17 @@
+long-running command · pid 5060@Wed_Oct_14_04:00:00_2026
+  node dist/server.js
+
+verdict: check first — dev server on :3000, its session is still active
+confidence: medium
+
+evidence:
+  owner: claude 5000 in myapp
+  running 5h0m · 1% CPU
+  listens on :3000
+  in ~/work/myapp
+
+next:
+  a dev server runs until stopped on purpose: leave it while you use it
+  stop it: agents kill 5060@Wed_Oct_14_04:00:00_2026
+  auto-reap never stops this: it belongs to a live session and is not stuck
+[rc=0]

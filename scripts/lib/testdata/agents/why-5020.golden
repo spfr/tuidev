@@ -1,0 +1,19 @@
+stuck polling loop · pid 5020@Wed_Oct_14_07:20:00_2026
+  until grep -q "^built" @TMP@/w/build.log; do sleep 10; done
+
+verdict: safe to stop — nothing has written to the file it watches for 1h30m
+confidence: high
+
+evidence:
+  owner: claude 5000 in myapp
+  waiting 1h40m · 0% CPU
+  watches @TMP@/w/build.log
+  last line: compiling 3/9
+  file quiet for 1h30m
+
+next:
+  look at it: tail -5 @TMP@/w/build.log
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5020@Wed_Oct_14_07:20:00_2026
+  auto-reap never stops this: its file has been quiet less than 2h0m (2 x AGENTS_WAIT_STUCK)
+[rc=0]

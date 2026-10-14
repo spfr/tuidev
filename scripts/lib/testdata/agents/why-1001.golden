@@ -1,0 +1,14 @@
+MCP server · pid 1001@Wed_Oct_14_08:00:01_2026
+  npm exec chrome-devtools-mcp@latest
+
+verdict: informational — part of a live session; it ends with the session
+confidence: high
+
+evidence:
+  owner: claude 1000 in repo
+  running 1h0m · 0% CPU
+
+next:
+  stop it: agents kill 1001@Wed_Oct_14_08:00:01_2026
+  auto-reap never stops this: it belongs to a live session
+[rc=0]

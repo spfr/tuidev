@@ -1,0 +1,10 @@
+STALE (7)  orphaned agent helpers and dev servers: agents reap
+  PID     WHY         AGE   CPU%    MEM KIDS  PORTS       COMMAND
+  60829   orphan      50m    0.0   210M    1  -           npm exec chrome-devtools-mcp@latest  (in ~)
+  60831   orphan      50m    0.0    54M    0  -           node /Users/NAME/.local/lib/example-agent-mcp.cjs  (in ~)
+  27681   orphan      42s    0.0     1M    0  -           caffeinate -i -t 300  (in ~)
+  4100    server    3h00m    0.5    78M    0  5173        node /Users/NAME/work/app/node_modules/.bin/vite  (in ~/work/app)
+  6000    orphan      50m    0.0   210M    1  -           npm exec chrome-devtools-mcp@latest  (in ~)
+  6100    server    3h00m    0.5    78M    0  5174        node /Users/NAME/work/app/node_modules/.bin/vite --port 5174  (in ~/work/app)
+  200     orphan      50m    3.0   312M    2  -           npm exec @playwright/mcp@latest  (in ~/work/app)
+[rc=0]

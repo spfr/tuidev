@@ -1,0 +1,39 @@
+AGENTS (6) + codex daemon
+  PID     KIND    STATUS       AGE   CPU%    MEM KIDS  PORTS       PROJECT                CWD
+  90419   claude  working    1h42m  102.4   1.0G    4  41234,41235 app                    ~/work/app
+      mcp: 1 server · 2 procs · 200M (chrome-devtools-mcp)
+      26603   keepawake · caffeinate -i -t 300 · 0% · 1M
+      22443   other · /tmp/go-build1/b001/web.test -test.count=1 · 102% · 180M
+  84091   claude  -            33m    6.8   632M    1  -           shop/fix-cart          ~/work/shop/.claude/worktrees/fix-cart
+      6999    agents ls · 0m05s · 0% · -
+  1000    claude  -          1h00m  107.0   1.4G   16  -           repo                   /Users/NAME/repo
+      mcp: 2 servers · 4 procs · 302M (chrome-devtools-mcp, example-agent-mcp)
+      1010    go test -race ./internal/web · 2m00s · 100% · feat-a  x3 dup  hot
+      1040    claude -p hello · 3m00s · 2% · -
+      1030    until [ -s /tmp/x ]; do sleep 5; done · 52m00s · 0% · main  wait
+      1020    go test -race ./internal/web · 4m00s · 0% · feat-a  x3 dup
+      1060    go vet ./... · 0m30s · 0% · -
+      1080    make serve · 45m00s · 0% · -  long
+      1041    claude -p hello · 3m00s · 2% · nested session
+      1005    keepawake · caffeinate -i -t 300 · 0% · 1M
+      1050    other · /usr/local/bin/some-helper --serve · 0% · 1M
+  2000    codex   -            30m    1.0   298M    2  -           repo                   /Users/NAME/repo
+      2010    go test -race ./internal/web · 1m00s · 0% · feat-a  x3 dup
+      2020    npm test · 1m00s · 0% · -
+  5000    claude  -          6h00m   13.6   512M   11  3000        myapp                  ~/work/myapp
+      5070    make test · 25m00s · 12% · main  long
+      5060    node dist/server.js · 5h00m · 1% · main  long
+      5030    while kill -0 4242 2>/dev/null; do sleep 5; done · 3h00m · 0% · main  wait  stuck
+      5040    until [ -s @TMP@/w/missing.out ]; do sleep 5; done · 2h00m · 0% · main  wait  stuck
+      5050    until tail -1 @TMP@/w/live.log | grep -q ready; do sleep 2; done · 5m00s · 0% · main  wait
+      5020    until grep -q "^built" @TMP@/w/build.log; do sleep 10; done · 1h40m · 0% · main  wait  stuck
+      5010    until tail -1 $F | grep -qE "^(ok|FAIL)"; do sleep 5; done · 5h10m · 0% · main  wait  stuck
+      5080    until tail -1 @TMP@/w/fail.out | grep -q PASS; do sleep 5; done · 2h30m · 0% · main  wait  stuck
+      5090    while [ -f @TMP@/w/build.log ]; do sleep 5; done · 3h00m · 0% · main  wait  stuck
+  100     codex   -          1h00m  146.0   1.1G    9  -           repo                   /Users/NAME/repo
+      101     go test ./... · 2m00s · 51% · main
+      144     npx playwright test · 1m00s · 40% · -
+      111     pnpm test · 1m00s · 30% · -
+      123     npm run build · 1m00s · 20% · -
+  61904   daemon  -         18h20m    0.0    70M    1  -           -                      -
+[rc=0]

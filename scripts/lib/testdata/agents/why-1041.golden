@@ -1,0 +1,14 @@
+nested agent session · pid 1041@Wed_Oct_14_08:57:00_2026
+  claude -p hello
+
+verdict: informational — part of a live session; it ends with the session
+confidence: high
+
+evidence:
+  owner: claude 1000 in repo
+  running 3m · 2% CPU
+
+next:
+  stop it: agents kill 1041@Wed_Oct_14_08:57:00_2026
+  auto-reap never stops this: it belongs to a live session
+[rc=0]

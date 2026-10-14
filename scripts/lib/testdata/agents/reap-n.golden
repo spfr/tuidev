@@ -1,0 +1,13 @@
+  60872   chrome-devtools-mcp
+  60829   npm
+  60831   node
+  27681   caffeinate
+  4100    node
+  6001    chrome-devtools-mcp
+  6000    npm
+  6100    node
+  202     chrome-headless-shell
+  201     node
+  200     npm
+dry run: would send SIGTERM to 11 process(es), then SIGKILL to any left after 3s
+[rc=0]

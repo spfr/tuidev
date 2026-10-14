@@ -1,0 +1,2 @@
+agents hook: session ended (prompt_input_exit): Claude Code stops its own background commands at exit
+[rc=0]

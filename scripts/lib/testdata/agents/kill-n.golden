@@ -1,0 +1,7 @@
+  90497   chrome-devtools-mcp
+  22443   web.test
+  26603   caffeinate
+  90466   npm
+  90419   claude
+dry run: would send SIGTERM to 5 process(es), then SIGKILL to any left after 3s
+[rc=0]

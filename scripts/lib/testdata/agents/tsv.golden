@@ -1,0 +1,274 @@
+need	1010	Wed_Oct_14_08:58:00_2026	dup	check	medium	dup	0	1000	check first	check first — the same command runs 3× in this directory	claude	repo	120	100	-	-	-	-	-
+evid	1010	fact	owner: claude 1000 in repo
+evid	1010	fact	running 2m · 100% CPU
+evid	1010	fact	in /Users/NAME/repo/.claude/worktrees/feat-a
+evid	1010	fact	the same command runs 3× in this directory
+evid	1010	next	keep the newest: the menu has Stop duplicates (keep newest)
+evid	1010	next	stop it: agents kill 1010@Wed_Oct_14_08:58:00_2026
+evid	1010	auto	auto-reap never stops this: it belongs to a live session and is not stuck
+need	1020	Wed_Oct_14_08:56:00_2026	dup	check	medium	dup	0	1000	check first	check first — the same command runs 3× in this directory	claude	repo	240	0	-	-	-	-	-
+evid	1020	fact	owner: claude 1000 in repo
+evid	1020	fact	running 4m · 0% CPU
+evid	1020	fact	in /Users/NAME/repo/.claude/worktrees/feat-a
+evid	1020	fact	the same command runs 3× in this directory
+evid	1020	next	keep the newest: the menu has Stop duplicates (keep newest)
+evid	1020	next	stop it: agents kill 1020@Wed_Oct_14_08:56:00_2026
+evid	1020	auto	auto-reap never stops this: it belongs to a live session and is not stuck
+need	1080	Wed_Oct_14_08:15:00_2026	long	info	high	long	0	1000	informational	informational — running 45m; its session is still active	claude	repo	2700	0	-	-	-	-	-
+evid	1080	fact	owner: claude 1000 in repo
+evid	1080	fact	running 45m · 0% CPU
+evid	1080	next	builds, test suites and servers often run this long; look at it if you expected it to end
+evid	1080	next	stop it: agents kill 1080@Wed_Oct_14_08:15:00_2026
+evid	1080	auto	auto-reap never stops this: it belongs to a live session and is not stuck
+need	2010	Wed_Oct_14_08:59:00_2026	dup	check	medium	dup	0	2000	check first	check first — the same command runs 3× in this directory	codex	repo	60	0	-	-	-	-	-
+evid	2010	fact	owner: codex 2000 in repo
+evid	2010	fact	running 1m · 0% CPU
+evid	2010	fact	in /Users/NAME/repo/.claude/worktrees/feat-a
+evid	2010	fact	the same command runs 3× in this directory
+evid	2010	next	keep the newest: the menu has Stop duplicates (keep newest)
+evid	2010	next	stop it: agents kill 2010@Wed_Oct_14_08:59:00_2026
+evid	2010	auto	auto-reap never stops this: it belongs to a live session and is not stuck
+need	5010	Wed_Oct_14_03:50:00_2026	stuck	stop	high	finished	1	5000	safe to stop	safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)	claude	myapp	18600	0	-	@TMP@/w/done.output	18000	[exited with code 0]	1
+evid	5010	fact	owner: claude 5000 in myapp
+evid	5010	fact	waiting 5h10m · 0% CPU
+evid	5010	fact	watches @TMP@/w/done.output
+evid	5010	fact	last line: [exited with code 0] (a completion marker)
+evid	5010	fact	file quiet for 5h0m
+evid	5010	next	look at it: tail -5 @TMP@/w/done.output
+evid	5010	next	stopping it ends only the loop: the session sees the command fail and carries on
+evid	5010	next	stop it: agents kill 5010@Wed_Oct_14_03:50:00_2026
+evid	5010	auto	auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
+need	5020	Wed_Oct_14_07:20:00_2026	stuck	stop	high	quiet	0	5000	safe to stop	safe to stop — nothing has written to the file it watches for 1h30m	claude	myapp	6000	0	-	@TMP@/w/build.log	5400	compiling 3/9	0
+evid	5020	fact	owner: claude 5000 in myapp
+evid	5020	fact	waiting 1h40m · 0% CPU
+evid	5020	fact	watches @TMP@/w/build.log
+evid	5020	fact	last line: compiling 3/9
+evid	5020	fact	file quiet for 1h30m
+evid	5020	next	look at it: tail -5 @TMP@/w/build.log
+evid	5020	next	stopping it ends only the loop: the session sees the command fail and carries on
+evid	5020	next	stop it: agents kill 5020@Wed_Oct_14_07:20:00_2026
+evid	5020	auto	auto-reap never stops this: its file has been quiet less than 2h0m (2 x AGENTS_WAIT_STUCK)
+need	5030	Wed_Oct_14_06:00:00_2026	stuck	check	medium	age-only	0	5000	check first	check first — waiting 3h0m, with no file to judge by (age only)	claude	myapp	10800	0	-	-	-	-	-
+evid	5030	fact	owner: claude 5000 in myapp
+evid	5030	fact	waiting 3h0m · 0% CPU
+evid	5030	fact	watches no file agents can check, so only its age counts
+evid	5030	next	stopping it ends only the loop: the session sees the command fail and carries on
+evid	5030	next	stop it: agents kill 5030@Wed_Oct_14_06:00:00_2026
+evid	5030	auto	auto-reap never stops this: nothing but its age says it is stuck
+need	5040	Wed_Oct_14_07:00:00_2026	stuck	check	medium	gone	0	5000	check first	check first — the file it watches is gone; waiting 2h0m	claude	myapp	7200	0	-	@TMP@/w/missing.out	-	-	-
+evid	5040	fact	owner: claude 5000 in myapp
+evid	5040	fact	waiting 2h0m · 0% CPU
+evid	5040	fact	watches @TMP@/w/missing.out, which no longer exists
+evid	5040	next	stopping it ends only the loop: the session sees the command fail and carries on
+evid	5040	next	stop it: agents kill 5040@Wed_Oct_14_07:00:00_2026
+evid	5040	auto	auto-reap never stops this: nothing but its age says it is stuck
+need	5060	Wed_Oct_14_04:00:00_2026	long	check	medium	server	0	5000	check first	check first — dev server on :3000, its session is still active	claude	myapp	18000	0.6	3000	-	-	-	-
+evid	5060	fact	owner: claude 5000 in myapp
+evid	5060	fact	running 5h0m · 1% CPU
+evid	5060	fact	listens on :3000
+evid	5060	fact	in ~/work/myapp
+evid	5060	next	a dev server runs until stopped on purpose: leave it while you use it
+evid	5060	next	stop it: agents kill 5060@Wed_Oct_14_04:00:00_2026
+evid	5060	auto	auto-reap never stops this: it belongs to a live session and is not stuck
+need	5070	Wed_Oct_14_08:35:00_2026	long	info	high	long	0	5000	informational	informational — running 25m; its session is still active	claude	myapp	1500	12	-	-	-	-	-
+evid	5070	fact	owner: claude 5000 in myapp
+evid	5070	fact	running 25m · 12% CPU
+evid	5070	fact	in ~/work/myapp
+evid	5070	next	builds, test suites and servers often run this long; look at it if you expected it to end
+evid	5070	next	stop it: agents kill 5070@Wed_Oct_14_08:35:00_2026
+evid	5070	auto	auto-reap never stops this: it belongs to a live session and is not stuck
+need	5080	Wed_Oct_14_06:30:00_2026	stuck	stop	high	finished	1	5000	safe to stop	safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago)	claude	myapp	9000	0	-	@TMP@/w/fail.out	7800	--- FAIL: TestX (0.01s)	1
+evid	5080	fact	owner: claude 5000 in myapp
+evid	5080	fact	waiting 2h30m · 0% CPU
+evid	5080	fact	watches @TMP@/w/fail.out
+evid	5080	fact	last line: --- FAIL: TestX (0.01s) (a completion marker)
+evid	5080	fact	file quiet for 2h10m
+evid	5080	next	look at it: tail -5 @TMP@/w/fail.out
+evid	5080	next	stopping it ends only the loop: the session sees the command fail and carries on
+evid	5080	next	stop it: agents kill 5080@Wed_Oct_14_06:30:00_2026
+evid	5080	auto	auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
+need	5090	Wed_Oct_14_06:00:00_2026	stuck	check	medium	exists-only	0	5000	check first	check first — waiting 3h0m on whether @TMP@/w/build.log exists	claude	myapp	10800	0	-	@TMP@/w/build.log	5400	-	-
+evid	5090	fact	owner: claude 5000 in myapp
+evid	5090	fact	waiting 3h0m · 0% CPU
+evid	5090	fact	watches @TMP@/w/build.log
+evid	5090	fact	its condition only tests whether the file exists, so how long it has been quiet says nothing
+evid	5090	fact	file quiet for 1h30m
+evid	5090	next	look at it: ls -l @TMP@/w/build.log
+evid	5090	next	stopping it ends only the loop: the session sees the command fail and carries on
+evid	5090	next	stop it: agents kill 5090@Wed_Oct_14_06:00:00_2026
+evid	5090	auto	auto-reap never stops this: it only tests whether its file exists, so the file being quiet proves nothing
+need	60829	Wed_Oct_14_08:23:56_2026	stale	stop	medium	session-ended	0	-	safe to stop	safe to stop — probably left by an agent session that ended	-	-	3005	0	-	-	-	-	-
+evid	60829	fact	owner: none, its session ended (the process now belongs to pid 1)
+evid	60829	fact	running 50m · 0% CPU
+evid	60829	fact	in @HOME@
+evid	60829	next	nothing uses it any more: its session is gone
+evid	60829	next	stop it: agents kill 60829@Wed_Oct_14_08:23:56_2026
+evid	60829	auto	auto-reap never stops this: no sample saw it under an agent, so it may be yours
+need	60831	Wed_Oct_14_08:23:56_2026	stale	stop	medium	session-ended	0	-	safe to stop	safe to stop — probably left by an agent session that ended	-	-	3005	0	-	-	-	-	-
+evid	60831	fact	owner: none, its session ended (the process now belongs to pid 1)
+evid	60831	fact	running 50m · 0% CPU
+evid	60831	fact	in @HOME@
+evid	60831	next	nothing uses it any more: its session is gone
+evid	60831	next	stop it: agents kill 60831@Wed_Oct_14_08:23:56_2026
+evid	60831	auto	auto-reap never stops this: no sample saw it under an agent, so it may be yours
+need	27681	Wed_Oct_14_09:13:19_2026	stale	stop	medium	session-ended	0	-	safe to stop	safe to stop — probably left by an agent session that ended	-	-	42	0	-	-	-	-	-
+evid	27681	fact	owner: none, its session ended (the process now belongs to pid 1)
+evid	27681	fact	running 42s · 0% CPU
+evid	27681	fact	in @HOME@
+evid	27681	next	nothing uses it any more: its session is gone
+evid	27681	next	stop it: agents kill 27681@Wed_Oct_14_09:13:19_2026
+evid	27681	auto	auto-reap never stops this: no sample saw it under an agent, so it may be yours
+need	4100	Wed_Oct_14_06:00:00_2026	stale	check	medium	server-orphan	0	-	check first	check first — a server on :5173, left behind when its session ended	-	-	10800	0.5	5173	-	-	-	-
+evid	4100	fact	owner: none, its session ended (the process now belongs to pid 1)
+evid	4100	fact	running 3h0m · 1% CPU
+evid	4100	fact	listens on :5173
+evid	4100	fact	in ~/work/app
+evid	4100	next	leave it if you still use it (http://localhost:5173); otherwise stop it
+evid	4100	next	stop it: agents kill 4100@Wed_Oct_14_06:00:00_2026
+evid	4100	auto	auto-reap never stops this: it listens on a port, and a server an agent started for you may still be wanted
+need	6000	Wed_Oct_14_08:10:00_2026	stale	stop	high	session-ended	1	-	safe to stop	safe to stop — its session ended	-	-	3005	0	-	-	-	-	-
+evid	6000	fact	owner: none, its session ended (the process now belongs to pid 1)
+evid	6000	fact	running 50m · 0% CPU
+evid	6000	fact	in @HOME@
+evid	6000	fact	ran under an agent session before it ended (agents sample saw it)
+evid	6000	next	nothing uses it any more: its session is gone
+evid	6000	next	stop it: agents kill 6000@Wed_Oct_14_08:10:00_2026
+evid	6000	auto	auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
+need	6100	Wed_Oct_14_06:00:00_2026	stale	check	medium	server-orphan	0	-	check first	check first — a server on :5174, left behind when its session ended	-	-	10800	0.5	5174	-	-	-	-
+evid	6100	fact	owner: none, its session ended (the process now belongs to pid 1)
+evid	6100	fact	running 3h0m · 1% CPU
+evid	6100	fact	listens on :5174
+evid	6100	fact	in ~/work/app
+evid	6100	next	leave it if you still use it (http://localhost:5174); otherwise stop it
+evid	6100	next	stop it: agents kill 6100@Wed_Oct_14_06:00:00_2026
+evid	6100	auto	auto-reap never stops this: it listens on a port, and a server an agent started for you may still be wanted
+need	200	Wed_Oct_14_08:10:00_2026	stale	stop	medium	session-ended	0	-	safe to stop	safe to stop — probably left by an agent session that ended	-	-	3000	3	-	-	-	-	-
+evid	200	fact	owner: none, its session ended (the process now belongs to pid 1)
+evid	200	fact	running 50m · 3% CPU
+evid	200	fact	in ~/work/app
+evid	200	next	nothing uses it any more: its session is gone
+evid	200	next	stop it: agents kill 200@Wed_Oct_14_08:10:00_2026
+evid	200	auto	auto-reap never stops this: no sample saw it under an agent, so it may be yours
+agent	90419	claude	6173	102.4	4.4	1080416	4	Wed_Oct_14_07:31:08_2026	41234,41235	me	working	@HOME@/work/app	claude --continue	app
+agent	84091	claude	2019	6.8	3.0	647704	1	Wed_Oct_14_08:40:22_2026	-	me	-	@HOME@/work/shop/.claude/worktrees/fix-cart	claude	shop/fix-cart
+agent	1000	claude	3600	107.0	1.7	1505900	16	Wed_Oct_14_08:00:00_2026	-	me	-	/Users/NAME/repo	claude	repo
+agent	2000	codex	1800	1.0	1.7	306000	2	Wed_Oct_14_08:30:00_2026	-	me	-	/Users/NAME/repo	codex	repo
+agent	5000	claude	21600	13.6	0.1	524900	11	Wed_Oct_14_03:00:00_2026	3000	me	-	@HOME@/work/myapp	claude	myapp
+agent	100	codex	3600	146.0	1.7	1112000	9	Wed_Oct_14_08:00:00_2026	-	me	-	/Users/NAME/repo	codex	repo
+agent	61904	daemon	66043	0.0	0.0	71888	1	Tue_Oct_13_14:53:18_2026	-	me	-	-	/Users/NAME/.codex/packages/app-server-daemon/releases/0.1/bin/codex app-server daemon pid-update-loop	-
+act	90466	mcp	6170	0.0	0.0	205088	1	Wed_Oct_14_07:31:11_2026	-	90419	chrome-devtools-mcp	-	npm exec chrome-devtools-mcp@latest	-	-	1
+act	26603	keepawake	92	0.0	0.0	1920	0	Wed_Oct_14_09:12:29_2026	-	90419	-	-	caffeinate -i -t 300	-	-	1
+act	22443	other	169	102.1	98.2	185072	0	Wed_Oct_14_09:11:12_2026	41234,41235	90419	-	-	/tmp/go-build1/b001/web.test -test.count=1	-	hot	1
+act	6999	tool	5	0.0	0.0	3000	0	Wed_Oct_14_09:14:00_2026	-	84091	-	-	agents ls	-	-	1
+act	1001	mcp	3600	0.0	0.0	260000	2	Wed_Oct_14_08:00:01_2026	-	1000	chrome-devtools-mcp	-	npm exec chrome-devtools-mcp@latest	-	-	1
+act	1004	mcp	3600	0.0	0.0	50000	0	Wed_Oct_14_08:00:01_2026	-	1000	example-agent-mcp	-	node /Users/NAME/.local/lib/example-agent-mcp.cjs	-	-	1
+act	1005	keepawake	60	0.0	0.0	1900	0	Wed_Oct_14_08:59:00_2026	-	1000	-	-	caffeinate -i -t 300	-	-	1
+act	1010	tool	120	100.0	0.0	274000	3	Wed_Oct_14_08:58:00_2026	-	1000	/Users/NAME/repo/.claude/worktrees/feat-a	/Users/NAME/repo/.claude/worktrees/feat-a	go test -race ./internal/web	feat-a	dup,hot	3
+act	1020	tool	240	0.0	0.0	3000	0	Wed_Oct_14_08:56:00_2026	-	1000	/Users/NAME/repo/.claude/worktrees/feat-a	/Users/NAME/repo/.claude/worktrees/feat-a	go test -race ./internal/web	feat-a	dup	3
+act	1030	tool	3120	0.0	0.0	2000	0	Wed_Oct_14_08:08:00_2026	-	1000	-	/Users/NAME/repo	until [ -s /tmp/x ]; do sleep 5; done	main	wait	1
+act	1040	tool	180	2.0	0.0	302000	1	Wed_Oct_14_08:57:00_2026	-	1000	-	-	claude -p hello	-	-	1
+act	1041	session	180	2.0	1.7	300000	0	Wed_Oct_14_08:57:00_2026	-	1000	nested	-	claude -p hello	-	-	1
+act	1050	other	180	0.0	0.0	2000	0	Wed_Oct_14_08:57:00_2026	-	1000	-	-	/usr/local/bin/some-helper --serve	-	-	1
+act	1060	tool	30	0.0	0.0	2000	0	Wed_Oct_14_08:59:30_2026	-	1000	-	-	go vet ./...	-	-	1
+act	1080	tool	2700	0.0	0.0	9000	0	Wed_Oct_14_08:15:00_2026	-	1000	-	-	make serve	-	long	1
+act	2010	tool	60	0.0	0.0	3000	0	Wed_Oct_14_08:59:00_2026	-	2000	-	/Users/NAME/repo/.claude/worktrees/feat-a	go test -race ./internal/web	feat-a	dup	3
+act	2020	tool	60	0.0	0.0	3000	0	Wed_Oct_14_08:59:00_2026	-	2000	-	-	npm test	-	-	1
+act	5010	tool	18600	0.0	0.0	2900	1	Wed_Oct_14_03:50:00_2026	-	5000	-	@HOME@/work/myapp	until tail -1 $F | grep -qE "^(ok|FAIL)"; do sleep 5; done	main	wait,stuck	1
+act	5020	tool	6000	0.0	0.0	2000	0	Wed_Oct_14_07:20:00_2026	-	5000	-	@HOME@/work/myapp	until grep -q "^built" @TMP@/w/build.log; do sleep 10; done	main	wait,stuck	1
+act	5030	tool	10800	0.0	0.0	2000	0	Wed_Oct_14_06:00:00_2026	-	5000	-	@HOME@/work/myapp	while kill -0 4242 2>/dev/null; do sleep 5; done	main	wait,stuck	1
+act	5040	tool	7200	0.0	0.0	2000	0	Wed_Oct_14_07:00:00_2026	-	5000	-	@HOME@/work/myapp	until [ -s @TMP@/w/missing.out ]; do sleep 5; done	main	wait,stuck	1
+act	5050	tool	300	0.0	0.0	2000	0	Wed_Oct_14_08:55:00_2026	-	5000	-	@HOME@/work/myapp	until tail -1 @TMP@/w/live.log | grep -q ready; do sleep 2; done	main	wait	1
+act	5060	tool	18000	0.6	0.1	160000	1	Wed_Oct_14_04:00:00_2026	3000	5000	-	@HOME@/work/myapp	node dist/server.js	main	long	1
+act	5070	tool	1500	12.0	0.7	50000	0	Wed_Oct_14_08:35:00_2026	-	5000	-	@HOME@/work/myapp	make test	main	long	1
+act	5080	tool	9000	0.0	0.0	2000	0	Wed_Oct_14_06:30:00_2026	-	5000	-	@HOME@/work/myapp	until tail -1 @TMP@/w/fail.out | grep -q PASS; do sleep 5; done	main	wait,stuck	1
+act	5090	tool	10800	0.0	0.0	2000	0	Wed_Oct_14_06:00:00_2026	-	5000	-	@HOME@/work/myapp	while [ -f @TMP@/w/build.log ]; do sleep 5; done	main	wait,stuck	1
+act	101	tool	120	51.0	0.0	173000	2	Wed_Oct_14_08:58:00_2026	-	100	/Users/NAME/repo	/Users/NAME/repo	go test ./...	main	-	1
+act	111	tool	60	30.0	0.0	93000	1	Wed_Oct_14_08:59:00_2026	-	100	-	-	pnpm test	-	-	1
+act	123	tool	60	20.0	0.0	93000	1	Wed_Oct_14_08:59:00_2026	-	100	-	-	npm run build	-	-	1
+act	144	tool	60	40.0	0.0	153000	1	Wed_Oct_14_08:59:00_2026	-	100	-	-	npx playwright test	-	-	1
+stale	60829	orphan	3005	0.0	0.0	215168	1	Wed_Oct_14_08:23:56_2026	-	me	-	@HOME@	npm exec chrome-devtools-mcp@latest	~
+stale	60831	orphan	3005	0.0	0.0	56208	0	Wed_Oct_14_08:23:56_2026	-	me	-	@HOME@	node /Users/NAME/.local/lib/example-agent-mcp.cjs	~
+stale	27681	orphan	42	0.0	0.0	1920	0	Wed_Oct_14_09:13:19_2026	-	me	-	@HOME@	caffeinate -i -t 300	~
+stale	4100	server	10800	0.5	0.3	80000	0	Wed_Oct_14_06:00:00_2026	5173	me	-	@HOME@/work/app	node /Users/NAME/work/app/node_modules/.bin/vite	app
+stale	6000	orphan	3005	0.0	0.0	215168	1	Wed_Oct_14_08:10:00_2026	-	me	-	@HOME@	npm exec chrome-devtools-mcp@latest	~
+stale	6100	server	10800	0.5	0.3	80000	0	Wed_Oct_14_06:00:00_2026	5174	me	-	@HOME@/work/app	node /Users/NAME/work/app/node_modules/.bin/vite --port 5174	app
+stale	200	orphan	3000	3.0	0.0	320000	2	Wed_Oct_14_08:10:00_2026	-	me	-	@HOME@/work/app	npm exec @playwright/mcp@latest	app
+hog	41198	Messages	1181806	116.0	117.0	39248	0	Wed_Sep_30_16:57:15_2026	-	me	-	-	/System/Applications/Messages.app/Contents/MacOS/Messages	-
+hog	9100	yes	40	95.0	75.0	20000	0	Wed_Oct_14_09:13:30_2026	-	me	-	-	/usr/bin/yes	-
+top	22443	web.test	169	102.1	98.2	185072	0	Wed_Oct_14_09:11:12_2026	-	me	-	-	/tmp/go-build1/b001/web.test -test.count=1	-
+top	1012	web.test	115	99.0	95.7	180000	0	Wed_Oct_14_08:58:05_2026	-	me	-	-	/tmp/go-build1/b001/web.test -test.paniconexit0	-
+top	48170	appstoreagent	655271	77.0	0.1	33728	0	Tue_Oct_6_19:12:50_2026	-	_appstore	-	-	/System/Library/PrivateFrameworks/AppStoreDaemon.framework/Support/appstoreagent	-
+total	0	-	0	670.8	0	0	0	-	-	-	-	-	-	-
+job	90419	agent	0	0.3	0	688336	1	Wed_Oct_14_07:31:08_2026	own	90419	claude	@HOME@/work/app	-	app
+job	90419	mcp	0	0.0	0	205088	2	Wed_Oct_14_07:31:08_2026	own	90466	claude	@HOME@/work/app	-	app
+job	90419	other	0	0.0	0	1920	1	Wed_Oct_14_07:31:08_2026	own	26603	claude	@HOME@/work/app	-	app
+job	90419	test	0	102.1	0	185072	1	Wed_Oct_14_07:31:08_2026	own	22443	claude	@HOME@/work/app	-	app
+job	61904	agent	0	0.0	0	22992	1	Tue_Oct_13_14:53:18_2026	own	61904	daemon	-	-	-
+job	61904	agent	0	0.0	0	48896	1	Tue_Oct_13_14:53:18_2026	own	197	daemon	-	-	-
+job	60829	mcp	0	0.0	0	97888	1	Wed_Oct_14_08:23:56_2026	own	60829	-	@HOME@	-	~
+job	60829	mcp	0	0.0	0	117280	1	Wed_Oct_14_08:23:56_2026	own	60872	-	@HOME@	-	~
+job	60831	mcp	0	0.0	0	56208	1	Wed_Oct_14_08:23:56_2026	own	60831	-	@HOME@	-	~
+job	27681	other	0	0.0	0	1920	1	Wed_Oct_14_09:13:19_2026	own	27681	-	@HOME@	-	~
+job	4100	server	0	0.5	0	80000	1	Wed_Oct_14_06:00:00_2026	own	4100	-	@HOME@/work/app	-	app
+job	84091	agent	0	6.8	0	644704	1	Wed_Oct_14_08:40:22_2026	own	84091	claude	@HOME@/work/shop/.claude/worktrees/fix-cart	-	shop/fix-cart
+job	84091	other	0	0.0	0	3000	1	Wed_Oct_14_08:40:22_2026	own	6999	claude	@HOME@/work/shop/.claude/worktrees/fix-cart	-	shop/fix-cart
+job	1000	agent	0	5.0	0	600000	1	Wed_Oct_14_08:00:00_2026	own	1000	claude	/Users/NAME/repo	-	repo
+job	1000	mcp	0	0.0	0	260000	3	Wed_Oct_14_08:00:00_2026	own	1001	claude	/Users/NAME/repo	-	repo
+job	1000	mcp	0	0.0	0	50000	1	Wed_Oct_14_08:00:00_2026	own	1004	claude	/Users/NAME/repo	-	repo
+job	1000	other	0	0.0	0	1900	1	Wed_Oct_14_08:00:00_2026	own	1005	claude	/Users/NAME/repo	-	repo
+job	1000	test	0	100.0	0	274000	4	Wed_Oct_14_08:00:00_2026	own	1010	claude	/Users/NAME/repo	-	repo
+job	1000	test	0	0.0	0	3000	1	Wed_Oct_14_08:00:00_2026	own	1020	claude	/Users/NAME/repo	-	repo
+job	1000	wait	0	0.0	0	2000	1	Wed_Oct_14_08:00:00_2026	own	1030	claude	/Users/NAME/repo	-	repo
+job	1000	other	0	0.0	0	2000	1	Wed_Oct_14_08:00:00_2026	own	1040	claude	/Users/NAME/repo	-	repo
+job	1000	agent	0	2.0	0	300000	1	Wed_Oct_14_08:00:00_2026	sub	1040	claude	/Users/NAME/repo	-	repo
+job	1000	other	0	0.0	0	2000	1	Wed_Oct_14_08:00:00_2026	own	1050	claude	/Users/NAME/repo	-	repo
+job	1000	build	0	0.0	0	2000	1	Wed_Oct_14_08:00:00_2026	own	1060	claude	/Users/NAME/repo	-	repo
+job	1000	server	0	0.0	0	9000	1	Wed_Oct_14_08:00:00_2026	own	1080	claude	/Users/NAME/repo	-	repo
+job	2000	agent	0	1.0	0	300000	1	Wed_Oct_14_08:30:00_2026	own	2000	codex	/Users/NAME/repo	-	repo
+job	2000	test	0	0.0	0	3000	1	Wed_Oct_14_08:30:00_2026	own	2010	codex	/Users/NAME/repo	-	repo
+job	2000	test	0	0.0	0	3000	1	Wed_Oct_14_08:30:00_2026	own	2020	codex	/Users/NAME/repo	-	repo
+job	5000	agent	0	1.0	0	300000	1	Wed_Oct_14_03:00:00_2026	own	5000	claude	@HOME@/work/myapp	-	myapp
+job	5000	wait	0	0.0	0	2900	2	Wed_Oct_14_03:00:00_2026	own	5010	claude	@HOME@/work/myapp	-	myapp
+job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5020	claude	@HOME@/work/myapp	-	myapp
+job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5030	claude	@HOME@/work/myapp	-	myapp
+job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5040	claude	@HOME@/work/myapp	-	myapp
+job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5050	claude	@HOME@/work/myapp	-	myapp
+job	5000	server	0	0.6	0	160000	2	Wed_Oct_14_03:00:00_2026	own	5060	claude	@HOME@/work/myapp	-	myapp
+job	5000	test	0	12.0	0	50000	1	Wed_Oct_14_03:00:00_2026	own	5070	claude	@HOME@/work/myapp	-	myapp
+job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5080	claude	@HOME@/work/myapp	-	myapp
+job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5090	claude	@HOME@/work/myapp	-	myapp
+job	6000	mcp	0	0.0	0	97888	1	Wed_Oct_14_08:10:00_2026	own	6000	-	@HOME@	-	~
+job	6000	mcp	0	0.0	0	117280	1	Wed_Oct_14_08:10:00_2026	own	6001	-	@HOME@	-	~
+job	6100	server	0	0.5	0	80000	1	Wed_Oct_14_06:00:00_2026	own	6100	-	@HOME@/work/app	-	app
+job	100	agent	0	5.0	0	600000	1	Wed_Oct_14_08:00:00_2026	own	100	codex	/Users/NAME/repo	-	repo
+job	100	test	0	51.0	0	173000	3	Wed_Oct_14_08:00:00_2026	own	101	codex	/Users/NAME/repo	-	repo
+job	100	test	0	30.0	0	93000	2	Wed_Oct_14_08:00:00_2026	own	111	codex	/Users/NAME/repo	-	repo
+job	100	build	0	20.0	0	93000	2	Wed_Oct_14_08:00:00_2026	own	123	codex	/Users/NAME/repo	-	repo
+job	100	test	0	0.0	0	3000	1	Wed_Oct_14_08:00:00_2026	own	144	codex	/Users/NAME/repo	-	repo
+job	100	browser	0	40.0	0	150000	1	Wed_Oct_14_08:00:00_2026	sub	144	codex	/Users/NAME/repo	-	repo
+job	200	mcp	0	0.0	0	90000	1	Wed_Oct_14_08:10:00_2026	own	200	-	@HOME@/work/app	-	app
+job	200	mcp	0	0.0	0	80000	1	Wed_Oct_14_08:10:00_2026	own	201	-	@HOME@/work/app	-	app
+job	200	browser	0	3.0	0	150000	1	Wed_Oct_14_08:10:00_2026	sub	201	-	@HOME@/work/app	-	app
+watched	1030	/tmp/x	1791739633	-	exists
+watched	5010	@TMP@/w/done.output	1577851200	[exited with code 0]	read
+watched	5020	@TMP@/w/build.log	1577863800	compiling 3/9	read
+watched	5040	@TMP@/w/missing.out	-	-	exists
+watched	5050	@TMP@/w/live.log	4070908800	compiling...	read
+watched	5080	@TMP@/w/fail.out	1577861400	--- FAIL: TestX (0.01s)	read
+watched	5090	@TMP@/w/build.log	1577863800	-	exists
+probe	listen	ok
+sys	84	1.50	8	42	normal	87	discharging
+awake	timed	8800	1577872800
+thermal	0	nominal
+power	automatic
+hist	ok	5400	test	3000
+lid	off	-	0	28800
+conf	AGENTS_BAR_TITLE	count awake
+conf	AGENTS_BAR_SECTIONS	needs agents jobs stale hogs awake system
+conf	AGENTS_BAR_ICON	terminal
+conf	AGENTS_BAR_TOP	3
+conf	AGENTS_BAR_REFRESH	10s
+conf	AGENTS_LID	1
+conf	AGENTS_CONF	@TMP@/none.conf
+conf	AGENTS_AUTO_REAP	0
+[rc=0]

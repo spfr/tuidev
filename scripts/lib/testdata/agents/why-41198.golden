@@ -1,0 +1,13 @@
+CPU hog · pid 41198@Wed_Sep_30_16:57:15_2026
+  Messages
+
+verdict: check first — Messages uses 116% CPU
+confidence: medium
+
+evidence:
+  116% CPU now · 117% on average over 13d16h · owned by me
+
+next:
+  quit it normally if you can; agents term 41198@Wed_Sep_30_16:57:15_2026 sends it SIGTERM
+  auto-reap never stops this: it is not an agent leftover
+[rc=0]

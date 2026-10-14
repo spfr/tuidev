@@ -1,0 +1,19 @@
+stuck polling loop · pid 5080@Wed_Oct_14_06:30:00_2026
+  until tail -1 @TMP@/w/fail.out | grep -q PASS; do sleep 5; done
+
+verdict: safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago)
+confidence: high
+
+evidence:
+  owner: claude 5000 in myapp
+  waiting 2h30m · 0% CPU
+  watches @TMP@/w/fail.out
+  last line: --- FAIL: TestX (0.01s) (a completion marker)
+  file quiet for 2h10m
+
+next:
+  look at it: tail -5 @TMP@/w/fail.out
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5080@Wed_Oct_14_06:30:00_2026
+  auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
+[rc=0]

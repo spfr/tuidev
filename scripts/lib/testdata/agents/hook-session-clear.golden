@@ -1,0 +1,11 @@
+agents hook: background commands the ended session left running:
+  task a1task001: wait-loop, pid 5200 (matched by output)
+  task a2task002: npm, pid 5300 (matched by output)
+  task m1task001: wait-loop, pid 5550 (matched by output)
+  5201    sleep
+  5200    zsh
+  5301    node
+  5300    zsh
+  5550    zsh
+dry run: would send SIGTERM to 5 process(es), then SIGKILL to any left after 3s
+[rc=0]

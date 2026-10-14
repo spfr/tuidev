@@ -1,0 +1,2 @@
+usage: agents awake [on [DURATION]|lid DURATION|off|agents|restore|status]
+[rc=2]

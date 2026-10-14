@@ -1,0 +1,19 @@
+polling loop · pid 5050@Wed_Oct_14_08:55:00_2026
+  until tail -1 @TMP@/w/live.log | grep -q ready; do sleep 2; done
+
+verdict: leave it — the file it watches changed just now: something still writes it
+confidence: high
+
+evidence:
+  owner: claude 5000 in myapp
+  waiting 5m · 0% CPU
+  watches @TMP@/w/live.log
+  last line: compiling...
+  file changed just now
+
+next:
+  look at it: tail -5 @TMP@/w/live.log
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5050@Wed_Oct_14_08:55:00_2026
+  auto-reap never stops this: its file is still being written, so it is not stuck
+[rc=0]

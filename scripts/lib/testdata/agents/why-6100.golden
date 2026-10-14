@@ -1,0 +1,17 @@
+stale process (its session ended) · pid 6100@Wed_Oct_14_06:00:00_2026
+  node /Users/NAME/work/app/node_modules/.bin/vite --port 5174
+
+verdict: check first — a server on :5174, left behind when its session ended
+confidence: medium
+
+evidence:
+  owner: none, its session ended (the process now belongs to pid 1)
+  running 3h0m · 1% CPU
+  listens on :5174
+  in ~/work/app
+
+next:
+  leave it if you still use it (http://localhost:5174); otherwise stop it
+  stop it: agents kill 6100@Wed_Oct_14_06:00:00_2026
+  auto-reap never stops this: it listens on a port, and a server an agent started for you may still be wanted
+[rc=0]

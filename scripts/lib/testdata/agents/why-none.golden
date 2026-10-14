@@ -1,0 +1,2 @@
+agents: pid 900 is not a session, a command a session runs, a stale process or a hog
+[rc=1]

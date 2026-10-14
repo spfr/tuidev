@@ -1,0 +1,2 @@
+agents: bad --since 'yesterday' (24h, 7d, 30d, today)
+[rc=2]

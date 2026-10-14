@@ -1,0 +1,8 @@
+  refuse 1: refusing pid 1
+  refuse 7000: this shell or one of its parents
+  refuse 500: this shell or one of its parents
+  refuse 48170: a system or session process (appstoreagent): quit it yourself if you mean it
+  refuse 606: a system or session process (loginwindow console): quit it yourself if you mean it
+  refuse 99999: no such process
+nothing to signal
+[rc=1]

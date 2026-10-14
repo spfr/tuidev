@@ -1,0 +1,16 @@
+stale process (its session ended) · pid 60829@Wed_Oct_14_08:23:56_2026
+  npm exec chrome-devtools-mcp@latest
+
+verdict: safe to stop — probably left by an agent session that ended
+confidence: medium
+
+evidence:
+  owner: none, its session ended (the process now belongs to pid 1)
+  running 50m · 0% CPU
+  in @HOME@
+
+next:
+  nothing uses it any more: its session is gone
+  stop it: agents kill 60829@Wed_Oct_14_08:23:56_2026
+  auto-reap never stops this: no sample saw it under an agent, so it may be yours
+[rc=0]

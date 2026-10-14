@@ -1,0 +1,17 @@
+duplicate command · pid 1010@Wed_Oct_14_08:58:00_2026
+  go test -race ./internal/web
+
+verdict: check first — the same command runs 3× in this directory
+confidence: medium
+
+evidence:
+  owner: claude 1000 in repo
+  running 2m · 100% CPU
+  in /Users/NAME/repo/.claude/worktrees/feat-a
+  the same command runs 3× in this directory
+
+next:
+  keep the newest: the menu has Stop duplicates (keep newest)
+  stop it: agents kill 1010@Wed_Oct_14_08:58:00_2026
+  auto-reap never stops this: it belongs to a live session and is not stuck
+[rc=0]

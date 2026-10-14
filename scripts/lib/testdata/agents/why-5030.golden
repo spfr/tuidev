@@ -1,0 +1,16 @@
+stuck polling loop · pid 5030@Wed_Oct_14_06:00:00_2026
+  while kill -0 4242 2>/dev/null; do sleep 5; done
+
+verdict: check first — waiting 3h0m, with no file to judge by (age only)
+confidence: medium
+
+evidence:
+  owner: claude 5000 in myapp
+  waiting 3h0m · 0% CPU
+  watches no file agents can check, so only its age counts
+
+next:
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5030@Wed_Oct_14_06:00:00_2026
+  auto-reap never stops this: nothing but its age says it is stuck
+[rc=0]

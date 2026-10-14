@@ -1,0 +1,19 @@
+stuck polling loop · pid 5090@Wed_Oct_14_06:00:00_2026
+  while [ -f @TMP@/w/build.log ]; do sleep 5; done
+
+verdict: check first — waiting 3h0m on whether @TMP@/w/build.log exists
+confidence: medium
+
+evidence:
+  owner: claude 5000 in myapp
+  waiting 3h0m · 0% CPU
+  watches @TMP@/w/build.log
+  its condition only tests whether the file exists, so how long it has been quiet says nothing
+  file quiet for 1h30m
+
+next:
+  look at it: ls -l @TMP@/w/build.log
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5090@Wed_Oct_14_06:00:00_2026
+  auto-reap never stops this: it only tests whether its file exists, so the file being quiet proves nothing
+[rc=0]

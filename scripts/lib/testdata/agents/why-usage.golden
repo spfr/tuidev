@@ -1,0 +1,2 @@
+usage: agents why [--copy] PID[@START]
+[rc=2]
