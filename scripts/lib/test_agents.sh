@@ -1339,4 +1339,14 @@ loc_sys="$(PATH="$tmp/loc:$PATH" LC_ALL=de_DE.UTF-8 agents_system 2>/dev/null)"
 pass "under LC_ALL=de_DE.UTF-8 the load still reads 20.22 (probes run with LC_ALL=C)"
 
 echo ""
+# Events: one sanitized TSV line per cleanup; nothing with history off.
+ev="$tmp/events"
+AGENTS_DATA_DIR="$ev" agents_event kill manual 42 $'a\tb\nc' proj ""
+IFS=$'\t' read -r e_t e_kind e_reason e_pid e_name e_proj e_sess < "$ev/events.tsv"
+[[ "$e_t" =~ ^[0-9]+$ && "$e_kind/$e_reason/$e_pid/$e_name/$e_proj/$e_sess" == "kill/manual/42/a b c/proj/-" ]] \
+    || fail "events: $(cat "$ev/events.tsv")"
+rm -rf "$ev"; AGENTS_HISTORY=0 AGENTS_DATA_DIR="$ev" agents_event kill manual 1 x - -
+[[ ! -e "$ev" ]] || fail "events: written with AGENTS_HISTORY=0"
+pass "events: one sanitized line per cleanup; AGENTS_HISTORY=0 writes nothing"
+
 echo "All agents tests passed."

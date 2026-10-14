@@ -319,6 +319,9 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_LID_MAX` | `8h` | The longest `agents awake lid` may run; longer requests are refused |
 | `AGENTS_LID_MIN_BATTERY` | `20` | Battery % (off AC) below which the lid guard turns lid sleep back on |
 | `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup |
+| `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
+| `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |
+| `AGENTS_AUTO_REAP` | `0` | `1` cleans up, without asking, only the leftovers of ended sessions and polling loops stuck twice as long as `AGENTS_WAIT_STUCK` with a quiet file; each one is logged and notified |
 | `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
 | `AGENTS_BAR_TITLE` | `count awake` | Title tokens after the icon: `count` (sessions, and how many are blocked), `cpu`, `mem`, `load`, `battery`, `thermal` (only above nominal), `awake`, `warn` (a triangle as well as the tint). Empty shows the icon alone |
 | `AGENTS_BAR_SECTIONS` | `needs agents stale hogs awake system` | Menu sections, in order; `needs`, `stale` and `hogs` appear only when they have entries |
