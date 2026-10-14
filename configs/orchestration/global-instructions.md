@@ -5,3 +5,4 @@
 - Don't read `.env*` files other than `.env.example`.
 - Library choice, architecture, and business rules are the user's call: bring the trade-offs and a recommendation.
 - When you name a file for the user, write it as a Markdown link whose text is the path and whose target is its absolute `file://` URL, so it opens with a click.
+- Run tests and builds in the foreground, or as a background task the harness reports on when it finishes; never poll an output file or process in a `sleep` loop. A server or watcher the user should keep goes in a tmux pane; stop every other server, watcher or background command you started before you report done.
