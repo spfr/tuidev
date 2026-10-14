@@ -94,6 +94,11 @@ printf '{"agentType":"general-purpose","spawnDepth":1}\n' > "$subs/agent-aaa.met
 { bg tu9 c1task001 'make test-c'; turn_end; } > "$subs/agent-ccc.jsonl"
 # Subagent D: its handback was refused.
 { bg tu10 d1task001 'make test-d'; handback false; } > "$subs/agent-ddd.jsonl"
+# Subagent E: a lint run whose process already ended (no notification yet);
+# the main conversation runs the same command, with a stdout that can't be read.
+{ bg tu13 e1task001 'make lint'; handback true; } > "$subs/agent-eee.jsonl"
+# Subagent G: no background commands at all.
+{ handback true; } > "$subs/agent-ggg.jsonl"
 # Fork F of the main conversation: begins with a copy of it (m1's result).
 { bg tu11 m1task001 'tail -f /tmp/app.log'; handback true; } > "$subs/agent-fff.jsonl"
 printf '{"agentType":"fork","isFork":true}\n' > "$subs/agent-fff.meta.json"
@@ -128,12 +133,13 @@ SNAP="$(
     shell 5900 5000 'make test-c'
     shell 5910 5000 'make test-d'
     shell 5950 5000 'claude -p hi'
+    shell 5960 5000 'make lint'
     proc 5951 5950 "claude -p hi"
     proc 6000 4000 "claude"
     shell 6100 6000 'cargo build'
 )"
-# Each tool shell's stdout. 5600 and 5700/5701 can't be read; 6100 belongs to
-# claude 6000 (outside this hook's tree) whatever file it writes.
+# Each tool shell's stdout. 5600, 5700/5701 and 5960 can't be read; 6100
+# belongs to claude 6000 (outside this hook's tree) whatever file it writes.
 OUTS="$(
     for t in 5200:a1task001 5300:a2task002 5400:b1task001 5500:m1task001 5550:m2task002 \
              5800:a5task005 5900:c1task001 5910:d1task001 5950:a7task007 6100:a6task006; do
@@ -177,23 +183,28 @@ t="$(_agents_hook_tasks "$subs/agent-aaa.jsonl" | cut -f1 | tr '\n' ' ')"
 _agents_hook_final "$subs/agent-aaa.jsonl" || fail "a delivered report not final"
 ! _agents_hook_final "$subs/agent-ccc.jsonl" || fail "a turn end counted as final"
 ! _agents_hook_final "$subs/agent-ddd.jsonl" || fail "a refused handback counted as final"
+mids="$(_agents_hook_started "$main" | _agents_hook_ids)"
+[[ "$(printf '%s\n' "$mids" | tr '\n' ' ')" == "m1task001 m2task002 " ]] || fail "main task ids: $mids"
 [[ -z "$(_agents_hook_own_tasks "$subs/agent-fff.jsonl" "$main" all)" ]] || fail "a fork owns the task it inherited"
+[[ -z "$(_agents_hook_own_tasks "$subs/agent-fff.jsonl" /nonexistent all "$(_agents_hook_started "$subs/agent-fff.jsonl")" "$mids")" ]] || fail "a fork owns the task it inherited (ids passed in)"
+[[ "$(_agents_hook_own_tasks "$subs/agent-bbb.jsonl" "$main" all "$(_agents_hook_started "$subs/agent-bbb.jsonl")" "$mids")" == "b1task001"$'\t'"$tasks_dir/b1task001.output"$'\t'"all" ]] \
+    || fail "own tasks: $(_agents_hook_own_tasks "$subs/agent-bbb.jsonl" "$main" all "$(_agents_hook_started "$subs/agent-bbb.jsonl")" "$mids")"
 pass "transcripts: background tasks with their files, ended ones left out, final reports, fork inheritance"
 
 # --- subagent-stop ------------------------------------------------------------
 run_hook subagent-stop "$(hook_json SubagentStop aaa)" -n
 [[ "$(cat "$tmp/rc")" == 0 ]] || fail "dry run rc"
 [[ ! -f "$tmp/signals" ]] || fail "a dry run signalled: $(cat "$tmp/signals")"
-for p in 5200 5201 5300 5301 5600; do grep -qE "^  $p " "$tmp/out" || fail "dry run misses $p: $(cat "$tmp/out")"; done
-for p in 5400 5500 5550 5700 5701 5800 5900 5910 5950 5951 6000 6100 5000 5100 5101; do
+for p in 5200 5201 5300 5301; do grep -qE "^  $p " "$tmp/out" || fail "dry run misses $p: $(cat "$tmp/out")"; done
+for p in 5400 5500 5550 5600 5700 5701 5800 5900 5910 5950 5951 5960 6000 6100 5000 5100 5101; do
     ! grep -qE "^  $p " "$tmp/out" || fail "dry run would stop $p: $(cat "$tmp/out")"
 done
 grep -q "task a1task001: wait-loop, pid 5200 (matched by output)" "$tmp/out" || fail "wait loop not matched by its file: $(cat "$tmp/out")"
-grep -q "task a3task003: go, pid 5600 (matched by command)" "$tmp/out" || fail "command fallback: $(cat "$tmp/out")"
+! grep -q "a3task003" "$tmp/out" || fail "a task whose stdout can't be read was matched (by its command?): $(cat "$tmp/out")"
 grep -q "refuse 5950: it hosts a session" "$tmp/out" || fail "a tool shell running a nested claude not refused: $(cat "$tmp/out")"
 grep -q "dry run: would send SIGTERM" "$tmp/out" || fail "no dry-run summary"
 [[ ! -e "$AGENTS_DATA_DIR/events.tsv" ]] || fail "a dry run logged events"
-pass "subagent-stop -n: only that subagent's live tasks (by file, or by a unique command); not another subagent's, the main session's, ended tasks, ambiguous commands, nested sessions or another claude's"
+pass "subagent-stop -n: only that subagent's live tasks, by their output file; not one whose stdout can't be read, another subagent's, the main session's, ended tasks, nested sessions or another claude's"
 
 ( _AGENTS_HOOK_DRY=true run_hook subagent-stop "$(hook_json SubagentStop aaa)"
   grep -q "dry run: would send SIGTERM" "$tmp/out" && [[ ! -f "$tmp/signals" ]] || fail "AGENTS_DRY_RUN=true is not a dry run" )
@@ -206,14 +217,14 @@ pass "AGENTS_DRY_RUN=true is a dry run too"
 
 run_hook subagent-stop "$(hook_json SubagentStop aaa)"
 [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "a real run is not quiet: rc $(cat "$tmp/rc"), $(cat "$tmp/out")"
-[[ "$(signalled)" == "5200 5201 5300 5301 5600 " ]] || fail "signalled: $(signalled)"
+[[ "$(signalled)" == "5200 5201 5300 5301 " ]] || fail "signalled: $(signalled)"
 [[ "$(awk '{ print $1 }' "$tmp/signals" | sort -u)" == TERM ]] || fail "not SIGTERM: $(cat "$tmp/signals")"
 ev="$(cut -f2- "$AGENTS_DATA_DIR/events.tsv" | sort)"
-[[ "$ev" == "$(printf 'hook\tsubagent-end\t5200\twait-loop\tmyapp\t%s\nhook\tsubagent-end\t5300\tnpm\tmyapp\t%s\nhook\tsubagent-end\t5600\tgo\tmyapp\t%s' "$sess" "$sess" "$sess")" ]] \
+[[ "$ev" == "$(printf 'hook\tsubagent-end\t5200\twait-loop\tmyapp\tclaude:5000\nhook\tsubagent-end\t5300\tnpm\tmyapp\tclaude:5000')" ]] \
     || fail "events: $ev"
-[[ "$(cat "$tmp/notified")" == "Stopped 3 background commands a subagent (general-purpose) left running in myapp" ]] \
+[[ "$(cat "$tmp/notified")" == "Stopped 2 background commands a subagent (general-purpose) left running in myapp" ]] \
     || fail "notification: $(cat "$tmp/notified" 2>/dev/null)"
-pass "subagent-stop: SIGTERMs those trees, quietly; one event per task (hook subagent-end), one notification"
+pass "subagent-stop: SIGTERMs those trees, quietly; one event per task (hook subagent-end, session claude:PID), one notification"
 
 rm -rf "$AGENTS_DATA_DIR"
 AGENTS_HISTORY=0 run_hook subagent-stop "$(hook_json SubagentStop aaa)"
@@ -228,16 +239,40 @@ run_hook subagent-stop "$(hook_json SubagentStop ddd)"
 [[ -z "$(signalled)" && ! -s "$tmp/out" ]] || fail "a refused handback: $(signalled)"
 run_hook subagent-stop "$(hook_json SubagentStop fff)"
 [[ -z "$(signalled)" ]] || fail "a fork stopped the main session's task: $(signalled)"
-pass "each subagent stops only its own; none while it waits for its commands, after a refused handback, or for what a fork inherited"
+run_hook subagent-stop "$(hook_json SubagentStop eee)" -n
+[[ -z "$(signalled)" && "$(cat "$tmp/err")" == *"none of its background commands still runs"* && "$(cat "$tmp/out")" != *5960* ]] \
+    || fail "an ended task matched a sibling running the same command: $(cat "$tmp/out" "$tmp/err")"
+run_hook subagent-stop "$(hook_json SubagentStop eee)"
+[[ -z "$(signalled)" ]] || fail "an ended task stopped the main conversation's same command: $(signalled)"
+run_hook subagent-stop "$(hook_json SubagentStop ggg)" -n
+[[ -z "$(signalled)" && "$(cat "$tmp/err")" == *"started no background commands"* ]] || fail "no background commands: $(cat "$tmp/err")"
+pass "each subagent stops only its own; none while it waits for its commands, after a refused handback, for what a fork inherited, or for an ended task whose command a sibling runs"
 
 # --- session-end --------------------------------------------------------------
 run_hook session-end "$(hook_json SessionEnd - clear)"
-[[ "$(signalled)" == "5200 5201 5300 5301 5400 5550 5600 " ]] || fail "session-end clear: $(signalled)"
+[[ "$(signalled)" == "5200 5201 5300 5301 5400 5550 " ]] || fail "session-end clear: $(signalled)"
 for r in other prompt_input_exit logout; do
     run_hook session-end "$(hook_json SessionEnd - "$r")"
     [[ -z "$(signalled)" && ! -s "$tmp/out" ]] || fail "session-end $r: $(signalled)"
 done
 pass "session-end on /clear: the session's polling loops (not its log tail) and its finished subagents' leftovers; nothing at exit"
+
+# --- Budget: a large session ends well inside the hook timeout ------------------------
+# A 20 MB main transcript and 30 subagents of 1 MB, each with a live task: the
+# main file is read once, the subagents in one pass (not once per subagent).
+big="$tmp/big"; mkdir -p "$big/s/subagents"
+filler() { awk -v n="$1" 'BEGIN { s = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\""; for (i = 0; i < 40; i++) s = s "lorem ipsum dolor sit amet "; s = s "\"}]}}"; for (i = 0; i < n; i++) print s }'; }
+{ filler 18000; bg tuM1 bigmain01 'until [ -s /tmp/x ]; do sleep 2; done'; filler 1000; } > "$big/s.jsonl"
+for i in $(seq 1 30); do
+    { filler 900; bg "tuS$i" "bigsub$i" 'make test'; handback true; } > "$big/s/subagents/agent-b$i.jsonl"
+done
+t0="$(date +%s)"
+jq -nc --arg m "$big/s.jsonl" '{session_id: "s", transcript_path: $m, cwd: "/work/big", hook_event_name: "SessionEnd", reason: "clear"}' \
+    | agents_main hook session-end -n > "$tmp/out" 2> "$tmp/err" || true
+[[ $(( $(date +%s) - t0 )) -le 8 ]] || fail "session-end on a 20 MB session with 30 subagents took $(( $(date +%s) - t0 )) s"
+[[ "$(cat "$tmp/err")" == *"none of its background commands still runs"* ]] || fail "big session-end: $(cat "$tmp/out" "$tmp/err")"
+rm -rf "$big"
+pass "budget: session-end on a 20 MB session with 30 subagents stays well inside the hook timeout"
 
 # --- Off switches and bad input: always exit 0, never signal ----------------------
 quiet_ok() {    # LABEL
