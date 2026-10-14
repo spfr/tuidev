@@ -52,18 +52,18 @@ read_only_style = "red"
 
 [directory.substitutions]
 "Documents" = "󰈙 "
-"Downloads" = " "
-"Music" = " "
-"Pictures" = " "
-"workspace" = " "
-"projects" = " "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+"workspace" = " "
+"projects" = " "
 
 # ============================================================================
 # Git Integration
 # ============================================================================
 
 [git_branch]
-symbol = " "
+symbol = " "
 format = "on [$symbol$branch]($style) "
 style = "bold purple"
 truncation_length = 20
@@ -72,17 +72,17 @@ truncation_symbol = "…"
 [git_status]
 format = '([\[$all_status$ahead_behind\]]($style) )'
 style = "bold yellow"
-conflicted = ""
+conflicted = "="
 ahead = "⇡"
 behind = "⇣"
 diverged = "⇕"
 up_to_date = ""
 untracked = "?"
-stashed = ""
+stashed = "$"
 modified = "!"
 staged = "+"
-renamed = ""
-deleted = ""
+renamed = "»"
+deleted = "✘"
 
 [git_state]
 format = '\([$state( $progress_current/$progress_total)]($style)\) '
@@ -93,7 +93,7 @@ style = "bright-black"
 # ============================================================================
 
 [python]
-symbol = " "
+symbol = " "
 format = 'via [$symbol$pyenv_prefix($version )(\($virtualenv\) )]($style)'
 style = "yellow bold"
 pyenv_version_name = false
@@ -102,24 +102,24 @@ detect_files = []
 detect_folders = []
 
 [nodejs]
-symbol = " "
+symbol = " "
 format = "via [$symbol($version )]($style)"
 style = "bold green"
 detect_extensions = ["js", "mjs", "cjs", "ts"]
 detect_files = ["package.json", ".node-version"]
 
 [rust]
-symbol = " "
+symbol = " "
 format = "via [$symbol($version )]($style)"
 style = "bold red"
 
 [golang]
-symbol = " "
+symbol = " "
 format = "via [$symbol($version )]($style)"
 style = "bold cyan"
 
 [java]
-symbol = " "
+symbol = " "
 format = "via [$symbol($version )]($style)"
 style = "red dimmed"
 
@@ -128,7 +128,7 @@ style = "red dimmed"
 # ============================================================================
 
 [docker_context]
-symbol = " "
+symbol = " "
 format = "via [$symbol$context]($style) "
 style = "blue bold"
 only_with_files = true

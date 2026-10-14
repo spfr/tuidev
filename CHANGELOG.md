@@ -63,12 +63,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loop) has not changed for `AGENTS_WAIT_STUCK` minutes; one `find -mmin`
   checks every such file. A file changed within that time (a long build's
   log) keeps the loop a plain `wait`, however old it is. A loop with no file
-  to watch, or whose file doesn't exist, is stuck once it has run that long. `agents ps` shows
-  `stuck`, `agents json` adds it to the tool's `flags` (still
-  `schema_version` 1: the flag is added next to `wait`), and the menu shows
-  an orange hourglass with Stop command… under Needs you, which tints the
-  icon but doesn't count as blocked. `docs/agent-workflows.md` tells agent
-  authors to match the exit line or cap their tries.
+  to watch, or whose file doesn't exist, is stuck once it has run that long.
+  `agents ps` shows `stuck`, `agents json` adds it to the tool's `flags`
+  (still `schema_version` 1: the flag is added next to `wait`), and the menu
+  shows an orange hourglass with Stop command… under Needs you, which tints
+  the icon but doesn't count as blocked. `docs/agent-workflows.md` tells
+  agent authors to match the exit line or cap their tries.
+- **The Starship prompt shows its Nerd Font icons again.** The shipped
+  `starship.toml` had lost every glyph in the Unicode private-use area: the
+  git branch, Python, Node, Rust, Go, Java and Docker symbols were plain
+  spaces; `~/Downloads`, `Music`, `Pictures`, `workspace` and `projects`
+  showed as a blank instead of an icon; and the conflicted, stashed, renamed
+  and deleted git states were empty, so they never showed. They are glyphs
+  again (the branch is U+F418), and the four git states use Starship's
+  defaults (`=`, `$`, `»`, `✘`). `./install.sh` or `make update-configs`
+  refreshes the managed block.
 
 ## [3.3.3] - 2026-10-14
 
