@@ -5,6 +5,94 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-10-14
+
+Needs you now explains itself, agents stop leaving processes behind, and
+`agents` shows where your CPU goes, today and over time.
+
+### Added
+- **`agents why PID`: is a Needs-you item safe to stop?** Every stale tree and
+  every command flagged `stuck`, `long` or `dup` comes with its evidence and a
+  verdict. The evidence: who owns it (or that its session ended), its age,
+  CPU and ports, and for a polling loop the file it watches, that file's last
+  line and how long ago it changed. The verdicts: **safe to stop** (a helper of
+  an ended session; a loop whose file already says `[exited with code 0]`,
+  `ok`, `FAIL`, `--- FAIL`…, or stayed quiet), **check first** (anything
+  listening on a port; a loop judged by its age alone), **leave it** (its file
+  is still changing) and **informational** (a long build or server of a live
+  session). One function makes the verdict for `why`, `agents json`
+  (additive `verdict` and `evidence` fields, schema 1) and the menu.
+- **Menu: each Needs-you item shows its verdict** (`· safe to stop`,
+  `· check first`, `· informational`) and, in its submenu, the evidence, then
+  Stop command…, Copy details and Show session. Stale items get the same.
+- **Claude Code cleanup hooks.** The shipped settings run `agents hook` on
+  `SubagentStop` and on `SessionEnd` (`/clear`, `/resume`). Once a subagent
+  hands back its final report, the background commands it left running (test
+  runs, dev servers, `until …; do sleep; done` loops) are stopped; on `/clear`
+  or `/resume`, the session's own polling loops and its finished subagents'
+  leftovers are. Each command is matched to its process by its
+  `tasks/<id>.output` file, only under the
+  `claude` that ran the hook, and stopped through the usual start-time-pinned
+  kill. Never another subagent's or session's work, the main conversation's
+  servers, or anything under tmux or Herdr. The hook always exits 0, is a
+  no-op without the `monitoring` pack, logs and notifies each stop;
+  `AGENTS_HOOK_REAP=0` turns it off and `agents hook … -n` shows what it would
+  stop. Even on 80 MB transcripts a hook takes about 2 s. Existing installs get the hooks with `make update-configs` (the
+  settings are three-way merged). Codex isn't covered: its hook transcripts
+  aren't a stable interface yet.
+- **Opt-in auto-reap (`AGENTS_AUTO_REAP=1`)** stops, without asking, only the
+  leftovers of ended sessions that listen on no port and polling loops stuck
+  on a file quiet for twice `AGENTS_WAIT_STUCK`; never a server, a long
+  command or a loop stuck by age alone. The menu runs it in the background at
+  most once a minute; `agents reap --auto` does the same from cron (`-n` shows
+  what it would stop). One notification sums up each run.
+- **Where the CPU goes: job types.** Every process in an agent's tree (and in
+  a stale one) counts toward one job: `test`, `build`, `server`, `browser`,
+  `mcp`, `agent`, `wait` or `other`. A command and everything it starts share
+  its job (a `go test` and the binaries it compiles are `test`); agents and
+  browsers keep their own. The built-in patterns cover go, cargo, pytest,
+  jest/vitest, npm/pnpm/yarn scripts, make, tsc, webpack/vite/next, dev
+  servers, headless Chrome and Playwright; `AGENTS_JOB_TEST`, `_BUILD`,
+  `_SERVER`, `_BROWSER` and `_MCP` add your own. `agents json` gives each
+  entry its `job` and adds a `jobs` list. The menu's new Where the CPU goes
+  section (`jobs` in `AGENTS_BAR_SECTIONS`) lists CPU by job, busiest first,
+  each with the sessions behind it, then `Today: 3.4 CPU-h · tests 40%` and
+  Open report.
+- **Local history and `agents report`.** With `AGENTS_HISTORY=1` (the default)
+  `agents sample` records, once a minute, the CPU time each job used per
+  project and session (from per-process CPU time keyed by pid and start time)
+  in `~/.local/state/tuidev/agents/history.tsv`, and every cleanup (`kill`,
+  `reap`, `auto`, `hook`) in `events.tsv`. Names only, never command lines;
+  nothing leaves the machine; kept `AGENTS_HISTORY_DAYS` (30). The menu starts
+  the sample in the background; `agents watch` does too, and elsewhere a cron
+  line does. `agents report [--since 24h|7d|30d|today] [--json]` shows
+  CPU-hours by job, the top projects, CPU by session kind, the busiest hours,
+  and the cleanups with the projects that leave things behind most.
+- **A new orchestration rule against leaked background processes:** run tests
+  and builds in the foreground or as a background task the harness reports
+  on, never poll in a `sleep` loop, keep wanted servers in tmux, and stop
+  everything else you started before reporting done. AGENTS.md says the same.
+
+### Security
+- **Every automatic stop needs proof, not a guess.** The cleanup hooks match
+  a task to a process only by its `tasks/<id>.output` file; if that can't be
+  read, nothing is stopped. Auto-reap stops a stale tree only if `agents
+  sample` saw it under an agent before its session ended, only when the port
+  check worked, never a `caffeinate` without `-t`, and never a loop that only
+  tests that a file exists (`while [ -f lock ]`). Overlapping menu refreshes
+  can't start two reaps.
+- **History is private**: `~/.local/state/tuidev/agents` is 700 and its files
+  600. `agents why` and the menu never show the last line of a symlink or of
+  a file under the sandbox credential paths (`~/.ssh`, `~/.netrc`, …);
+  `test_contract.sh` keeps that list in step with `credential-paths.txt`.
+- `AGENTS_JOB_*` patterns are rejected unless both the shell and awk accept
+  them.
+
+### Fixed
+- `test_agents.sh` runs the live lid tests on macOS only, so the Alpine CI
+  job passes again (3.4.0's CI run failed there; the release itself was
+  unaffected).
+
 ## [3.4.0] - 2026-10-14
 
 ### Added
