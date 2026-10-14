@@ -252,6 +252,47 @@ pass "sample: one at a time (lock dir)"
 )
 pass "sample.state: pid@start seen under an agent stays marked after it is orphaned; your own orphan is never marked"
 
+# Private: the data dir is 700 and its files 600, and an older, open one is
+# made private on the next write.
+perm() { if [[ "$(uname)" == Darwin ]]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi; }
+[[ "$(perm "$AGENTS_DATA_DIR")" == 700 ]] || fail "data dir mode $(perm "$AGENTS_DATA_DIR")"
+for f in history.tsv sample.state today.tsv sample.stamp; do
+    [[ "$(perm "$AGENTS_DATA_DIR/$f")" == 600 ]] || fail "$f mode $(perm "$AGENTS_DATA_DIR/$f")"
+done
+(
+    AGENTS_DATA_DIR="$tmp/open"; mkdir -p "$AGENTS_DATA_DIR"; chmod 755 "$AGENTS_DATA_DIR"
+    printf 'x\n' > "$AGENTS_DATA_DIR/events.tsv"; chmod 644 "$AGENTS_DATA_DIR/events.tsv"
+    agents_event kill manual 1 x app -
+    [[ "$(perm "$AGENTS_DATA_DIR")/$(perm "$AGENTS_DATA_DIR/events.tsv")" == 700/600 ]] \
+        || fail "an open data dir not made private: $(perm "$AGENTS_DATA_DIR")/$(perm "$AGENTS_DATA_DIR/events.tsv")"
+    rm -rf "$AGENTS_DATA_DIR"; agents_event kill manual 1 x app -
+    [[ "$(perm "$AGENTS_DATA_DIR")/$(perm "$AGENTS_DATA_DIR/events.tsv")" == 700/600 ]] || fail "a new data dir is not private"
+)
+pass "history is private: data dir 700, files 600; an open one is fixed on the next write"
+
+# Events and prune share a lock: an event waits for a prune (never lost), a
+# prune skips the day when it can't have the lock, a leftover lock is taken.
+(
+    AGENTS_DATA_DIR="$tmp/elock"; mkdir -p "$AGENTS_DATA_DIR"
+    mkdir "$AGENTS_DATA_DIR/events.lock"
+    ( sleep 0.3; printf '%s\treap\tstale\t9\tz\tapp\t-\n' "$FAKE_NOW" >> "$AGENTS_DATA_DIR/events.tsv"; rmdir "$AGENTS_DATA_DIR/events.lock" ) &
+    agents_event kill manual 1 x app -
+    wait
+    [[ "$(cut -f4 "$AGENTS_DATA_DIR/events.tsv" | tr '\n' ' ')" == "9 1 " ]] || fail "an event did not wait for the lock: $(cat "$AGENTS_DATA_DIR/events.tsv")"
+    [[ ! -e "$AGENTS_DATA_DIR/events.lock" ]] || fail "agents_event left its lock"
+    old=$((FAKE_NOW - 31 * 86400))
+    printf '%s\tkill\tmanual\t2\tx\tapp\t-\n' "$old" >> "$AGENTS_DATA_DIR/events.tsv"
+    mkdir "$AGENTS_DATA_DIR/events.lock"
+    _agents_history_prune "$FAKE_NOW" 2026-10-20
+    [[ "$(grep -c . "$AGENTS_DATA_DIR/events.tsv")" == 3 && -d "$AGENTS_DATA_DIR/events.lock" ]] || fail "prune rewrote events.tsv without the lock"
+    touch -t 202001010000 "$AGENTS_DATA_DIR/events.lock"
+    agents_event kill manual 3 y app -
+    [[ "$(cut -f4 "$AGENTS_DATA_DIR/events.tsv" | tail -1)" == 3 && ! -e "$AGENTS_DATA_DIR/events.lock" ]] || fail "a leftover lock was not taken over"
+    _agents_history_prune "$FAKE_NOW" 2026-10-21
+    [[ "$(cut -f4 "$AGENTS_DATA_DIR/events.tsv" | tr '\n' ' ')" == "9 1 3 " ]] || fail "prune under the lock: $(cat "$AGENTS_DATA_DIR/events.tsv")"
+)
+pass "events and prune share a lock: an event waits, a prune without the lock leaves events.tsv, a leftover lock is taken over"
+
 # hist line and the due check.
 [[ "$(_agents_hist_line)" == $'hist\tdue\t0\t-\t0' ]] || fail "hist line on a new day, a minute after: $(_agents_hist_line)"
 agents_sample

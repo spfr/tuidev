@@ -309,7 +309,15 @@ throttled; throttled
 printf '%s\n' "$(( $(date +%s) - 61 ))" > "$AGENTS_RUN_DIR/auto-reap"
 throttled
 [[ "$(grep -c . "$tmp/collects")" == 2 ]] || fail "--throttle never ran again after a minute"
-pass "reap --auto --throttle runs at most once a minute"
+# Overlapping menu runs: while one holds the lock, another never starts.
+printf '%s\n' "$(( $(date +%s) - 61 ))" > "$AGENTS_RUN_DIR/auto-reap"
+mkdir "$AGENTS_RUN_DIR/auto-reap.lock"
+throttled
+[[ "$(grep -c . "$tmp/collects")" == 2 ]] || fail "--throttle ran while another run held the lock"
+touch -t 202001010000 "$AGENTS_RUN_DIR/auto-reap.lock"
+throttled
+[[ "$(grep -c . "$tmp/collects")" == 3 && ! -e "$AGENTS_RUN_DIR/auto-reap.lock" ]] || fail "a leftover auto-reap lock was not cleared"
+pass "reap --auto --throttle runs at most once a minute, one run at a time (lock)"
 
 # Manual cleanups are logged too: kill (manual), reap (stale, stuck).
 rm -f "$AGENTS_DATA_DIR/events.tsv" "$tmp/signals"

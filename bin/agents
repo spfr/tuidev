@@ -1707,11 +1707,41 @@ agents_reap_tokens() {
 
 # --- History and events -------------------------------------------------------
 # $AGENTS_DATA_DIR holds what `agents report` reads. Names only, never full
-# command lines, and nothing leaves the machine.
+# command lines, and nothing leaves the machine. Private: the directory is
+# 700 and its files 600 (every writer runs under umask 077).
 #   events.tsv  one line per cleanup: epoch kind reason pid name project session
 #               kind:   kill (you), reap (`agents reap`), auto (AGENTS_AUTO_REAP),
 #                       hook (a session's or subagent's end)
 #               reason: manual stale stuck long subagent-end session-end
+#               session: the owning session as kind:pid (claude:4242), "-"
+#                       for a stale tree
+
+# _agents_data_dir — create $AGENTS_DATA_DIR, private (call under umask 077),
+# and make an older one private too.
+_agents_data_dir() {
+    mkdir -p "$AGENTS_DATA_DIR" 2>/dev/null || return 1
+    chmod -R go= "$AGENTS_DATA_DIR" 2>/dev/null
+    return 0
+}
+
+# _agents_events_lock — take events.lock (a directory: mkdir is atomic),
+# waiting up to a second; a lock older than a minute is a leftover and is
+# taken over. agents_event appends and _agents_history_prune rewrites
+# events.tsv only under it, so a prune never drops a line. False when it
+# could not be had.
+_agents_events_lock() {
+    local lock="$AGENTS_DATA_DIR/events.lock" i=0
+    while [[ $i -lt 20 ]]; do
+        mkdir "$lock" 2>/dev/null && return 0
+        if [[ $i -eq 0 && -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; then
+            rmdir "$lock" 2>/dev/null; i=$((i + 1)); continue
+        fi
+        sleep 0.05 2>/dev/null || sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
+_agents_events_unlock() { rmdir "$AGENTS_DATA_DIR/events.lock" 2>/dev/null; return 0; }
 
 # _agents_tsv_field TEXT — one TSV field: tabs and newlines become spaces, empty is "-".
 _agents_tsv_field() {
@@ -1720,14 +1750,21 @@ _agents_tsv_field() {
 }
 
 # agents_event KIND REASON PID NAME PROJECT SESSION — append one cleanup to
-# events.tsv (a no-op with AGENTS_HISTORY=0). Never fails the caller.
+# events.tsv (a no-op with AGENTS_HISTORY=0), under the events lock (if it
+# can't be had within a second, the line is appended anyway). Never fails
+# the caller.
 agents_event() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
-    mkdir -p "$AGENTS_DATA_DIR" 2>/dev/null || return 0
     local f out="" now
     now="$(date +%s)"
     for f in "$@"; do out+=$'\t'"$(_agents_tsv_field "$f")"; done
-    printf '%s%s\n' "$now" "$out" >> "$AGENTS_DATA_DIR/events.tsv" 2>/dev/null || true
+    (
+        umask 077
+        _agents_data_dir || exit 0
+        locked=0; _agents_events_lock && locked=1
+        printf '%s%s\n' "$now" "$out" >> "$AGENTS_DATA_DIR/events.tsv" 2>/dev/null
+        [[ $locked -eq 0 ]] || _agents_events_unlock
+    ) 2>/dev/null
     return 0
 }
 
@@ -2126,15 +2163,21 @@ agents_auto_tokens() {
 }
 
 # _agents_auto_due — true at most once a minute (the menu runs auto-reap on
-# every refresh that shows something it may stop).
+# every refresh that shows something it may stop). The stamp is read and
+# written under a lock (mkdir is atomic), so two overlapping menu runs never
+# both start a reap; a lock older than a minute is a leftover and is removed.
 _agents_auto_due() {
-    local f="$AGENTS_RUN_DIR/auto-reap" ts="" now
-    now="$(date +%s)"
+    local f="$AGENTS_RUN_DIR/auto-reap" lock="$AGENTS_RUN_DIR/auto-reap.lock" ts="" now rc=1
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
+    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
+    mkdir "$lock" 2>/dev/null || return 1
+    now="$(date +%s)"
     [[ -r "$f" ]] && read -r ts < "$f"
     [[ "$ts" =~ ^[0-9]+$ ]] || ts=0
-    [[ $((now - ts)) -ge 60 ]] || return 1
-    printf '%s\n' "$now" > "$f" 2>/dev/null
+    if [[ $((now - ts)) -ge 60 ]] && printf '%s\n' "$now" > "$f.$$" 2>/dev/null && mv -f "$f.$$" "$f"; then rc=0; fi
+    rm -f "$f.$$"
+    rmdir "$lock" 2>/dev/null
+    return $rc
 }
 
 # agents_reap_auto — `agents reap --auto`: stop, without asking, only what
@@ -2285,13 +2328,16 @@ function jobs_json(   i, j, b, t, out, ss, k, m, r) {
 # time: a second one while the first runs returns at once.
 agents_sample() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
-    local lock="$AGENTS_DATA_DIR/sample.lock" rc
-    mkdir -p "$AGENTS_DATA_DIR" 2>/dev/null || { echo "agents: cannot create $AGENTS_DATA_DIR" >&2; return 1; }
-    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
-    mkdir "$lock" 2>/dev/null || return 0
-    _agents_sample_locked; rc=$?
-    rmdir "$lock" 2>/dev/null
-    return "$rc"
+    (
+        umask 077
+        lock="$AGENTS_DATA_DIR/sample.lock"
+        _agents_data_dir || { echo "agents: cannot create $AGENTS_DATA_DIR" >&2; exit 1; }
+        [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
+        mkdir "$lock" 2>/dev/null || exit 0
+        _agents_sample_locked; rc=$?
+        rmdir "$lock" 2>/dev/null
+        exit "$rc"
+    )
 }
 
 _agents_sample_locked() {
@@ -2370,20 +2416,24 @@ END {
 }
 
 # _agents_history_prune NOW DAY — drop history and events older than
-# AGENTS_HISTORY_DAYS, at most once a day.
+# AGENTS_HISTORY_DAYS, at most once a day. history.tsv has one writer (the
+# sample this runs in, under sample.lock); events.tsv is rewritten under the
+# events lock, or left for tomorrow when that can't be had.
 _agents_history_prune() {
-    local stamp="" f
+    local stamp="" cut=$(( $1 - AGENTS_HISTORY_DAYS * 86400 ))
     [[ -r "$AGENTS_DATA_DIR/prune.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/prune.stamp"
     [[ "$stamp" != "$2" ]] || return 0
-    for f in history events; do
-        _agents_prune_file "$AGENTS_DATA_DIR/$f.tsv" $(( $1 - AGENTS_HISTORY_DAYS * 86400 ))
-    done
+    _agents_prune_file "$AGENTS_DATA_DIR/history.tsv" "$cut"
+    if _agents_events_lock; then
+        _agents_prune_file "$AGENTS_DATA_DIR/events.tsv" "$cut"
+        _agents_events_unlock
+    fi
     printf '%s\n' "$2" > "$AGENTS_DATA_DIR/prune.stamp"
 }
 
 # _agents_prune_file FILE CUTOFF — keep the lines from CUTOFF on, rewriting the
-# file atomically. agents_event appends without a lock, so lines added while
-# this runs are carried over.
+# file atomically. The caller keeps its writers out; lines that still got in
+# while it ran are carried over.
 _agents_prune_file() {
     local file="$1" tmp="$1.prune.$$" seen kept
     [[ -f "$file" ]] || return 0
