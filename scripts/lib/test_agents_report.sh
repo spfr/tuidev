@@ -66,14 +66,14 @@ row() { printf '%s\n' "$1" | tr -s ' ' | grep -qxF "$2"; }
 # 1. runs: the most repeated commands, the slowest tests and builds.
 out="$(rep --view runs)"
 [[ "$out" == "agents report · runs · last 24h"$'\n\n'"RUNS 26 · 2.06 CPU-h · 18% failed"* ]] || fail "runs header:"$'\n'"$out"
-row "$out" " app go test 10 1.11 5m30s 9m 11%" || fail "runs: go (median of 10 = mean of the middle two, p90 = 9th):"$'\n'"$out"
-row "$out" " api make build 5 0.67 5m 8m20s 0%" || fail "runs: make:"$'\n'"$out"
+row "$out" " app go test 10 1.11 5m30s 9m00s 11%" || fail "runs: go (median of 10 = mean of the middle two, p90 = 9th):"$'\n'"$out"
+row "$out" " api make build 5 0.67 5m00s 8m20s 0%" || fail "runs: make:"$'\n'"$out"
 row "$out" " shop pytest test 5 0.28 3m20s 3m20s 60%" || fail "runs: pytest:"$'\n'"$out"
-row "$out" " shop wait-loop wait 3 0.00 42m 42m -" || fail "runs: cleaned runs count in no failure rate:"$'\n'"$out"
+row "$out" " shop wait-loop wait 3 0.00 42m00s 42m00s -" || fail "runs: cleaned runs count in no failure rate:"$'\n'"$out"
 [[ "$(printf '%s\n' "$out" | grep -n ' make ' | head -1 | cut -d: -f1)" -lt "$(printf '%s\n' "$out" | grep -n ' pytest ' | head -1 | cut -d: -f1)" ]] \
     || fail "runs: a tie in count goes to more CPU"
 slow="$(printf '%s\n' "$out" | sed -n '/^SLOWEST/,$p')"
-row "$slow" " app go test 10 5m30s 9m 10m" || fail "slowest: go:"$'\n'"$slow"
+row "$slow" " app go test 10 5m30s 9m00s 10m00s" || fail "slowest: go:"$'\n'"$slow"
 [[ "$slow" != *wait-loop* && "$slow" != *node* ]] || fail "slowest lists more than tests and builds:"$'\n'"$slow"
 [[ "$out" != *old* && "$out" != *broken* ]] || fail "runs counts rows outside the window or short rows"
 pass "runs: count, CPU-h, median, p90 and failure rate per command; slowest tests and builds"
@@ -102,7 +102,7 @@ pass "waste: duplicates and their CPU, leaks and their hours, polling, re-runs (
 # 3. trends: this window against the one before.
 out="$(rep --view trends --since 24h)"
 [[ "$out" == "agents report · trends · last 24h vs the 24h before"* ]] || fail "trends header:"$'\n'"$out"
-row "$out" " api 0.67 0.22 ↑200% 5 0% 5m ↑400% more CPU, slower" || fail "trends: api regressed:"$'\n'"$out"
+row "$out" " api 0.67 0.22 ↑200% 5 0% 5m00s ↑400% more CPU, slower" || fail "trends: api regressed:"$'\n'"$out"
 row "$out" " app 1.11 0.83 ↑33% 12 ↑500% 6m30s ↑30%" || fail "trends: app (more, under the thresholds):"$'\n'"$out"
 row "$out" " shop 0.28 0.00 new 8 new 3m20s new" || fail "trends: shop is new:"$'\n'"$out"
 row "$out" " test 1.39 0.83 ↑67% 15 ↑650% 3m20s ↓33% more CPU" || fail "trends: by job:"$'\n'"$out"

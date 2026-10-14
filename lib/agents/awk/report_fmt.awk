@@ -1,5 +1,6 @@
 # lib/agents/awk/report_fmt.awk — numbers, words and table cells for
-# `agents report`. Part of report.awk's program; needs lib_json.
+# `agents report`. Part of report.awk's program; needs lib_json and lib_fmt
+# (dur, cut).
 
 # h: CPU seconds in the unit of the summary (CPU-h, or CPU-min below an hour in all).
 function h(s) { return sprintf("%.2f", s / unit) }
@@ -25,14 +26,6 @@ function nouns(n, s) { return n == 1 ? s : s "s" }
 function nruns(n) { return n " " nouns(n, "run") }
 # hrs: wall-clock seconds as hours.
 function hrs(s) { return sprintf("%.1f h", s / 3600) }
-# dur: a duration: 42s 6m30s 12m 1h05m.
-function dur(s,   m) {
-    s = int(s + 0.5)
-    if (s < 60) return s "s"
-    if (s < 600) { m = int(s / 60); return (s % 60) ? sprintf("%dm%02ds", m, s % 60) : m "m" }
-    if (s < 3600) return int(s / 60) "m"
-    return sprintf("%dh%02dm", int(s / 3600), int((s % 3600) / 60))
-}
 # chg CUR PREV — the change: ↑85% ↓12% 0%; "new" from nothing, "-" for neither.
 function chg(c, p,   r) {
     if (p <= 0) return c > 0 ? "new" : "-"
@@ -49,8 +42,6 @@ function dw(s,   i, n, c, w) {
 # lc / rc: S left- or right-aligned in W columns.
 function lc(s, w,   k) { k = w - dw(s); while (k-- > 0) s = s " "; return s }
 function rc(s, w,   k, o) { k = w - dw(s); o = ""; while (k-- > 0) o = o " "; return o s }
-# cut: at most W bytes, "..." marking a cut.
-function cut(s, w) { return length(s) > w ? substr(s, 1, w - 3) "..." : s }
 # line KEYS N ARR FMT LIM — "a 1.00 · b 0.50" (FMT "h": CPU-h, else counts).
 function line(keys, cnt, arr, fmt, lim,   i, o) {
     o = ""

@@ -428,7 +428,7 @@ agents report · trends · last 24h vs the 24h before
 
   PROJECT                CPU-h  BEFORE  CHANGE   RUNS  CHANGE   MEDIAN  CHANGE
   app                     1.11    0.83    ↑33%     12   ↑500%    6m30s    ↑30%
-  api                     0.67    0.22   ↑200%      5      0%       5m   ↑400%  more CPU, slower
+  api                     0.67    0.22   ↑200%      5      0%    5m00s   ↑400%  more CPU, slower
   shop                    0.28    0.00     new      8     new    3m20s     new
 ```
 

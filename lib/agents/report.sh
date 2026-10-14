@@ -46,7 +46,7 @@ _agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|t
 # for the window the caller's _agents_window set.
 _agents_report_awk() {
     B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" \
-    _agents_awk "lib_json lib_sort report_fmt report_runs report_insights report_views report" -F '\t' \
+    _agents_awk "lib_json lib_sort lib_fmt report_fmt report_runs report_insights report_views report" -F '\t' \
         -v view="$1" -v label="$2" -v json="$3" -v start="$start" -v now="$now" -v off="$off" \
         -v pstart="$((start - period))" -v pend="$((now - period))" -v hist="$AGENTS_HISTORY" \
         -v hf="$AGENTS_DATA_DIR/history.tsv" -v ef="$AGENTS_DATA_DIR/events.tsv" -v rf="$AGENTS_DATA_DIR/runs.tsv"

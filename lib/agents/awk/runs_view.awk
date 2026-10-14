@@ -13,7 +13,6 @@ function when(e,   z, era, doe, yoe, doy, mp, d, m, s) {
     m = mp < 10 ? mp + 3 : mp - 9
     return sprintf("%s %2d %02d:%02d", mon[m], d, int(s / 3600), int((s % 3600) / 60))
 }
-function took(s) { return s < 60 ? s "s" : dur(s) }
 function num(s) { return s ~ /^-?[0-9]+$/ ? s + 0 : "null" }
 function flags(dup, cl,   o) { o = (dup == 1 ? "dup" : ""); if (cl == 1) o = o (o == "" ? "" : ",") "cleaned"; return o == "" ? "-" : o }
 function cell(i, c, v) { cv[i, c] = v; if (length(v) > w[c]) w[c] = length(v) }
@@ -47,11 +46,11 @@ END {
         else printf "no runs ended %s\n", win
         exit
     }
-    printf "%sRuns ended %s: %d · %s CPU%s · newest first%s\n\n", B, win, n, took(int(cpu)),
+    printf "%sRuns ended %s: %d · %s CPU%s · newest first%s\n\n", B, win, n, dur(int(cpu)),
         (ncl > 0 ? " · " ncl " stopped by agents" : ""), N
     for (i = 1; i <= n; i++) {
         split(row[i], f, "\t")
-        cell(i, 1, when(f[1])); cell(i, 2, took(f[8])); cell(i, 3, took(f[9])); cell(i, 4, mem(f[10])); cell(i, 5, f[11])
+        cell(i, 1, when(f[1])); cell(i, 2, dur(f[8])); cell(i, 3, dur(f[9])); cell(i, 4, mem(f[10])); cell(i, 5, f[11])
         cell(i, 6, cut(f[4], 32)); cell(i, 7, f[5]); cell(i, 8, cut(f[6], 24)); cell(i, 9, f[7]); cell(i, 10, f[3]); cell(i, 11, flags(f[12], f[13]))
         bad[i] = (f[11] ~ /^-?[0-9]+$/ && f[11] != 0)
     }

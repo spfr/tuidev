@@ -6,7 +6,7 @@ AGENTS (1)
       1040    claude -p hello · 3m00s · 2% · -
       1030    until [ -s /nonexistent/x ]; do sleep 5; done · 52m00s · 0% · main  wait
       1020    go test -race ./internal/web · 4m00s · 0% · feat-a  x3 dup
-      1060    go vet ./... · 0m30s · 0% · -
+      1060    go vet ./... · 30s · 0% · -
       1080    make serve · 45m00s · 0% · -  long
       1041    claude -p hello · 3m00s · 2% · nested session
       1005    keepawake · caffeinate -i -t 300 · 0% · 1M
