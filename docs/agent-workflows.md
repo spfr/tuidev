@@ -135,6 +135,10 @@ herdr machine add workbox                     # save an SSH node (interactive, o
 herdr --machine workbox agent list            # scriptable, no TUI
 ```
 
+<img src="assets/herdr.png" width="800" alt="Herdr with three machines in its sidebar, Local, devbox and workbox, and six agents across them, each marked working, blocked or done. The view shows devbox's api workspace, where an agent asks to allow git push origin fix-404.">
+
+<sub>This Mac and two Linux containers saved as SSH machines, with scripted agent stand-ins that report their state through `herdr pane report-agent`. How it is made: [docs/assets/tapes/README.md](assets/tapes/README.md#the-herdr-fleet).</sub>
+
 Herdr is a second multiplexer. tmux (`--pack tmux`) is the default for a durable local session. Reach for Herdr when the question is *which agent needs me*, not *how do I keep this pane alive*. Its prefix is `Ctrl+b`, so it doesn't clash with tmux's `Ctrl+a`.
 
 Practices:
@@ -182,6 +186,8 @@ A **session** is one Herdr server with its own workspaces, panes and socket. Pla
 ## Local processes: `agents` (`--pack monitoring`)
 
 Every `claude` session starts its own MCP servers (`npm exec chrome-devtools-mcp@latest`, `node …/some-mcp.cjs`), about 250 MB a session, and holds a rolling `caffeinate -i -t 300`. When a session dies badly, those children are reparented to launchd and keep running. `agents` (`~/.local/bin/agents`) shows what is running and cleans up what leaked. It reads one `ps` snapshot per run and never needs sudo.
+
+<img src="assets/agents.png" width="800" alt="The agents command in a terminal. Three sessions: a Claude Code session in api, blocked and waiting for input, whose polling loop has waited 5h10m and is flagged wait and stuck; a working Claude Code session in myapp with two MCP servers and three commands, two of them from subagents in their own worktrees; an idle Codex session in web running a dev server on port 5173. Below them, two stale processes a crashed session left behind, one CPU hog, and a status line with CPU, memory, battery, thermal pressure and keep-awake.">
 
 ```bash
 agents                    # sessions (blocked first), stale processes and hogs if any, system status
@@ -439,6 +445,10 @@ Read them as leads, not verdicts: a regression may be a bigger change landing, a
 ### Menu bar (SwiftBar, macOS)
 
 On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents.10s.sh` plugin, which also stands in for a system-stats menu bar app. If SwiftBar already has a plugin folder, the plugin goes there; otherwise the pack sets the folder to `~/.config/swiftbar/plugins`. Open SwiftBar once (`open -a SwiftBar`) and turn on **Launch at login** in its settings. The pack doesn't add login items. Uninstalling removes the plugin but leaves SwiftBar's plugin-folder setting as it is.
+
+<img src="assets/menu.gif" width="680" alt="The agents menu under its menu-bar item, 3 · 1 blocked, opening four submenus in turn: a stuck polling loop's verdict, safe to stop because what it waits for already finished, with its evidence and Stop command…, Copy details and Show session; the sessions behind the tests job; the Awake choices with Lid closed too… and its 1, 3 and 8 hour options; and the busiest processes under the CPU line.">
+
+<sub>The plugin's real output over the screenshot fixtures, drawn as a macOS menu by `scripts/render_menu.sh` ([how](assets/tapes/README.md#the-swiftbar-menu)).</sub>
 
 - **Title:** by default an SF Symbol and the number of sessions, plus `· N blocked` when sessions wait for you and a cup while keep-awake is on. The icon turns orange when something needs a look (a blocked session, stale processes, a hog, memory pressure) and red for heavy thermal pressure, critical memory pressure, or sleep disabled with nothing to restore it; otherwise it follows the menu bar's colors. The session count is the same in the title, the menu and `agents ls`; the Codex daemon is listed separately and not counted.
 - **Menu**, in the order of `AGENTS_BAR_SECTIONS` (sections with nothing to show are left out):

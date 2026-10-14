@@ -1,0 +1,203 @@
+<!doctype html>
+<!--
+  The menu-bar picture's template (scripts/render_menu.sh). It draws the
+  SwiftBar plugin's real output, in SwiftBar's text format, as a macOS menu:
+  menu.js (written by the script) sets window.MENU to that output, and
+  window.OPEN to the rows whose submenus are open. symbols.js holds the SF
+  Symbols symbols.swift rendered, as data: URLs; CSS masks tint them.
+  ?theme=light|dark picks the appearance. After layout the page's title is
+  "WIDTH HEIGHT" of what it drew, which the script uses as the window size.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>menu</title>
+<style>
+  :root {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    --wall-a: #c9d6ea; --wall-b: #e9dccf; --wall-c: #b7c7e0;
+    --bar: rgba(255, 255, 255, 0.42); --bar-text: #1d1d1f;
+    --menu: rgba(242, 242, 244, 0.86); --menu-edge: rgba(0, 0, 0, 0.14); --menu-inner: rgba(255, 255, 255, 0.55);
+    --label: rgba(0, 0, 0, 0.86); --dim: rgba(0, 0, 0, 0.30); --sep: rgba(0, 0, 0, 0.10);
+    --hl: #0a6cf0; --hl-text: #ffffff; --pill: rgba(0, 0, 0, 0.10);
+    --shadow: 0 12px 34px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.10);
+  }
+  body.dark {
+    --wall-a: #1d2a44; --wall-b: #3a2b3f; --wall-c: #10192b;
+    --bar: rgba(30, 30, 34, 0.45); --bar-text: #f5f5f7;
+    --menu: rgba(38, 38, 42, 0.84); --menu-edge: rgba(0, 0, 0, 0.55); --menu-inner: rgba(255, 255, 255, 0.13);
+    --label: rgba(255, 255, 255, 0.88); --dim: rgba(255, 255, 255, 0.30); --sep: rgba(255, 255, 255, 0.12);
+    --hl: #0a72e8; --pill: rgba(255, 255, 255, 0.20);
+    --shadow: 0 14px 38px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+  html, body { margin: 0; padding: 0; background: transparent; }
+  body { font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  #stage {
+    position: relative; overflow: hidden; border-radius: 14px;
+    background:
+      radial-gradient(1200px 700px at 15% 0%, var(--wall-a), transparent 70%),
+      radial-gradient(900px 700px at 95% 100%, var(--wall-b), transparent 70%),
+      var(--wall-c);
+  }
+  #bar {
+    position: absolute; left: 0; right: 0; top: 0; height: 30px;
+    background: var(--bar); backdrop-filter: blur(20px);
+  }
+  #item {
+    position: absolute; top: 3px; height: 24px; padding: 0 9px; border-radius: 7px;
+    display: flex; align-items: center; gap: 5px; background: var(--pill);
+    color: var(--bar-text); font-size: 14px; font-weight: 500; white-space: pre;
+  }
+  .menu {
+    position: absolute; padding: 5px; border-radius: 12px; background: var(--menu);
+    backdrop-filter: blur(30px) saturate(1.6); box-shadow: var(--shadow), inset 0 0 0 0.5px var(--menu-inner);
+    outline: 0.5px solid var(--menu-edge); min-width: 200px; box-sizing: border-box;
+  }
+  .row {
+    display: flex; align-items: center; height: 23px; padding: 0 10px 0 8px; border-radius: 7px;
+    color: var(--label); font-size: 14px; white-space: pre; gap: 7px;
+  }
+  .row.small { height: 20px; }
+  .row.disabled { color: var(--dim); }
+  .row.hl { background: var(--hl); color: var(--hl-text); }
+  .gutter { width: 12px; flex: none; display: flex; justify-content: center; }
+  .icon { width: 18px; flex: none; display: flex; justify-content: center; align-items: center; }
+  .text { flex: 1; display: flex; align-items: center; gap: 3px; }
+  .chev { margin-left: 18px; flex: none; }
+  .sym { display: inline-block; background: currentColor; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
+  .sep { height: 1px; margin: 5px 10px; background: var(--sep); }
+</style>
+<script src="symbols.js"></script>
+<script src="menu.js"></script>
+</head>
+<body>
+<div id="stage"><div id="bar"></div></div>
+<script>
+(function () {
+  var theme = (location.search.match(/theme=(\w+)/) || [])[1] || "light";
+  if (theme === "dark") document.body.classList.add("dark");
+  var SYM = window.SYMBOLS || {}, OPEN = window.OPEN || [];
+
+  // SwiftBar's format: "text | key=value key=\"quoted\" ...", "--" per submenu level, "---" a separator.
+  function parse(text) {
+    var lines = text.split("\n"), title = [], root = { children: [] }, stack = [root], inTitle = true;
+    lines.forEach(function (line) {
+      if (line === "") return;
+      var depth = 0, s = line, sep = false;
+      for (;;) {
+        if (s === "---") { sep = true; break; }
+        if (s.slice(0, 2) === "--") { s = s.slice(2); depth++; } else break;
+      }
+      if (inTitle) { if (sep && depth === 0) { inTitle = false; } else title.push(s); return; }
+      var item = { sep: sep, children: [], params: {} };
+      if (!sep) {
+        var bar = s.indexOf("|");
+        item.text = (bar < 0 ? s : s.slice(0, bar)).replace(/\s+$/, "");
+        if (bar >= 0) {
+          var re = /(\w+)=("([^"]*)"|\S+)/g, m;
+          while ((m = re.exec(s.slice(bar + 1)))) item.params[m[1]] = m[3] !== undefined ? m[3] : m[2];
+        }
+      }
+      stack.length = depth + 1;
+      var parent = stack[depth] || stack[stack.length - 1];
+      parent.children.push(item);
+      stack[depth + 1] = item;
+    });
+    return { title: title, root: root };
+  }
+
+  function sfColor(p) {
+    if (p.sfconfig) {
+      try { var c = JSON.parse(atob(p.sfconfig)).colors; if (c && c[0]) return c[0]; } catch (e) {}
+    }
+    return null;
+  }
+  function symbol(name, h, color) {
+    var dims = SYM[name];
+    if (!dims) return null;
+    var el = document.createElement("span"), w = dims[0] * h / dims[1];
+    el.className = "sym";
+    el.style.width = w + "px"; el.style.height = h + "px";
+    el.style.webkitMaskImage = "url('" + dims[2] + "')";
+    if (color) el.style.background = color;
+    return el;
+  }
+  // Text with SwiftBar's inline :symbol.name: tokens (unless symbolize=false).
+  function richText(el, text, size, symbolize, color) {
+    var parts = symbolize ? text.split(/(:[a-z0-9.]+:)/) : [text];
+    parts.forEach(function (part) {
+      var m = symbolize && part.match(/^:([a-z0-9.]+):$/), s = m && symbol(m[1], size, color);
+      if (s) el.appendChild(s); else if (part) el.appendChild(document.createTextNode(part));
+    });
+  }
+  function enabled(it) {
+    var p = it.params;
+    return it.children.length > 0 || p.bash !== undefined || p.href !== undefined || p.refresh === "true";
+  }
+
+  function buildMenu(items, openPath, x, y, stage) {
+    var menu = document.createElement("div"), hasIcon = false, hasCheck = false, openRow = null, openItem = null;
+    menu.className = "menu";
+    items.forEach(function (it) { if (it.params.sfimage) hasIcon = true; if (it.params.checked === "true") hasCheck = true; });
+    items.forEach(function (it) {
+      if (it.sep) { var s = document.createElement("div"); s.className = "sep"; menu.appendChild(s); return; }
+      var row = document.createElement("div"), size = parseFloat(it.params.size || "14");
+      row.className = "row" + (enabled(it) ? "" : " disabled") + (size < 13 ? " small" : "");
+      row.style.fontSize = size + "px";
+      var isOpen = openPath.length && it.text.indexOf(openPath[0]) === 0 && !openRow;
+      if (isOpen) { row.classList.add("hl"); openRow = row; openItem = it; }
+      var tint = isOpen ? null : sfColor(it.params);
+      if (hasCheck) {
+        var g = document.createElement("span"); g.className = "gutter";
+        if (it.params.checked === "true") { var c = symbol("checkmark", 11); if (c) g.appendChild(c); }
+        row.appendChild(g);
+      }
+      if (hasIcon) {
+        var ic = document.createElement("span"); ic.className = "icon";
+        var sy = it.params.sfimage && symbol(it.params.sfimage, 15, tint);
+        if (sy) ic.appendChild(sy);
+        row.appendChild(ic);
+      }
+      var t = document.createElement("span"); t.className = "text";
+      richText(t, it.text, Math.round(size), it.params.symbolize !== "false", null);
+      row.appendChild(t);
+      if (it.children.length) {
+        var ch = document.createElement("span"); ch.className = "chev";
+        var cs = symbol("chevron.right", 11); if (cs) ch.appendChild(cs);
+        row.appendChild(ch);
+      }
+      menu.appendChild(row);
+    });
+    menu.style.left = x + "px"; menu.style.top = y + "px";
+    stage.appendChild(menu);
+    if (openRow && openItem.children.length) {
+      var r = openRow.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      buildMenu(openItem.children, openPath.slice(1), r.right - sr.left + 6, r.top - sr.top - 5, stage);
+    }
+  }
+
+  var data = parse(window.MENU || ""), stage = document.getElementById("stage");
+  stage.style.width = "4000px"; stage.style.height = "4000px";
+  // The status item: the plugin's first title line, with its sfcolor on the symbols.
+  var head = data.title[0] || "", bar = head.indexOf("|"), tp = {}, re = /(\w+)=(\S+)/g, m;
+  if (bar >= 0) { while ((m = re.exec(head.slice(bar + 1)))) tp[m[1]] = m[2]; head = head.slice(0, bar).replace(/\s+$/, ""); }
+  var item = document.createElement("div"); item.id = "item"; item.style.left = "60px";
+  richText(item, head, 16, true, tp.sfcolor || null);
+  stage.appendChild(item);
+  buildMenu(data.root.children, OPEN, 60, 33, stage);
+
+  // Fit the stage to what was drawn, with a margin of desktop around it.
+  var maxR = 0, maxB = 0;
+  Array.prototype.forEach.call(document.querySelectorAll(".menu, #item"), function (el) {
+    maxR = Math.max(maxR, el.offsetLeft + el.offsetWidth);
+    maxB = Math.max(maxB, el.offsetTop + el.offsetHeight);
+  });
+  var W = Math.ceil(maxR + 48), H = Math.ceil(maxB + 44);
+  // A fixed size is for GIF frames, which can't have soft corners.
+  if (window.FIXED) { W = window.FIXED[0]; H = window.FIXED[1]; stage.style.borderRadius = "0"; }
+  stage.style.width = W + "px"; stage.style.height = H + "px";
+  document.title = W + " " + H;
+})();
+</script>
+</body>
+</html>

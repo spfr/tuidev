@@ -19,6 +19,7 @@ export HOME="$DEMO_HOME" DEMO_FIXTURES="$tapes/fixtures"
 export PATH="$DEMO_HOME/.demo/stubs:$PATH"
 export HERDR_SOCKET_PATH="$DEMO_HOME/.demo/herdr.sock"
 export AGENTS_RUN_DIR="$DEMO_HOME/.config/tuidev/run" AGENTS_CONF="$DEMO_HOME/.config/agents.conf"
+export AGENTS_DATA_DIR="$DEMO_HOME/.local/state/tuidev/agents"
 # The fixture's uid, and a pid that is not in it (bin/agents hides its own tree).
 export AGENTS_TESTING=1 AGENTS_UID=501 AGENTS_SELF=99999 AGENTS_EUID=501
 

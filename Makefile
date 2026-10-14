@@ -130,7 +130,7 @@ check-remote: ## Health check against the remote profile
 SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
                scripts/install/*.sh scripts/install/packs/*.sh \
                scripts/migrations/*.sh bin/sbx bin/agents lib/agents/*.sh configs/swiftbar/*.sh \
-               docs/assets/tapes/*.sh docs/assets/tapes/bin/agents
+               docs/assets/tapes/*.sh docs/assets/tapes/herdr/*.sh docs/assets/tapes/bin/agents
 
 lint: ## Shellcheck every shell script (install, scripts, libs, packs, migrations, sbx)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found. brew install shellcheck"; exit 1; }
@@ -223,7 +223,7 @@ theme: ## Apply a theme: make theme NAME=catppuccin-mocha
 # Docs
 # ----------------------------------------------------------------------------
 
-screenshots: ## Re-render docs/assets/*.png and tour.gif from their VHS tapes (TAPES="agents sbx" for some)
+screenshots: ## Re-render docs/assets/ from the VHS tapes and render_menu.sh (TAPES="agents menu" for some)
 	@./scripts/screenshots.sh $(TAPES)
 
 # ----------------------------------------------------------------------------

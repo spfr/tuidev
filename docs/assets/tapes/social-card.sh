@@ -28,7 +28,7 @@ echo
 for line in "${title[@]}"; do centre 46 $'\033[90m' "${line//█/$'\033[34m'█$'\033[90m'}"; done
 echo
 centre 49 $'\033[1m' "The terminal dev environment for AI coding agents"
-centre 45 $'\033[1;32m' "modern CLI · sandboxed agents · orchestration"
+centre 48 $'\033[1;32m' "agents on every machine · cleaned up · sandboxed"
 echo
 centre 49 $'\033[37m' "Herdr · Claude Code · Codex · macOS · Linux · MIT"
 sleep "${1:-30}"

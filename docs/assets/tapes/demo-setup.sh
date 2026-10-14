@@ -37,6 +37,19 @@ mkdir -p "$home/.claude"
 # `agents awake agents` is on, held by pid 8800 in fixtures/ps.txt.
 echo "8800 Wed_Oct_14_09:02:00_2026 agents 0" > "$home/.config/tuidev/run/awake"
 
+# The background task api's polling loop (pid 2120) waits on: it finished 5h
+# ago, so its last line is Claude Code's exit marker and the loop's
+# `grep -qE "^(ok|FAIL)"` will never match. `agents why 2120` reads it.
+task="$home/.demo/claude-501/tasks/b1.output"
+if [[ ! -f "$task" ]]; then
+    mkdir -p "$(dirname "$task")"
+    printf '=== RUN   TestHealth\n--- PASS: TestHealth (0.00s)\nPASS\nok  \tapi/routes\t0.412s\n[exited with code 0]\n' > "$task"
+    perl -e '$t = time - 5 * 3600; utime $t, $t, $ARGV[0]' "$task"
+fi
+
+# A made-up week of CPU samples and cleanups, for `agents report` and the menu.
+bash "$tapes/demo-history.sh" "$home"
+
 for tool in ps lsof launchctl sysctl memory_pressure pmset notifyutil herdr; do
     ln -sf "$tapes/demo-stub.sh" "$home/.demo/stubs/$tool"
 done
