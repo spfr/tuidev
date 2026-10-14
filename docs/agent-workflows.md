@@ -359,7 +359,72 @@ With `AGENTS_HISTORY=1` (the default), `agents` keeps a local history in `~/.loc
 - **Sampling.** `agents sample` takes one sample: one `ps` snapshot, classified by job, and one row per job, project and session kind in `history.tsv`: `epoch job project session cpu_s rss_kib procs` (`session` is `claude` or `codex`, `-` for a stale tree). `cpu_s` is the CPU time used since the previous sample, from each process's CPU time keyed by `pid@start` (so a reused pid starts afresh), not the moment's `%cpu`. A process that ends between two samples loses its last interval, so runs much shorter than a minute count low. Rows without CPU are left out. One sample runs at a time, and history and events older than `AGENTS_HISTORY_DAYS` (30) are dropped once a day (under the same lock every event is appended with, so a prune never loses one). `sample.state` keeps each process's CPU time and whether a sample saw it under an agent: the provenance auto-reap needs before it stops a stale tree.
 - **Who samples.** The menu bar starts `agents sample` in the background whenever the last sample is a minute old, and so does `agents watch` while it runs. Without either (Linux, a headless box), add a cron line (`crontab -e`): `* * * * * $HOME/.local/bin/agents sample`.
 - **Cleanups.** `events.tsv` holds one line per cleanup: `epoch kind reason pid name project session` (`session` is `claude:PID`, or `-` for a stale tree), written by `kill`, `reap`, auto-reap and the session hooks.
-- **`agents report [--since 24h|7d|30d|today] [--json]`** (default `24h`) reads both files: total CPU-hours, CPU-hours by job with their share, the top projects with their main job, CPU by session kind, the busiest hours of the day, and the cleanups by reason and kind with the projects that leave things behind most. `--json` prints the same as one object (`schema_version` 1: `since`, `until`, `window`, `history`, `cpu_s`, `jobs`, `projects` with their `main_job` and `jobs`, `sessions`, `hours`, `cleanups` with `total`, `by_reason`, `by_kind`, `projects`). With no history yet it says so: the first numbers arrive a minute or two after the menu starts.
+- **`agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]`** (default `--view summary`, `--since 24h`). The summary reads both files: total CPU-hours, CPU-hours by job with their share, the top projects with their main job, CPU by session kind, the busiest hours of the day, and the cleanups by reason and kind with the projects that leave things behind most. It opens with **Top insights**, the three most actionable findings from the run ledger (below). With no history yet it says so: the first numbers arrive a minute or two after the menu starts.
+
+#### The run ledger's views
+
+`runs.tsv`, in the same directory, holds one row per finished run: `end_epoch start_epoch job project session agent cmd duration_s cpu_s peak_rss_kib exit dup cleaned` (`agent` is the subagent type, `main` or `-`; `cmd` a name only, such as `go`, `pytest`, `make` or `wait-loop`; `dup` and `cleaned` are 0 or 1). A run counts in the window it ended in. Four views read it, each for `--since` (`trends` defaults to `7d`):
+
+| View | Shows |
+|------|-------|
+| `runs` | the most repeated commands per project (runs, CPU-h, median and p90 duration, failure rate), then the slowest tests and builds by median |
+| `waste` | duplicate runs and their CPU, runs left running until a cleanup stopped them (their hours and CPU, by agent type and job), polling loops' waiting time, and failed runs re-run at once |
+| `trends` | this window against the one before it (`7d`: this week against last; `today`: yesterday by this hour), per project and per job: CPU-h, runs and median duration, with ↑/↓ and the change in %, regressions flagged |
+| `agents` | runs, CPU, failure rate, duplicates, leaks and polling time per agent type (`main` and each subagent type), then which types leak and duplicate most |
+
+The definitions are the same in every view. A run **failed** when its exit code is known and not 0; a run a cleanup stopped counts in no failure rate. A failed run is **re-run at once** when the same command (project, `cmd`, job) from the same session starts within 120 s of its end; the failed run's CPU counts as wasted. The **median** is the middle run (the mean of the two middle ones for an even count), **p90** the nearest rank. A **regression** in `trends` is more CPU (up by half and by 0.25 CPU-h or more) or slower runs (the median up by half and by 30 s or more, with 5 or more runs in each window).
+
+```text
+$ agents report --view waste
+agents report · waste · last 24h
+
+DUPLICATES  3 runs · 0.33 CPU-h (16% of the runs' CPU)
+  PROJECT              COMMAND      JOB      RUNS   CPU-h
+  app                  go           test        3    0.33
+
+LEFT RUNNING  3 runs, until a cleanup stopped them · 2.1 h · 0.00 CPU-h
+  by agent    Explore 3 (2.1 h)
+  by job      wait 3 (2.1 h)
+
+POLLING LOOPS  5 · 4.1 h waiting
+  by agent    Explore 3 (2.1 h) · main 2 (2.0 h)
+
+FAILED, RE-RUN AT ONCE  2 runs · 0.11 CPU-h
+  PROJECT              COMMAND      JOB      RUNS   CPU-h
+  shop                 pytest       test        2    0.11
+
+$ agents report --view trends --since 24h
+agents report · trends · last 24h vs the 24h before
+
+  PROJECT                CPU-h  BEFORE  CHANGE   RUNS  CHANGE   MEDIAN  CHANGE
+  app                     1.11    0.83    ↑33%     12   ↑500%    6m30s    ↑30%
+  api                     0.67    0.22   ↑200%      5      0%       5m   ↑400%  more CPU, slower
+  shop                    0.28    0.00     new      8     new    3m20s     new
+```
+
+#### Reading the insights
+
+Each finding gets an impact in CPU seconds, and the summary lists the three largest of 5 CPU-min or more, each with what to do:
+
+| Finding | When | Impact |
+|---------|------|--------|
+| duplicates | a command ran as a duplicate twice or more | the duplicates' CPU |
+| re-runs | a command failed and was re-run at once twice or more | the failed runs' CPU |
+| leaks | an agent type's runs were stopped by a cleanup | their CPU, plus a tenth of the hours they ran (an hour left running counts as 6 CPU-min) |
+| polling | an agent type's polling loops (not cleaned up) waited an hour or more | a tenth of those hours |
+| regression | a project's CPU rose by half and by 0.25 CPU-h or more on the window before | the rise |
+
+```text
+TOP INSIGHTS
+  1. api: 40 CPU-min in 24h, ↑200% on the 24h before (build +27 CPU-min) — see what changed: agents report --view trends
+  2. app: `go` test runs ×10 in 24h, 5m30s median, 3 duplicates (20 CPU-min) — consider a shared test cache or serializing them
+  3. Explore subagents left 3 polling loops running in 24h (2.1 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
+```
+
+Read them as leads, not verdicts: a regression may be a bigger change landing, and duplicates of a test suite may be two worktrees on purpose. The view named in each line holds the detail. Without a ledger (`runs.tsv` missing or empty), nothing is guessed: the summary says so in one line, and a ledger view shows the summary with that line.
+
+- **`--json`** prints any view as one object (`schema_version` 1; fields are only ever added). Every view has `view`, `since`, `until`, `window` and `ledger` (false without a ledger, its lists then empty). The summary adds `history`, `cpu_s`, `jobs`, `projects` with their `main_job` and `jobs`, `sessions`, `hours`, `cleanups` (`total`, `by_reason`, `by_kind`, `projects`) and `insights` (`kind`, `view`, `impact_s`, `project`, `agent`, `cmd`, `job`, `text`). `runs` has `runs`, `cpu_s`, `exit_known`, `failed`, `commands` (every command: `project`, `cmd`, `job`, `runs`, `cpu_s`, `median_s`, `p90_s`, `max_s`, `exit_known`, `failed`, `fail_pct`, `dups`, `dup_cpu_s`, `reruns`, `rerun_cpu_s`) and `slowest`; `waste` has `run_cpu_s`, `duplicates`, `cleaned` (with `agents` and `jobs`), `wait` and `reruns`; `trends` has `previous` (`since`, `until`), `projects` and `jobs` (`cpu_s`, `prev_cpu_s`, `runs`, `prev_runs`, `median_s`, `prev_median_s`, `more_cpu`, `slower`); `agents` has `runs`, `cpu_s` and `agents` (`agent`, `runs`, `cpu_s`, `pct`, `exit_known`, `failed`, `dups`, `dup_cpu_s`, `cleaned`, `cleaned_cpu_s`, `cleaned_s`, `wait_runs`, `wait_s`).
+- **The menu's insight.** `agents_insight_write` (in `lib/agents/report.sh`) writes today's top insight to `insight.txt` (`epoch until view text`), at most every 5 minutes, after a sample; `agents tsv` passes it on while it is current (an hour, and never past midnight), and the menu shows it under Today.
 
 ### Menu bar (SwiftBar, macOS)
 
@@ -369,7 +434,7 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents
 - **Menu**, in the order of `AGENTS_BAR_SECTIONS` (sections with nothing to show are left out):
   - **Needs you:** sessions Herdr reports as blocked, waiting for input or a permission; commands running more than once (`myapp: 3× go test running`, with Stop duplicates (keep newest)…) commands running longer than `AGENTS_TOOL_LONG` (with Stop command…), and polling loops flagged `stuck` (`myapp: until tail -1 $F … · stuck 3h27m`, an orange hourglass, with Stop command…). A polling loop that is not stuck stays out of it. Stuck loops and long or duplicate commands tint the icon orange, but only blocked sessions count in the title's `· N blocked`. Each stuck or long command ends with its verdict (`· safe to stop`, `· check first`, `· informational`; orange for the first two, gray otherwise; see [Needs you](#needs-you-is-it-safe-to-stop)), and its submenu holds the full verdict, the evidence and the auto-reap note, then Stop command… (asks first), Copy details (`agents why --copy`) and Show session (`agents ps` of the owning session in your terminal). Stopping is one choice among those, not the only one.
   - **Agents:** one line per session: project, kind, status, CPU and memory, with a dot colored by status (orange blocked, green working, gray idle). When its commands use most of the CPU the row says so (`735% (tools 728%)`). Clicking it shows the project in Finder. Its submenu holds the full path, pid, age, children and ports; Running (N), one line per command (command, age, CPU, origin, flags) with Stop command… (asks first); the MCP servers on one line; Stop duplicates (keep newest)… when a command runs twice; and Kill session…, Copy path, Open in Finder and Copy PID. The Codex daemon follows on its own line with a gear.
-  - **Where the CPU goes:** the CPU of agent work right now by job type, busiest first (`tests · 412% · 1.1G`), each with a submenu of the sessions behind it (project, kind, CPU, memory; clicking one shows its project in Finder). Then `Today: 3.4 CPU-h · tests 40%` from the history, and Open report, which opens `agents report` in your terminal. Each refresh that finds the last sample a minute old starts `agents sample` in the background; the menu never waits for it.
+  - **Where the CPU goes:** the CPU of agent work right now by job type, busiest first (`tests · 412% · 1.1G`), each with a submenu of the sessions behind it (project, kind, CPU, memory; clicking one shows its project in Finder). Then `Today: 3.4 CPU-h · tests 40%` from the history, today's top insight when there is one (a lightbulb; clicking it opens that view of the report), and Open report, which opens `agents report` in your terminal. Each refresh that finds the last sample a minute old starts `agents sample` in the background; the menu never waits for it.
   - **Stale:** each with its verdict (a helper is safe to stop; a server is check first), the evidence, Kill tree and Copy details, plus Reap all stale, which kills exactly the processes listed, not whatever is stale when you click.
   - **Hogs:** each with Terminate (SIGTERM, your own processes only).
   - **Awake:** the state (off, while agents run, time left, `lid closed · 2h41m left`), with a check mark on the active choice among Until turned off, For 1 hour, For 3 hours, While agents run and Off, plus who holds the Mac awake. A Lid closed too… group offers 1, 3 and 8 hours (up to `AGENTS_LID_MAX`; `AGENTS_LID=0` hides it), each running `agents awake lid` and asking for your password. While lid mode is on, End lid mode now… ends it (one dialog). When sleep is disabled with nothing to restore it, a red Restore lid sleep… item leads Needs you and the Awake section. A menu action has no terminal, so lid mode's results come back as macOS notifications: on, failed to start (and that sleep was restored), cancelled, restored.
