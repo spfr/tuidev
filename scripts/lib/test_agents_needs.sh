@@ -91,6 +91,23 @@ printf 'one\ttwo \033[32mok\033[0m\n   \n\n' > "$W/ctl.log"
 mkfifo "$W/fifo" 2>/dev/null && { [[ -z "$(_agents_last_line "$W/fifo")" ]] || fail "a FIFO was read"; }
 pass "watched files: mtime from one stat, the last non-blank line from the file's tail, a gone file says so"
 
+# Credential files are never read for a last line: by path, through a
+# symlinked directory or file, in any case; their neighbours still are.
+mkdir -p "$HOME/.ssh" "$HOME/.config/gh" "$HOME/.sshx"
+printf 'PRIVATE KEY\n' > "$HOME/.ssh/id_x"; printf 'machine x password y\n' > "$HOME/.netrc"
+printf 'oauth: t\n' > "$HOME/.config/gh/hosts.yml"; printf 'fine\n' > "$HOME/.sshx/log"; printf 'fine\n' > "$HOME/.netrc.log"
+for f in "$HOME/.ssh/id_x" "$HOME/.netrc" "$HOME/.config/gh/hosts.yml"; do
+    [[ -z "$(_agents_last_line "$f")" ]] || fail "a credential file was read: $f"
+done
+ln -s "$HOME/.ssh" "$W/sshdir"; ln -s "$HOME/.netrc" "$W/netrc-link"
+[[ -z "$(_agents_last_line "$W/sshdir/id_x")" ]] || fail "a credential file read through a symlinked directory"
+[[ -z "$(_agents_last_line "$W/netrc-link")" ]] || fail "a credential file read through a symlink"
+_agents_cred_path "$HOME/.SSH/id_x" || fail "credential paths compared with case"
+if _agents_cred_path "$HOME/.sshx/log" || _agents_cred_path "$HOME/.netrc.log"; then fail "a neighbour of a credential path refused"; fi
+[[ "$(_agents_last_line "$HOME/.sshx/log")/$(_agents_last_line "$HOME/.netrc.log")" == "fine/fine" ]] || fail "a neighbour of a credential path not read"
+[[ "$(_agents_watch_info "7001"$'\t'"$HOME/.ssh/id_x" | cut -f5)" == - ]] || fail "a watched credential file's last line reached the evidence"
+pass "credential files (configs/sandbox/credential-paths.txt) are never read for a last line, even through symlinks"
+
 # The enriched records, as agents_collect hands them on: the stuck flags come
 # from the watched files' state relative to the same fixed now.
 cwds="$(for p in 5000 5010 5020 5030 5040 5050 5060 5070 5080 5090; do printf '%s\t%s\n' "$p" "$HOME/work/myapp"; done; printf '6100\t%s\n' "$HOME/work/app")"
