@@ -321,7 +321,7 @@ lid_guard_running() {
     local pid
     read -r pid _ < "${AGENTS_RUN_DIR:-$TUIDEV_STATE_DIR/run}/lid" 2>/dev/null || return 1
     [[ "$pid" =~ ^[0-9]+$ ]] || return 1
-    LC_ALL=C ps -ww -o uid=,args= -p "$pid" 2>/dev/null | awk 'NR == 1 && $1 == 0 { r = 1 } / agents-lid-guard / { g = 1 } END { exit !(r && g) }'
+    LC_ALL=C ps -ww -o ruid=,args= -p "$pid" 2>/dev/null | awk 'NR == 1 && $1 == 0 { r = 1 } / agents-lid-guard / { g = 1 } END { exit !(r && g) }'
 }
 
 # ---------------------------------------------------------------------------

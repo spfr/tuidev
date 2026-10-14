@@ -22,7 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when thermal pressure reaches heavy. The usual `caffeinate -di` holder
   runs alongside for the same time. `agents awake off` ends it early (one more
   dialog), and `agents awake restore` turns lid sleep back on whatever
-  disabled it. macOS keeps the setting across a reboot that kills the guard,
+  disabled it; `awake on` and `awake agents` replace only the `caffeinate`
+  holder and leave lid mode running. The dialog comes from
+  `/usr/bin/osascript` started with an empty environment, and the root
+  command uses absolute paths only. A guard is signalled, or counted as
+  running, only while it is root's (real uid) and named `agents-lid-guard`. macOS keeps the setting across a reboot that kills the guard,
   so `agents`, `agents awake status`, the menu (a red Restore lid sleep…) and
   `make check` warn: "lid sleep disabled with nothing to restore it". The
   menu's Lid closed too… group (1h, 3h, 8h) shows only with `AGENTS_LID=1`.

@@ -968,7 +968,9 @@ restore'
 # _agents_lid_cmd start SECS BATTERY [OLD_GUARD] | stop [GUARD] — the command
 # `do shell script` runs as root. Only the numbers checked here are added to
 # fixed text; anything else is refused (exit 2). A guard pid is signalled only
-# while it is root's and still named agents-lid-guard.
+# while its real uid is root's and it is still named agents-lid-guard. Every
+# command is an absolute path (no echo, [ or exit that an inherited function
+# could replace).
 _agents_lid_cmd() {
     local what="$1" secs="" batt="" old="" retire=""
     case "$what" in
@@ -979,30 +981,39 @@ _agents_lid_cmd() {
     esac
     if [[ -n "$old" ]]; then
         [[ "$old" =~ ^[1-9][0-9]{0,7}$ ]] || return 2
-        retire="if [ \"\$(/bin/ps -o uid= -p $old)\" -eq 0 ] 2>/dev/null && /bin/ps -ww -o args= -p $old | /usr/bin/grep -q \" agents-lid-guard \"; then /bin/kill -USR1 $old; fi"
+        retire="if /bin/test \"\$(/bin/ps -o ruid= -p $old)\" -eq 0 2>/dev/null && /bin/ps -ww -o args= -p $old | /usr/bin/grep -q \" agents-lid-guard \"; then /bin/kill -USR1 $old; fi"
     fi
     [[ "$_AGENTS_LID_GUARD" != *"'"* ]] || return 2
     if [[ "$what" == stop ]]; then
         printf '/usr/bin/pmset -a disablesleep 0%s\n' "${retire:+; $retire}"
     else
         # env -i: the root bash reads nothing from the caller's environment (BASH_ENV).
-        printf "%s/usr/bin/pmset -a disablesleep 1 || exit 1; /usr/bin/nohup /usr/bin/env -i /bin/bash -c '%s' agents-lid-guard %s %s </dev/null >/dev/null 2>&1 & echo \$!\n" \
+        printf "%sif /usr/bin/pmset -a disablesleep 1; then /usr/bin/nohup /usr/bin/env -i /bin/bash -c '%s' agents-lid-guard %s %s </dev/null >/dev/null 2>&1 & /bin/echo \$!; fi\n" \
             "${retire:+$retire; }" "$_AGENTS_LID_GUARD" "$secs" "$batt"
     fi
 }
 
+# The osascript that asks for the password: always /usr/bin/osascript, except
+# that the test harness (AGENTS_TESTING) points it at a stub.
+_agents_osascript() {
+    if [[ -n "${AGENTS_TESTING:-}" && -n "${AGENTS_OSASCRIPT:-}" ]]; then echo "$AGENTS_OSASCRIPT"; else echo /usr/bin/osascript; fi
+}
+
 # _agents_admin_run COMMAND PROMPT — run COMMAND as root after macOS's own
 # password dialog (PROMPT says why). Both travel as arguments, never inside
-# AppleScript source. Fails when the dialog is cancelled.
+# AppleScript source, and osascript starts with an empty environment, so no
+# PATH, BASH_ENV or exported function reaches the root shell. Fails when the
+# dialog is cancelled; osascript's own message goes to stderr.
 _agents_admin_run() {
-    command -v osascript >/dev/null 2>&1 || { echo "agents: no osascript to ask for an administrator password" >&2; return 1; }
-    osascript -e 'on run argv' \
+    local osa; osa="$(_agents_osascript)"
+    [[ -x "$osa" ]] || { echo "agents: no $osa to ask for an administrator password" >&2; return 1; }
+    /usr/bin/env -i "$osa" -e 'on run argv' \
         -e 'do shell script (item 1 of argv) with prompt (item 2 of argv) with administrator privileges' \
-        -e 'end run' "$1" "$2" 2>/dev/null
+        -e 'end run' "$1" "$2"
 }
 
 _agents_lid_supported() {
-    command -v pmset >/dev/null 2>&1 && command -v osascript >/dev/null 2>&1 && return 0
+    command -v pmset >/dev/null 2>&1 && [[ -x "$(_agents_osascript)" ]] && return 0
     echo "agents: keeping awake with the lid closed is macOS only (it needs pmset and osascript)" >&2
     return 2
 }
@@ -1019,9 +1030,21 @@ agents_lid_state() {
     if ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; then
         _agents_rm_if_same "$file" "$content"; return 1
     fi
-    now="$(_agents_start "$pid" 2>/dev/null)"
-    if [[ -n "$now" && -n "$start" && "$start" != - ]]; then
-        if [[ "$now" != "$start" ]]; then _agents_rm_if_same "$file" "$content"; return 1; fi
+    if [[ -n "$start" && "$start" != - ]]; then
+        now="$(_agents_start "$pid" 2>/dev/null)"
+        if [[ -n "$now" ]]; then
+            if [[ "$now" != "$start" ]]; then _agents_rm_if_same "$file" "$content"; return 1; fi
+            verified=1
+        fi
+    else
+        # No start time was recorded: only root's agents-lid-guard counts. A
+        # pid that now names something else is dropped; when ps answers
+        # nothing, it can't be told, and the guard is not counted as live.
+        now="$(LC_ALL=C ps -ww -o ruid=,args= -p "$pid" 2>/dev/null)"
+        [[ -n "$now" ]] || return 1
+        if ! printf '%s\n' "$now" | awk 'NR == 1 && $1 == 0 { r = 1 } / agents-lid-guard / { g = 1 } END { exit !(r && g) }'; then
+            _agents_rm_if_same "$file" "$content"; return 1
+        fi
         verified=1
     fi
     echo "$pid ${until:-0} $verified"
@@ -1056,6 +1079,7 @@ agents_awake_lid() {
         echo "agents: AGENTS_LID_MIN_BATTERY must be 0-100" >&2; return 2
     fi
     _agents_inhibitor || return 1
+    mkdir -p "$AGENTS_RUN_DIR" || return 1
     # Refuse before the dialog what we could not clean up after it.
     if state="$(agents_awake_state)" && [[ "${state##* }" != 1 ]]; then
         echo "awake: can't verify the current keep-awake holder (pid ${state%% *}); run 'agents awake off' first" >&2; return 1
@@ -1064,18 +1088,21 @@ agents_awake_lid() {
         read -r pid _ v <<<"$state"; [[ "$v" == 1 ]] && old="$pid"
     fi
     cmd="$(_agents_lid_cmd start "$secs" "$AGENTS_LID_MIN_BATTERY" "$old")" || { echo "agents: refusing to build the root command" >&2; return 2; }
-    if ! out="$(_agents_admin_run "$cmd" "agents wants to keep your Mac awake with the lid closed for $dur. Lid sleep comes back after that, below ${AGENTS_LID_MIN_BATTERY}% battery, or when the Mac runs hot.")"; then
-        echo "awake: cancelled (no administrator rights); nothing changed" >&2; return 1
+    if ! out="$(_agents_admin_run "$cmd" "agents wants to keep your Mac awake with the lid closed for $dur. Lid sleep comes back after that, below ${AGENTS_LID_MIN_BATTERY}% battery, or when the Mac runs hot." 2>"$AGENTS_RUN_DIR/lid.err")"; then
+        _agents_admin_failed "lid mode was not started"; return 1
     fi
-    rm -f "$AGENTS_RUN_DIR/powermode"
+    rm -f "$AGENTS_RUN_DIR/lid.err"
     gpid="${out##*$'\n'}"
     if [[ ! "$gpid" =~ ^[0-9]+$ ]]; then
+        rm -f "$AGENTS_RUN_DIR/powermode"
         echo "awake: lid sleep may be off with no guard to restore it: run '$_AGENTS_LID_FIX'" >&2; return 1
     fi
     until=$(( $(date +%s) + secs ))
-    mkdir -p "$AGENTS_RUN_DIR"
     start="$(_agents_start "$gpid")"
+    # The record first, then the cached SleepDisabled: never "disabled with no
+    # guard" in between.
     printf '%s %s %s\n' "$gpid" "${start:--}" "$until" > "$AGENTS_RUN_DIR/lid"
+    rm -f "$AGENTS_RUN_DIR/powermode"
     _agents_awake_off_holder >/dev/null || true
     ( trap '' HUP; _agents_hold "$secs" ) </dev/null >/dev/null 2>&1 &
     pid=$!
@@ -1095,11 +1122,29 @@ agents_lid_stop() {
     fi
     _agents_lid_supported || return 2
     cmd="$(_agents_lid_cmd stop "$pid")" || { echo "agents: refusing to build the root command" >&2; return 2; }
-    if ! _agents_admin_run "$cmd" "agents wants to let your Mac sleep with the lid closed again." >/dev/null; then
-        echo "awake: cancelled; lid sleep is still disabled" >&2; return 1
+    mkdir -p "$AGENTS_RUN_DIR" || return 1
+    if ! _agents_admin_run "$cmd" "agents wants to let your Mac sleep with the lid closed again." >/dev/null 2>"$AGENTS_RUN_DIR/lid.err"; then
+        _agents_admin_failed "lid sleep was not restored"; return 1
     fi
-    rm -f "$AGENTS_RUN_DIR/lid" "$AGENTS_RUN_DIR/powermode"
+    rm -f "$AGENTS_RUN_DIR/lid.err"
+    # The cached SleepDisabled first, then the record (see agents_awake_lid).
+    rm -f "$AGENTS_RUN_DIR/powermode"
+    rm -f "$AGENTS_RUN_DIR/lid"
     echo "awake: lid sleep restored"
+}
+
+# _agents_admin_failed WHAT — report a failed admin step with osascript's own
+# message. Cancelling the dialog (-128) runs nothing; any other failure may
+# have run part of the root command, so say how to check.
+_agents_admin_failed() {
+    local err=""
+    err="$(cat "$AGENTS_RUN_DIR/lid.err" 2>/dev/null)"; rm -f "$AGENTS_RUN_DIR/lid.err" "$AGENTS_RUN_DIR/powermode"
+    if [[ "$err" == *"(-128)"* ]]; then
+        echo "awake: cancelled in the password dialog; $1, nothing ran as root" >&2
+    else
+        echo "awake: the administrator step failed${err:+: $err}" >&2
+        echo "awake: $1 as asked, but part of it may have run: check 'pmset -g | grep SleepDisabled'; to be sure, run '$_AGENTS_LID_FIX'" >&2
+    fi
 }
 
 # agents_awake_off — release: lid mode first (when on), then the holder.
@@ -1131,7 +1176,9 @@ agents_awake_on() {
         secs="$(agents_parse_duration "$1")" || { echo "agents: bad duration '$1' (try 30m, 2h, 1h30m)" >&2; return 2; }
         until=$(( $(date +%s) + secs ))
     fi
-    agents_awake_off >/dev/null || return 1
+    # Only the holder is replaced: lid mode, when on, keeps running until it
+    # times out or `awake off` / `awake restore` ends it (no dialog here).
+    _agents_awake_off_holder >/dev/null || return 1
     ( trap '' HUP; _agents_hold "$secs" ) </dev/null >/dev/null 2>&1 &
     pid=$!
     disown "$pid" 2>/dev/null
@@ -1147,7 +1194,7 @@ agents_awake_agents() {
         echo "awake: no claude or codex session is running; nothing to hold"
         return 0
     fi
-    agents_awake_off >/dev/null || return 1
+    _agents_awake_off_holder >/dev/null || return 1   # lid mode keeps running
     nohup bash "$AGENTS_PATH" _awake-loop </dev/null >/dev/null 2>&1 &
     pid=$!
     disown "$pid" 2>/dev/null
@@ -1179,6 +1226,7 @@ _agents_awake_loop() {
     exit 0
 }
 
+_agents_field() { local a; read -r -a a <<<"$2"; echo "${a[$1 - 1]}"; }   # N WORDS
 _agents_clock() { date -r "$1" +%H:%M 2>/dev/null || date -d "@$1" +%H:%M 2>/dev/null; }
 
 agents_awake_line() {
@@ -1189,8 +1237,8 @@ agents_awake_line() {
         local note="pid $pid"
         [[ "$verified" == 1 ]] || note="pid $pid, unverified"
         case "$mode" in
-            timed)  echo "awake: on until $(_agents_clock "$until") ($note)" ;;
-            agents) echo "awake: while agents run ($note)" ;;
+            timed)  echo "awake: on until $(_agents_clock "$until") ($note)${lid:+; lid closed too until $(_agents_clock "$(_agents_field 2 "$lid")")}" ;;
+            agents) echo "awake: while agents run ($note)${lid:+; lid closed too until $(_agents_clock "$(_agents_field 2 "$lid")")}" ;;
             lid)    if [[ -n "$lid" ]]; then echo "awake: lid closed too, until $(_agents_clock "$until") ($note; guard pid ${lid%% *})"
                     else echo "awake: on until $(_agents_clock "$until") ($note; lid mode ended, a closed lid sleeps again)"; fi ;;
             *)      echo "awake: on ($note)" ;;
