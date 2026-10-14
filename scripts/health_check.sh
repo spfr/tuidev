@@ -299,7 +299,7 @@ check_extras() {
 pack_probe() {
     # Returns the probe command for a given pack name.
     case "$1" in
-        monitoring)         echo "have_cmd btm || have_cmd bottom || have_cmd htop" ;;
+        monitoring)         echo "have_cmd agents && { have_cmd btm || have_cmd bottom || have_cmd htop; }" ;;
         sandbox-container)  echo "have_cmd container || have_cmd podman || have_cmd docker" ;;
         herdr)              echo "have_cmd herdr" ;;
         fnm)                echo "have_cmd fnm" ;;
@@ -332,6 +332,22 @@ check_packs() {
         probe="$(pack_probe "$pack")"
         check_optional "pack: $pack" "$probe"
     done
+
+    # The monitoring pack's SwiftBar plugin (macOS), wherever the manifest put it.
+    case " ${packs[*]} " in
+        *" monitoring "*) is_macos && check_optional "SwiftBar agents plugin" swiftbar_plugin_present ;;
+    esac
+    return 0
+}
+
+# Probe: the SwiftBar plugin the monitoring pack recorded is in place.
+# shellcheck disable=SC2329  # invoked through check_optional's eval
+swiftbar_plugin_present() {
+    local p
+    while IFS= read -r p; do
+        [[ -x "$p" ]] && return 0
+    done < <(tuidev_manifest_values file | grep -E '/agents\.[0-9]+[smhd]\.sh$')
+    return 1
 }
 
 # ---------------------------------------------------------------------------

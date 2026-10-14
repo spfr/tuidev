@@ -144,6 +144,11 @@ each_line "$M_GIT" _unset_git_record
 
 print_header "removing tuidev helpers"
 
+# Release a keep-awake hold `agents` started before the helper goes away.
+if [[ -x "$HOME/.local/bin/agents" ]]; then
+    run_cmd "$HOME/.local/bin/agents" awake off || true
+fi
+
 _remove_helper() {
     case "$1" in "$HOME/.local/bin/"*) ;; *) return 0 ;; esac
     [[ -e "$1" || -L "$1" ]] || return 0
@@ -155,7 +160,7 @@ if $MANIFEST_MODE; then
     each_line "$M_FILES" _remove_helper
 else
     # Without a record, remove a helper only if it is still exactly ours.
-    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh"; do
+    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents"; do
         f="$HOME/.local/bin/${pair%%:*}"
         if [[ -f "$f" ]] && cmp -s "$f" "$SCRIPT_DIR/${pair#*:}"; then
             _remove_helper "$f"
@@ -163,6 +168,29 @@ else
             print_info "kept $f (differs from the repo copy — review it yourself)"
         fi
     done
+fi
+
+# The SwiftBar plugin only calls `agents`, so it goes with it: left behind, it
+# would show "not on PATH" on every refresh.
+_remove_swiftbar_plugin() {
+    case "${1##*/}" in agents.*.sh) ;; *) return 0 ;; esac
+    [[ -f "$1" ]] && grep -q 'agents' "$1" 2>/dev/null || return 0
+    run_cmd rm -f "$1"
+    done_msg "removed $1"
+}
+swiftbar_dir="${XDG_CONFIG_HOME:-$HOME/.config}/swiftbar/plugins"
+if $MANIFEST_MODE; then
+    each_line "$M_FILES" _remove_swiftbar_plugin
+else
+    for f in "$swiftbar_dir"/agents.*.sh; do
+        [[ -f "$f" ]] && cmp -s "$f" "$SCRIPT_DIR/configs/swiftbar/agents.10s.sh" && _remove_swiftbar_plugin "$f"
+    done
+fi
+# Unset SwiftBar's plugin folder only if it is still ours and now empty.
+if is_macos && [[ "$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null)" == "$swiftbar_dir" ]] \
+   && [[ -z "$(ls -A "$swiftbar_dir" 2>/dev/null)" ]]; then
+    run_cmd defaults delete com.ameba.SwiftBar PluginDirectory
+    done_msg "reset SwiftBar's plugin folder"
 fi
 
 # ---------------------------------------------------------------------------
@@ -201,7 +229,7 @@ if [[ "$ANSWER" == "y" ]]; then
         for path in "$HOME/.config/nvim" "$HOME/.config/ghostty/config" \
                     "$HOME/.hammerspoon/init.lua" "$HOME/.claude/settings.json" \
                     "$HOME/.codex/config.toml" "$HOME/.config/opencode" \
-                    "$HOME/.config/herdr/config.toml"; do
+                    "$HOME/.config/herdr/config.toml" "$HOME/.config/agents.conf"; do
             [[ -e "$path" ]] && print_info "    $path"
         done
     fi

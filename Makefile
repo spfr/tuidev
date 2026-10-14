@@ -129,7 +129,7 @@ check-remote: ## Health check against the remote profile
 # One file list for `make lint` and CI.
 SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
                scripts/install/*.sh scripts/install/packs/*.sh \
-               scripts/migrations/*.sh bin/sbx
+               scripts/migrations/*.sh bin/sbx bin/agents configs/swiftbar/*.sh
 
 lint: ## Shellcheck every shell script (install, scripts, libs, packs, migrations, sbx)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found. brew install shellcheck"; exit 1; }

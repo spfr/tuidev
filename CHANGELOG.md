@@ -8,6 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`agents`: see and clean up agent processes (`--pack monitoring`).**
+  Every `claude` session starts its own MCP servers, and a session that dies
+  badly leaves them running under launchd. `agents` lists each `claude` and
+  `codex` tree (CPU, memory, cwd, ports, Herdr status; the Codex app-server
+  daemon gets its own row), flags orphaned MCP servers, npx helpers,
+  `caffeinate` and dev servers as stale, and shows CPU hogs of any owner.
+  `agents kill`/`reap`/`term` signal descendants first, re-check each
+  process's start time before every signal, and refuse pid 1, their own
+  parents, other users' processes, system and session processes (Finder,
+  loginwindow, your terminal, `/System/Library`) and running as root. Nothing
+  that hosts a session (a shell, tmux, screen, zellij, Herdr, an agent), no
+  launchd job and no systemd service is ever called stale. `agents awake`
+  keeps the Mac awake with `caffeinate -di` (for a duration, or while agents run), and `agents thermal`
+  shows thermal pressure and the energy mode. `agents watch` redraws live;
+  `agents json`/`tsv` are machine-readable. Standalone bash 3.2, no sudo.
+- **SwiftBar menu for agents and the system (macOS).** The `monitoring` pack
+  installs SwiftBar and an `agents` plugin that also covers a stats app. The
+  title is an SF Symbol, the session count and `· N blocked` when sessions
+  wait for you, tinted only when something needs a look. The menu leads
+  with what needs you (blocked sessions), then one line per session
+  (project, status dot, CPU, memory; path, Copy path, Open in Finder and a
+  dialog-confirmed Kill session… in its submenu), stale processes and hogs
+  only when there are any, keep-awake with the active choice checked, and a
+  two-line system view (CPU, memory, load with the busiest processes;
+  battery, thermal pressure, energy mode). Actions report their result as a
+  notification, and windows open in your terminal (`agents open-term`,
+  `AGENTS_TERMINAL`: Ghostty, iTerm, WezTerm, kitty or Terminal) rather than
+  SwiftBar's Terminal.app. A refresh takes 0.2–0.6 s depending on load;
+  Herdr's answer is cached and never waited on. A plugin folder you already
+  set is kept.
+- **What each agent session runs.** `agents ls` and `watch` list under each
+  session its MCP servers on one line and its busiest commands: the real
+  command of each tool shell (`go test -race ./internal/web`, not the
+  `zsh -c … eval` wrapper), how long it has run, its CPU and the worktree
+  subagent it runs for. Commands running twice are flagged `dup`, over 20
+  minutes `long`, and a full core or more `hot` (polling loops agents
+  wait on are marked `wait` instead). `agents ps PID` lists
+  everything. In the menu, a session shows how much of its CPU its commands
+  use, lists them under Running with Stop command…, and duplicates and
+  long-running commands appear under Needs you with Stop duplicates (keep
+  newest)…. `agents json` gains `schema_version` 1 and an `activity` object
+  per session, documented as a stable contract.
+- **`~/.config/agents.conf`.** Thresholds, the menu-bar title tokens and
+  icon, which sections show and in what order, and the refresh interval, in
+  a commented file placed once and never overwritten. It is read as
+  `KEY=value`, never sourced: unknown keys and bad values are reported and
+  ignored. `agents config` prints the settings in effect.
 - **Package updates on Linux.** `update.sh --packages` (and `make update`)
   stopped at "brew not found" on apt, dnf and pacman machines. It now checks
   the pack packages the native manager installed and upgrades the outdated
@@ -16,6 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sudo` command instead of prompting. A failed probe reads "status
   unknown", apt keeps auto/manual marks, and pacman gets `sudo pacman -Syu`
   rather than a partial upgrade.
+
+### Changed
+- **Tailscale installs as the `tailscale-app` cask.** Homebrew renamed the
+  cask and moves existing installs itself; a migration renames the record in
+  `~/.config/tuidev/manifest` so uninstall uses the new name.
+- **CI's macOS job runs on `macos-26`, and the Linux test image on Alpine
+  3.24.**
 
 ### Fixed
 - **Repo check no longer claims "up to date" after a failed fetch.**

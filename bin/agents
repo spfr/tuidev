@@ -1,0 +1,1796 @@
+#!/usr/bin/env bash
+# agents — see and control the agentic-coding processes on this machine.
+#
+# One `ps` snapshot per run, classified in a single awk pass:
+#   agents    every `claude` / `codex` process tree (the Codex app-server
+#             daemon gets its own row, tagged `daemon`), with tree CPU and
+#             memory, cwd, listening ports and Herdr status;
+#   stale     orphans an agent left behind: MCP servers, `npm exec`/npx
+#             helpers, `caffeinate`, and dev servers still listening;
+#   hogs      runaway processes of any owner (a Messages.app at 100% for days).
+# Plus keep-awake (`caffeinate`, never `pmset disablesleep` or sudo) and
+# thermal pressure. Installed by `./install.sh --pack monitoring`; the
+# SwiftBar plugin (configs/swiftbar/agents.10s.sh) reads `agents tsv`.
+#
+# Standalone on purpose: it runs from ~/.local/bin without the repo. bash 3.2;
+# sourcing it defines the functions only (scripts/lib/test_agents.sh does).
+
+# --- Configuration --------------------------------------------------------------
+# Precedence: environment, then the config file, then the defaults below. The
+# file (configs/agents/agents.conf documents every key) is read line by line as
+# KEY=value, never sourced: only the keys below are accepted, each value must
+# match its shape, and anything else is reported and ignored.
+AGENTS_CONF="${AGENTS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/agents.conf}"
+_AGENTS_CONF_KEYS="AGENTS_HOG_PCT AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP AGENTS_GRACE"
+_AGENTS_CONF_KEYS+=" AGENTS_AWAKE_POLL AGENTS_NAMES AGENTS_NO_HERDR AGENTS_TERMINAL AGENTS_BAR_TITLE"
+_AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH"
+_AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS"
+_AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
+_AGENTS_BAR_SECTION_NAMES="needs agents stale hogs awake system"
+
+# _agents_conf_valid KEY VALUE — does VALUE have the shape KEY needs?
+_agents_conf_valid() {
+    local w allowed=""
+    case "$1" in
+        AGENTS_HOG_PCT|AGENTS_HOG_MIN|AGENTS_HOG_NOW|AGENTS_HOG_TOP|AGENTS_GRACE|AGENTS_AWAKE_POLL|AGENTS_BAR_TOP|AGENTS_TOOL_LONG|AGENTS_LS_TOOLS)
+            [[ "$2" =~ ^[0-9]+$ ]] ;;
+        AGENTS_NAMES)       [[ "$2" =~ ^[A-Za-z0-9._\ -]+$ ]] ;;
+        AGENTS_NO_HERDR)    [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
+        AGENTS_BAR_ICON)    [[ "$2" =~ ^[a-z0-9.]+$ ]] ;;
+        AGENTS_BAR_REFRESH) [[ "$2" =~ ^[1-9][0-9]*[smhd]$ ]] ;;
+        AGENTS_BAR_TITLE)    allowed="$_AGENTS_BAR_TOKENS" ;;
+        AGENTS_BAR_SECTIONS) allowed="$_AGENTS_BAR_SECTION_NAMES" ;;
+        *) return 1 ;;
+    esac || return 1
+    [[ -n "$allowed" ]] || return 0
+    for w in $2; do
+        case " $allowed " in *" $w "*) ;; *) return 1 ;; esac
+    done
+}
+
+# agents_conf_load FILE — set each valid KEY=value the environment hasn't.
+agents_conf_load() {
+    local file="$1" line key val n=0
+    [[ -r "$file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        n=$((n + 1))
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        if [[ ! "$line" =~ ^([A-Z_]+)=(.*)$ ]]; then
+            echo "agents: $file:$n: not KEY=value, ignored" >&2; continue
+        fi
+        key="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+        case "$val" in
+            \"*\") val="${val#\"}"; val="${val%\"}" ;;
+            \'*\') val="${val#\'}"; val="${val%\'}" ;;
+            *)     val="${val%%[[:space:]]#*}"; val="${val%"${val##*[![:space:]]}"}" ;;
+        esac
+        case " $_AGENTS_CONF_KEYS " in
+            *" $key "*) ;;
+            *) echo "agents: $file:$n: unknown key $key, ignored" >&2; continue ;;
+        esac
+        if ! _agents_conf_valid "$key" "$val"; then
+            echo "agents: $file:$n: bad value for $key ('$val'), ignored" >&2; continue
+        fi
+        [[ -n "${!key+set}" ]] && continue      # the environment wins
+        printf -v "$key" '%s' "$val"
+    done < "$file"
+}
+agents_conf_load "$AGENTS_CONF"
+
+AGENTS_HOG_PCT="${AGENTS_HOG_PCT:-50}"   # lifetime-average CPU% that makes a hog…
+AGENTS_HOG_MIN="${AGENTS_HOG_MIN:-30}"   # …once it has run this many minutes
+AGENTS_HOG_NOW="${AGENTS_HOG_NOW:-90}"   # current CPU% hog (outside agent trees)
+AGENTS_HOG_TOP="${AGENTS_HOG_TOP:-5}"    # hogs listed
+AGENTS_TOOL_LONG="${AGENTS_TOOL_LONG:-20}"  # minutes before a tool command counts as long-running
+AGENTS_LS_TOOLS="${AGENTS_LS_TOOLS:-5}"    # tool commands listed per session in ls
+AGENTS_GRACE="${AGENTS_GRACE:-3}"        # seconds between SIGTERM and SIGKILL
+AGENTS_AWAKE_POLL="${AGENTS_AWAKE_POLL:-60}"  # `awake agents` re-check, seconds
+AGENTS_NAMES="${AGENTS_NAMES:-claude codex}"  # argv[0] basenames that are agents
+AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
+# Menu bar (SwiftBar plugin): what the title shows, which sections the menu
+# has (in this order), its icon, how many top CPU processes the System
+# section lists, and the refresh interval the pack names the plugin file with.
+AGENTS_BAR_TITLE="${AGENTS_BAR_TITLE-count awake}"
+AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs agents stale hogs awake system}"
+AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
+AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
+AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"
+AGENTS_RUN_DIR="${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}"
+
+# A process reparented to launchd/init (ppid 1), owned by you, whose argv
+# matches one of these EREs is an orphaned agent helper. Add your own here.
+AGENTS_ORPHAN_PATTERNS=(
+    '(^|/)npm exec( |$)'             # npm exec PKG, how MCP configs start servers
+    '(^|/)npx( |$)'
+    '/_npx/'                         # anything run from the npx cache
+    'chrome-devtools-mcp'
+    '(^|/)mcp-server'
+    '(^|/)caffeinate( |$)'           # Claude Code's rolling `caffeinate -i -t 300`
+    '^([^ ]*/)?(node|bun|deno|uv|uvx|python[0-9.]*) .*mcp'
+)
+# The Codex app-server daemon: long-lived by design, never stale.
+AGENTS_DAEMON_PATTERN='(^|/)codex app-server( |$)'
+export AGENTS_DAEMON_PATTERN
+# A listener whose binary lives here is an app, a system service or a packaged
+# daemon (a `podman machine`'s gvproxy), not a dev server.
+AGENTS_SYSTEM_PATTERN='^/(Applications|System|Library|usr/(libexec|sbin|bin))/|\.app/Contents/|^/(opt/homebrew|usr/local|home/linuxbrew/\.linuxbrew)/Cellar/|/libexec/'
+
+# Never stale and never signalled, whatever runs under them: a process whose
+# tree holds an agent, an interactive or login shell, or a session supervisor.
+AGENTS_SUPERVISOR_NAMES="tmux screen SCREEN zellij herdr pm2 abduco dtach"
+AGENTS_SHELL_NAMES="zsh bash fish sh dash ksh tcsh nu"
+export AGENTS_SUPERVISOR_NAMES AGENTS_SHELL_NAMES   # read by the awk programs
+# Never signalled (kill and term refuse them): the session's own processes and
+# your terminal. /System/Applications (Messages, Mail…) stays allowed.
+AGENTS_CRITICAL_NAMES="loginwindow Finder Dock WindowServer SystemUIServer ControlCenter launchd Ghostty ghostty Terminal iTerm2 WezTerm wezterm-gui kitty Alacritty alacritty"
+AGENTS_CRITICAL_PATH='^/(System/Library|System/Volumes|usr/libexec|usr/sbin|sbin)/'
+export AGENTS_CRITICAL_NAMES AGENTS_CRITICAL_PATH   # read by the awk programs
+
+# This process and your uid. Overridable only by the test harness.
+if [[ -n "${AGENTS_TESTING:-}" ]]; then
+    AGENTS_SELF="${AGENTS_SELF:-$$}" AGENTS_UID="${AGENTS_UID:-$UID}"
+else
+    AGENTS_SELF=$$ AGENTS_UID="$UID"
+fi
+AGENTS_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+# --- awk helpers shared by every program below ------------------------------
+# secs: ps `time`/`etime` ([DD-][HH:]MM:SS[.cc]) to seconds.
+# pname: a readable name for argv (the executable inside an .app bundle).
+# shellcheck disable=SC2016  # awk source: $i is an awk field, not a shell variable
+_AGENTS_AWK_LIB='
+function secs(s,   d, i, n, a, t) {
+    sub(/\.[0-9]*$/, "", s)
+    d = 0; i = index(s, "-")
+    if (i > 0) { d = substr(s, 1, i - 1) + 0; s = substr(s, i + 1) }
+    n = split(s, a, ":"); t = 0
+    for (i = 1; i <= n; i++) t = t * 60 + a[i]
+    return d * 86400 + t
+}
+function base(a,   b) { b = a; sub(/ .*/, "", b); sub(/.*\//, "", b); return b }
+function pname(a,   i, s) {
+    i = index(a, ".app/Contents/MacOS/")
+    if (i == 0) return base(a)
+    s = substr(a, i + 20); sub(/ --?[A-Za-z].*$/, "", s)
+    return s
+}
+function critical(a,   n, t, i, nm, w) {
+    if (ENVIRON["AGENTS_CRITICAL_PATH"] != "" && a ~ ENVIRON["AGENTS_CRITICAL_PATH"]) return 1
+    nm = pname(a); w = nm; sub(/ .*/, "", w)       # "Terminal" from "Terminal -psn_0_1"
+    n = split(ENVIRON["AGENTS_CRITICAL_NAMES"], t, " ")
+    for (i = 1; i <= n; i++) if (nm == t[i] || w == t[i]) return 1
+    return 0
+}
+# Name lists for the host checks below, read once from the environment.
+function hostinit(   n, t, i) {
+    if (host_ok++) return
+    n = split(ENVIRON["AGENTS_NAMES"], t, " "); for (i = 1; i <= n; i++) names[t[i]] = 1
+    n = split(ENVIRON["AGENTS_SUPERVISOR_NAMES"], t, " "); for (i = 1; i <= n; i++) sups[t[i]] = 1
+    n = split(ENVIRON["AGENTS_SHELL_NAMES"], t, " "); for (i = 1; i <= n; i++) shells[t[i]] = 1
+}
+function agent_kind(a,   b) {
+    hostinit()
+    if (a ~ /--chrome-native-host/) return ""        # a browser bridge, not a session
+    b = base(a)
+    if (b in names) return b
+    if (a ~ /claude-code\/cli\.m?js/) return "claude"
+    if (a ~ /@openai\/codex\/bin\/codex/) return "codex"
+    return ""
+}
+# An interactive or login shell: "-zsh", "zsh", "/bin/bash -l", but not
+# "bash -c CMD" or "sh script.sh".
+function interactive_shell(a,   b, login, rest) {
+    hostinit()
+    b = a; sub(/ .*/, "", b); login = (substr(b, 1, 1) == "-"); sub(/^-/, "", b); sub(/.*\//, "", b)
+    if (!(b in shells)) return 0
+    if (login || index(a, " ") == 0) return 1
+    rest = a; sub(/^[^ ]+ +/, "", rest)
+    return rest ~ /^(-[A-Za-z]+|--login|--interactive)( +(-[A-Za-z]+|--login|--interactive))*$/
+}
+function supervisor(a) { hostinit(); return (base(a) in sups) || a ~ /^PM2 / || a ~ /^tmux: / }
+# Hosts a session: an agent (or the Codex daemon), an interactive shell, or a
+# session supervisor. Such a process shelters every ancestor.
+function hosts(a) {
+    return agent_kind(a) != "" || a ~ ENVIRON["AGENTS_DAEMON_PATTERN"] || interactive_shell(a) || supervisor(a)
+}
+# --- Activity: what a session runs ---
+# A tool shell: a shell running one command line, "/bin/zsh -c …" (the Claude
+# Code Bash tool) or "bash -lc …" (Codex).
+function tool_shell(a,   b) {
+    hostinit()
+    b = a; sub(/ .*/, "", b); sub(/^-/, "", b); sub(/.*\//, "", b)
+    if (b == "sandbox-exec") return a ~ / (\/[^ ]*\/)?(bash|zsh|sh) +-[A-Za-z]*c /
+    return (b in shells) && a ~ /^[^ ]+ +-[A-Za-z]*c( |$)/
+}
+function is_mcp(a) { return a ~ /(^|\/)npm exec( |$)|(^|\/)npx( |$)|\/_npx\/|mcp/ }
+# mcp_name: "chrome-devtools-mcp" from "npm exec chrome-devtools-mcp@latest",
+# "example-agent-mcp" from "node …/example-agent-mcp.cjs".
+function mcp_name(a,   n, w, i, s) {
+    if (match(a, /(npm exec|npx)( +-[^ ]+)* +[^ -][^ ]*/)) {
+        s = substr(a, RSTART, RLENGTH); sub(/.* /, "", s)
+    } else {
+        n = split(a, w, " "); s = ""
+        for (i = 1; i <= n; i++) if (w[i] ~ /mcp/) { s = w[i]; break }
+        if (s == "") s = pname(a)
+    }
+    sub(/.*\//, "", s); sub(/@[^@\/]*$/, "", s); sub(/\.(c|m)?js$|\.py$|\.ts$/, "", s)
+    return s == "" ? pname(a) : s
+}
+# tool_cmd: the command a tool shell runs, tidied for display and comparison:
+# the string a Claude Code shell evals (or the -c string), without cd
+# prefixes, VAR=value assignments, 2>&1, </dev/null or a trailing | tail/head.
+function tool_cmd(a,   q, i, j, s, k, t) {
+    q = sprintf("%c", 39); tool_cd = ""
+    i = index(a, " eval " q)
+    if (i > 0) {
+        s = substr(a, i + 7)
+        j = 0; t = s
+        while ((k = index(t, q " < /dev/null")) > 0) { j += k; t = substr(t, k + 1) }
+        if (j > 0) s = substr(s, 1, j - 1)
+        t = q "\"" q "\"" q
+        while ((k = index(s, t)) > 0) s = substr(s, 1, k - 1) q substr(s, k + 5)
+    } else {
+        s = a
+        if (base(a) == "sandbox-exec") {
+            if (match(a, / (\/[^ ]*\/)?(bash|zsh|sh) +-[A-Za-z]*c +/)) s = substr(a, RSTART + RLENGTH)
+        } else sub(/^[^ ]+ +-[A-Za-z]*c +/, "", s)
+        if (substr(s, 1, 1) == q || substr(s, 1, 1) == "\"") {
+            s = substr(s, 2); k = substr(s, length(s))
+            if (k == q || k == "\"") s = substr(s, 1, length(s) - 1)
+        }
+    }
+    while (match(s, /^ *cd +[^ ;&]+ *(&&|;) */)) {
+        t = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        sub(/^ *cd +/, "", t); sub(/ *(&&|;) *$/, "", t)
+        if (t ~ /^\//) tool_cd = t
+    }
+    while (match(s, /(^|[;&|] *)[A-Za-z_][A-Za-z0-9_]*=[^ ]* +/)) {
+        t = substr(s, RSTART, RLENGTH); k = t; sub(/[A-Za-z_][A-Za-z0-9_]*=[^ ]* +$/, "", k)
+        s = substr(s, 1, RSTART - 1) k substr(s, RSTART + RLENGTH)
+    }
+    gsub(/ *2>&1/, "", s); gsub(/ *< *\/dev\/null/, "", s)
+    gsub(/\\012/, " \342\217\216 ", s)        # ps shows a newline as \012: one line, marked
+    sub(/ *\| *(tail|head)( +-[0-9A-Za-z]+)* *$/, "", s)
+    gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s)
+    gsub(/\/ /, " ", s); sub(/\/$/, "", s)
+    if (length(s) > 400) s = substr(s, 1, 397) "..."   # compared whole; shortened on display
+    return s == "" ? pname(a) : s
+}
+# argv(): the command line, column 14 on, of the current record (line is $0).
+# Skips the 13 fields by position, cheaper than 13 regex substitutions.
+function argv(line,   s, i, p, k) {
+    p = 1
+    for (i = 1; i <= 13; i++) { k = index(substr(line, p), $i); p += k - 1 + length($i) }
+    s = substr(line, p); sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s
+}
+'
+
+# --- Snapshot and classification --------------------------------------------
+
+# One line per process: pid ppid uid user %cpu rss(KiB) cputime etime
+# lstart(5 words) args. BSD option syntax, which macOS and procps both take.
+agents_snapshot() {
+    LC_ALL=C ps axww -o pid=,ppid=,uid=,user=,pcpu=,rss=,time=,etime=,lstart=,args= 2>/dev/null
+}
+
+# agents_secs TIME — [DD-][HH:]MM:SS[.cc] to whole seconds.
+agents_secs() { printf '%s\n' "$1" | LC_ALL=C awk "$_AGENTS_AWK_LIB"'{ print secs($1) }'; }
+
+# agents_parse_duration 30m|2h|1h30m|90s|1d — seconds; non-zero on bad input.
+agents_parse_duration() {
+    local s="$1" total=0 n unit
+    [[ "$s" =~ ^([0-9]+[smhd])+$ ]] || return 1
+    while [[ -n "$s" ]]; do
+        [[ "$s" =~ ^([0-9]+)([smhd])(.*)$ ]] || return 1
+        n=$((10#${BASH_REMATCH[1]})); unit="${BASH_REMATCH[2]}"; s="${BASH_REMATCH[3]}"
+        case "$unit" in
+            m) n=$((n * 60)) ;;
+            h) n=$((n * 3600)) ;;
+            d) n=$((n * 86400)) ;;
+        esac
+        total=$((total + n))
+    done
+    [[ $total -gt 0 ]] || return 1
+    echo "$total"
+}
+
+# agents_classify LISTENERS KEEP_PIDS < SNAPSHOT
+# LISTENERS: "pid port" lines. KEEP_PIDS: pids never flagged (our own
+# keep-awake holder). Prints tab-separated records, 14 columns:
+#   type pid kind age_s cpu avg rss_kib kids start ports user herdr cwd args
+# type is agent | stale | cand (a dev-server candidate agents_enrich confirms
+# by cwd) | hog. Unknown fields are "-".
+agents_classify() {
+    local IFS=$'\n'
+    AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
+    AGENTS_UID="$AGENTS_UID" AGENTS_SELF="$AGENTS_SELF" AGENTS_NAMES="$AGENTS_NAMES" \
+    AGENTS_DAEMON="$AGENTS_DAEMON_PATTERN" AGENTS_SYSTEM="$AGENTS_SYSTEM_PATTERN" \
+    AGENTS_HOG_PCT="$AGENTS_HOG_PCT" AGENTS_HOG_MIN="$AGENTS_HOG_MIN" \
+    AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_HOG_TOP="$AGENTS_HOG_TOP" AGENTS_BAR_TOP="$AGENTS_BAR_TOP" \
+    LC_ALL=C awk "$_AGENTS_AWK_LIB"'
+function addports(q, list,   n, a, i) {
+    n = split(list, a, ",")
+    for (i = 1; i <= n; i++)
+        if (index("," tp[q] ",", "," a[i] ",") == 0) tp[q] = (tp[q] == "" ? a[i] : tp[q] "," a[i])
+}
+function rec(type, p, kind, c, r, k, ports) {
+    printf "%s\t%d\t%s\t%d\t%.1f\t%.1f\t%d\t%d\t%s\t%s\t%s\t-\t-\t%s\n", type, p, kind, et[p], c, avg(p), r, k, st[p], (ports == "" ? "-" : ports), usr[p], av[p]
+}
+function avg(p) { return et[p] > 0 ? 100 * ct[p] / et[p] : 0 }
+function act(p, cls, r, label, cmd) {
+    gsub(/\t/, " ", cmd)
+    printf "act\t%d\t%s\t%d\t%.1f\t%.1f\t%d\t%d\t%s\t%s\t%d\t%s\t-\t%s\n", p, cls, et[p], tcpu[p], avg(p), trss[p], kids[p], st[p], (tp[p] == "" ? "-" : tp[p]), r, label, cmd
+}
+BEGIN {
+    me = ENVIRON["AGENTS_UID"]; self = ENVIRON["AGENTS_SELF"] + 0
+    np = split(ENVIRON["AGENTS_PATTERNS"], pat, "\n")
+    n = split(ENVIRON["AGENTS_KEEP"], t, "[ \n]+"); for (i = 1; i <= n; i++) if (t[i] != "") keep[t[i] + 0] = 1
+    n = split(ENVIRON["AGENTS_LISTEN"], t, "\n")
+    for (i = 1; i <= n; i++) {
+        if (split(t[i], f, " ") < 2) continue
+        q = f[1] + 0
+        if (index("," lp[q] ",", "," f[2] ",") == 0) lp[q] = (lp[q] == "" ? f[2] : lp[q] "," f[2])
+    }
+    daemon = ENVIRON["AGENTS_DAEMON"]; sysre = ENVIRON["AGENTS_SYSTEM"]
+    hogpct = ENVIRON["AGENTS_HOG_PCT"] + 0; hogmin = 60 * ENVIRON["AGENTS_HOG_MIN"]
+    hognow = ENVIRON["AGENTS_HOG_NOW"] + 0; hogtop = ENVIRON["AGENTS_HOG_TOP"] + 0; ntop = ENVIRON["AGENTS_BAR_TOP"] + 0
+    n = 0
+}
+NF >= 14 {
+    p = $1 + 0
+    if (p in pp) next
+    ord[++n] = p
+    pp[p] = $2 + 0; uid[p] = $3; usr[p] = $4; cpu[p] = $5 + 0; rss[p] = $6 + 0
+    ct[p] = secs($7); et[p] = secs($8); st[p] = $9 "_" $10 "_" $11 "_" $12 "_" $13
+    s = argv($0); gsub(/\t/, " ", s)
+    av[p] = s
+}
+END {
+    for (k = 1; k <= n; k++) {
+        p = ord[k]
+        isd[p] = (av[p] ~ daemon)
+        kind[p] = isd[p] ? "daemon" : agent_kind(av[p])
+    }
+    # This process and its ancestors: never a hog, never stale, never killed.
+    q = self; d = 0
+    while (q > 0 && (q in pp) && d++ < 64) { anc[q] = 1; q = pp[q] }
+    # Walk up from every process: its topmost agent ancestor (the root of its
+    # agent tree) and whether it runs under this process; then add it to every
+    # ancestor subtree sums, leaving out the subtree of this process (ps, us).
+    for (k = 1; k <= n; k++) {
+        p = ord[k]; top = ""; under = 0; q = p; d = 0
+        while (q > 1 && (q in pp) && d++ < 64) {
+            if (kind[q] != "") top = q
+            if (q == self) under = 1
+            q = pp[q]
+        }
+        root[p] = top; mine[p] = under
+        if (under) continue
+        # A process that hosts a session (an agent, an interactive shell, a
+        # tmux/screen/zellij/herdr/pm2 server) shelters every ancestor.
+        host = (kind[p] != "" || hosts(av[p]))
+        q = p; d = 0
+        while (q > 1 && (q in pp) && d++ < 64) {
+            tcpu[q] += cpu[p]; trss[q] += rss[p]
+            if (q != p) kids[q]++
+            if (p in lp) addports(q, lp[p])
+            if (host) shelter[q] = 1
+            q = pp[q]
+        }
+    }
+    nh = 0
+    for (k = 1; k <= n; k++) {
+        p = ord[k]
+        if (root[p] == p) {
+            rec("agent", p, kind[p], tcpu[p], trss[p], kids[p], tp[p])
+        } else if (pp[p] == 1 && uid[p] == me && kind[p] == "" && !(p in keep) && !mine[p] && !anc[p] && !shelter[p]) {
+            hit = 0
+            for (i = 1; i <= np; i++) if (pat[i] != "" && av[p] ~ pat[i]) { hit = 1; break }
+            if (hit) rec("stale", p, "orphan", tcpu[p], trss[p], kids[p], tp[p])
+            # A dev server listens itself or through its children (`npm run dev`
+            # starting vite); a tree that hosts a session never gets here.
+            else if (tp[p] != "" && av[p] !~ sysre) rec("cand", p, "server", tcpu[p], trss[p], kids[p], tp[p])
+        }
+        if (p <= 1 || anc[p] || mine[p]) continue
+        a = avg(p)
+        if ((et[p] >= hogmin && a >= hogpct) || (cpu[p] >= hognow && root[p] == "")) {
+            hp[++nh] = p; score[nh] = (a > cpu[p] ? a : cpu[p])
+        }
+    }
+    for (j = 1; j <= hogtop && j <= nh; j++) {
+        best = j
+        for (i = j + 1; i <= nh; i++) if (score[i] > score[best]) best = i
+        t1 = hp[j]; hp[j] = hp[best]; hp[best] = t1
+        t2 = score[j]; score[j] = score[best]; score[best] = t2
+        rec("hog", hp[j], pname(av[hp[j]]), cpu[hp[j]], rss[hp[j]], 0, "")
+        ishog[hp[j]] = 1
+    }
+    # The busiest processes right now that are not already listed as hogs,
+    # and the machine total (both leave out this process and its children).
+    nt = 0; sum = 0
+    for (k = 1; k <= n; k++) {
+        p = ord[k]
+        if (mine[p]) continue
+        sum += cpu[p]
+        if (p > 1 && !anc[p] && !ishog[p] && cpu[p] > 0) tq[++nt] = p
+    }
+    for (j = 1; j <= ntop && j <= nt; j++) {
+        best = j
+        for (i = j + 1; i <= nt; i++) if (cpu[tq[i]] > cpu[tq[best]]) best = i
+        t1 = tq[j]; tq[j] = tq[best]; tq[best] = t1
+        rec("top", tq[j], pname(av[tq[j]]), cpu[tq[j]], rss[tq[j]], 0, "")
+    }
+    printf "total\t0\t-\t0\t%.1f\t0\t0\t0\t-\t-\t-\t-\t-\t-\n", sum
+    # Activity: every child of a session root is one unit (mcp, tool,
+    # keepawake, session, other) with its subtree totals; agents nested deeper
+    # (claude -p from a tool shell) are listed as nested sessions too.
+    #   act PID CLASS AGE CPU AVG RSS KIDS START PORTS ROOT LABEL - CMD
+    # LABEL: the MCP server name, the depth of a nested session, or the directory
+    # a tool command cd'"'"'s into first (where it really runs).
+    for (k = 1; k <= n; k++) {
+        p = ord[k]; r = root[p]
+        if (r == "" || p == r || mine[p] || isd[r]) continue
+        if (kind[p] != "" && !isd[p]) {
+            act(p, "session", r, (pp[p] == r ? "direct" : "nested"), av[p]); continue
+        }
+        if (pp[p] != r) continue
+        a = av[p]
+        if (a ~ /(^|\/)caffeinate( |$)/) act(p, "keepawake", r, "-", a)
+        else if (tool_shell(a)) { c = tool_cmd(a); act(p, "tool", r, (tool_cd == "" ? "-" : tool_cd), c) }
+        else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a), a)
+        else act(p, "other", r, "-", a)
+    }
+}'
+}
+
+# Where a dev server's cwd must be for it to count as one an agent left: a
+# directory under $HOME (not ~/Library), $TMPDIR, or Claude Code's per-user
+# temp dir (/private/tmp/claude-UID, its sandbox scratchpads).
+_agents_cwd_roots() {
+    local t="${TMPDIR:-}"
+    t="${t%/}"
+    printf '%s/\n' "$HOME"
+    if [[ -n "$t" ]]; then
+        printf '%s/\n' "$t"
+        [[ "$t" == /var/* || "$t" == /tmp/* ]] && printf '/private%s/\n' "$t"
+    fi
+    printf '/private/tmp/claude-%s/\n/tmp/claude-%s/\n' "$AGENTS_UID" "$AGENTS_UID"
+}
+
+# agents_project CWD — the short name a session goes by: the directory's name,
+# or REPO/NAME for a worktree under REPO/.claude/worktrees/NAME; "~" for $HOME.
+# (agents_enrich applies the same rule in awk; the tests keep them in step.)
+agents_project() {
+    local c="$1" repo wt
+    case "$c" in
+        ""|-) echo - ;;
+        "$HOME") echo "~" ;;
+        */.claude/worktrees/*)
+            repo="${c%%/.claude/worktrees/*}"; wt="${c#*/.claude/worktrees/}"
+            echo "${repo##*/}/${wt%%/*}" ;;
+        *) c="${c%/}"; echo "${c##*/}" ;;
+    esac
+}
+
+# agents_enrich CWDS HERDR < RECORDS — fill in cwd ("pid<TAB>cwd" lines) and
+# Herdr status ("kind<TAB>status<TAB>cwd" lines), and append column 15, the
+# project name (agents_project). A dev-server candidate is kept, as stale,
+# only when its cwd is under one of _agents_cwd_roots. Agent rows come first,
+# ordered by what needs you: blocked, working, idle/done, unknown, the daemon;
+# then activity rows, where column 15 is the origin (main, or the worktree a
+# subagent runs in), 16 the flags (dup, long, hot, wait) and 17 how many copies
+# of that command run in the same directory (in the session, or any session).
+# A tool's cwd is where it cd'"'"'s to first, if it does.
+agents_enrich() {
+    AGENTS_CWDS="$1" AGENTS_HERDR="$2" AGENTS_CWD_ROOTS="$(_agents_cwd_roots)" HOME="$HOME" \
+    AGENTS_TOOL_LONG="$AGENTS_TOOL_LONG" AGENTS_HOG_NOW="$AGENTS_HOG_NOW" LC_ALL=C awk -F '\t' -v OFS='\t' '
+function project(c,   i) {
+    if (c == "" || index(c, home "/Library/") == 1) return 0
+    for (i = 1; i <= nr; i++) if (roots[i] != "" && index(c, roots[i]) == 1) return 1
+    return 0
+}
+function projname(c,   i, r, w, n, a) {
+    if (c == "" || c == "-") return "-"
+    if (c == home) return "~"
+    i = index(c, "/.claude/worktrees/")
+    if (i > 0) { r = substr(c, 1, i - 1); sub(/.*\//, "", r); w = substr(c, i + 19); sub(/\/.*/, "", w); return r "/" w }
+    sub(/\/$/, "", c); n = split(c, a, "/"); return a[n]
+}
+# A polling loop a session waits on ("until …; do sleep 5; done"): never dup
+# or long, it is how the agent waits for something.
+function waits(c) { return c ~ /^(until|while) .*; *do .*sleep [0-9.]+.*; *done/ }
+function origin(c,   i, w) {
+    if (c == "" || c == "-") return "-"
+    i = index(c, "/.claude/worktrees/")
+    if (i == 0) return "main"
+    w = substr(c, i + 19); sub(/\/.*/, "", w); return w
+}
+function rank(kind, status) {
+    if (kind == "daemon") return 4
+    if (status == "blocked") return 0
+    if (status == "working") return 1
+    if (status == "idle" || status == "done") return 2
+    return 3
+}
+END {
+    for (r = 0; r <= 4; r++) for (i = 1; i <= na; i++) if (ar[i] == r) print arow[i]
+    longs = 60 * ENVIRON["AGENTS_TOOL_LONG"]; hot = ENVIRON["AGENTS_HOG_NOW"] + 0
+    for (i = 1; i <= nx; i++) {
+        split(xrow[i], f, "\t")
+        if (f[3] != "tool" || waits(f[14])) continue
+        same[f[11], f[13], f[14]]++
+        if (f[13] != "-") here[f[13], f[14]]++
+    }
+    for (i = 1; i <= nx; i++) {
+        $0 = xrow[i]; d = 1; fl = ""
+        if ($3 == "tool" && waits($14)) fl = "wait"
+        else if ($3 == "tool") {
+            d = same[$11, $13, $14]; if ($13 != "-" && here[$13, $14] > d) d = here[$13, $14]
+            if (d > 1) fl = "dup"
+            if ($4 >= longs) fl = fl (fl == "" ? "" : ",") "long"
+        }
+        if ($5 >= hot) fl = fl (fl == "" ? "" : ",") "hot"
+        $16 = (fl == "" ? "-" : fl); $17 = d
+        print
+    }
+    for (i = 1; i <= no; i++) print orow[i]
+}
+BEGIN {
+    home = ENVIRON["HOME"]
+    nr = split(ENVIRON["AGENTS_CWD_ROOTS"], roots, "\n")
+    n = split(ENVIRON["AGENTS_CWDS"], t, "\n")
+    for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 2) cwd[f[1]] = f[2]
+    n = split(ENVIRON["AGENTS_HERDR"], t, "\n")
+    for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 3 && !((f[1], f[3]) in hs)) hs[f[1], f[3]] = f[2]
+}
+NF < 14 { next }
+$1 == "cand" {
+    if (!project(cwd[$2])) next
+    $1 = "stale"
+}
+($2 in cwd) { $13 = cwd[$2] }
+$1 == "agent" && (($3, $13) in hs) { $12 = hs[$3, $13] }
+{
+    if ($1 == "act") {
+        if ($3 == "tool" && $12 ~ /^\//) $13 = $12       # cd target: the real cwd
+        $15 = origin($13); xrow[++nx] = $0; next
+    }
+    $15 = projname($13)
+    if ($1 == "agent") { arow[++na] = $0; ar[na] = rank($3, $12) } else orow[++no] = $0
+}'
+}
+
+# "pid port" for every TCP listener we can see (our own processes, unprivileged).
+_agents_listeners() {
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -b -w -nP -iTCP -sTCP:LISTEN -Fpn 2>/dev/null | awk '
+            /^p/ { p = substr($0, 2) }
+            /^n/ { port = $0; sub(/.*:/, "", port); if (!seen[p " " port]++) print p " " port }'
+    elif command -v ss >/dev/null 2>&1; then
+        ss -Hltnp 2>/dev/null | awk '{
+            port = $4; sub(/.*:/, "", port); s = $0
+            while (match(s, /pid=[0-9]+/)) { print substr(s, RSTART + 4, RLENGTH - 4) " " port; s = substr(s, RSTART + RLENGTH) } }'
+    fi
+}
+
+# _agents_cwds PID... — "pid<TAB>cwd" lines.
+_agents_cwds() {
+    [[ $# -gt 0 ]] || return 0
+    local p
+    if [[ -d /proc/self ]]; then
+        for p in "$@"; do
+            printf '%s\t%s\n' "$p" "$(readlink "/proc/$p/cwd" 2>/dev/null || echo -)"
+        done
+    elif command -v lsof >/dev/null 2>&1; then
+        local IFS=,
+        lsof -b -w -a -d cwd -Fpn -p "$*" 2>/dev/null | awk '/^p/ { p = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) }'
+    fi
+}
+
+# Herdr's view: "agent<TAB>status<TAB>cwd". Silent when Herdr, its socket or
+# jq is missing, or when AGENTS_NO_HERDR=1.
+_agents_herdr_query() {
+    _agents_timeout 2 herdr agent list 2>/dev/null \
+        | jq -r '.result.agents[]? | [(.agent // "-"), (.agent_status // "-"), (.cwd // "-")] | @tsv' 2>/dev/null
+}
+_agents_herdr() {
+    [[ -z "${AGENTS_NO_HERDR:-}" ]] || return 0
+    command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
+    [[ -S "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}" ]] || return 0
+    _agents_herdr_cached "${1:-sync}"
+}
+
+# _agents_herdr_cached sync|async — Herdr's answer, cached for 10s in the run
+# dir. async (the menu bar) never waits: it serves the cache (up to a minute
+# old) and refreshes it in the background. sync (the terminal) asks Herdr
+# when the cache is stale.
+_agents_herdr_cached() {
+    local cache="$AGENTS_RUN_DIR/herdr.tsv" ts="" now age line
+    now="$(date +%s)"
+    [[ -r "$cache" ]] && read -r ts < "$cache"
+    [[ "$ts" =~ ^[0-9]+$ ]] || ts=0          # a damaged cache counts as stale
+    age=$((now - ${ts:-0}))
+    if [[ $age -lt 10 || ( "$1" == async && $age -lt 60 ) ]]; then
+        { read -r _; while IFS= read -r line; do printf '%s\n' "$line"; done; } < "$cache"
+        [[ $age -lt 10 ]] && return 0
+    fi
+    if [[ "$1" == async ]]; then
+        ( _agents_herdr_refresh ) </dev/null >/dev/null 2>&1 &
+        return 0
+    fi
+    _agents_herdr_refresh
+    [[ -r "$cache" ]] && { read -r _; while IFS= read -r line; do printf '%s\n' "$line"; done; } < "$cache"
+    return 0
+}
+
+# Rewrite the cache from a fresh query; one refresh at a time.
+_agents_herdr_refresh() {
+    local cache="$AGENTS_RUN_DIR/herdr.tsv" lock="$AGENTS_RUN_DIR/herdr.lock"
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 0
+    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
+    mkdir "$lock" 2>/dev/null || return 0
+    { date +%s; _agents_herdr_query; } > "$cache.$$" 2>/dev/null && mv -f "$cache.$$" "$cache"
+    rm -f "$cache.$$"
+    rmdir "$lock" 2>/dev/null
+    return 0
+}
+
+# _agents_timeout SECS CMD... — run CMD, killing it after SECS.
+_agents_timeout() {
+    local secs="$1" pid watcher rc; shift
+    "$@" &
+    pid=$!
+    ( sleep "$secs"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    watcher=$!
+    wait "$pid"; rc=$?
+    kill "$watcher" 2>/dev/null
+    return "$rc"
+}
+
+# _agents_launchd_pids < `launchctl list` — the PIDs of running launchd jobs.
+_agents_launchd_pids() { awk 'NR > 1 && $1 ~ /^[0-9]+$/ { print $1 }'; }
+
+# _agents_cgroup_service < /proc/PID/cgroup — true when the process runs in a
+# systemd .service unit (a user or system service, not a terminal scope).
+_agents_cgroup_service() {
+    awk -F ':' '{ n = split($NF, a, "/"); if (a[n] ~ /\.service$/) f = 1 } END { exit !f }'
+}
+
+# _agents_keep_pids SNAPSHOT — never stale: our keep-awake holder, launchd jobs
+# (LaunchAgents, Homebrew services) on macOS, systemd services on Linux.
+_agents_keep_pids() {
+    local p
+    _agents_awake_pid
+    if command -v launchctl >/dev/null 2>&1; then
+        launchctl list 2>/dev/null | _agents_launchd_pids
+    elif [[ -r /proc/self/cgroup ]]; then
+        for p in $(printf '%s\n' "$1" | awk '$2 == 1 { print $1 }'); do
+            _agents_cgroup_service < "/proc/$p/cgroup" 2>/dev/null && echo "$p"
+        done
+    fi
+    return 0
+}
+
+# agents_collect — the full record set for this moment.
+agents_collect() {
+    local ps listen recs pids
+    ps="$(agents_snapshot)"
+    if [[ -z "$ps" ]]; then
+        echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2
+        return 1
+    fi
+    listen="$(_agents_listeners)"
+    recs="$(printf '%s\n' "$ps" | agents_classify "$listen" "$(_agents_keep_pids "$ps")")"
+    local type pid kind rest
+    set --
+    while IFS=$'\t' read -r type pid kind rest; do
+        case "$type" in
+            agent|stale|cand) set -- "$@" "$pid" ;;
+            act) [[ "$kind" == tool ]] && set -- "$@" "$pid" ;;   # its origin
+        esac
+    done <<<"$recs"
+    pids="$(_agents_cwds "$@")"
+    printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")"
+}
+
+# --- Thermal and energy mode (display only) ----------------------------------
+
+agents_thermal_level() {
+    local key lvl=""
+    if command -v notifyutil >/dev/null 2>&1; then
+        read -r key lvl < <(LC_ALL=C notifyutil -g com.apple.system.thermalpressurelevel 2>/dev/null)
+        [[ "$lvl" =~ ^[0-9]+$ ]] && echo "$lvl"
+    fi
+    return 0
+}
+agents_thermal_name() {
+    case "$1" in
+        0) echo nominal ;; 1) echo moderate ;; 2) echo heavy ;;
+        3) echo trapping ;; 4) echo sleeping ;; *) echo unknown ;;
+    esac
+}
+# Energy mode: 0 automatic, 1 low, 2 high (macOS); the power profile on Linux.
+# It rarely changes, so the answer is kept in the run dir for a minute.
+agents_powermode() {
+    local cache="$AGENTS_RUN_DIR/powermode" ts="" mode="" now
+    now="$(date +%s)"
+    [[ -r "$cache" ]] && read -r ts mode < "$cache"
+    [[ "$ts" =~ ^[0-9]+$ ]] || ts=0
+    if [[ -n "$mode" && $((now - ${ts:-0})) -lt 60 ]]; then echo "$mode"; return 0; fi
+    mode="$(_agents_powermode_probe)"
+    { mkdir -p "$AGENTS_RUN_DIR" && printf '%s %s\n' "$now" "$mode" > "$cache"; } 2>/dev/null
+    echo "$mode"
+}
+_agents_powermode_probe() {
+    if command -v pmset >/dev/null 2>&1; then
+        LC_ALL=C pmset -g 2>/dev/null | LC_ALL=C awk '
+            $1 == "powermode"    { m = ($2 == 1 ? "low" : $2 == 2 ? "high" : "automatic"); print m; exit }
+            $1 == "lowpowermode" { lp = ($2 == 1 ? "low" : "automatic") }
+            END { if (m == "") print (lp == "" ? "unknown" : lp) }'
+    elif command -v powerprofilesctl >/dev/null 2>&1; then
+        powerprofilesctl get 2>/dev/null || echo unknown
+    else
+        echo unknown
+    fi
+}
+
+# --- Keep-awake ---------------------------------------------------------------
+# State: $AGENTS_RUN_DIR/awake holds "pid start mode until_epoch". The start
+# time guards against a reused pid after a reboot or a crash.
+
+_agents_awake_file() { echo "$AGENTS_RUN_DIR/awake"; }
+
+# _agents_start PID — the process's start time as one token, or nothing.
+_agents_start() { LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | awk 'NF >= 5 { print $1 "_" $2 "_" $3 "_" $4 "_" $5 }'; }
+
+# _agents_rm_if_same FILE CONTENT — remove FILE only if it still holds CONTENT,
+# so a reader never deletes a state file another `agents` just rewrote.
+_agents_rm_if_same() {
+    local now=""
+    [[ -f "$1" ]] && now="$(cat "$1" 2>/dev/null)"
+    [[ "$now" == "$2" ]] && rm -f "$1"
+    return 0
+}
+
+# agents_awake_state — "pid mode until verified" for a recorded holder that
+# still exists; verified is 1 when its start time matches the record, 0 when
+# it can't be checked (ps unavailable, or a "-" start recorded in a sandbox).
+# The record is cleared only when the holder is really gone: kill -0 says "No
+# such process", or the pid now names a process with another start time. A
+# permission error (EPERM) proves nothing and keeps the record.
+agents_awake_state() {
+    local file content pid start mode until now="" err verified=0
+    file="$(_agents_awake_file)"
+    [[ -f "$file" ]] || return 1
+    content="$(cat "$file" 2>/dev/null)"
+    read -r pid start mode until <<<"$content" || true
+    if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
+        _agents_rm_if_same "$file" "$content"; return 1
+    fi
+    if ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; then
+        _agents_rm_if_same "$file" "$content"; return 1
+    fi
+    now="$(_agents_start "$pid" 2>/dev/null)"
+    if [[ -n "$now" && -n "$start" && "$start" != - ]]; then
+        if [[ "$now" != "$start" ]]; then
+            _agents_rm_if_same "$file" "$content"; return 1      # the pid was reused
+        fi
+        verified=1
+    fi
+    echo "$pid $mode ${until:-0} $verified"
+}
+
+# Serialize on/off/agents with a lock directory (mkdir is atomic). A lock left
+# by a crashed run is broken after a minute.
+_agents_lock() {
+    local lock="$AGENTS_RUN_DIR/awake.lock" i=0
+    mkdir -p "$AGENTS_RUN_DIR" || return 1
+    [[ -z "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rmdir "$lock" 2>/dev/null
+    until mkdir "$lock" 2>/dev/null; do
+        i=$((i + 1))
+        if [[ $i -ge 50 ]]; then
+            echo "agents: keep-awake is busy (remove $lock if no other agents runs)" >&2
+            return 1
+        fi
+        sleep 0.1
+    done
+}
+_agents_unlock() { rmdir "$AGENTS_RUN_DIR/awake.lock" 2>/dev/null; return 0; }
+
+# The platform's sleep inhibitor, or fail with a message.
+_agents_inhibitor() {
+    command -v caffeinate >/dev/null 2>&1 && return 0
+    command -v systemd-inhibit >/dev/null 2>&1 && return 0
+    echo "agents: no caffeinate or systemd-inhibit on this system; keep-awake is unavailable" >&2
+    return 1
+}
+# _agents_awake_now — agents_awake_state, read once per run once primed (the
+# menu and the table ask several times; _agents_awake_prime re-reads it).
+_agents_awake_prime() { _AGENTS_AWAKE_STATE="$(agents_awake_state)"; _AGENTS_AWAKE_PRIMED=1; }
+_agents_awake_now() {
+    if [[ -z "${_AGENTS_AWAKE_PRIMED:-}" ]]; then agents_awake_state; return; fi
+    [[ -n "$_AGENTS_AWAKE_STATE" ]] && echo "$_AGENTS_AWAKE_STATE"
+}
+_agents_awake_pid() { local s; s="$(_agents_awake_now)" && echo "${s%% *}"; }
+
+# _agents_hold [SECS] [WATCH_PID] — run the platform's sleep inhibitor in the
+# foreground: caffeinate -di (system and display idle sleep) on macOS,
+# systemd-inhibit on Linux.
+_agents_hold() {
+    local secs="${1:-}" watch="${2:-}"
+    if command -v caffeinate >/dev/null 2>&1; then
+        exec caffeinate -di ${secs:+-t "$secs"} ${watch:+-w "$watch"}
+    elif command -v systemd-inhibit >/dev/null 2>&1; then
+        exec systemd-inhibit --what=idle:sleep --who=agents --why="agents awake" sleep "${secs:-infinity}"
+    fi
+    echo "agents: no caffeinate or systemd-inhibit on this system" >&2
+    return 1
+}
+
+# The forked child already has its final start time (exec keeps it), so the
+# pidfile can be written straight away.
+_agents_awake_write() {   # PID MODE UNTIL
+    mkdir -p "$AGENTS_RUN_DIR"
+    local start; start="$(_agents_start "$1")"
+    printf '%s %s %s %s\n' "$1" "${start:--}" "$2" "$3" > "$(_agents_awake_file)"
+}
+
+agents_awake_off() {
+    local state pid file content
+    file="$(_agents_awake_file)"
+    content="$(cat "$file" 2>/dev/null)"
+    state="$(agents_awake_state)" || { echo "awake: already off"; return 0; }
+    pid="${state%% *}"
+    if [[ "${state##* }" != 1 ]]; then
+        echo "awake: can't verify that pid $pid is the keep-awake holder (its start time is unknown); not stopping it" >&2
+        echo "awake: if it is, run 'kill $pid' and remove $file" >&2
+        return 1
+    fi
+    kill "$pid" 2>/dev/null
+    _agents_rm_if_same "$file" "$content"
+    echo "awake: off (stopped pid $pid)"
+}
+
+agents_awake_on() {
+    local secs="" until=0 pid mode
+    _agents_inhibitor || return 1
+    if [[ -n "${1:-}" ]]; then
+        secs="$(agents_parse_duration "$1")" || { echo "agents: bad duration '$1' (try 30m, 2h, 1h30m)" >&2; return 2; }
+        until=$(( $(date +%s) + secs ))
+    fi
+    agents_awake_off >/dev/null || return 1
+    ( trap '' HUP; _agents_hold "$secs" ) </dev/null >/dev/null 2>&1 &
+    pid=$!
+    disown "$pid" 2>/dev/null
+    if [[ -n "$secs" ]]; then mode=timed; else mode=on; fi
+    _agents_awake_write "$pid" "$mode" "$until"
+    if [[ -n "$secs" ]]; then echo "awake: on until $(_agents_clock "$until") (pid $pid)"; else echo "awake: on until 'agents awake off' (pid $pid)"; fi
+}
+
+agents_awake_agents() {
+    local pid
+    _agents_inhibitor || return 1
+    if [[ "$(_agents_count)" -eq 0 ]]; then
+        echo "awake: no claude or codex session is running; nothing to hold"
+        return 0
+    fi
+    agents_awake_off >/dev/null || return 1
+    nohup bash "$AGENTS_PATH" _awake-loop </dev/null >/dev/null 2>&1 &
+    pid=$!
+    disown "$pid" 2>/dev/null
+    _agents_awake_write "$pid" agents 0
+    echo "awake: on while agents run (pid $pid, re-checked every ${AGENTS_AWAKE_POLL}s)"
+}
+
+# Number of claude/codex roots running now (the daemon does not count).
+_agents_count() {
+    agents_snapshot | agents_classify "" "" | awk -F '\t' '$1 == "agent" && $3 != "daemon" { n++ } END { print n + 0 }'
+}
+
+# The `awake agents` background loop: hold while any agent runs, then exit.
+_agents_awake_loop() {
+    local hold="" sleeper=""
+    trap '[[ -n "$hold" ]] && kill "$hold" 2>/dev/null; [[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT HUP
+    while [[ "$(_agents_count)" -gt 0 ]]; do
+        if [[ -z "$hold" ]] || ! kill -0 "$hold" 2>/dev/null; then
+            ( trap '' HUP; _agents_hold "" "$$" ) </dev/null >/dev/null 2>&1 &
+            hold=$!
+        fi
+        sleep "$AGENTS_AWAKE_POLL" &
+        sleeper=$!
+        wait "$sleeper"
+    done
+    [[ -n "$hold" ]] && kill "$hold" 2>/dev/null
+    local file; file="$(_agents_awake_file)"
+    [[ -f "$file" && "$(awk '{ print $1 }' "$file")" == "$$" ]] && rm -f "$file"
+    exit 0
+}
+
+_agents_clock() { date -r "$1" +%H:%M 2>/dev/null || date -d "@$1" +%H:%M 2>/dev/null; }
+
+agents_awake_line() {
+    local state pid mode until verified
+    if state="$(_agents_awake_now)"; then
+        read -r pid mode until verified <<<"$state"
+        local note="pid $pid"
+        [[ "$verified" == 1 ]] || note="pid $pid, unverified"
+        case "$mode" in
+            timed)  echo "awake: on until $(_agents_clock "$until") ($note)" ;;
+            agents) echo "awake: while agents run ($note)" ;;
+            *)      echo "awake: on ($note)" ;;
+        esac
+    else
+        echo "awake: off"
+    fi
+}
+
+# Who else holds the Mac awake: owner names from `pmset -g assertions`, deduplicated.
+agents_awake_holders() {
+    command -v pmset >/dev/null 2>&1 || return 0
+    pmset -g assertions 2>/dev/null | awk '
+        /^Listed by owning process:/ { on = 1; next }
+        /^[A-Z]/ { on = 0 }
+        on && /pid [0-9]+\(/ && /Prevent(UserIdle)?(System|Display)Sleep|NoIdleSleep|NoDisplaySleep/ {
+            s = $0; sub(/^[^(]*\(/, "", s); sub(/\):.*$/, "", s)
+            pid = $2; sub(/\(.*/, "", pid)
+            if (s == "powerd" || seen[pid]++) next
+            if (!(s in c)) o[++n] = s
+            c[s]++
+        }
+        END { for (i = 1; i <= n; i++) printf "%s%s%s", (i > 1 ? ", " : ""), o[i], (c[o[i]] > 1 ? " x" c[o[i]] : ""); if (n) print "" }'
+}
+
+agents_awake() {
+    local rc
+    case "${1:-status}" in
+        on|off|agents)
+            _agents_lock || return 1
+            # Release the lock however this ends (an error exit, Ctrl-C, kill).
+            trap '_agents_unlock' EXIT
+            trap '_agents_unlock; exit 130' INT
+            trap '_agents_unlock; exit 143' TERM
+            case "$1" in
+                on)     agents_awake_on "${2:-}" ;;
+                off)    agents_awake_off ;;
+                agents) agents_awake_agents ;;
+            esac
+            rc=$?
+            _agents_unlock
+            trap - EXIT INT TERM
+            return "$rc"
+            ;;
+        status)
+            agents_awake_line
+            local h; h="$(agents_awake_holders)"
+            [[ -z "$h" ]] || echo "held awake by: $h"
+            ;;
+        *) echo "usage: agents awake [on [DURATION]|off|agents|status]" >&2; return 2 ;;
+    esac
+}
+
+# --- Killing ---------------------------------------------------------------------
+
+# agents_refusal PID [SNAPSHOT] — why PID must not be signalled (exit 0 and a
+# reason), or nothing (exit 1). Refuses pid <= 1, this process and its
+# ancestors, unknown pids, other users' processes, critical ones (the login
+# session, Finder, Dock, your terminal, anything under /System/Library,
+# /usr/libexec or /usr/sbin), and any process hosting a shell or an agent
+# below it (an agent root itself is fine).
+agents_refusal() {
+    local pid="$1" snap="${2-}"
+    [[ "$pid" =~ ^[0-9]+$ ]] || { echo "not a pid"; return 0; }
+    [[ "$pid" -gt 1 ]] || { echo "refusing pid $pid"; return 0; }
+    [[ -n "$snap" ]] || snap="$(agents_snapshot)"
+    local out
+    out="$(printf '%s\n' "$snap" | AGENTS_UID="$AGENTS_UID" AGENTS_NAMES="$AGENTS_NAMES" LC_ALL=C awk -v t="$pid" -v self="$AGENTS_SELF" "$_AGENTS_AWK_LIB"'
+        NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; usr[p] = $4; av[p] = argv($0); ord[++n] = p }
+        END {
+            q = self + 0; d = 0
+            while (q > 0 && (q in pp) && d++ < 64) { if (q == t) { print "this shell or one of its parents"; exit } q = pp[q] }
+            if (!(t in pp)) { print "no such process"; exit }
+            if (critical(av[t])) { print "a system or session process (" pname(av[t]) "): quit it yourself if you mean it"; exit }
+            # A terminal, editor or multiplexer hosting shells or agents (Warp,
+            # VS Code, tmux…). An agent root itself may be killed with its tree.
+            if (agent_kind(av[t]) == "" && av[t] !~ ENVIRON["AGENTS_DAEMON_PATTERN"]) {
+                for (k = 1; k <= n; k++) {
+                    p = ord[k]; if (p == t || !hosts(av[p])) continue
+                    q = pp[p]; d = 0
+                    while (q > 1 && (q in pp) && d++ < 64) { if (q == t) { print "it hosts a session (" pname(av[p]) ", pid " p "): close that first"; exit } q = pp[q] }
+                }
+            }
+            if (uid[t] != ENVIRON["AGENTS_UID"]) print "owned by " usr[t] ": run `sudo kill " t "` yourself if you mean it"
+        }')"
+    [[ -n "$out" ]] || return 1
+    echo "$out"
+}
+
+# agents_tree PID < SNAPSHOT — PID and its descendants, deepest first:
+# "pid<TAB>start<TAB>uid<TAB>name<TAB>critical(0|1)".
+agents_tree() {
+    LC_ALL=C awk -v t="$1" "$_AGENTS_AWK_LIB"'
+        NF >= 14 {
+            p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; st[p] = $9 "_" $10 "_" $11 "_" $12 "_" $13
+            s = argv($0); nm[p] = pname(s); cr[p] = critical(s); kids[pp[p]] = kids[pp[p]] " " p
+        }
+        END {
+            t += 0; if (!(t in pp)) exit
+            q[1] = t; dep[t] = 0; h = 1; n = 1
+            while (h <= n) { p = q[h++]; m = split(kids[p], c, " "); for (i = 1; i <= m; i++) { q[++n] = c[i] + 0; dep[c[i] + 0] = dep[p] + 1 } }
+            for (i = 1; i <= n; i++) printf "%d\t%s\t%s\t%s\t%s\t%d\n", dep[q[i]], q[i], st[q[i]], uid[q[i]], nm[q[i]], cr[q[i]]
+        }' | sort -t "$(printf '\t')" -k1,1nr | cut -f2-
+}
+
+# _agents_signal SIG PID START — signal only if PID still has that start time.
+_agents_signal() {
+    local now; now="$(_agents_start "$2")"
+    [[ -n "$now" ]] || return 0                       # already gone
+    if [[ -n "$3" && "$now" != "$3" ]]; then
+        echo "  skip $2: its start time changed (pid reused)" >&2
+        return 1
+    fi
+    kill "-$1" "$2" 2>/dev/null
+}
+
+_agents_confirm() {
+    [[ "$AGENTS_YES" == true ]] && return 0
+    if [[ ! -t 0 ]]; then
+        echo "agents: not a terminal; pass -y to confirm" >&2
+        return 1
+    fi
+    local reply
+    read -r -p "$1 [y/N] " reply
+    [[ "$reply" == [yY]* ]]
+}
+
+# _agents_plan TOKEN SNAPSHOT TREE — print the planned victims ("pid start
+# name" lines, the root last) for TOKEN = PID or PID@START; complain and fail
+# otherwise. Tree members owned by someone else, or critical, are skipped.
+_agents_plan() {
+    local token="$1" snap="$2" tree="$3" pid want why now
+    pid="${token%%@*}"; want=""
+    [[ "$token" == *@* ]] && want="${token#*@}"
+    if why="$(agents_refusal "$pid" "$snap")"; then
+        echo "  refuse $pid: $why" >&2; return 1
+    fi
+    now="$(printf '%s\n' "$snap" | awk -v t="$pid" '$1 == t { print $9 "_" $10 "_" $11 "_" $12 "_" $13 }')"
+    if [[ -n "$want" && "$now" != "$want" ]]; then
+        echo "  refuse $pid: not the process that was listed (its start time changed)" >&2; return 1
+    fi
+    if [[ "$tree" == true ]]; then
+        if printf '%s\n' "$snap" | agents_tree "$pid" | awk -F '\t' -v s="$AGENTS_SELF" '$1 == s { f = 1 } END { exit !f }'; then
+            echo "  refuse $pid: this shell runs inside that tree" >&2; return 1
+        fi
+        printf '%s\n' "$snap" | agents_tree "$pid" | awk -F '\t' -v me="$AGENTS_UID" '
+            $5 == 1  { printf "  skip %s (%s): a system or session process\n", $1, $4 > "/dev/stderr"; next }
+            $3 == me { print $1 "\t" $2 "\t" $4; next }
+            { printf "  skip %s (%s): another user owns it\n", $1, $4 > "/dev/stderr" }'
+    else
+        printf '%s\n' "$snap" | agents_tree "$pid" | awk -F '\t' -v t="$pid" '$1 == t { print $1 "\t" $2 "\t" $4 }'
+    fi
+}
+
+# _agents_new_members ROOTS PLAN < SNAPSHOT — processes that joined a targeted
+# tree after the plan was made ("pid start name"). ROOTS: "pid<TAB>start"
+# lines; a root whose start time changed (or is gone) contributes nothing.
+_agents_new_members() {
+    AGENTS_ROOTS="$1" AGENTS_PLAN="$2" LC_ALL=C awk -v me="$AGENTS_UID" -v self="$AGENTS_SELF" "$_AGENTS_AWK_LIB"'
+        BEGIN {
+            n = split(ENVIRON["AGENTS_ROOTS"], r, "\n"); for (i = 1; i <= n; i++) if (split(r[i], f, "\t") >= 2) want[f[1] + 0] = f[2]
+            n = split(ENVIRON["AGENTS_PLAN"], r, "\n"); for (i = 1; i <= n; i++) if (split(r[i], f, "\t") >= 1) have[f[1] + 0] = 1
+        }
+        NF >= 14 {
+            p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; st[p] = $9 "_" $10 "_" $11 "_" $12 "_" $13
+            s = argv($0); nm[p] = pname(s); cr[p] = critical(s); kids[pp[p]] = kids[pp[p]] " " p
+        }
+        END {
+            for (r0 in want) {
+                if (!(r0 in pp) || st[r0] != want[r0]) continue
+                h = 1; n = 1; q[1] = r0 + 0
+                while (h <= n) {
+                    p = q[h++]; m = split(kids[p], c, " ")
+                    for (i = 1; i <= m; i++) {
+                        x = c[i] + 0; q[++n] = x
+                        if (!have[x] && uid[x] == me && !cr[x] && x != self + 0 && !seen[x]++) print x "\t" st[x] "\t" nm[x]
+                    }
+                }
+            }
+        }'
+}
+
+# _agents_alive PLAN — "pid start name" lines still running with that start
+# (one ps for the whole plan).
+_agents_alive() {
+    local pid start name pids="" now
+    while IFS=$'\t' read -r pid start name; do
+        [[ "$pid" =~ ^[0-9]+$ ]] && pids+="${pids:+,}$pid"
+    done <<<"$1"
+    [[ -n "$pids" ]] || return 0
+    now="$(LC_ALL=C ps -o pid=,lstart= -p "$pids" 2>/dev/null | LC_ALL=C awk 'NF >= 6 { print $1 "\t" $2 "_" $3 "_" $4 "_" $5 "_" $6 }')"
+    while IFS=$'\t' read -r pid start name; do
+        [[ -n "$pid" && -n "$start" ]] || continue
+        [[ $'\n'"$now"$'\n' == *$'\n'"$pid"$'\t'"$start"$'\n'* ]] && printf '%s\t%s\t%s\n' "$pid" "$start" "$name"
+    done <<<"$1"
+}
+
+# _agents_kill_message ROOTS — the confirmation text. ROOTS: one
+# "pid<TAB>name<TAB>children<TAB>project" line per tree.
+_agents_kill_message() {
+    local pid name kids proj n=0 one="" all=""
+    while IFS=$'\t' read -r pid name kids proj; do
+        [[ -n "$pid" ]] || continue
+        n=$((n + 1))
+        one="$name"
+        [[ -z "$proj" || "$proj" == - ]] || one+=" in $proj"
+        one+=" (pid $pid"
+        case "$kids" in 0) ;; 1) one+=", 1 child process" ;; *) one+=", $kids child processes" ;; esac
+        one+=")"
+        all+="• $one"$'\n'
+    done <<<"$1"
+    if [[ $n -eq 1 ]]; then echo "Kill $one?"; else printf 'Kill %d process trees?\n\n%s' "$n" "$all"; fi
+}
+
+# agents_kill_tokens TREE(true|false) TOKEN... — the kill/reap/term engine.
+agents_kill_tokens() {
+    local tree="$1" snap plan="" roots="" desc="" one token pid start name n left extra waited=0 errf refused cwd; shift
+    snap="$(agents_snapshot)"
+    [[ -n "$snap" ]] || { echo "agents: cannot read the process table" >&2; _agents_notify "Nothing done: cannot read the process table"; return 1; }
+    errf="$(mktemp "${TMPDIR:-/tmp}/agents.XXXXXX")" || errf=/dev/null
+    for token in "$@"; do
+        one="$(_agents_plan "$token" "$snap" "$tree" 2>>"$errf")" || continue
+        [[ -n "$one" ]] || continue
+        plan+="$one"$'\n'
+        IFS=$'\t' read -r pid start name <<<"$(printf '%s\n' "$one" | tail -1)"
+        roots+="$pid"$'\t'"$start"$'\n'
+        cwd="$(_agents_cwds "$pid" | cut -f2)"
+        desc+="$pid"$'\t'"$name"$'\t'"$(( $(printf '%s\n' "$one" | grep -c .) - 1 ))"$'\t'"$(agents_project "$cwd")"$'\n'
+    done
+    refused=""
+    if [[ "$errf" != /dev/null ]]; then
+        cat "$errf" >&2
+        refused="$(grep -m1 'refuse' "$errf" | sed 's/^ *refuse //')"
+        rm -f "$errf"
+    fi
+    plan="${plan%$'\n'}"; roots="${roots%$'\n'}"
+    if [[ -z "$plan" ]]; then
+        echo "nothing to signal"
+        _agents_notify "Nothing killed${refused:+: $refused}"
+        return 1
+    fi
+    n="$(printf '%s\n' "$plan" | grep -c .)"
+    printf '%s\n' "$plan" | awk -F '\t' '{ printf "  %-7s %s\n", $1, $3 }'
+    if [[ "$AGENTS_DRY_RUN" == true ]]; then
+        if [[ "$tree" == true ]]; then
+            echo "dry run: would send SIGTERM to $n process(es), then SIGKILL to any left after ${AGENTS_GRACE}s"
+        else
+            echo "dry run: would send SIGTERM to $n process(es)"
+        fi
+        return 0
+    fi
+    if [[ "${AGENTS_CONFIRM_GUI:-false}" == true ]]; then
+        _agents_gui_confirm "$(_agents_kill_message "$desc")" || { echo "cancelled"; return 1; }
+    else
+        _agents_confirm "Send SIGTERM to $n process(es)?" || { echo "cancelled"; return 1; }
+    fi
+    while IFS=$'\t' read -r pid start name; do
+        [[ -n "$pid" ]] || continue
+        _agents_signal TERM "$pid" "$start"
+    done <<<"$plan"
+    IFS=$'\t' read -r pid name _ <<<"$desc"
+    if [[ "$tree" != true ]]; then
+        echo "sent SIGTERM"
+        _agents_notify "Sent SIGTERM to $name (pid $pid)"
+        return 0
+    fi
+    # Wait up to the grace period, returning as soon as everything is gone.
+    while [[ $waited -lt $((AGENTS_GRACE * 5)) ]]; do
+        [[ -n "$(_agents_alive "$plan")" ]] || break
+        sleep 0.2; waited=$((waited + 1))
+    done
+    # What survived, plus anything a still-running root's tree spawned meanwhile.
+    left="$(_agents_alive "$plan")"
+    extra="$(agents_snapshot | _agents_new_members "$roots" "$plan")"
+    while IFS=$'\t' read -r pid start name; do
+        [[ -n "$pid" ]] || continue
+        echo "  SIGKILL $pid ($name)"
+        _agents_signal KILL "$pid" "$start"
+    done <<<"$left${extra:+$'\n'$extra}"
+    echo "done"
+    IFS=$'\t' read -r pid name _ <<<"$desc"
+    if [[ "$(printf '%s\n' "$roots" | grep -c .)" -eq 1 ]]; then
+        _agents_notify "Killed $name (pid $pid)$([[ $n -gt 1 ]] && echo " and $((n - 1)) child processes")"
+    else
+        _agents_notify "Killed $n processes in $(printf '%s\n' "$roots" | grep -c .) trees"
+    fi
+}
+
+# --- Output --------------------------------------------------------------------
+
+_agents_colors() {
+    if [[ -t 1 && -z "${NO_COLOR:-}" && -z "${TUIDEV_NO_COLOR:-}" ]]; then
+        C_B=$'\033[1m' C_DIM=$'\033[2m' C_Y=$'\033[33m' C_R=$'\033[31m' C_G=$'\033[32m' C_0=$'\033[0m'
+    else
+        C_B='' C_DIM='' C_Y='' C_R='' C_G='' C_0=''
+    fi
+}
+
+# agents_system — "load1 cores mem_free_pct mem_level battery_pct battery_state",
+# tab-separated, "-" where unknown. Unprivileged and cheap: one sysctl (cores,
+# memory pressure level, load), memory_pressure -Q and pmset -g batt on macOS,
+# parsed in bash; /proc and /sys on Linux.
+agents_system() {
+    local cores="" load="" memfree="" level="" batt="" state="" b
+    if command -v memory_pressure >/dev/null 2>&1; then
+        _agents_parse_sysctl < <(LC_ALL=C sysctl -n hw.ncpu kern.memorystatus_vm_pressure_level vm.loadavg 2>/dev/null)
+        memfree="$(_agents_parse_memfree < <(LC_ALL=C memory_pressure -Q 2>/dev/null))"
+    elif [[ -r /proc/meminfo ]]; then
+        memfree="$(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { if (t) printf "%d", 100 * a / t }' /proc/meminfo)"
+        [[ -r /proc/loadavg ]] && read -r load _ < /proc/loadavg
+    fi
+    [[ -n "$cores" ]] || cores="$(LC_ALL=C getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+    [[ -n "$load" ]] || load="$(LC_ALL=C uptime 2>/dev/null | LC_ALL=C awk -F 'load averages?: *' 'NF > 1 { split($2, a, /[ ,]+/); print a[1] }')"
+    case "$level" in 1) level=normal ;; 2) level=warn ;; 4) level=critical ;; *) level="" ;; esac
+    if command -v pmset >/dev/null 2>&1; then
+        IFS=$'\t' read -r batt state < <(_agents_parse_batt < <(LC_ALL=C pmset -g batt 2>/dev/null))
+    else
+        for b in /sys/class/power_supply/BAT*; do
+            [[ -r "$b/capacity" ]] || continue
+            read -r batt < "$b/capacity"; state="$(tr '[:upper:]' '[:lower:]' < "$b/status" 2>/dev/null)"
+            break
+        done
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${load:--}" "${cores:-1}" "${memfree:--}" "${level:--}" "${batt:--}" "${state:--}"
+}
+
+# _agents_parse_sysctl < `sysctl -n hw.ncpu kern.memorystatus_vm_pressure_level
+# vm.loadavg` — sets cores, level and load in the caller (dynamic scope).
+_agents_parse_sysctl() {
+    local line n=0
+    while IFS= read -r line; do
+        n=$((n + 1))
+        case "$n" in
+            1) [[ "$line" =~ ^[0-9]+$ ]] && cores="$line" ;;
+            2) [[ "$line" =~ ^[0-9]+$ ]] && level="$line" ;;
+            3) [[ "$line" =~ ^\{\ *([0-9.]+) ]] && load="${BASH_REMATCH[1]}" ;;
+        esac
+    done
+}
+
+# _agents_parse_memfree < `memory_pressure -Q` — the free percentage.
+_agents_parse_memfree() {
+    local line
+    while IFS= read -r line; do
+        [[ "$line" =~ free\ percentage:\ *([0-9]+)% ]] && { echo "${BASH_REMATCH[1]}"; return; }
+    done
+}
+
+# _agents_parse_batt < `pmset -g batt` — "percent<TAB>state" (charging,
+# discharging, charged, AC attached…); nothing on a Mac without a battery.
+_agents_parse_batt() {
+    local line
+    while IFS= read -r line; do
+        if [[ "$line" == *InternalBattery* && "$line" =~ ([0-9]+)%\;\ *([^;]+) ]]; then
+            printf '%s\t%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+            return
+        fi
+    done
+}
+
+# _agents_cpu_pct CORES RECORDS — machine CPU% (0-100) from the total record.
+_agents_cpu_pct() {
+    local type cpu cores="${1:-1}"
+    [[ "$cores" =~ ^[1-9][0-9]*$ ]] || cores=1
+    while IFS=$'\t' read -r type _ _ _ cpu _; do
+        [[ "$type" == total ]] || continue
+        cpu="${cpu%%.*}"
+        echo $(( (${cpu:-0} + cores / 2) / cores ))
+        return
+    done <<<"$2"
+    echo -
+}
+
+# _agents_footer [RECORDS] — the status lines under the table.
+_agents_footer() {
+    local lvl load cores memfree level batt state cpu="-"
+    lvl="$(agents_thermal_level)"
+    IFS=$'\t' read -r load cores memfree level batt state <<<"$(agents_system)"
+    [[ -z "${1:-}" ]] || cpu="$(_agents_cpu_pct "$cores" "$1")"
+    printf 'cpu: %s%% · load: %s/%s cores · memory: %s%% free%s%s\n' "$cpu" "$load" "$cores" "$memfree" \
+        "$([[ "$level" == - || "$level" == normal ]] || echo " ($level pressure)")" \
+        "$([[ "$batt" == - ]] || echo " · battery: $batt% $state")"
+    printf 'thermal: %s · energy: %s · %s\n' "$(agents_thermal_name "${lvl:--}")" "$(agents_powermode)" "$(agents_awake_line)"
+}
+
+# agents_render SECTIONS < RECORDS — the human table. SECTIONS: any of
+# "agents stale hogs"; "quiet" hides empty stale/hogs sections behind one line;
+# "detail" lists everything each session runs (agents ps), AGENTS_FOCUS=PID
+# only that session. Sessions are counted without the Codex daemon, which gets
+# a dim last row. Under each session: its MCP servers on one line, then its
+# commands (busiest first, AGENTS_LS_TOOLS of them) and nested sessions.
+agents_render() {
+    AGENTS_SECTIONS="$1" W="${AGENTS_WIDTH:-120}" HOME="$HOME" B="$C_B" DIM="$C_DIM" Y="$C_Y" R="$C_R" G="$C_G" N="$C_0" \
+    LS_TOOLS="$AGENTS_LS_TOOLS" FOCUS="${AGENTS_FOCUS:-}" LC_ALL=C awk -F '\t' '
+function age(s) {
+    if (s < 60) return s "s"
+    if (s < 3600) return int(s / 60) "m"
+    if (s < 86400) return sprintf("%dh%02dm", s / 3600, (s % 3600) / 60)
+    return sprintf("%dd%02dh", s / 86400, (s % 86400) / 3600)
+}
+function mem(k) { return k >= 1048576 ? sprintf("%.1fG", k / 1048576) : k >= 1024 ? sprintf("%dM", k / 1024) : k "K" }
+function tilde(p) { return (p != "-" && index(p, home) == 1) ? "~" substr(p, length(home) + 1) : p }
+function cut(s, n) { return n < 8 ? "" : length(s) > n ? substr(s, 1, n - 3) "..." : s }
+function has(x) { return index(want, " " x " ") > 0 }
+function dur(s) { return s < 3600 ? sprintf("%dm%02ds", s / 60, s % 60) : age(s) }
+function flags(f,   o) {
+    o = ""
+    if (index("," f[16] ",", ",dup,")) o = o "  " ENVIRON["Y"] "x" f[17] " dup" e
+    if (index("," f[16] ",", ",long,")) o = o "  " ENVIRON["Y"] "long" e
+    if (index("," f[16] ",", ",hot,")) o = o "  " ENVIRON["R"] "hot" e
+    if (index("," f[16] ",", ",wait,")) o = o "  " ENVIRON["DIM"] "wait" e
+    return o
+}
+# The activity lines under session r; full lists every unit with its pid.
+function activity(r, full,   i, j, k, f, g, nm, mp, mr, nt, tl, ns, ss, no, oth, lim, t, names) {
+    nm = 0; mp = 0; mr = 0; nt = 0; ns = 0; no = 0; names = ""
+    split("", seen)
+    for (i = 1; i <= nx; i++) {
+        split(x[i], f, "\t")
+        if (f[11] != r) continue
+        if (f[3] == "mcp") { if (!(f[12] in seen)) { seen[f[12]] = 1; nm++; names = names (names == "" ? "" : ", ") f[12] } mp += f[8] + 1; mr += f[7] }
+        else if (f[3] == "tool") tl[++nt] = x[i]
+        else if (f[3] == "session") ss[++ns] = x[i]
+        else oth[++no] = x[i]
+    }
+    if (nm) printf "%s      mcp: %d server%s · %d procs · %s%s%s\n", ENVIRON["DIM"], nm, (nm > 1 ? "s" : ""), mp, mem(mr), (full ? " (" names ")" : ""), e
+    for (j = 1; j <= nt; j++) {          # busiest first
+        k = j
+        for (i = j + 1; i <= nt; i++) { split(tl[i], f, "\t"); split(tl[k], g, "\t"); if (f[5] + 0 > g[5] + 0) k = i }
+        t = tl[j]; tl[j] = tl[k]; tl[k] = t
+    }
+    lim = full ? nt : ENVIRON["LS_TOOLS"] + 0
+    for (j = 1; j <= nt && j <= lim; j++) {
+        split(tl[j], f, "\t")
+        printf "      %s %s · %s · %d%% · %s%s%s\n", (full ? sprintf("%-7s", f[2]) : "\342\224\224"), cut(f[14], w - 50), dur(f[4]), f[5] + 0.5, f[15], flags(f), (full ? "" : "")
+    }
+    if (nt > lim) printf "%s      ... %d more (agents ps %s)%s\n", ENVIRON["DIM"], nt - lim, r, e
+    for (j = 1; j <= ns; j++) {
+        split(ss[j], f, "\t")
+        printf "      %s %s · %s · %d%% · %s session\n", (full ? sprintf("%-7s", f[2]) : "\342\206\263"), cut(f[14], w - 50), dur(f[4]), f[5] + 0.5, f[12]
+    }
+    if (full) for (j = 1; j <= no; j++) {
+        split(oth[j], f, "\t")
+        printf "%s      %-7s %s · %s · %d%% · %s%s\n", ENVIRON["DIM"], f[2], f[3], cut(f[14], w - 50), f[5] + 0.5, mem(f[7]), e
+    }
+}
+BEGIN { home = ENVIRON["HOME"]; w = ENVIRON["W"] + 0; want = " " ENVIRON["AGENTS_SECTIONS"] " "; e = ENVIRON["N"] }
+NF >= 14 {
+    if ($1 == "act") x[++nx] = $0
+    else if ($1 == "agent") { if (ENVIRON["FOCUS"] != "" && $2 != ENVIRON["FOCUS"]) next; if ($3 == "daemon") d[++nd] = $0; else a[++na] = $0 }
+    else if ($1 == "stale") s[++ns] = $0
+    else if ($1 == "hog") h[++nh] = $0
+}
+END {
+    quiet = has("quiet"); printed = 0
+    if (has("agents")) {
+        printf "%sAGENTS (%d)%s%s\n", ENVIRON["B"], na, e, (nd ? ENVIRON["DIM"] " + codex daemon" e : "")
+        if (na + nd) printf "%s  %-7s %-7s %-8s %7s %6s %6s %4s  %-11s %-22s %s%s\n", ENVIRON["DIM"], "PID", "KIND", "STATUS", "AGE", "CPU%", "MEM", "KIDS", "PORTS", "PROJECT", "CWD", e
+        for (i = 1; i <= na + nd; i++) {
+            split(i <= na ? a[i] : d[i - na], f, "\t")
+            c = f[12] == "blocked" ? ENVIRON["Y"] ENVIRON["B"] : f[12] == "working" ? ENVIRON["G"] : ""
+            pre = (i > na ? ENVIRON["DIM"] : "")
+            line = sprintf("%s  %-7s %-7s %s%-8s%s%s %7s %6.1f %6s %4d  %-11s %-22s ", pre, f[2], f[3], c, f[12], (c == "" ? "" : e), pre, age(f[4]), f[5], mem(f[7]), f[8], cut(f[10], 11), cut(f[15], 22))
+            print line cut(tilde(f[13]), w - 101) (pre == "" ? "" : e)
+            if (i <= na) activity(f[2], has("detail"))
+        }
+        if (!na) print "  no claude or codex session is running"
+        printed = 1
+    }
+    if (quiet && !ns && !nh && (has("stale") || has("hogs"))) { print ""; print ENVIRON["DIM"] "no stale processes · no hogs" e; exit }
+    if (has("stale") && (ns || !quiet)) {
+        if (printed) print ""
+        printf "%sSTALE (%d)%s%s\n", (ns ? ENVIRON["Y"] ENVIRON["B"] : ENVIRON["B"]), ns, e, (ns ? ENVIRON["DIM"] "  orphaned agent helpers and dev servers: agents reap" e : "")
+        if (ns) printf "%s  %-7s %-7s %7s %6s %6s %4s  %-11s %s%s\n", ENVIRON["DIM"], "PID", "WHY", "AGE", "CPU%", "MEM", "KIDS", "PORTS", "COMMAND", e
+        for (i = 1; i <= ns; i++) {
+            split(s[i], f, "\t")
+            line = sprintf("  %-7s %-7s %7s %6.1f %6s %4d  %-11s ", f[2], f[3], age(f[4]), f[5], mem(f[7]), f[8], f[10])
+            print line cut(f[14] (f[13] != "-" ? "  (in " tilde(f[13]) ")" : ""), w - 59)
+        }
+        if (!ns) print "  none"
+        printed = 1
+    }
+    if (has("hogs") && (nh || !quiet)) {
+        if (printed) print ""
+        printf "%sHOGS (%d)%s%s\n", (nh ? ENVIRON["R"] ENVIRON["B"] : ENVIRON["B"]), nh, e, (nh ? ENVIRON["DIM"] "  CPU% now / lifetime average: agents term PID" e : "")
+        if (nh) printf "%s  %-7s %-12s %7s %6s %6s %6s  %s%s\n", ENVIRON["DIM"], "PID", "USER", "AGE", "NOW%", "AVG%", "MEM", "PROCESS", e
+        for (i = 1; i <= nh; i++) {
+            split(h[i], f, "\t")
+            line = sprintf("  %-7s %-12s %7s %6.1f %6.1f %6s  ", f[2], substr(f[11], 1, 12), age(f[4]), f[5], f[6], mem(f[7]))
+            print line cut(f[3], w - 58)
+        }
+        if (!nh) print "  none"
+    }
+}'
+}
+
+# agents_json < RECORDS — {schema_version, agents (each with its activity),
+# stale, hogs, top, system, awake, thermal, powermode}. The schema is a
+# contract (docs/agent-workflows.md): add fields freely, bump schema_version
+# for anything that removes or changes one.
+agents_json() {
+    local state="" pid="" mode="" until="" lvl sys
+    state="$(_agents_awake_now)" && read -r pid mode until _ <<<"$state"
+    lvl="$(agents_thermal_level)"
+    sys="$(agents_system)"
+    AW_PID="$pid" AW_MODE="$mode" AW_UNTIL="$until" TH="${lvl:-}" TH_NAME="$(agents_thermal_name "${lvl:--}")" \
+    PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LC_ALL=C awk -F '\t' '
+function js(s,   o, i, c, n) {
+    n = length(s); o = ""
+    for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") o = o "\\\\"; else if (c == "\"") o = o "\\\""; else if (c == "\t") o = o "\\t"
+        else if (c >= " ") o = o c
+    }
+    return "\"" o "\""
+}
+function opt(s) { return s == "-" || s == "" ? "null" : js(s) }
+function ports(s,   n, a, i, o) { if (s == "-") return "[]"; n = split(s, a, ","); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? "," : "") (a[i] + 0); return "[" o "]" }
+function obj(r,   f) {
+    split(r, f, "\t")
+    return sprintf("{\"pid\":%d,\"kind\":%s,\"age_s\":%d,\"cpu\":%s,\"avg_cpu\":%s,\"rss_kib\":%d,\"children\":%d,\"start\":%s,\"start_epoch\":%d,\"ports\":%s,\"user\":%s,\"herdr\":%s,\"cwd\":%s,\"project\":%s,\"command\":%s}",
+        f[2], js(f[3]), f[4], f[5] + 0, f[6] + 0, f[7], f[8], js(f[9]), ENVIRON["NOW"] - f[4], ports(f[10]), js(f[11]), opt(f[12]), opt(f[13]), opt(f[15]), js(f[14]))
+}
+function num(s) { return s == "-" || s == "" ? "null" : s + 0 }
+function fl(s,   n, a, i, o) { if (s == "-" || s == "") return "[]"; n = split(s, a, ","); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? "," : "") js(a[i]); return "[" o "]" }
+function c1(v) { return sprintf("%.1f", v + 0) }
+# What session r runs. Units are its direct children; nested sessions sit
+# inside a unit, so they are listed but not added again.
+function activity(r, tcpu, trss,   i, f, cs, ct, cm, co, rt, rm, ro, n, nm, mo, mn, mp, mr, mc, tl, sl, k) {
+    ct = cm = co = rt = rm = ro = 0; tl = ""; sl = ""; nm = 0
+    split("", mp); split("", mr); split("", mc)
+    for (i = 1; i <= nx; i++) {
+        split(x[i], f, "\t")
+        if (f[11] != r) continue
+        if (f[3] == "session") {
+            sl = sl (sl == "" ? "" : ",") sprintf("{\"pid\":%d,\"start\":%s,\"start_epoch\":%d,\"token\":%s,\"depth\":%s,\"age_s\":%d,\"cpu\":%s,\"rss_kib\":%d,\"command\":%s}",
+                f[2], js(f[9]), ENVIRON["NOW"] - f[4], js(f[2] "@" f[9]), js(f[12]), f[4], c1(f[5]), f[7], js(f[14]))
+            if (f[12] == "nested") continue
+        }
+        if (f[3] == "mcp") {
+            cm += f[5]; rm += f[7]
+            if (!(f[12] in mp)) mo[++nm] = f[12]
+            mp[f[12]] += f[8] + 1; mr[f[12]] += f[7]; mc[f[12]] += f[5]
+        } else if (f[3] == "tool") {
+            ct += f[5]; rt += f[7]
+            tl = tl (tl == "" ? "" : ",") sprintf("{\"pid\":%d,\"start\":%s,\"start_epoch\":%d,\"token\":%s,\"cmd\":%s,\"origin\":%s,\"cwd\":%s,\"age_s\":%d,\"cpu\":%s,\"rss_kib\":%d,\"processes\":%d,\"ports\":%s,\"flags\":%s,\"dup_count\":%d}",
+                f[2], js(f[9]), ENVIRON["NOW"] - f[4], js(f[2] "@" f[9]), js(f[14]), opt(f[15]), opt(f[13]), f[4], c1(f[5]), f[7], f[8] + 1, ports(f[10]), fl(f[16]), f[17])
+        } else { co += f[5]; ro += f[7] }
+    }
+    mn = ""
+    for (k = 1; k <= nm; k++) mn = mn (k > 1 ? "," : "") sprintf("{\"name\":%s,\"procs\":%d,\"cpu\":%s,\"rss_kib\":%d}", js(mo[k]), mp[mo[k]], c1(mc[mo[k]]), mr[mo[k]])
+    cs = tcpu - ct - cm - co; if (cs < 0) cs = 0
+    return sprintf("{\"cpu\":{\"self\":%s,\"tools\":%s,\"mcp\":%s,\"other\":%s},\"rss_kib\":{\"self\":%d,\"tools\":%d,\"mcp\":%d,\"other\":%d},\"mcp\":[%s],\"tools\":[%s],\"child_sessions\":[%s]}",
+        c1(cs), c1(ct), c1(cm), c1(co), (trss - rt - rm - ro > 0 ? trss - rt - rm - ro : 0), rt, rm, ro, mn, tl, sl)
+}
+$1 == "total" { total = $5; next }
+$1 == "act" { x[++nx] = $0; next }
+$1 == "agent" && NF >= 14 { ag[++na] = $0; next }
+NF >= 14 { o[$1] = o[$1] (o[$1] == "" ? "" : ",") obj($0) }
+END {
+    aw = ENVIRON["AW_PID"] == "" ? "{\"active\":false}" : sprintf("{\"active\":true,\"pid\":%d,\"mode\":%s,\"until\":%d}", ENVIRON["AW_PID"], js(ENVIRON["AW_MODE"]), ENVIRON["AW_UNTIL"])
+    split(ENVIRON["SYS"], y, "\t")
+    sys = sprintf("{\"cpu_pct\":%s,\"load1\":%s,\"cores\":%s,\"mem_free_pct\":%s,\"mem_pressure\":%s,\"battery_pct\":%s,\"battery_state\":%s}",
+        (total == "" ? "null" : int(total / (y[2] > 0 ? y[2] : 1) + 0.5)), num(y[1]), num(y[2]), num(y[3]), opt(y[4]), num(y[5]), opt(y[6]))
+    for (i = 1; i <= na; i++) {
+        split(ag[i], f, "\t"); s = obj(ag[i])
+        o["agent"] = o["agent"] (i > 1 ? "," : "") substr(s, 1, length(s) - 1) ",\"activity\":" activity(f[2], f[5], f[7]) "}"
+    }
+    printf "{\"schema_version\":1,\"agents\":[%s],\"stale\":[%s],\"hogs\":[%s],\"top\":[%s],\"system\":%s,\"awake\":%s,\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}\n",
+        o["agent"], o["stale"], o["hog"], o["top"], sys, aw, (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"])
+}'
+}
+
+# agents_tsv — the records (agent, stale, hog, top, total), then:
+#   sys  cpu_pct load1 cores mem_free_pct mem_pressure battery_pct battery_state
+#   awake mode pid until · thermal level name · power mode
+#   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
+# Built for the menu bar: Herdr is read from its cache (never waited on), and
+# the keep-awake state is read once.
+agents_tsv() {
+    local recs state pid="-" mode="off" until=0 lvl sys key val cores
+    _agents_awake_prime
+    recs="$(AGENTS_HERDR_MODE=async agents_collect)" || return 1
+    [[ -z "$recs" ]] || printf '%s\n' "$recs"
+    sys="$(agents_system)"
+    cores="${sys#*$'\t'}"; cores="${cores%%$'\t'*}"
+    printf 'sys\t%s\t%s\n' "$(_agents_cpu_pct "$cores" "$recs")" "$sys"
+    state="$(_agents_awake_now)" && read -r pid mode until _ <<<"$state"
+    lvl="$(agents_thermal_level)"
+    printf 'awake\t%s\t%s\t%s\n' "$mode" "$pid" "$until"
+    printf 'thermal\t%s\t%s\n' "${lvl:--}" "$(agents_thermal_name "${lvl:--}")"
+    printf 'power\t%s\n' "$(agents_powermode)"
+    for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_CONF; do
+        val="${!key}"
+        printf 'conf\t%s\t%s\n' "$key" "${val:--}"
+    done
+}
+
+# agents_token_cwd PID@START — the working directory of exactly that process
+# (refused when the pid is gone or now names another process). The menu
+# passes only such tokens, never a path: paths are resolved here, at click time.
+agents_token_cwd() {
+    local pid start now c
+    if [[ ! "${1:-}" =~ ^([0-9]+)@([A-Za-z0-9_:]+)$ ]]; then
+        echo "usage: agents cwd PID@START" >&2; return 2
+    fi
+    pid="${BASH_REMATCH[1]}" start="${BASH_REMATCH[2]}"
+    now="$(_agents_start "$pid")"
+    [[ -n "$now" && "$now" == "$start" ]] || { echo "agents: pid $pid is gone or now names another process" >&2; return 1; }
+    c="$(_agents_cwds "$pid" | cut -f2)"
+    [[ "$c" == /* ]] || { echo "agents: no working directory for pid $pid" >&2; return 1; }
+    printf '%s\n' "$c"
+}
+
+# agents_config [--edit] — the effective settings and where they came from;
+# --edit opens the file in your text editor.
+agents_config() {
+    local key
+    if [[ "${1:-}" == --edit ]]; then
+        [[ -r "$AGENTS_CONF" ]] || { echo "agents: $AGENTS_CONF does not exist" >&2; return 1; }
+        open -t "$AGENTS_CONF"
+        return
+    fi
+    if [[ -r "$AGENTS_CONF" ]]; then echo "# $AGENTS_CONF"; else echo "# $AGENTS_CONF (absent: defaults)"; fi
+    for key in $_AGENTS_CONF_KEYS; do
+        printf '%s=%s\n' "$key" "${!key-}"
+    done
+}
+
+agents_watch() {
+    local secs="${1:-2}" out key
+    [[ "$secs" =~ ^[1-9][0-9]*$ ]] || { echo "usage: agents watch [SECONDS]" >&2; return 2; }
+    trap 'tput cnorm 2>/dev/null; echo; exit 0' INT TERM
+    tput civis 2>/dev/null
+    while :; do
+        _agents_awake_prime
+        out="$(r="$(agents_collect)"; printf '%s\n' "$r" | agents_render "agents stale hogs quiet"; echo; _agents_footer "$r")"
+        printf '\033[H\033[2J%sagents · %s · every %ss · q quit%s\n\n%s\n' "$C_DIM" "$(date +%H:%M:%S)" "$secs" "$C_0" "$out"
+        if [[ -t 0 ]]; then
+            read -r -s -n 1 -t "$secs" key && [[ "$key" == q ]] && break
+        else
+            sleep "$secs"
+        fi
+    done
+    tput cnorm 2>/dev/null
+}
+
+# --- Terminal windows ------------------------------------------------------------
+# The menu opens `agents watch` (and other views) in your terminal itself
+# rather than through SwiftBar's terminal=true, which always uses Terminal.app.
+
+# _agents_app_dirs — where .app bundles are looked for (a test may override).
+_agents_app_dirs() {
+    if [[ -n "${AGENTS_TESTING:-}" && -n "${AGENTS_APP_DIRS:-}" ]]; then echo "$AGENTS_APP_DIRS"; return; fi
+    echo "/Applications $HOME/Applications"
+}
+
+# agents_terminal — the terminal to open: AGENTS_TERMINAL, or with auto the
+# first installed of Ghostty, iTerm, WezTerm, kitty, falling back to Terminal.
+agents_terminal() {
+    local want="${AGENTS_TERMINAL:-auto}" pair dir
+    [[ "$want" == auto ]] || { echo "$want"; return; }
+    for pair in Ghostty:ghostty iTerm:iterm WezTerm:wezterm kitty:kitty; do
+        for dir in $(_agents_app_dirs); do
+            [[ -d "$dir/${pair%%:*}.app" ]] || continue
+            # `open -na Ghostty --args -e CMD` needs Ghostty 1.2 or later.
+            [[ "$pair" != Ghostty:* ]] || _agents_ghostty_ok "$dir/Ghostty.app" || continue
+            echo "${pair#*:}"; return
+        done
+    done
+    echo terminal
+}
+
+# _agents_ghostty_ok APP — true for Ghostty 1.2 or later.
+_agents_ghostty_ok() {
+    local v
+    v="$("$1/Contents/MacOS/ghostty" +version 2>/dev/null)"
+    [[ "$v" =~ Ghostty\ ([0-9]+)\.([0-9]+) ]] || return 1
+    [[ ${BASH_REMATCH[1]} -gt 1 || ( ${BASH_REMATCH[1]} -eq 1 && ${BASH_REMATCH[2]} -ge 2 ) ]]
+}
+
+# _agents_term_argv TERMINAL [--hold] ARGS... — the command (one word per line)
+# that opens a window running `agents ARGS…`. The window gets this PATH and
+# the absolute path of agents, so a login shell's PATH doesn't matter; --hold
+# keeps it open after a one-shot command until a key is pressed.
+_agents_term_argv() {
+    local term="$1" hold="" inner run cmdline w; shift
+    [[ "${1:-}" == --hold ]] && { hold=1; shift; }
+    inner="$(printf '%q ' "$AGENTS_PATH" "$@")"
+    [[ -z "$hold" ]] || inner+="; printf '\\n[press any key to close] '; read -r -s -n 1"
+    run=(/usr/bin/env "PATH=$PATH" /bin/bash -c "$inner")
+    cmdline="$(printf '%q ' "${run[@]}")"
+    case "$term" in
+        ghostty) set -- open -na Ghostty --args -e "${run[@]}" ;;
+        kitty)   set -- open -na kitty --args "${run[@]}" ;;
+        wezterm) set -- open -na WezTerm --args start -- "${run[@]}" ;;
+        iterm)   set -- osascript -e 'on run argv' \
+                     -e 'tell application "iTerm" to create window with default profile command (item 1 of argv)' \
+                     -e 'end run' "$cmdline" ;;
+        terminal) set -- osascript -e 'on run argv' \
+                     -e 'tell application "Terminal" to do script (item 1 of argv)' \
+                     -e 'tell application "Terminal" to activate' -e 'end run' "$cmdline" ;;
+        *) echo "agents: unknown terminal '$term' (auto, ghostty, iterm, terminal, wezterm, kitty)" >&2; return 2 ;;
+    esac
+    for w in "$@"; do printf '%s\n' "$w"; done
+}
+
+# agents_open_term [-n] [--hold] ARGS... — run `agents ARGS…` in a new window
+# of your terminal; -n prints the command instead.
+agents_open_term() {
+    local dry="" term line argv=()
+    [[ "${1:-}" == -n ]] && { dry=1; shift; }
+    [[ $# -gt 0 ]] || { echo "usage: agents open-term [-n] [--hold] COMMAND..." >&2; return 2; }
+    term="$(agents_terminal)"
+    while IFS= read -r line; do argv+=("$line"); done < <(_agents_term_argv "$term" "$@")
+    [[ ${#argv[@]} -gt 0 ]] || return 2
+    if [[ -n "$dry" ]]; then printf '%q ' "${argv[@]}"; echo; return 0; fi
+    "${argv[@]}" >/dev/null 2>&1
+}
+
+# --- Confirmation and notification from the menu bar ---------------------------
+
+# _agents_gui_confirm MESSAGE — a native dialog with Cancel as the default;
+# true only for "Kill". No GUI (or no osascript) means no.
+_agents_gui_confirm() {
+    local out
+    command -v osascript >/dev/null 2>&1 || { echo "agents: no osascript to confirm with; not killing" >&2; return 1; }
+    out="$(osascript -e 'on run argv' \
+        -e 'display dialog (item 1 of argv) with title "agents" buttons {"Cancel", "Kill"} default button "Cancel" cancel button "Cancel" with icon caution' \
+        -e 'end run' "$1" 2>/dev/null)" || return 1
+    [[ "$out" == *"button returned:Kill"* ]]
+}
+
+# _agents_notify MESSAGE — a macOS notification, when asked for (--notify).
+_agents_notify() {
+    [[ "${AGENTS_NOTIFY:-false}" == true ]] || return 0
+    command -v osascript >/dev/null 2>&1 || return 0
+    osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title "agents"' -e 'end run' "$1" >/dev/null 2>&1 || true
+}
+
+agents_usage() {
+    cat <<EOF
+agents — see and control local agentic-coding processes (claude, codex)
+
+LOOK
+  agents [ls]                  sessions (blocked first), then stale processes and
+                               hogs when there are any, then system status
+  agents watch [SECS]          the same, redrawn every SECS (default 2); q quits
+  agents ps [PID]              everything a session runs: MCP servers, each command
+                               (tool shell) with its origin (main or a worktree
+                               subagent) and flags (dup, long, hot, wait), nested
+                               sessions; all sessions without PID
+  agents stale                 only stale processes: orphaned MCP servers, npx
+                               helpers, caffeinate, dev servers (ppid 1)
+  agents hogs                  top $AGENTS_HOG_TOP CPU hogs, any owner: lifetime average
+                               >= ${AGENTS_HOG_PCT}% after ${AGENTS_HOG_MIN}m, or >= ${AGENTS_HOG_NOW}% now outside agent trees
+  agents thermal               thermal pressure and energy mode (display only)
+  agents json | tsv            machine-readable snapshot (tsv feeds SwiftBar)
+
+ACT
+  agents kill [OPTS] PID...    SIGTERM the whole tree, descendants first, then
+                               SIGKILL whatever is left after ${AGENTS_GRACE}s
+  agents reap [OPTS]           kill every stale tree
+  agents term [OPTS] PID...    SIGTERM one process (for hogs), not its tree
+    -n, --dry-run              show what would be signalled
+    -y, --yes                  don't ask (required when stdin is not a terminal)
+    --confirm-gui              ask with a macOS dialog instead (Cancel is the default)
+    --notify                   report the result as a macOS notification
+    PID@START                  a PID with its start time (from json/tsv): refused if
+                               the pid now names a different process
+  agents cwd PID@START         that process's working directory (copy-path puts it
+                               on the clipboard, reveal shows it in Finder)
+  agents open-term [-n] [--hold] CMD...
+                               run 'agents CMD' in a new window of your terminal
+                               (AGENTS_TERMINAL); -n prints the command
+
+KEEP AWAKE
+  agents awake [status]        keep-awake state, and who else holds the Mac awake
+  agents awake on [DURATION]   hold system and display awake (30m, 2h, 1h30m);
+                               no DURATION = until 'agents awake off'
+  agents awake agents          hold while any claude/codex runs, then release
+  agents awake off             release
+
+SETTINGS
+  agents config [--edit]       effective settings, and the file they came from;
+                               --edit opens the file in your text editor
+  $AGENTS_CONF (KEY=value; AGENTS_CONF picks another file). Keys: AGENTS_HOG_PCT
+  AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP AGENTS_GRACE AGENTS_AWAKE_POLL
+  AGENTS_NAMES AGENTS_NO_HERDR AGENTS_TERMINAL, and the menu bar's AGENTS_BAR_TITLE
+  AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. The same
+  names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
+  AGENTS_ORPHAN_PATTERNS at the top of $AGENTS_PATH
+
+SAFETY
+  Never signals pid 1, this shell or its parents, another user's process
+  (prints the sudo command instead), a system or session process (anything
+  under /System/Library, /usr/libexec or /usr/sbin; loginwindow, Finder, Dock,
+  WindowServer, your terminal), or a process hosting a shell or an agent below
+  it. Refuses to run as root. Re-checks each process's start time before every
+  signal. Never marks as stale anything that hosts a session (an agent, a
+  shell, tmux/screen/zellij/herdr/pm2), a launchd job or a systemd service.
+  Keep-awake uses caffeinate (macOS) or systemd-inhibit (Linux), never sudo or
+  'pmset disablesleep'; a closed lid still sleeps unless the Mac is on AC with
+  an external display (closed-display mode).
+EOF
+}
+
+agents_main() {
+    local cmd="${1:-ls}"
+    [[ $# -gt 0 ]] && shift
+    AGENTS_DRY_RUN=false AGENTS_YES=false AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false
+    _agents_colors
+    if [[ -t 1 ]]; then AGENTS_WIDTH="${COLUMNS:-$(tput cols 2>/dev/null || echo 120)}"; else AGENTS_WIDTH=160; fi
+    case "$cmd" in
+        kill|reap|term)
+            # As root every process is "yours": refuse rather than guess.
+            local euid="$EUID"
+            [[ -z "${AGENTS_TESTING:-}" ]] || euid="${AGENTS_EUID:-$EUID}"
+            if [[ "$euid" -eq 0 ]]; then
+                echo "agents: refusing to $cmd as root; run it as yourself" >&2
+                return 2
+            fi
+            local args=() a
+            for a in "$@"; do
+                case "$a" in
+                    -n|--dry-run)  AGENTS_DRY_RUN=true ;;
+                    -y|--yes)      AGENTS_YES=true ;;
+                    --confirm-gui) AGENTS_CONFIRM_GUI=true ;;
+                    --notify)      AGENTS_NOTIFY=true ;;
+                    -*)            echo "agents: unknown option $a" >&2; return 2 ;;
+                    *)             args+=("$a") ;;
+                esac
+            done
+            set -- ${args[@]+"${args[@]}"}
+            ;;
+    esac
+    case "$cmd" in
+        ls|list)  local r; _agents_awake_prime; r="$(agents_collect)" || return 1
+                  printf '%s\n' "$r" | agents_render "agents stale hogs quiet"; echo; _agents_footer "$r" ;;
+        ps)       [[ -z "${1:-}" || "$1" =~ ^[0-9]+$ ]] || { echo "usage: agents ps [PID]" >&2; return 2; }
+                  local r; r="$(agents_collect)" || return 1
+                  printf '%s\n' "$r" | AGENTS_FOCUS="${1:-}" agents_render "agents detail" ;;
+        stale)    agents_collect | agents_render stale ;;
+        hogs)     agents_collect | agents_render hogs ;;
+        watch)    agents_watch "$@" ;;
+        kill)     [[ $# -gt 0 ]] || { echo "usage: agents kill [-n] [-y] PID..." >&2; return 2; }
+                  agents_kill_tokens true "$@" ;;
+        term)     [[ $# -gt 0 ]] || { echo "usage: agents term [-n] [-y] PID..." >&2; return 2; }
+                  agents_kill_tokens false "$@" ;;
+        reap)     local recs tokens
+                  recs="$(agents_collect)" || return 1
+                  tokens="$(printf '%s\n' "$recs" | awk -F '\t' '$1 == "stale" { print $2 "@" $9 }')"
+                  [[ -n "$tokens" ]] || { echo "no stale processes"; _agents_notify "No stale processes"; return 0; }
+                  # shellcheck disable=SC2086  # one token per word, none has spaces
+                  agents_kill_tokens true $tokens ;;
+        awake)    agents_awake "$@" ;;
+        thermal)  local lvl; lvl="$(agents_thermal_level)"
+                  echo "thermal pressure: $(agents_thermal_name "${lvl:--}")${lvl:+ ($lvl)}"
+                  echo "energy mode: $(agents_powermode)" ;;
+        json)     _agents_awake_prime; agents_collect | agents_json ;;
+        tsv)      agents_tsv ;;
+        config)   agents_config "$@" ;;
+        cwd)      agents_token_cwd "$@" ;;
+        copy-path) local c; c="$(agents_token_cwd "$@")" || return 1
+                  printf '%s' "$c" | pbcopy ;;
+        reveal)   local c; c="$(agents_token_cwd "$@")" || return 1
+                  open -R "$c" ;;
+        open-term) agents_open_term "$@" ;;
+        _awake-loop) _agents_awake_loop ;;
+        -h|--help|help) agents_usage ;;
+        *)        echo "agents: unknown command '$cmd' (agents --help)" >&2; return 2 ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    agents_main "$@"
+fi

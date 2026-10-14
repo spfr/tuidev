@@ -119,6 +119,9 @@ jobs:
             configs/sandbox/profiles/standard.sb
             configs/sandbox/profiles/off.sb
             bin/sbx
+            bin/agents
+            configs/swiftbar/agents.10s.sh
+            configs/agents/agents.conf
             scripts/lib/ui.sh
             scripts/lib/config_write.sh
             scripts/lib/migrate.sh

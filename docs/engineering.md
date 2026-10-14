@@ -29,11 +29,14 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `configs/themes/<name>/palette.toml` | `~/.config/tmux/theme.conf` + blocks in the Ghostty and Starship configs | `scripts/theme.sh` |
 | `configs/nvim/` | `~/.config/nvim/` | upgrade-shipped per file, only while tuidev owns the tree (`nvim` pack) |
 | `configs/tmux/tmux.conf` | `~/.config/tmux/tmux.conf` | managed block `tuidev-tmux` + TPM bootstrap (`tmux` pack) |
+| `bin/agents`, `configs/swiftbar/agents.10s.sh` | `~/.local/bin/agents`, SwiftBar's plugin folder (default `~/.config/swiftbar/plugins/`, named after `AGENTS_BAR_REFRESH`) | overwrite (`monitoring` pack; the plugin on macOS only) |
+| `configs/agents/agents.conf` | `~/.config/agents.conf` | adopt-existing (`monitoring` pack) |
 
 tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/tuidev`. It is defined once, in `scripts/lib/ui.sh`, and holds `profile`, `manifest`, `env`, `migrations`, `theme`, `backups/`, `sandbox/` and `shell.d/`. Derive every state path from it.
 
 ```
 bin/sbx                 Seatbelt wrapper
+bin/agents              agent process monitor (monitoring pack); standalone, sourceable for tests
 configs/                everything installed into $HOME (table above)
 scripts/lib/            shared libraries + test_*.sh unit harnesses
 scripts/install/        built-in packs (core remote sandbox ui extras); packs/ = optional packs (includes nvim.sh, tmux.sh)
@@ -141,7 +144,7 @@ Run these locally, in this order. `make ci-test` runs the first four.
 make lint              # shellcheck -x over every shell file (the list lives in the Makefile)
 make validate-configs  # JSON, TOML, Lua, zsh/sh syntax (CI adds --strict)
 make check-links       # every relative link in every tracked .md resolves
-make test-lib          # scripts/lib/test_*.sh: config_write, container, contract, migrations, pkg, profile, theme
+make test-lib          # scripts/lib/test_*.sh: agents, config_write, container, contract, migrations, pkg, profile, theme
 make test-core         # core-tagged tests against this machine
 make container-test    # core-tagged tests in an Alpine container (tests scripts and configs, not the installer)
 ```

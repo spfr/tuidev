@@ -10,6 +10,7 @@ tuidev: an opinionated, agent-first terminal setup for macOS (and Linux). It is 
 - `scripts/`: packs, libs, update, tests, migrations.
 - `configs/`: what gets installed into `$HOME`.
 - `bin/sbx`: the Seatbelt wrapper.
+- `bin/agents`: the agent process monitor the `monitoring` pack installs.
 
 It is a **public** repo that ships best practices only. The architecture map is in [docs/engineering.md](docs/engineering.md).
 

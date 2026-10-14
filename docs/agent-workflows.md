@@ -16,6 +16,7 @@ A fleet of agents is an **attention queue**, not a wall of panes. Look at an age
 | Sessions that keep running with the terminal closed | **Background sessions**: `claude --bg`, `claude agents` (see [below](#background-sessions)) |
 | Many agents: which one is blocked? | **Herdr** (`--pack herdr`, prefix `Ctrl+b`) |
 | Steer one agent from your phone | The CLI's native **remote control** |
+| What is running, what leaked, what keeps the Mac awake? | **`agents`** (`--pack monitoring`), plus a SwiftBar menu on macOS (see [below](#local-processes-agents---pack-monitoring)) |
 
 These tools don't replace each other. tmux doesn't know agent state, and Herdr doesn't replace a Ghostty tab. Work that must survive a laptop lid belongs on an always-on node (see [remote.md](remote.md)).
 
@@ -176,6 +177,136 @@ A **session** is one Herdr server with its own workspaces, panes and socket. Pla
   Enable it with `systemctl --user enable --now herdr.service`, and run `sudo loginctl enable-linger $USER` once so user units run without a login. A named session needs the same unit with `Environment=HERDR_SESSION=NAME`.
 
 `herdr machine add` checks and, after asking, installs the remote server. It never copies your config or secrets. `herdr machine status` checks saved machines without prompting; `herdr machine reconnect` finishes SSH authentication (MFA included) in your terminal. Passphrase-protected keys need `ssh-add` first. Under `sbx --profile strict`, an agent reaches the Herdr socket only with `--allow-herdr` (see [sandboxing.md](sandboxing.md#profiles)). Inside a Herdr pane, `HERDR_ENV=1` is already set, and `sbx` hides the wrapped process from Herdr's detection unless you pass `--allow-herdr`. Herdr's docs: <https://herdr.dev/docs/>.
+
+## Local processes: `agents` (`--pack monitoring`)
+
+Every `claude` session starts its own MCP servers (`npm exec chrome-devtools-mcp@latest`, `node …/some-mcp.cjs`), about 250 MB a session, and holds a rolling `caffeinate -i -t 300`. When a session dies badly, those children are reparented to launchd and keep running. `agents` (`~/.local/bin/agents`) shows what is running and cleans up what leaked. It reads one `ps` snapshot per run and never needs sudo.
+
+```bash
+agents                    # sessions (blocked first), stale processes and hogs if any, system status
+agents watch              # the same, redrawn every 2s (q quits)
+agents open-term watch    # the same in a new window of your terminal (AGENTS_TERMINAL)
+agents ps 90419           # everything one session runs (all sessions without a pid)
+agents reap -n            # what `reap` would kill: every stale tree
+agents reap               # SIGTERM each stale tree, SIGKILL what's left after 3s (asks first)
+agents kill PID           # one tree, descendants first
+agents term PID           # one process only (a hog), SIGTERM
+agents awake on 2h        # keep the Mac and display awake (30m, 1h30m; no duration = until off)
+agents awake agents       # stay awake while any claude or codex runs, then release
+agents awake status       # our hold, plus who else holds the Mac awake (pmset -g assertions)
+agents json               # machine-readable; `agents tsv` feeds the menu-bar plugin
+```
+
+- **Agents** are processes named `claude` or `codex` (`AGENTS_NAMES` adds more): one row per tree, with its project (the directory's name, or `repo/name` for a worktree under `.claude/worktrees/`), tree CPU and memory, child count, cwd, listening ports and, when Herdr is running, its status for the pane in that directory. Sessions waiting for you (Herdr's `blocked`) come first, then `working`, then `idle` and `done`, then sessions without a status. Herdr's answer is cached for ten seconds in `~/.config/tuidev/run/`; the menu bar never waits for it and refreshes it in the background. The Codex app-server daemon (`codex app-server … --managed-daemon` and its `pid-update-loop`) is long-lived by design: it gets its own `daemon` row and is never stale. `claude --chrome-native-host`, the browser bridge Chrome starts, is not a session.
+- **What sessions run.** Under each session, `agents ls` lists its MCP servers on one line and its busiest commands (`AGENTS_LS_TOOLS`), and `agents ps PID` lists everything:
+
+  ```
+    90419   claude  working    3h30m  537.0   2.1G   33  64013  myapp        ~/code/myapp
+        mcp: 2 servers · 4 procs · 209M
+        └ go test -race ./internal/web · 2m08s · 100% · feat-a  x2 dup  hot
+        └ npm run dev · 1h00m · 0% · feat-b  long
+  ```
+
+  Each child of a session is one unit, with its whole subtree's CPU and memory:
+  - **MCP servers**, grouped by name (`npm exec X-mcp@latest`, `node …/x-mcp.cjs`);
+  - **commands**: each tool shell, Claude Code's `zsh -c … eval '<command>'` or Codex's `bash -lc <command>` (on macOS wrapped in `sandbox-exec`), shown as the command itself, without its `cd`, `VAR=value` prefixes, `2>&1` and a trailing `| tail`;
+  - the session's own `caffeinate`, nested sessions (a `claude -p` a command started), and anything else.
+
+  A command's **origin** is the worktree subagent it runs for, from its directory (`<repo>/.claude/worktrees/<name>`), or `main`. Subagents run inside the session's own process, so the directory is the only reliable clue. Flags:
+  - `dup`: the same command runs more than once in the same directory, within a session or across sessions. A command's directory is where it `cd`s first, so parallel worktree subagents running the same `go test` in their own worktrees are not duplicates;
+  - `long`: running longer than `AGENTS_TOOL_LONG` (20 minutes);
+  - `wait`: a polling loop the agent waits on (`until …; do sleep 5; done`). It is never `dup` or `long` and never needs you; the menu marks it with an hourglass, and it can still be stopped;
+  - `hot`: its subtree uses `AGENTS_HOG_NOW` CPU or more.
+
+  Stopping a command is an ordinary tree kill with every safety check: the session sees the command fail and carries on.
+- **Stale** means reparented to launchd (ppid 1), yours, and either matching an agent-helper pattern (MCP servers, `npm exec`/npx, `caffeinate`; the list is `AGENTS_ORPHAN_PATTERNS` at the top of the script) or a dev server: a process that listens on a TCP port itself or through its children (an orphaned `npm run dev` whose vite listens), started from a directory under `$HOME` (not `~/Library`), `$TMPDIR` or Claude Code's `/private/tmp/claude-UID` scratchpads. Never flagged:
+  - a session, or anything that hosts one: a process whose tree holds an agent, an interactive or login shell, or a tmux, screen, zellij, Herdr or pm2 server (so a tmux server whose claude pane listens on a port is left alone);
+  - launchd jobs (`launchctl list`: LaunchAgents, Homebrew services) and, on Linux, processes in a systemd `.service` unit;
+  - the Codex daemon and `agents`' own keep-awake holder.
+
+  Stale detection is mostly a macOS story: on Linux, orphans usually reparent to a `systemd --user` subreaper instead of pid 1, so they don't look orphaned.
+- **Hogs** are any process of any owner averaging at least 50% CPU over its lifetime after 30 minutes (a Messages.app stuck at 100% for days), or at least 90% right now outside an agent tree. `AGENTS_HOG_PCT`, `AGENTS_HOG_MIN`, `AGENTS_HOG_NOW` and `AGENTS_HOG_TOP` tune them. On Linux, `ps` reports only the lifetime average.
+- **Safety.** `kill`, `reap` and `term` refuse:
+  - pid 1, `agents` itself and its parents (so the session you run it from);
+  - other users' processes, for which they print the `sudo kill` to run yourself;
+  - system and session processes: anything under `/System/Library`, `/usr/libexec` or `/usr/sbin`, and `loginwindow`, Finder, Dock, WindowServer, SystemUIServer, ControlCenter and your terminal (Ghostty, Terminal, iTerm2, WezTerm, kitty, Alacritty). Apps in `/System/Applications`, such as a runaway Messages, stay allowed. Inside a tree, such members are skipped;
+  - any process hosting an interactive shell or an agent below it: a terminal app (Warp, Hyper, Tabby…), an editor's helper, a tmux or screen server. An agent root itself can still be killed, with its tree;
+  - running as root at all.
+
+  Before every signal they re-check the process's start time, so a reused pid is never hit, and `PID@START` (from `json` or `tsv`) pins the exact process that was listed. A tree kill returns as soon as everything exited after SIGTERM; after the grace period it SIGKILLs the survivors, plus, if the tree's root is still running then, anything that root's tree spawned meanwhile. Without a terminal they need `-y`.
+- **Keep-awake** is `caffeinate -di` (system and display idle sleep), never `pmset disablesleep` or sudo. The holder's pid lives in `~/.config/tuidev/run/awake`, and `on`, `off` and `agents` take a lock (released on any exit), so two clicks never leave two holders. The record is dropped only when the holder is really gone; if its start time can't be checked (`ps` blocked, as in a sandbox), `awake off` refuses to signal the pid and tells you how to stop it yourself. Without `caffeinate` or `systemd-inhibit`, `awake on` fails with a message. `./uninstall.sh` runs `agents awake off` before it removes the helper. `awake agents` re-checks every minute, which also covers Claude Code's own gap between stopping one `caffeinate` and starting the next. A closed lid still sleeps the Mac unless it runs on power with an external display attached (Apple's closed-display mode). On Linux, `systemd-inhibit` holds the same locks.
+- **Thermal** shows the kernel's thermal pressure (`nominal`, `moderate`, `heavy`, `trapping`, `sleeping`, from `notifyutil -g com.apple.system.thermalpressurelevel`) and the energy mode (`automatic`, `low`, `high`). Both are read-only: macOS runs the fans, and `agents` never changes the energy mode.
+
+### Menu bar (SwiftBar, macOS)
+
+On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents.10s.sh` plugin, which also stands in for a system-stats menu bar app. If SwiftBar already has a plugin folder, the plugin goes there; otherwise the pack sets the folder to `~/.config/swiftbar/plugins`. Open SwiftBar once (`open -a SwiftBar`) and turn on **Launch at login** in its settings. The pack doesn't add login items. Uninstalling removes the plugin but leaves SwiftBar's plugin-folder setting as it is.
+
+- **Title:** by default an SF Symbol and the number of sessions, plus `· N blocked` when sessions wait for you and a cup while keep-awake is on. The icon turns orange when something needs a look (a blocked session, stale processes, a hog, memory pressure) and red for heavy thermal pressure or critical memory pressure; otherwise it follows the menu bar's colors. The session count is the same in the title, the menu and `agents ls`; the Codex daemon is listed separately and not counted.
+- **Menu**, in the order of `AGENTS_BAR_SECTIONS` (sections with nothing to show are left out):
+  - **Needs you:** sessions Herdr reports as blocked, waiting for input or a permission; commands running more than once (`myapp: 3× go test running`, with Stop duplicates (keep newest)…) and commands running longer than `AGENTS_TOOL_LONG` (with Stop command…), but not the polling loops agents wait on.
+  - **Agents:** one line per session: project, kind, status, CPU and memory, with a dot colored by status (orange blocked, green working, gray idle). When its commands use most of the CPU the row says so (`735% (tools 728%)`). Clicking it shows the project in Finder. Its submenu holds the full path, pid, age, children and ports; Running (N), one line per command (command, age, CPU, origin, flags) with Stop command… (asks first); the MCP servers on one line; Stop duplicates (keep newest)… when a command runs twice; and Kill session…, Copy path, Open in Finder and Copy PID. The Codex daemon follows on its own line with a gear.
+  - **Stale:** each with Kill tree, plus Reap all stale, which kills exactly the processes listed, not whatever is stale when you click.
+  - **Hogs:** each with Terminate (SIGTERM, your own processes only).
+  - **Awake:** the state (off, while agents run, time left), with a check mark on the active choice among Until turned off, For 1 hour, For 3 hours, While agents run and Off, plus who holds the Mac awake.
+  - **System**, two lines: CPU (the sum of `%cpu` over the `ps` snapshot, divided by the cores), memory used (`memory_pressure -Q`) and the load, which opens `agents watch`, with the busiest processes in its submenu (each opens Activity Monitor); then battery and charging (`pmset -g batt`), thermal pressure and energy mode, which opens System Settings › Battery, where Energy Mode lives.
+  - Then Open agents watch, Edit settings (opens `~/.config/agents.conf`) and Refresh.
+- Every action runs `agents` with the `PID@START` it listed, so a menu opened before a pid was reused can't kill the wrong process. Menu parameters carry only fixed words and such tokens, never a path or a name a process controls: Copy path and Open in Finder run `agents copy-path|reveal PID@START`, which looks the directory up when you click (`agents cwd PID@START` prints it). Killing a live session asks first in a macOS dialog (`--confirm-gui`, Cancel is the default) naming the project, pid and child count; stale processes and hogs, already filtered, go in one click. Each action reports its result as a notification (`--notify`).
+- Windows open in your terminal (`agents open-term`, `AGENTS_TERMINAL`), not through SwiftBar's own terminal option, which always uses Terminal.app. For Ghostty (1.2 or later; `auto` skips an older one) that is `open -na Ghostty --args -e …`; one-shot views such as "Who holds the Mac awake?" wait for a key before the window closes.
+- Text uses the menu's own label color. Status colors are on the symbols only (SwiftBar colors an item's symbol through `sfconfig`, not `sfcolor`), and lines that only inform, such as section headers and the details in a submenu, appear dimmed.
+- One refresh runs `agents tsv` once: one `ps` snapshot, two `lsof` calls, a handful of one-line probes, and Herdr from its cache, in 0.2–0.6 s depending on load.
+
+### Machine-readable output: `agents json`
+
+`agents json` is a contract other tools build on: fields are only added within a `schema_version`, and anything removed or changed bumps it. Version 1:
+
+```
+{
+  "schema_version": 1,
+  "agents": [{
+    "pid", "kind" ("claude"|"codex"|…|"daemon"), "age_s", "cpu", "avg_cpu", "rss_kib", "children",
+    "start", "start_epoch", "ports": [n], "user", "herdr" (status or null), "cwd", "project", "command",
+    "activity": {
+      "cpu":     {"self", "tools", "mcp", "other"},          percent, subtree sums
+      "rss_kib": {"self", "tools", "mcp", "other"},
+      "mcp":   [{"name", "procs", "cpu", "rss_kib"}],
+      "tools": [{"pid", "start", "start_epoch", "token" ("PID@START"), "cmd", "origin" ("main"|worktree|null),
+                 "cwd", "age_s", "cpu", "rss_kib", "processes", "ports": [n],
+                 "flags": ["dup"|"long"|"hot"|"wait"], "dup_count"}],
+      "child_sessions": [{"pid", "start", "start_epoch", "token", "depth" ("direct"|"nested"), "age_s", "cpu", "rss_kib", "command"}]
+    }
+  }],
+  "stale": [same fields as an agent, without activity], "hogs": [...], "top": [...],
+  "system": {"cpu_pct", "load1", "cores", "mem_free_pct", "mem_pressure", "battery_pct", "battery_state"},
+  "awake": {"active", "pid", "mode", "until"}, "thermal": {"level", "name"}, "powermode"
+}
+```
+
+`start` is the process start time as `ps` prints it (it is part of the `token`); `start_epoch` is the same moment in Unix seconds, derived from the elapsed time (±1 s). A tool's `cwd` is the directory its command `cd`s into, when it does. A `token` is what `agents kill`, `term`, `cwd`, `copy-path` and `reveal` take: they refuse it once the pid names another process.
+
+### Settings: `~/.config/agents.conf`
+
+The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf) once (`--adopt-existing`) and never overwrites it. Uncomment a line to change it; `agents config` prints what is in effect. The file is read as `KEY=value` lines, never run as a script: unknown keys and malformed values are reported and ignored. The same names in the environment win, and `AGENTS_CONF` points at another file.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `AGENTS_HOG_PCT` | `50` | Lifetime-average CPU% that makes a long-running process a hog |
+| `AGENTS_HOG_MIN` | `30` | Minutes a process must have run before its average counts |
+| `AGENTS_HOG_NOW` | `90` | Current CPU% that makes a process outside any agent tree a hog |
+| `AGENTS_HOG_TOP` | `5` | Hogs listed |
+| `AGENTS_TOOL_LONG` | `20` | Minutes before a session's command (a tool shell) is flagged `long` |
+| `AGENTS_LS_TOOLS` | `5` | Commands listed under each session in `agents ls` and `watch`; `agents ps` lists all |
+| `AGENTS_NAMES` | `claude codex` | Process names (argv[0] basenames) that count as agent sessions |
+| `AGENTS_GRACE` | `3` | Seconds between SIGTERM and SIGKILL when killing a tree |
+| `AGENTS_AWAKE_POLL` | `60` | Seconds between checks in `agents awake agents` |
+| `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup |
+| `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
+| `AGENTS_BAR_TITLE` | `count awake` | Title tokens after the icon: `count` (sessions, and how many are blocked), `cpu`, `mem`, `load`, `battery`, `thermal` (only above nominal), `awake`, `warn` (a triangle as well as the tint). Empty shows the icon alone |
+| `AGENTS_BAR_SECTIONS` | `needs agents stale hogs awake system` | Menu sections, in order; `needs`, `stale` and `hogs` appear only when they have entries |
+| `AGENTS_BAR_ICON` | `terminal` | The title's SF Symbol |
+| `AGENTS_BAR_TOP` | `3` | Busiest processes in the System section (`0` for none) |
+| `AGENTS_BAR_REFRESH` | `10s` | SwiftBar's refresh interval, which it reads from the plugin's file name. Re-run `./install.sh --pack monitoring` (or `make update-configs`) after changing it, and the pack renames the plugin. One refresh takes 0.2–0.6 s depending on load, so 10s or slower is plenty |
+
+The stale patterns are not a setting: extend `AGENTS_ORPHAN_PATTERNS` at the top of `bin/agents` and send the change upstream if it's general.
 
 ## Desk and session tools
 
