@@ -9,18 +9,30 @@ make screenshots TAPES="agents"     # one or more by name
 
 | Tape | Image | Shows |
 |------|-------|-------|
-| `agents.tape` | `agents.png` | `agents` over the fixture process table (the README hero) |
-| `sbx.tape` | `sbx.png` | `sbx` reading the project, refused a credential and the CLI's settings |
+| `tour.tape` | `tour.gif` | The README hero: a short tour of the shell, `agents` and `sbx` in one demo home |
+| `shell.tape` | `shell.png` | The real Starship prompt, `ll src` (eza with icons and a git column), `rg` and `git diff` through delta, in the `~/api` demo repo |
+| `agents.tape` | `agents.png` | `agents` over the fixture process table |
+| `sbx.tape` | `sbx.png` | a key read without and under `sbx`, then refused credentials and a `~/.zshrc` write, while `make test` runs |
 | `social-preview.tape` | `social-preview.png` | The 1280×640 Open Graph card; its text is in `social-card.sh` |
 | `theme.tape` | | Shared settings: the Tokyo Night palette and the Ghostty font, sourced by the others |
 
+Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https://github.com/ryanoasis/nerd-fonts) (`brew install --cask font-symbols-only-nerd-font`): `theme.tape` lists it after JetBrains Mono as a fallback, so the file icons `eza` draws render as they do in Ghostty. Without it they show as blanks, and `make screenshots` warns.
+
 ## The demo environment
 
-`make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. `scripts/screenshots.sh` gives each tape a throwaway home in `$TMPDIR` and deletes it afterwards. The `agents` and `sbx` tapes source `demo-env.sh`, hidden, which:
+`make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. `scripts/screenshots.sh` gives each tape a throwaway home in `$TMPDIR` and deletes it afterwards. The `sbx` and `tour` tapes' home is `/Users/Shared/NAME` instead: strict lets `sbx` write to `$TMPDIR`, so a home there would make the "write outside the project" denial false, and `/Users/Shared/NAME` shows no real user in the error paths (the script refuses to run if it already exists). The `agents` and `sbx` tapes source `demo-env.sh`, hidden, which:
 
-- builds that home with `demo-setup.sh`: three projects (`myapp`, `api`, `web`), a fake `~/.ssh/id_ed25519` for `sbx` to refuse, a `~/.claude/settings.json`, and the state `agents` reads (a keep-awake record and a Herdr socket);
-- sets `HOME` to it and draws a two-line prompt shaped like the shipped Starship one, without Starship (which would show the real user, host and git state);
+- builds that home with `demo-setup.sh`: three projects (`myapp`, `api`, `web`), fake `~/.ssh/id_ed25519`, `~/.aws/credentials` and `~/.zshrc` for `sbx` to protect, a `make test` target in `myapp`, a `~/.claude/settings.json`, and the state `agents` reads (a keep-awake record and a Herdr socket);
+- sets `HOME` to it and draws a two-line prompt shaped like the shipped Starship one, without Starship (the `shell` and `tour` tapes start the real one, below);
 - puts `bin/agents` (the demo wrapper) and the repo's `bin/sbx` first on `PATH`.
+
+The `shell` and `tour` tapes source `demo-shell.sh` instead, which sources `demo-env.sh` and then, with `demo-shell-setup.sh`:
+
+- makes `~/api`, a small repo with a staged change, an unstaged one and an untracked file, with fixed file times;
+- installs the shipped `starship.toml` as a managed block and applies the Tokyo Night palette with `scripts/theme.sh`, as an install would, then starts the real Starship (the prompt shows `~/api` and the branch, never a user or host);
+- sets the git defaults tuidev ships (`delta` as the pager) in the demo home, and reads the `cat`, `ls` and `ll` aliases from `configs/zsh/.zshrc`, so they can't drift. The one override is `ll`: it adds `--no-user --no-permissions`, because the owner column would show whoever renders it. The shipped Starship config has no branch icon (its `symbol` is a plain space), so the prompt shows none either.
+
+There is no Herdr shot: its UI shows live panes from a running server, and a truthful one would need real agent sessions, which the demo never starts. The `agents` shot shows Herdr's session status through a fixture instead.
 
 `sbx` is the real one. The demo `agents` is the real `bin/agents`, sourced, with these swapped in:
 
@@ -41,7 +53,7 @@ To try the demo by hand, from the repo root in bash:
 source docs/assets/tapes/demo-env.sh
 agents
 agents ps 1201
-sbx -- cat ../.ssh/id_ed25519
+sbx -- cat ~/.ssh/id_ed25519
 ```
 
 Without `DEMO_HOME` set, `demo-env.sh` makes the home with `mktemp` and leaves it there: when you're done, close that shell and `rm -rf "$(dirname "$DEMO_HOME")"` (run it in the demo shell first to see the path, `echo "$DEMO_HOME"`). Set `DEMO_HOME` before sourcing to choose the place yourself.

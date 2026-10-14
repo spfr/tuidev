@@ -2,7 +2,7 @@
 # Tokyo Night palette from configs/themes/tokyo-night/palette.toml and the
 # font from configs/ghostty/config. Tapes run from the repo root.
 Set Shell "bash"
-Set FontFamily "JetBrains Mono"
+Set FontFamily "JetBrains Mono, Symbols Nerd Font Mono"
 Set FontSize 16
 Set LineHeight 1.1
 Set Padding 22

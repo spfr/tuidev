@@ -1,6 +1,6 @@
 # Contributing to tuidev
 
-Thanks for your interest. tuidev is a terminal setup for running AI coding agents: sandboxed by default, easy to watch, and installed in layers you can undo. A good change makes it better at that without growing the core. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
+Thanks for your interest. tuidev is a terminal dev environment for AI coding agents: modern CLI tools, agents sandboxed by default and orchestrated, easy to watch, and installed in layers you can undo. A good change makes it better at that without growing the core. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
 
 ## Reporting issues
 

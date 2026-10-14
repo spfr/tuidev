@@ -14,3 +14,4 @@ Sleep 400ms
 Enter
 Sleep 3s
 Screenshot docs/assets/agents.png
+Sleep 500ms

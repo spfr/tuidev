@@ -27,9 +27,9 @@ echo
 # Blocks in the accent blue, their shadow in the palette's dim grey.
 for line in "${title[@]}"; do centre 46 $'\033[90m' "${line//█/$'\033[34m'█$'\033[90m'}"; done
 echo
-centre 39 $'\033[1m' "Run AI coding agents from the terminal:"
-centre 34 $'\033[1;32m' "sandboxed, observable, reversible."
+centre 49 $'\033[1m' "The terminal dev environment for AI coding agents"
+centre 45 $'\033[1;32m' "modern CLI · sandboxed agents · orchestration"
 echo
-centre 41 $'\033[37m' "Claude Code · Codex · macOS · Linux · MIT"
+centre 49 $'\033[37m' "Herdr · Claude Code · Codex · macOS · Linux · MIT"
 sleep "${1:-30}"
 printf '\033[?25h'

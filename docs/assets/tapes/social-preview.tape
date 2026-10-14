@@ -14,3 +14,4 @@ Sleep 1500ms
 Show
 Sleep 500ms
 Screenshot docs/assets/social-preview.png
+Sleep 500ms

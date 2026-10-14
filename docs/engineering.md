@@ -164,7 +164,7 @@ CI (`.github/workflows/ci.yml`, with actions pinned to a SHA and updated by Depe
 
 ## Screenshots
 
-The README images in `docs/assets/` (`agents.png`, `sbx.png`) and the social preview card (`social-preview.png`, 1280×640, uploaded by hand in the repo's Settings › Social preview) are rendered from [VHS](https://github.com/charmbracelet/vhs) tapes in `docs/assets/tapes/`. Re-render them whenever a change alters what they show, such as `agents` output, `sbx` messages, the prompt or the palette:
+The README images in `docs/assets/` (`tour.gif`, `shell.png`, `agents.png`, `sbx.png`) and the social preview card (`social-preview.png`, 1280×640, uploaded by hand in the repo's Settings › Social preview) are rendered from [VHS](https://github.com/charmbracelet/vhs) tapes in `docs/assets/tapes/`. Re-render them whenever a change alters what they show, such as `agents` output, `sbx` messages, the prompt or the palette:
 
 ```bash
 brew install vhs                 # once; it brings ttyd and ffmpeg
@@ -172,4 +172,4 @@ make screenshots                 # every tape (scripts/screenshots.sh)
 make screenshots TAPES=sbx       # just one
 ```
 
-The `agents` and `sbx` tapes run in a throwaway home with made-up projects, and `agents` reads fixture process tables, so nothing from your machine reaches an image. Look at every image before you commit it, and keep each under about 500 KB. `make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. If VHS fails, the script prints the end of its log. VHS listens on a local port, so it fails inside a sandbox that doesn't allow binding one, such as Claude Code's native sandbox unless `sandbox.network.allowLocalBinding` is on; run `make screenshots` outside it. The fixtures, the demo wrapper and the by-hand recipe for the SwiftBar menu, which VHS can't record, are in [docs/assets/tapes/README.md](assets/tapes/README.md).
+The tapes run in a throwaway home with made-up projects, and `agents` reads fixture process tables, so nothing from your machine reaches an image. Look at every image before you commit it (for the GIF, pull frames out with `ffmpeg -ss SECONDS -i docs/assets/tour.gif -frames:v 1 frame.png`), and keep each under about 500 KB, the GIF under 2 MB. End a tape with a `Sleep` after its last `Screenshot`: VHS can drop one that is the final command, and the script fails when a tape's file is missing. `make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. If VHS fails, the script prints the end of its log. VHS listens on a local port, so it fails inside a sandbox that doesn't allow binding one, such as Claude Code's native sandbox unless `sandbox.network.allowLocalBinding` is on; run `make screenshots` outside it. The fixtures, the demo wrapper and the by-hand recipe for the SwiftBar menu, which VHS can't record, are in [docs/assets/tapes/README.md](assets/tapes/README.md).

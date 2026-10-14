@@ -1,13 +1,13 @@
 #!/bin/bash
-# Re-render the README screenshots and the social preview from their VHS
-# tapes (docs/assets/tapes/*.tape) into docs/assets/.
+# Re-render the README images and the social preview from their VHS tapes
+# (docs/assets/tapes/*.tape) into docs/assets/.
 #
 # Usage: scripts/screenshots.sh [TAPE...]     e.g. scripts/screenshots.sh sbx
 #
-# Each tape gets a throwaway HOME; the agents and sbx tapes build it with
-# docs/assets/tapes/demo-setup.sh, and `agents` reads fixture process tables,
-# so nothing from this machine reaches an image. macOS only (the sbx shot
-# needs Seatbelt, and the demo is only checked there); needs VHS
+# Each tape gets a throwaway HOME, built by docs/assets/tapes/demo-setup.sh
+# (and demo-shell-setup.sh for the shell shots), and `agents` reads fixture
+# process tables, so nothing from this machine reaches an image. macOS only
+# (the sbx shots need Seatbelt, and the demo is only checked there); needs VHS
 # (brew install vhs). See docs/assets/tapes/README.md.
 set -eo pipefail
 
@@ -20,6 +20,12 @@ TAPES_DIR="docs/assets/tapes"
 
 is_macos || die "make screenshots runs on macOS only: the sbx shot needs Seatbelt (sandbox-exec)"
 command_exists vhs || die "VHS is not installed: brew install vhs (https://github.com/charmbracelet/vhs)"
+
+# The shots show eza's file icons, which JetBrains Mono lacks. Ghostty draws
+# them out of the box; VHS needs the Symbols Nerd Font installed to fall back to.
+if ! ls "$HOME"/Library/Fonts/SymbolsNerdFont* /Library/Fonts/SymbolsNerdFont* >/dev/null 2>&1; then
+    print_warning "Symbols Nerd Font not found: icons in the shots will render as blanks (brew install --cask font-symbols-only-nerd-font)"
+fi
 
 cd "$REPO_DIR"
 
@@ -38,24 +44,48 @@ else
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-screenshots.XXXXXX")"
-trap 'rm -rf "$work"' EXIT
+sbx_home=""
+trap 'rm -rf "$work"; [[ -z "$sbx_home" ]] || rm -rf "$sbx_home"' EXIT
+
+# The files a tape writes: its Screenshot lines and its Output lines.
+tape_outputs() { sed -n -e 's/^Screenshot //p' -e 's/^Output //p' "$1"; }
 
 for tape in "${tapes[@]}"; do
     name="$(basename "$tape" .tape)"
     print_step "rendering $tape"
-    # A fresh demo home per tape; VHS also writes a GIF we don't keep.
-    if ! DEMO_HOME="$work/$name/NAME" vhs -o "$work/$name.gif" "$tape" >"$work/$name.log" 2>&1; then
+    # A fresh demo home per tape. The sbx and tour tapes run `sbx` in it, and
+    # its home can't live in $TMPDIR (strict lets sbx write there, so the
+    # "write outside the project" denial would be false) or under the real
+    # home (its path would show the user). /Users/Shared is neither, and
+    # /Users/Shared/NAME reads as a home in error messages.
+    demo_home="$work/$name/NAME"
+    if [[ "$name" == sbx || "$name" == tour ]]; then
+        demo_home="/Users/Shared/NAME"
+        [[ ! -e "$demo_home" ]] || die "$demo_home already exists; remove it (a leftover demo home) and re-run"
+        sbx_home="$demo_home"
+    fi
+    # Remove the old images, so a shot VHS fails to write can't pass as fresh.
+    tape_outputs "$tape" | while IFS= read -r out; do rm -f "$out"; done
+    # A tape without its own Output also gets a GIF we don't keep.
+    vhs_out=(-o "$work/$name.gif")
+    if grep -q '^Output ' "$tape"; then vhs_out=(); fi
+    if ! DEMO_HOME="$demo_home" vhs ${vhs_out[@]+"${vhs_out[@]}"} "$tape" >"$work/$name.log" 2>&1; then
         tail -20 "$work/$name.log" >&2
         if grep -qiE 'randomPort|bind|operation not permitted' "$work/$name.log"; then
             print_info "VHS could not listen on a local port: a sandbox that blocks binding one (Claude Code's native sandbox, by default) does this; run it outside"
         fi
         die "vhs failed on $tape (its log is above)"
     fi
+    # VHS drops a Screenshot that is the tape's last command: end tapes with a Sleep.
+    tape_outputs "$tape" | while IFS= read -r out; do
+        [[ -s "$out" ]] || { tail -20 "$work/$name.log" >&2; die "$tape did not write $out (end the tape with a Sleep after its Screenshot)"; }
+    done
+    if [[ -n "$sbx_home" ]]; then rm -rf "$sbx_home"; sbx_home=""; fi
 done
 
 print_success "screenshots rendered:"
 for tape in "${tapes[@]}"; do
-    sed -n 's/^Screenshot //p' "$tape" | while IFS= read -r png; do
-        printf '  %s  %s KB\n' "$png" "$(( $(wc -c < "$png") / 1024 ))"
+    tape_outputs "$tape" | while IFS= read -r out; do
+        printf '  %s  %s KB\n' "$out" "$(( $(wc -c < "$out") / 1024 ))"
     done
 done
