@@ -72,6 +72,10 @@ listen="$(printf '%s\n' '5061 3000' '6100 5173')"
 # shellcheck disable=SC2034
 AGENTS_UID=501 AGENTS_SELF=9999
 recs="$(printf '%s\n' "$fixture" | agents_classify "$listen" "")"
+# A sample saw the MCP helper 6000 under an agent before its session ended
+# (sample.state: the provenance auto-reap needs); never the vite server 6100.
+mkdir -p "$AGENTS_DATA_DIR"
+printf '%s\n6000@Wed_Oct_14_08:10:00_2026\t1\t1\n6001@Wed_Oct_14_08:10:01_2026\t0\t1\n6100@Wed_Oct_14_06:00:00_2026\t30\t0\n' "$now" > "$AGENTS_DATA_DIR/sample.state"
 watch="$(printf '%s\n' "$recs" | awk -F '\t' '$1 == "watch" { print $2 "\t" $3 }')"
 [[ "$(printf '%s\n' "$watch" | cut -f1 | tr '\n' ' ')" == "5010 5020 5040 5050 5080 5090 " ]] || fail "watched loops: $(printf '%s\n' "$watch" | tr '\n' ' ')"
 
@@ -79,8 +83,8 @@ watch="$(printf '%s\n' "$recs" | awk -F '\t' '$1 == "watch" { print $2 "\t" $3 }
 # line, "-" for a file that is gone.
 winfo="$(_agents_watch_info "$watch")"
 wrow() { printf '%s\n' "$winfo" | awk -F '\t' -v p="$1" '$2 == p'; }
-[[ "$(wrow 5010)" == "watched"$'\t'"5010"$'\t'"$W/done.output"$'\t'"$((now - 5 * 3600))"$'\t'"[exited with code 0]" ]] || fail "watched row: $(wrow 5010)"
-[[ "$(wrow 5040)" == "watched"$'\t'"5040"$'\t'"$W/missing.out"$'\t-\t-' ]] || fail "a missing file: $(wrow 5040)"
+[[ "$(wrow 5010)" == "watched"$'\t'"5010"$'\t'"$W/done.output"$'\t'"$((now - 5 * 3600))"$'\t'"[exited with code 0]"$'\t'"read" ]] || fail "watched row: $(wrow 5010)"
+[[ "$(wrow 5040)" == "watched"$'\t'"5040"$'\t'"$W/missing.out"$'\t-\t-\tread' ]] || fail "a missing file: $(wrow 5040)"
 [[ "$(wrow 5080 | cut -f5)" == "--- FAIL: TestX (0.01s)" ]] || fail "last line of fail.out: $(wrow 5080)"
 printf 'one\ttwo \033[32mok\033[0m\n   \n\n' > "$W/ctl.log"
 [[ "$(_agents_last_line "$W/ctl.log")" == "one two  [32mok [0m" ]] || fail "control characters blanked, blank lines skipped: $(_agents_last_line "$W/ctl.log" | od -c | head -3)"
@@ -193,6 +197,64 @@ pass "last lines are tidied: terminal colors stripped, 80 characters"
 # AGENTS_WAIT_STUCK=0: nothing is stuck, so nothing is auto-reaped as a loop.
 [[ -z "$(printf '%s\n' "$enr" | AGENTS_WAIT_STUCK=0 agents_assess | awk -F '\t' '$1 == "need" && $4 == "stuck" && $8 == 1')" ]] \
     || fail "AGENTS_WAIT_STUCK=0 still auto-reaps loops"
+
+# A loop that only tests whether a file exists (while [ -f lock ]) is not
+# judged by how long the file has been quiet: check first, never auto. Its
+# last line is not read.
+printf 'secret\n' > "$W/lock"; touch -t 202610140300 "$W/lock"
+pfix="$(printf '%s\n' \
+    " 5000     1   501 me    1.0 300000  0:30.00 06:00:00 Wed Oct 14 03:00:00 2026     claude" \
+    " 5500  5000   501 me    0.0   2000  0:00.10 05:30:00 Wed Oct 14 03:30:00 2026     $snap_pre 'while [ -f $W/lock ]; do sleep 5; done' < /dev/null && pwd -P >| /tmp/c1" \
+    " 5510  5000   501 me    0.0   2000  0:00.10 05:30:00 Wed Oct 14 03:30:00 2026     $snap_pre 'until grep -q ok $W/lock; do sleep 5; done' < /dev/null && pwd -P >| /tmp/c2")"
+precs="$(printf '%s\n' "$pfix" | agents_classify "" "")"
+pwatch="$(printf '%s\n' "$precs" | awk -F '\t' '$1 == "watch" { print $2 "\t" $3 "\t" $4 }')"
+[[ "$pwatch" == "5500"$'\t'"$W/lock"$'\t'"exists"$'\n'"5510"$'\t'"$W/lock"$'\t'"read" ]] || fail "watch modes: $pwatch"
+pinfo="$(_agents_watch_info "$pwatch")"
+[[ "$(printf '%s\n' "$pinfo" | awk -F '\t' '$2 == 5500 { print $5 "/" $6 }')" == "-/exists" ]] || fail "an exists-only loop's file was read: $pinfo"
+pneeds="$( { printf '%s\n' "$precs" | agents_enrich "" "" "$(printf '5500\tquiet\n5510\tquiet')"; printf '%s\n' "$pinfo"; } | agents_assess)"
+pv() { printf '%s\n' "$pneeds" | awk -F '\t' -v p="$1" '$1 == "need" && $2 == p { print $4, $5, $6, $7, $8 }'; }
+[[ "$(pv 5500)" == "stuck check medium exists-only 0" ]] || fail "an exists-only stuck loop: $(pv 5500)"
+[[ "$(printf '%s\n' "$pneeds" | awk -F '\t' '$1 == "evid" && $2 == 5500 && $3 == "auto" { print $4 }')" == *"only tests whether its file exists"* ]] \
+    || fail "exists-only auto note: $pneeds"
+[[ "$(printf '%s\n' "$pneeds" | awk -F '\t' '$1 == "evid" && $2 == 5500 && $4 ~ /^last line/')" == "" ]] || fail "an exists-only loop shows a last line"
+[[ "$(pv 5510)" == "stuck stop high quiet 1" ]] || fail "a loop reading the same quiet file: $(pv 5510)"
+pass "a loop that only tests a file's existence is check first and never auto; one that reads the file is judged by it"
+
+# Auto-reap needs provenance: a stale tree no sample saw under an agent (your
+# own nohup npx or caffeinate) is only probably safe, and never auto; nor is
+# a caffeinate without -t; one with -t, seen under an agent, is.
+srow() { printf 'stale\t%s\torphan\t3000\t0.0\t0.0\t9000\t0\t%s\t-\tme\t-\t-\t%s\t-\n' "$1" "$2" "$3"; }
+(
+    AGENTS_DATA_DIR="$tmp/prov"; mkdir -p "$AGENTS_DATA_DIR"
+    printf '%s\n7200@S2\t0\t1\n7300@S3\t0\t1\n7400@S4\t0\t0\n' "$now" > "$AGENTS_DATA_DIR/sample.state"
+    sn="$( { srow 7100 S1 'npx -y some-tool'; srow 7200 S2 'caffeinate -dims'; srow 7300 S3 'caffeinate -i -t 300'; srow 7400 S4 'npm exec x-mcp'; } | agents_assess)"
+    sv() { printf '%s\n' "$sn" | awk -F '\t' -v p="$1" '$1 == "need" && $2 == p { print $4, $5, $6, $7, $8 }'; }
+    sa() { printf '%s\n' "$sn" | awk -F '\t' -v p="$1" '$1 == "evid" && $2 == p && $3 == "auto" { print $4 }'; }
+    [[ "$(sv 7100)" == "stale stop medium session-ended 0" ]] || fail "unproven stale: $(sv 7100)"
+    [[ "$(printf '%s\n' "$sn" | awk -F '\t' '$1 == "need" && $2 == 7100 { print $11 }')" == "safe to stop — probably left by an agent session that ended" ]] \
+        || fail "unproven stale verdict"
+    [[ "$(sa 7100)" == *"no sample saw it under an agent"* && "$(sv 7400)" == "stale stop medium session-ended 0" ]] || fail "unproven auto note: $(sa 7100) / $(sv 7400)"
+    [[ "$(sv 7200)" == "stale stop high session-ended 0" && "$(sa 7200)" == *"caffeinate without -t"* ]] || fail "caffeinate without -t: $(sv 7200) $(sa 7200)"
+    [[ "$(sv 7300)" == "stale stop high session-ended 1" ]] || fail "proven caffeinate -t: $(sv 7300)"
+    rm -f "$AGENTS_DATA_DIR/sample.state"
+    [[ "$( { srow 7300 S3 'caffeinate -i -t 300'; } | AGENTS_HISTORY=0 agents_assess | awk -F '\t' '$1 == "evid" && $3 == "auto" { print $4 }')" == *"AGENTS_HISTORY=0"* ]] \
+        || fail "no provenance without history"
+)
+pass "auto-reap provenance: unproven stale trees are probably safe, never auto; caffeinate without -t never auto"
+
+# Ports that could not be listed: "no ports found" is not "no ports".
+pf="$( { printf '%s\n' "$enr"; printf 'probe\tlisten\tfail\n'; } | agents_assess)"
+[[ "$(printf '%s\n' "$pf" | awk -F '\t' '$1 == "need" && $2 == 6000 { print $4, $5, $6, $7, $8 }')" == "stale check medium ports-unknown 0" ]] \
+    || fail "stale with the port check unavailable: $(printf '%s\n' "$pf" | awk -F '\t' '$1 == "need" && $2 == 6000')"
+[[ "$(printf '%s\n' "$pf" | awk -F '\t' '$1 == "need" && $2 == 6000 { print $11 }')" == *"the port check was unavailable"* ]] || fail "ports-unknown verdict text"
+[[ "$(printf '%s\n' "$pf" | agents_auto_tokens | cut -f1 | tr '\n' ' ')" == "5010@Wed_Oct_14_03:50:00_2026 5080@Wed_Oct_14_06:30:00_2026 " ]] \
+    || fail "auto-reap with no port check: $(printf '%s\n' "$pf" | agents_auto_tokens)"
+[[ "$( { printf '%s\n' "$enr"; printf 'probe\tlisten\tok\n'; } | agents_assess | agents_auto_tokens | grep -c '^6000@')" == 1 ]] || fail "probe ok lost the stale helper"
+( _agents_listeners() { return 1; }; agents_snapshot() { printf '%s\n' "$fixture"; }; _agents_cwds() { :; }
+  [[ "$(agents_collect | tail -1)" == "probe"$'\t'"listen"$'\t'"fail" ]] || fail "agents_collect: no probe fail row" )
+( mkdir -p "$tmp/nolsof"; for b in awk cat; do ln -sf "$(command -v "$b")" "$tmp/nolsof/$b"; done
+  if PATH="$tmp/nolsof" _agents_listeners >/dev/null; then fail "_agents_listeners succeeded with no lsof or ss"; fi )
+pass "when listening ports can't be listed, stale trees are check first and auto-reap leaves them"
 
 # --- Auto-reap: what it would and would not stop -----------------------------------
 auto="$(printf '%s\n' "$needs" | agents_auto_tokens)"

@@ -301,14 +301,16 @@ function mcp_name(a,   n, w, i, s) {
 # tidied command: never dup or long, it is how the agent waits for something.
 function waits(c) { return c ~ /^(until|while) .*; *do .*sleep [0-9.]+.*; *done/ }
 # watched: the file a polling loop waits on, "" when there is none: the first
-# absolute path given to tail, head, grep, cat, test, [ or [[ in its condition,
-# directly or through a VAR=/abs/path assignment before the loop
+# absolute path given to tail, head, grep, cat, wc, jq, test, [ or [[ in its
+# condition, directly or through a VAR=/abs/path assignment before the loop
 # ("F=/t/x.output; until tail -1 $F | grep -q ok; do …"). Arguments of any
 # other command (docker exec db /usr/bin/pg_isready, curl --unix-socket
 # /var/run/x.sock) never count, nor do /dev paths, globs and redirection
 # targets. A quoted word split at its spaces is joined back ("/tmp/my dir/x").
+# Sets watch_reads: 1 when the condition reads the file (tail, grep, jq…), 0
+# when it only tests that it exists (test, [, [[: while [ -f lock ]).
 function watched(s,   c, pre, j, n, w, i, t, cmd, cur, k, q, d, x) {
-    q = sprintf("%c", 39); d = "\""
+    q = sprintf("%c", 39); d = "\""; watch_reads = 0
     gsub(/\\012/, " ; ", s)
     if (!match(s, /(^|[;&(] *)(until|while) +/)) return ""
     pre = substr(s, 1, RSTART - 1); c = substr(s, RSTART + RLENGTH)
@@ -332,19 +334,20 @@ function watched(s,   c, pre, j, n, w, i, t, cmd, cur, k, q, d, x) {
         if (t ~ /^(\|\||&&|[|;()])$/) { cmd = 1; cur = ""; continue }
         if (t == "!") continue
         if (cmd) { cmd = 0; cur = t; sub(/.*\//, "", cur); continue }
-        if (cur !~ /^(tail|head|grep|egrep|fgrep|cat|test|\[|\[\[)$/) continue
+        if (cur !~ /^(tail|head|grep|egrep|fgrep|cat|wc|jq|test|\[|\[\[)$/) continue
         if (t ~ /^[0-9]*[<>]/ || (i > 1 && w[i - 1] ~ /[<>]$/)) continue
         x = substr(t, 1, 1)
         if ((x == q || x == d) && length(t) >= 2 && substr(t, length(t)) == x) t = substr(t, 2, length(t) - 2)
         if (t ~ /^\$\{?[A-Za-z_][A-Za-z0-9_]*\}?$/) { gsub(/[${}]/, "", t); t = (t in wv) ? wv[t] : "" }
-        if (t ~ /^\// && t !~ /^\/dev\// && t !~ /[*?]|\[/) return t
+        if (t ~ /^\// && t !~ /^\/dev\// && t !~ /[*?]|\[/) { watch_reads = (cur !~ /^(test|\[|\[\[)$/); return t }
     }
     return ""
 }
 # tool_cmd: the command a tool shell runs, tidied for display and comparison:
 # the string a Claude Code shell evals (or the -c string), without cd
 # prefixes, VAR=value assignments, 2>&1, </dev/null or a trailing | tail/head.
-# Sets tool_cd (the absolute directory it changes to first) and tool_watch.
+# Sets tool_cd (the absolute directory it changes to first), tool_watch and
+# watch_reads (watched).
 function tool_cmd(a,   q, i, j, s, k, t) {
     q = sprintf("%c", 39); tool_cd = ""; tool_watch = ""
     i = index(a, " eval " q)
@@ -426,8 +429,9 @@ agents_parse_duration() {
 # keep-awake holder). Prints tab-separated records, 14 columns:
 #   type pid kind age_s cpu avg rss_kib kids start ports user herdr cwd args
 # type is agent | stale | cand (a dev-server candidate agents_enrich confirms
-# by cwd) | hog. Unknown fields are "-". Plus three-column "watch PID PATH"
-# records: the file a polling loop waits on (agents_collect checks its age,
+# by cwd) | hog. Unknown fields are "-". Plus "watch PID PATH read|exists"
+# records: the file a polling loop waits on, and whether its condition reads
+# it or only tests that it exists (agents_collect checks its age,
 # agents_enrich drops them), and "job" records (_AGENTS_AWK_JOBS).
 agents_classify() {
     local IFS=$'\n'
@@ -567,7 +571,7 @@ END {
         if (a ~ /(^|\/)caffeinate( |$)/) act(p, "keepawake", r, "-", a)
         else if (tool_shell(a)) {
             c = tool_cmd(a); act(p, "tool", r, (tool_cd == "" ? "-" : tool_cd), c)
-            if (tool_watch != "" && waits(c)) { gsub(/\t/, " ", tool_watch); printf "watch\t%d\t%s\n", p, tool_watch }
+            if (tool_watch != "" && waits(c)) { gsub(/\t/, " ", tool_watch); printf "watch\t%d\t%s\t%s\n", p, tool_watch, (watch_reads ? "read" : "exists") }
         }
         else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a), a)
         else act(p, "other", r, "-", a)
@@ -704,15 +708,24 @@ $1 == "agent" && (($3, $13) in hs) { $12 = hs[$3, $13] }
 }
 
 # "pid port" for every TCP listener we can see (our own processes, unprivileged).
+# Fails when they could not be listed (no lsof or ss, or it failed): "no
+# ports found" then is not "no ports" (agents_collect's probe row). lsof exits
+# 1 with no output when nothing listens; an error also says so on stderr.
 _agents_listeners() {
+    local out rc=0
     if command -v lsof >/dev/null 2>&1; then
-        lsof -b -w -nP -iTCP -sTCP:LISTEN -Fpn 2>/dev/null | awk '
+        out="$(lsof -b -w -nP -iTCP -sTCP:LISTEN -Fpn 2>&1)" || rc=$?
+        printf '%s\n' "$out" | awk '
             /^p/ { p = substr($0, 2) }
             /^n/ { port = $0; sub(/.*:/, "", port); if (!seen[p " " port]++) print p " " port }'
+        [[ $rc -eq 0 || -z "$out" ]]
     elif command -v ss >/dev/null 2>&1; then
-        ss -Hltnp 2>/dev/null | awk '{
+        out="$(ss -Hltnp 2>/dev/null)" || return 1
+        printf '%s\n' "$out" | awk '{
             port = $4; sub(/.*:/, "", port); s = $0
             while (match(s, /pid=[0-9]+/)) { print substr(s, RSTART + 4, RLENGTH - 4) " " port; s = substr(s, RSTART + RLENGTH) } }'
+    else
+        return 1
     fi
 }
 
@@ -814,15 +827,17 @@ _agents_keep_pids() {
     return 0
 }
 
-# agents_collect — the full record set for this moment.
+# agents_collect — the full record set for this moment, ending in
+# "probe listen ok|fail": whether the listening ports could be listed (when
+# not, a stale tree's "no ports" proves nothing, and auto-reap leaves it).
 agents_collect() {
-    local ps listen recs pids
+    local ps listen recs pids lprobe=ok
     ps="$(agents_snapshot)"
     if [[ -z "$ps" ]]; then
         echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2
         return 1
     fi
-    listen="$(_agents_listeners)"
+    listen="$(_agents_listeners)" || lprobe=fail
     recs="$(printf '%s\n' "$ps" | agents_classify "$listen" "$(_agents_keep_pids "$ps")")"
     local type pid kind rest watch=""
     set --
@@ -830,15 +845,16 @@ agents_collect() {
         case "$type" in
             agent|stale|cand) set -- "$@" "$pid" ;;
             act) [[ "$kind" == tool ]] && set -- "$@" "$pid" ;;   # its origin
-            watch) watch+="$pid"$'\t'"$kind"$'\n' ;;              # kind: the path
+            watch) watch+="$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;  # kind: the path; rest: read|exists
         esac
     done <<<"$recs"
     pids="$(_agents_cwds "$@")"
     printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_watched "$watch")"
     _agents_watch_info "$watch"     # "watched" rows: the evidence agents_assess reads
+    printf 'probe\tlisten\t%s\n' "$lprobe"
 }
 
-# _agents_watched "PID<TAB>PATH" lines — "pid<TAB>quiet" for each polling loop
+# _agents_watched "PID<TAB>PATH[<TAB>MODE]" lines — "pid<TAB>quiet" for each polling loop
 # whose watched file has not changed for AGENTS_WAIT_STUCK minutes, and
 # "pid<TAB>fresh" for one whose file changed since. One find for all of them
 # (-mmin works the same on macOS and Linux); a missing file says nothing, and
@@ -846,12 +862,12 @@ agents_collect() {
 _agents_watched() {
     local pid path paths=() old
     [[ -n "$1" && "$AGENTS_WAIT_STUCK" -gt 0 ]] || return 0
-    while IFS=$'\t' read -r pid path; do
+    while IFS=$'\t' read -r pid path _; do
         [[ "$pid" =~ ^[0-9]+$ && "$path" == /* && -e "$path" ]] && paths+=("$path")
     done <<<"$1"
     [[ ${#paths[@]} -gt 0 ]] || return 0
     old="$(find "${paths[@]}" -maxdepth 0 -mmin "+$AGENTS_WAIT_STUCK" -print 2>/dev/null)"
-    while IFS=$'\t' read -r pid path; do
+    while IFS=$'\t' read -r pid path _; do
         [[ "$pid" =~ ^[0-9]+$ && "$path" == /* && -e "$path" ]] || continue
         if [[ $'\n'"$old"$'\n' == *$'\n'"$path"$'\n'* ]]; then printf '%s\tquiet\n' "$pid"; else printf '%s\tfresh\n' "$pid"; fi
     done <<<"$1"
@@ -1780,25 +1796,28 @@ _agents_last_line() {
     printf '%s' "${l:0:300}"
 }
 
-# _agents_watch_info "PID<TAB>PATH" lines — for each polling loop's watched
-# file: "watched PID PATH MTIME LAST" (MTIME "-" when the file is gone; LAST
-# "-" when there is none). One stat for all files, one tail per file.
+# _agents_watch_info "PID<TAB>PATH[<TAB>MODE]" lines — for each polling loop's
+# watched file: "watched PID PATH MTIME LAST MODE" (MTIME "-" when the file is
+# gone; LAST "-" when there is none; MODE read, or exists for a loop that only
+# tests that the file exists, whose last line is not read). One stat for all
+# files, one tail per file.
 _agents_watch_info() {
-    local pid path paths=() stats m e p last n=0
+    local pid path mode paths=() stats m e p last n=0
     [[ -n "$1" ]] || return 0
-    while IFS=$'\t' read -r pid path; do
+    while IFS=$'\t' read -r pid path _; do
         [[ "$pid" =~ ^[0-9]+$ && "$path" == /* && -e "$path" ]] && paths+=("$path")
     done <<<"$1"
     [[ ${#paths[@]} -eq 0 ]] || stats="$(_agents_mtimes "${paths[@]}")"
-    while IFS=$'\t' read -r pid path; do
+    while IFS=$'\t' read -r pid path mode; do
         [[ "$pid" =~ ^[0-9]+$ && "$path" == /* ]] || continue
         n=$((n + 1)); [[ $n -le 16 ]] || break
         m=-
         while IFS=$'\t' read -r e p; do
             [[ "$p" == "$path" && "$e" =~ ^[0-9]+$ ]] && { m="$e"; break; }
         done <<<"${stats:-}"
-        last="$(_agents_last_line "$path")"
-        printf 'watched\t%s\t%s\t%s\t%s\n' "$pid" "$path" "$m" "${last:--}"
+        last=""
+        if [[ "$mode" != exists ]]; then mode="read"; last="$(_agents_last_line "$path")"; fi
+        printf 'watched\t%s\t%s\t%s\t%s\t%s\n' "$pid" "$path" "$m" "${last:--}" "$mode"
     done <<<"$1"
 }
 
@@ -1811,13 +1830,17 @@ _agents_watch_info() {
 # FLAG: stale stuck long dup wait tool mcp keepawake session other agent hog.
 # ACTION: stop (safe to stop), check (check first), leave (leave it), info.
 # CONF: high medium low, how sure the verdict is. AUTO: 1 when auto-reap may
-# stop it: a stale tree that listens on no port, or a stuck loop whose watched
-# file has been quiet for 2 x AGENTS_WAIT_STUCK. OWNER: the owning session's
-# pid ("-" once it ended). QUIET: seconds since the watched file changed.
-# MARKER: 1 when its last line says the work it waits for has finished.
+# stop it: a stale tree that listens on no port (the ports could be listed:
+# the "probe listen" row), that a sample saw under an agent before it was
+# orphaned (sample.state; never a caffeinate without -t), or a stuck loop
+# whose condition reads its watched file and that file has been quiet for
+# 2 x AGENTS_WAIT_STUCK. OWNER: the owning session's pid ("-" once it ended).
+# QUIET: seconds since the watched file changed. MARKER: 1 when its last line
+# says the work it waits for has finished.
 agents_assess() {
     AGENTS_TARGET="${1:-}" NOW="${AGENTS_NOW:-$(date +%s)}" HOME="$HOME" AGENTS_WAIT_STUCK="$AGENTS_WAIT_STUCK" \
-    AGENTS_AUTO_REAP="$AGENTS_AUTO_REAP" LC_ALL=C awk -F '\t' -v OFS='\t' '
+    AGENTS_AUTO_REAP="$AGENTS_AUTO_REAP" AGENTS_HISTORY="$AGENTS_HISTORY" AGENTS_SEEN="$AGENTS_DATA_DIR/sample.state" \
+    LC_ALL=C awk -F '\t' -v OFS='\t' '
 function age(s) {
     s = int(s); if (s < 0) s = 0
     if (s < 60) return s "s"
@@ -1860,11 +1883,20 @@ function owner(r) {
     if (!(r in akind)) return "session " r
     return akind[r] " " r (aproj[r] != "-" ? " in " aproj[r] : "") (astat[r] != "-" ? " (" astat[r] ")" : "")
 }
+# proven(tok): a sample saw this pid@start under an agent (sample.state, read
+# once, only when a stale tree needs it).
+function proven(tok,   line, f) {
+    if (!seen_read++) {
+        while ((getline line < ENVIRON["AGENTS_SEEN"]) > 0) if (split(line, f, "\t") >= 3 && f[3] == 1) seenp[f[1]] = 1
+        close(ENVIRON["AGENTS_SEEN"])
+    }
+    return (tok in seenp)
+}
 function fact(s) { facts = facts "evid\t" P "\tfact\t" s "\n" }
 function hint(s) { facts = facts "evid\t" P "\tnext\t" s "\n" }
 function verdict(a, c, code, text) { ACT = a; CONF = c; CODE = code; TEXT = text }
 # judge(f) — fills the verdict for one record (split into f) and prints it.
-function judge(f,   t, cls, fl, ports, root, cwd, w, have, quiet, last, mk, stuck2, nope, lbl, tok, pa) {
+function judge(f,   t, cls, fl, ports, root, cwd, w, have, rd, hv, quiet, last, mk, stuck2, nope, lbl, tok, pa, pv) {
     t = f[1]; P = f[2]; facts = ""; AUTO = 0; nope = ""
     ports = (f[10] == "" ? "-" : f[10]); cwd = (f[13] == "" ? "-" : f[13])
     tok = f[2] "@" f[9]; quiet = "-"; last = "-"; mk = "-"; w = "-"; OWN = "-"
@@ -1879,10 +1911,21 @@ function judge(f,   t, cls, fl, ports, root, cwd, w, have, quiet, last, mk, stuc
             verdict("check", "medium", "server-orphan", "check first \342\200\224 a server on " plist(ports) ", left behind when its session ended")
             hint("leave it if you still use it (http://localhost:" pa[1] "); otherwise stop it")
             nope = "it listens on a port, and a server an agent started for you may still be wanted"
+        } else if (!lsok) {
+            verdict("check", "medium", "ports-unknown", "check first \342\200\224 its session ended, but the port check was unavailable")
+            fact("listening ports could not be listed (no lsof or ss, or it failed)")
+            hint("if it serves nothing you use, stop it")
+            nope = "the port check was unavailable, so it may be a server you use"
         } else {
-            verdict("stop", "high", "session-ended", "safe to stop \342\200\224 its session ended")
+            pv = proven(tok)
+            if (pv) {
+                fact("ran under an agent session before it ended (agents sample saw it)")
+                verdict("stop", "high", "session-ended", "safe to stop \342\200\224 its session ended")
+            } else verdict("stop", "medium", "session-ended", "safe to stop \342\200\224 probably left by an agent session that ended")
             hint("nothing uses it any more: its session is gone")
-            AUTO = 1
+            if (!pv) nope = "no sample saw it under an agent" (hist ? "" : " (AGENTS_HISTORY=0 records none)") ", so it may be yours"
+            else if (f[14] ~ /(^|\/)caffeinate( |$)/ && f[14] !~ / -[A-Za-z]*t *[0-9]/) nope = "a caffeinate without -t keeps the Mac awake until stopped, which you may want"
+            else AUTO = 1
         }
         hint("stop it: agents kill " tok)
     } else if (t == "act") {
@@ -1894,28 +1937,35 @@ function judge(f,   t, cls, fl, ports, root, cwd, w, have, quiet, last, mk, stuc
             FLAG = index(fl, ",stuck,") ? "stuck" : "wait"
             w = (P in wpath) ? wpath[P] : "-"
             have = (w != "-" && wm[P] != "-")
+            # rd: its condition reads the file (tail, grep…), so how long the
+            # file has been quiet is evidence; not for [ -f lock ] (exists).
+            rd = !((P in wrd) && !wrd[P]); hv = (have && rd)
             if (have) {
                 quiet = now - wm[P]; if (quiet < 0) quiet = 0
-                last = (wl[P] == "-" ? "" : tidy(wl[P], 80)); mk = marker(last)
                 fact("watches " shortp(w))
-                fact("last line: " (last == "" ? "(none: the file is empty)" : last) (mk ? " (a completion marker)" : ""))
+                if (rd) {
+                    last = (wl[P] == "-" ? "" : tidy(wl[P], 80)); mk = marker(last)
+                    fact("last line: " (last == "" ? "(none: the file is empty)" : last) (mk ? " (a completion marker)" : ""))
+                } else fact("its condition only tests whether the file exists, so how long it has been quiet says nothing")
                 fact(quiet < 60 ? "file changed just now" : (quiet < stuck ? "file changed " age(quiet) " ago" : "file quiet for " age(quiet)))
-                hint("look at it: tail -5 " (index(w, " ") ? "\"" w "\"" : tilde(w)))
+                hint("look at it: " (rd ? "tail -5 " : "ls -l ") (index(w, " ") ? "\"" w "\"" : tilde(w)))
             } else if (w != "-") fact("watches " shortp(w) ", which no longer exists")
             else fact("watches no file agents can check, so only its age counts")
-            stuck2 = (stuck > 0 && have && quiet >= 2 * stuck)
+            stuck2 = (stuck > 0 && hv && quiet >= 2 * stuck)
             if (FLAG == "stuck") {
-                if (have && mk) verdict("stop", "high", "finished", "safe to stop \342\200\224 what it waits for already finished (" tidy(last, 40) ", " age(quiet) " ago)")
-                else if (have) verdict("stop", "high", "quiet", "safe to stop \342\200\224 nothing has written to the file it watches for " age(quiet))
+                if (hv && mk) verdict("stop", "high", "finished", "safe to stop \342\200\224 what it waits for already finished (" tidy(last, 40) ", " age(quiet) " ago)")
+                else if (hv) verdict("stop", "high", "quiet", "safe to stop \342\200\224 nothing has written to the file it watches for " age(quiet))
+                else if (have) verdict("check", "medium", "exists-only", "check first \342\200\224 waiting " age(f[4]) " on whether " shortp(w) " exists")
                 else if (w != "-") verdict("check", "medium", "gone", "check first \342\200\224 the file it watches is gone; waiting " age(f[4]))
                 else verdict("check", "medium", "age-only", "check first \342\200\224 waiting " age(f[4]) ", with no file to judge by (age only)")
                 if (stuck2) AUTO = 1
                 else if (!have) nope = "nothing but its age says it is stuck"
+                else if (!rd) nope = "it only tests whether its file exists, so the file being quiet proves nothing"
                 else nope = "its file has been quiet less than " age(2 * stuck) " (2 x AGENTS_WAIT_STUCK)"
-            } else if (have && quiet < stuck && !mk) {
+            } else if (hv && quiet < stuck && !mk) {
                 verdict("leave", "high", "file-active", "leave it \342\200\224 the file it watches changed " (quiet < 60 ? "just now" : age(quiet) " ago") ": something still writes it")
                 nope = "its file is still being written, so it is not stuck"
-            } else if (have && mk && quiet >= 120) {
+            } else if (hv && mk && quiet >= 120) {
                 verdict("check", "medium", "finished-young", "check first \342\200\224 what it waits for looks finished (" tidy(last, 40) ", " age(quiet) " ago), but it keeps waiting")
                 nope = "it has not waited " age(stuck) " (AGENTS_WAIT_STUCK) yet"
             } else {
@@ -1968,8 +2018,10 @@ function judge(f,   t, cls, fl, ports, root, cwd, w, have, quiet, last, mk, stuc
 BEGIN {
     now = ENVIRON["NOW"] + 0; home = ENVIRON["HOME"]; target = ENVIRON["AGENTS_TARGET"]
     stuck = 60 * ENVIRON["AGENTS_WAIT_STUCK"]; autoon = (ENVIRON["AGENTS_AUTO_REAP"] == 1)
+    hist = (ENVIRON["AGENTS_HISTORY"] == 1); lsok = 1
 }
-$1 == "watched" { wpath[$2] = $3; wm[$2] = $4; s = $0; for (i = 1; i <= 4; i++) sub(/^[^\t]*\t/, "", s); wl[$2] = s; next }
+$1 == "probe" && $2 == "listen" { lsok = ($3 != "fail"); next }
+$1 == "watched" { wpath[$2] = $3; wm[$2] = $4; wl[$2] = $5; wrd[$2] = ($6 != "exists"); next }
 NF < 14 { next }
 $1 == "agent" { akind[$2] = $3; aproj[$2] = ($15 == "" ? "-" : $15); astat[$2] = $12 }
 $1 == "agent" || $1 == "act" || $1 == "stale" || $1 == "hog" { row[++n] = $0 }
@@ -2086,9 +2138,10 @@ _agents_auto_due() {
 }
 
 # agents_reap_auto — `agents reap --auto`: stop, without asking, only what
-# agents_assess calls safe for that (stale trees that listen on no port; loops
-# stuck on a file quiet for 2 x AGENTS_WAIT_STUCK). Never a long command, a
-# listener or an age-only stuck loop. The usual PID@START kill with its grace
+# agents_assess calls safe for that (stale trees a sample saw under an agent
+# that listen on no port, when ports could be listed; loops stuck reading a
+# file quiet for 2 x AGENTS_WAIT_STUCK). Never a long command, a listener, an
+# age-only or exists-only stuck loop, or a caffeinate without -t. The usual PID@START kill with its grace
 # period; each tree is logged (auto) and one notification sums them up.
 agents_reap_auto() {
     local recs plan tokens="" reasons="" t r s notify="$AGENTS_NOTIFY"
@@ -2223,6 +2276,10 @@ function jobs_json(   i, j, b, t, out, ss, k, m, r) {
 # that ends between two samples loses its last interval, so short runs count
 # low. today.tsv keeps today's totals for the menu ("day<TAB>cpu_s", then
 # "job<TAB>cpu_s" lines, busiest first), sample.stamp the last sample's epoch.
+# sample.state: the epoch, then "pid@start<TAB>cputime_s<TAB>agent" for each
+# process in an agent tree or a stale one; agent is 1 once a sample has seen
+# it under an agent (kept while it lives, so an orphan keeps it): the
+# provenance auto-reap needs before it stops a stale tree.
 
 # agents_sample — take one sample (a no-op with AGENTS_HISTORY=0). One at a
 # time: a second one while the first runs returns at once.
@@ -2263,7 +2320,7 @@ BEGIN {
     last = 0; n = 0
     while ((getline line < sf) > 0) {
         if (n++ == 0) { last = line + 0; continue }
-        if (split(line, f, "\t") >= 2) prev[f[1]] = f[2] + 0
+        if (split(line, f, "\t") >= 2) { prev[f[1]] = f[2] + 0; if (f[3] == 1) seen[f[1]] = 1 }
     }
     close(sf)
     tday = ""; ttot = 0
@@ -2279,8 +2336,8 @@ $1 == "jp" && NF >= 8 { np++; jk[np] = $2 "@" $3; jr[np] = $4; jj[np] = $5; jc[n
 END {
     out = sf ".new"; print now > out
     for (i = 1; i <= np; i++) {
-        k = jk[i]; c = jc[i]
-        print k "\t" c > out
+        k = jk[i]; c = jc[i]; r = jr[i]
+        print k "\t" c "\t" ((k in seen) || ((r in sess) && sess[r] != "-") ? 1 : 0) > out
         if (k in prev) d = c - prev[k]
         else if (last > 0 && ja[i] <= now - last) d = c
         else d = 0

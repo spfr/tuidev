@@ -180,7 +180,8 @@ _agents_cwds() { local p; for p in "$@"; do case "$p" in 300|500) printf '%s\t%s
 agents_sample || fail "first sample failed"
 [[ ! -s "$AGENTS_DATA_DIR/history.tsv" ]] || fail "the first sample (the baseline) wrote rows: $(cat "$AGENTS_DATA_DIR/history.tsv")"
 [[ "$(head -1 "$AGENTS_DATA_DIR/sample.state")" == "$FAKE_NOW" ]] || fail "sample.state has no epoch header"
-grep -q $'^302@Wed_Oct_14_08:56:00_2026\t10$' "$AGENTS_DATA_DIR/sample.state" || fail "sample.state does not key cputime by pid@start"
+grep -q $'^302@Wed_Oct_14_08:56:00_2026\t10\t1$' "$AGENTS_DATA_DIR/sample.state" || fail "sample.state does not key cputime by pid@start (agent 1)"
+grep -q $'^500@Wed_Oct_14_08:10:00_2026\t1\t0$' "$AGENTS_DATA_DIR/sample.state" || fail "a stale tree never seen under an agent is marked as seen"
 [[ "$(cat "$AGENTS_DATA_DIR/sample.stamp")" == "$FAKE_NOW" ]] || fail "sample.stamp"
 [[ ! -e "$AGENTS_DATA_DIR/sample.lock" ]] || fail "sample left its lock behind"
 
@@ -225,6 +226,31 @@ agents_sample || fail "a locked-out sample failed"
 [[ "$(cat "$AGENTS_DATA_DIR/sample.stamp")" == "$before" ]] || fail "a second sample ran while one held the lock"
 rmdir "$AGENTS_DATA_DIR/sample.lock"
 pass "sample: one at a time (lock dir)"
+
+# Provenance for auto-reap: a process seen under an agent keeps that mark
+# once its session ends and it is orphaned; one never seen there has none.
+(
+    AGENTS_DATA_DIR="$tmp/prov"
+    agents_snapshot() { cat "$tmp/snap.prov"; }
+    {
+        psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd
+        psl 300 1 5.0 600000 1:00.00 01:00:00 08:00:00 claude
+        psl 303 300 0.0 90000 0:05.00 01:00:00 08:00:01 "npm exec x-mcp@latest"
+        psl 500 1 0.0 50000 0:01.00 50:00 08:10:00 "caffeinate -dims"
+    } > "$tmp/snap.prov"
+    agents_sample || fail "provenance: first sample"
+    {
+        psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd
+        psl 303 1 0.0 90000 0:05.00 01:01:00 08:00:01 "npm exec x-mcp@latest"
+        psl 500 1 0.0 50000 0:01.00 51:00 08:10:00 "caffeinate -dims"
+    } > "$tmp/snap.prov"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "provenance: second sample"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "provenance: third sample"
+    st="$AGENTS_DATA_DIR/sample.state"
+    grep -q $'^303@Wed_Oct_14_08:00:01_2026\t5\t1$' "$st" || fail "an orphan lost its agent provenance: $(cat "$st")"
+    grep -q $'^500@Wed_Oct_14_08:10:00_2026\t1\t0$' "$st" || fail "a user's own orphan got agent provenance: $(cat "$st")"
+)
+pass "sample.state: pid@start seen under an agent stays marked after it is orphaned; your own orphan is never marked"
 
 # hist line and the due check.
 [[ "$(_agents_hist_line)" == $'hist\tdue\t0\t-\t0' ]] || fail "hist line on a new day, a minute after: $(_agents_hist_line)"
