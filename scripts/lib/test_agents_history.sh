@@ -130,6 +130,12 @@ _agents_conf_valid AGENTS_JOB_BUILD '(^| )just build( |$)' || fail "a good job p
 _agents_conf_valid AGENTS_JOB_BUILD '' || fail "an empty job pattern rejected"
 ! _agents_conf_valid AGENTS_JOB_BUILD '(unclosed' || fail "a pattern that does not compile accepted"
 ! _agents_conf_valid AGENTS_JOB_BUILD $'tab\there' || fail "a pattern with a tab accepted"
+# Checked by the awk that uses it: bash's regcomp may take [[:<:]] (macOS),
+# while awk only warns about it on stderr and exits 0.
+! _agents_conf_valid AGENTS_JOB_BUILD '[[:<:]]foo' || fail "a pattern awk can't compile ([[:<:]]) accepted"
+_agents_conf_valid AGENTS_JOB_TEST '(^| )(just|task) test( |$)|[.]spec[.]ts$' || fail "a normal ERE rejected"
+[[ "$(AGENTS_JOB_TEST='[[:<:]]foo' bash "$REPO_DIR/bin/agents" config 2>&1 | grep -c 'bad AGENTS_JOB_TEST')" == 1 ]] \
+    || fail "a bad AGENTS_JOB_TEST in the environment is not reported"
 printf 'AGENTS_JOB_SERVER="(^| )foreman start( |$)"\nAGENTS_JOB_MCP=(broken\n' > "$tmp/jobs.conf"
 out="$(AGENTS_CONF="$tmp/jobs.conf" bash "$REPO_DIR/bin/agents" config 2>"$tmp/jobs.err")"
 [[ "$out" == *'AGENTS_JOB_SERVER=(^| )foreman start( |$)'* ]] || fail "job pattern from the config file: $out"

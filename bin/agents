@@ -32,15 +32,16 @@ _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_J
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
 _AGENTS_BAR_SECTION_NAMES="needs agents jobs stale hogs awake system"
 
-# _agents_ere_ok VALUE — empty, or a printable extended regex that compiles.
+# _agents_ere_ok VALUE — empty, or a printable extended regex that compiles in
+# the awk that will use it, read the same way (ENVIRON, LC_ALL=C). Some awks
+# only warn on stderr and exit 0 (an unknown class such as [[:<:]]), so any
+# output fails it too.
 _agents_ere_ok() {
-    local re="$1" rc=0
+    local re="$1" err
     [[ -n "$re" ]] || return 0
     [[ "$re" =~ ^[[:print:]]+$ ]] || return 1
-    # [[ =~ ]] returns 2 for a pattern that does not compile.
-    # shellcheck disable=SC2319  # that status is the point
-    { [[ "" =~ $re ]]; rc=$?; } 2>/dev/null
-    [[ $rc -ne 2 ]]
+    err="$(_AGENTS_ERE="$re" LC_ALL=C awk 'BEGIN { if ("" ~ ENVIRON["_AGENTS_ERE"]) n++ }' 2>&1 </dev/null)" || return 1
+    [[ -z "$err" ]]
 }
 
 # _agents_conf_valid KEY VALUE — does VALUE have the shape KEY needs?
