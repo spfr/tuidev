@@ -10,7 +10,8 @@
   - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`;
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
-  - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`.
+  - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`;
+  - `SubagentStop` and `SessionEnd` (`clear|resume`) hooks that run `~/.local/bin/agents hook` to stop the background commands a finished subagent or cleared session left running (a no-op without the `monitoring` pack; `AGENTS_HOOK_REAP=0` turns them off).
 
   The credential paths live in `configs/sandbox/credential-paths.txt`; `test_contract.sh` fails until `bin/sbx`, the `.sb` profiles, those deny rules and the docs match it.
 - **Agent teams are off by default.** While they are on, every subagent Claude names launches as a teammate. Use plain subagents; turn teams on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) only when teammates must talk to each other. `teammateMode: "auto"` then gives them tmux panes.

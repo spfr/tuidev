@@ -121,6 +121,29 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x \"$HOME/.local/bin/agents\" ] && \"$HOME/.local/bin/agents\" hook subagent-stop; exit 0",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "clear|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x \"$HOME/.local/bin/agents\" ] && \"$HOME/.local/bin/agents\" hook session-end; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

@@ -42,6 +42,7 @@ The packs install configs, not the CLIs. The CLIs update themselves. Claude Code
 - `sandbox.enabled` is `true`: Claude Code's native sandbox confines the Bash tool and its children by default. See [sandboxing.md](sandboxing.md) for what it confines and how to adjust it.
 - `attribution` is empty (no `Co-Authored-By`). Agent teams are off (see [Agent teams](#agent-teams)).
 - Notification hooks cover permission prompts, idle prompts, idle teammates and auto-mode denials. There is no `Stop` hook.
+- Cleanup hooks: `SubagentStop`, and `SessionEnd` on `/clear` and `/resume`, run `agents hook` to stop the background commands a finished subagent or a cleared session left running. They need the `monitoring` pack and do nothing without it. See [Cleanup hooks](#cleanup-hooks-claude-code).
 
 **Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off by default, `file_opener = "vscode"`, an unpinned model, and `~/.codex/rules/tuidev.rules`, which makes the same git and gh writes prompt. See [sandboxing.md](sandboxing.md) for how this native sandbox relates to `sbx`.
 
@@ -304,6 +305,31 @@ Never a long or duplicate command, anything listening on a port, or a loop stuck
 
 Every cleanup is logged to `~/.local/state/tuidev/agents/events.tsv` (`AGENTS_HISTORY=0` turns that off): `kill manual` for `agents kill` and `term` and the menu's Stop and Kill items, `reap stale` or `reap stuck` for `agents reap`, and `auto stale` or `auto stuck` for auto-reap, each with the process name, project and owning session (`claude:PID`), never a command line.
 
+### Cleanup hooks (Claude Code)
+
+A subagent often starts a command in the background (a test run, a dev server, an `until …; do sleep 5; done` loop), hands back its report and never stops it. The session stays open, so nothing cleans up, and the loop can run for hours. The shipped `~/.claude/settings.json` runs `agents hook` from two Claude Code hooks to stop those commands. Without the `monitoring` pack the hooks do nothing.
+
+- **`SubagentStop`** (`agents hook subagent-stop`): once a subagent has handed back its final report (its last tool call is a `SubagentHandback` that went through), every background command it started that still runs is stopped. A subagent that only ends a turn while its own commands run is waiting for them, because Claude Code resumes it when they end, so the hook leaves those commands alone. So does Claude Code itself, which stops a foreground subagent's commands when the subagent ends. `SubagentHandback` exists only in auto mode, so in other permission modes this hook stops nothing.
+- **`SessionEnd`**, on `/clear` and `/resume` only (`agents hook session-end`): the session's own polling loops, which only the cleared conversation was waiting for, and whatever its finished subagents left. Its other background commands, such as a dev server, keep running, as Claude Code intends across `/clear`. At exit, Claude Code stops all of them itself.
+
+A command is matched to its process by the file the process writes to: the `tasks/<id>.output` file named in the transcript, read with `lsof` on macOS and `/proc` on Linux. Only if that can't be read, it falls back to the command line, and only when exactly one tool shell runs that command. A process is a candidate only if it is a direct child of the `claude` that ran the hook. The hooks never touch:
+
+- another subagent's commands, the main conversation's (except its polling loops on `/clear`), or commands a fork inherited from the conversation it copied;
+- anything outside that `claude`'s tree, including another session's, and anything started under `tmux`, `screen` or Herdr, which detach from it. To leave a server running on purpose, start it in tmux;
+- tasks the transcript shows as ended or stopped, and processes that host a shell or an agent (a nested `claude -p`).
+
+Every stop goes through the same safe kill as `agents kill`: start-time pinned, SIGTERM, then SIGKILL after `AGENTS_GRACE` seconds. Each stopped command is logged as a `hook` event, and you get one notification per hook run. The subagent receives Claude Code's usual "background command failed" notice. The hooks always exit 0 and print nothing. Turn them off with `AGENTS_HOOK_REAP=0`. To see what they would stop, run one by hand with a hook payload:
+
+```bash
+echo '{"session_id":"…","transcript_path":"…/SESSION.jsonl","agent_type":"Explore",
+       "agent_transcript_path":"…/SESSION/subagents/agent-ID.jsonl","cwd":"'"$PWD"'"}' \
+  | agents hook subagent-stop -n        # or AGENTS_DRY_RUN=true
+```
+
+Run it from inside the session, for example with Claude Code's `!` prefix, because it looks for the `claude` process above it.
+
+Codex CLI has documented `SubagentStop` and `SessionEnd` hooks too, but it says its transcript format isn't a stable interface for hooks, and its hook input doesn't list the background (unified exec) commands still running. A command can't be tied to the agent that started it, so no Codex hook is shipped.
+
 ### Menu bar (SwiftBar, macOS)
 
 On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its `agents.10s.sh` plugin, which also stands in for a system-stats menu bar app. If SwiftBar already has a plugin folder, the plugin goes there; otherwise the pack sets the folder to `~/.config/swiftbar/plugins`. Open SwiftBar once (`open -a SwiftBar`) and turn on **Launch at login** in its settings. The pack doesn't add login items. Uninstalling removes the plugin but leaves SwiftBar's plugin-folder setting as it is.
@@ -389,6 +415,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
 | `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |
 | `AGENTS_AUTO_REAP` | `0` | `1` lets the menu clean up, without asking and at most once a minute, only the leftovers of ended sessions that listen on no port and polling loops stuck twice as long as `AGENTS_WAIT_STUCK` with a quiet file; each one is logged and notified ([auto-reap](#needs-you-is-it-safe-to-stop)) |
+| `AGENTS_HOOK_REAP` | `1` | The Claude Code [cleanup hooks](#cleanup-hooks-claude-code) stop what a finished subagent or a cleared session left running; `0` turns them off |
 | `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
 | `AGENTS_BAR_TITLE` | `count awake` | Title tokens after the icon: `count` (sessions, and how many are blocked), `cpu`, `mem`, `load`, `battery`, `thermal` (only above nominal), `awake`, `warn` (a triangle as well as the tint). Empty shows the icon alone |
 | `AGENTS_BAR_SECTIONS` | `needs agents stale hogs awake system` | Menu sections, in order; `needs`, `stale` and `hogs` appear only when they have entries |

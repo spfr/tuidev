@@ -27,6 +27,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_B
 _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP"
+_AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP"
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
 _AGENTS_BAR_SECTION_NAMES="needs agents stale hogs awake system"
 
@@ -41,6 +42,7 @@ _agents_conf_valid() {
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
         AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
+        AGENTS_HOOK_REAP)   [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
         AGENTS_LID_MIN_BATTERY) [[ "$2" =~ ^([0-9]|[1-9][0-9]|100)$ ]] ;;
         AGENTS_BAR_ICON)    [[ "$2" =~ ^[a-z0-9.]+$ ]] ;;
@@ -2541,6 +2543,307 @@ agents_open_term() {
     "${argv[@]}" >/dev/null 2>&1
 }
 
+# --- Cleanup hooks: what a subagent or session left running --------------------
+# `agents hook subagent-stop|session-end` runs from Claude Code's SubagentStop
+# and SessionEnd hooks (configs/claude/settings.json) with the hook's JSON on
+# stdin. It stops background commands (the Bash tool's run_in_background) that
+# provably belong to the agent that ended and that nothing will read any more:
+#   subagent-stop  every background command the subagent started that still
+#                  runs, once it has delivered its final report (its last tool
+#                  call is a SubagentHandback that went through). A subagent
+#                  that ends a turn while its own commands run is waiting for
+#                  them: Claude Code resumes it when they end, so they stay.
+#   session-end    on /clear and /resume only (at exit Claude Code stops its
+#                  background commands itself, and it keeps them across /clear
+#                  and /resume on purpose): the session's own polling loops,
+#                  which only the cleared conversation waited for, and what its
+#                  finished subagents left.
+# A task is matched to a live process by the file its stdout goes to (Claude
+# Code's tasks/<id>.output), or, when that can't be read, by its command line
+# if exactly one tool shell runs it. Only direct children of the claude process
+# that runs the hook are candidates, and every kill goes through
+# agents_kill_tokens (start-time pinned, refusals, SIGTERM then SIGKILL).
+# Always exits 0; prints nothing unless it is a dry run.
+
+# 1 (the default) lets the hooks stop what they find; 0 turns them off.
+AGENTS_HOOK_REAP="${AGENTS_HOOK_REAP:-1}"
+_agents_env_check AGENTS_HOOK_REAP 1
+# agents_main resets AGENTS_DRY_RUN, so the hook reads the caller's value here.
+_AGENTS_HOOK_DRY="${AGENTS_DRY_RUN:-false}"
+
+# _agents_hook_input < HOOK_JSON — one tab-separated line: event session
+# transcript agent_id agent_type agent_transcript cwd reason ("-" if absent).
+_agents_hook_input() {
+    jq -r '[.hook_event_name, .session_id, .transcript_path, .agent_id, .agent_type,
+            .agent_transcript_path, .cwd, .reason]
+        | map(if type == "string" and . != "" then gsub("[\t\n]"; " ") else "-" end) | join("\t")' 2>/dev/null
+}
+
+# _agents_hook_path PATH — PATH with a leading ~/ expanded; "-" stays "-".
+_agents_hook_path() {
+    case "$1" in \~/*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;; *) printf '%s\n' "$1" ;; esac
+}
+
+# _agents_hook_tasks TRANSCRIPT — "id<TAB>path<TAB>args" for each background
+# command the transcript's agent started (run_in_background, or moved to the
+# background) that it does not show as ended (a task notification) or stopped
+# (TaskStop). path: the output file its result names, or "-". args: the
+# command as Claude Code's tool shell shows it (zsh -c … eval '…'), or "-",
+# for the command-line fallback. Only the lines that matter reach jq.
+_agents_hook_tasks() {
+    local f="$1" ended
+    [[ -f "$f" && -r "$f" ]] || return 0
+    ended="$(grep -oE '<task-id>[A-Za-z0-9_-]+</task-id>' "$f" 2>/dev/null | sed -E 's:</?task-id>::g'
+             grep -E '"name": ?"TaskStop"' "$f" 2>/dev/null | jq -r '.message.content[]?
+                 | select(.type == "tool_use" and .name == "TaskStop") | .input | (.task_id // .shell_id // empty)' 2>/dev/null)"
+    grep -E '"backgroundTaskId"|"name": ?"Bash"' "$f" 2>/dev/null | jq -rs --arg ended "$ended" --arg q "'" '
+        ($ended | split("\n")) as $gone
+        | (map(select(.type == "assistant") | .message.content | arrays | .[]
+               | select(.type == "tool_use") | {key: .id, value: (.input.command // "")}) | from_entries) as $cmd
+        | .[] | select(.type == "user" and (.toolUseResult | type) == "object"
+                       and (.toolUseResult.backgroundTaskId | type) == "string")
+        | .toolUseResult.backgroundTaskId as $id
+        | select(($id | test("^[A-Za-z0-9_-]+$")) and ([$gone[] | select(. == $id)] | length) == 0)
+        | (.message.content | arrays | .[] | select(.type == "tool_result")) as $r
+        | (($r.content | if type == "array" then map(.text? // "") | join(" ") else tostring end)
+           | (capture("Output is being written to: (?<p>/[^ ]+?\\.output)") | .p) // "-") as $path
+        | ($cmd[$r.tool_use_id] // "") as $c
+        | [$id, $path,
+           (if $c == "" then "-" else "zsh -c eval " + $q
+              + ($c | gsub($q; $q + "\"" + $q + "\"" + $q) | gsub("\n"; "\\012") | gsub("\t"; " "))
+              + $q + " < /dev/null" end)]
+        | join("\t")' 2>/dev/null
+}
+
+# _agents_hook_final TRANSCRIPT — true when the agent's last tool call is a
+# SubagentHandback that went through (no result yet counts: the call ends the
+# run); false for a subagent that only ended a turn.
+_agents_hook_final() {
+    local f="$1" id res
+    id="$(grep -E '"type": ?"tool_use"' "$f" 2>/dev/null | tail -1 \
+        | jq -r '[.message.content | arrays | .[] | select(.type == "tool_use")] | last
+                 | select(.name == "SubagentHandback") | .id' 2>/dev/null)"
+    [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || return 1
+    res="$(grep -F "\"$id\"" "$f" 2>/dev/null | grep -E '"type": ?"tool_result"' | tail -1 \
+        | jq -r 'if ((.toolUseResult | type) == "object" and .toolUseResult.success == false)
+                    or ([.message.content | arrays | .[] | select(.type == "tool_result") | .is_error == true] | any)
+                 then "no" else "yes" end' 2>/dev/null)"
+    [[ "$res" != no ]]
+}
+
+# _agents_hook_inherited TRANSCRIPT MAIN — task ids the agent did not start
+# itself: a fork begins with a copy of the conversation it was forked from
+# (its parentAgentId's transcript, else MAIN), task results included.
+_agents_hook_inherited() {
+    local meta="${1%.jsonl}.meta.json" parent="$2" id=""
+    [[ -r "$meta" ]] && id="$(jq -r '.parentAgentId // empty' "$meta" 2>/dev/null)"
+    [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] && parent="${1%/*}/agent-$id.jsonl"
+    [[ -r "$parent" && "$parent" != "$1" ]] || return 0
+    grep -oE '"backgroundTaskId": ?"[A-Za-z0-9_-]+"' "$parent" 2>/dev/null | sed -E 's/.*"([A-Za-z0-9_-]+)"$/\1/'
+}
+
+# _agents_hook_own_tasks TRANSCRIPT MAIN SCOPE — _agents_hook_tasks without the
+# inherited ones, each line ending in SCOPE (all, or wait: polling loops only).
+_agents_hook_own_tasks() {
+    local inh
+    inh="$(_agents_hook_inherited "$1" "$2")"
+    _agents_hook_tasks "$1" | H_INH="$inh" awk -F '\t' -v scope="$3" '
+        BEGIN { n = split(ENVIRON["H_INH"], t, "\n"); for (i = 1; i <= n; i++) skip[t[i]] = 1 }
+        NF >= 3 && !($1 in skip) { print $0 "\t" scope }'
+}
+
+# _agents_hook_claude SNAPSHOT — the claude process this hook runs under: the
+# nearest ancestor of this process that is a claude agent.
+_agents_hook_claude() {
+    printf '%s\n' "$1" | AGENTS_NAMES="$AGENTS_NAMES" LC_ALL=C awk -v self="$AGENTS_SELF" "$_AGENTS_AWK_LIB"'
+        NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; av[p] = argv($0) }
+        END {
+            q = pp[self + 0]; d = 0
+            while (q > 1 && (q in pp) && d++ < 64) { if (agent_kind(av[q]) == "claude") { print q; exit } q = pp[q] }
+        }'
+}
+
+# _agents_hook_children SNAPSHOT CLAUDE — CLAUDE's direct children, without
+# this process's own ancestors (the hook's shell).
+_agents_hook_children() {
+    printf '%s\n' "$1" | LC_ALL=C awk -v self="$AGENTS_SELF" -v c="$2" '
+        NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; ord[++n] = p }
+        END {
+            q = self + 0; d = 0
+            while (q > 0 && (q in pp) && d++ < 64) { anc[q] = 1; q = pp[q] }
+            for (k = 1; k <= n; k++) if (pp[ord[k]] == c + 0 && !anc[ord[k]]) print ord[k]
+        }'
+}
+
+# _agents_hook_stdouts PID... — "pid<TAB>path" of each one's stdout (fd 1).
+# One lsof for all of them (-b: never block on a stale mount); /proc on Linux.
+_agents_hook_stdouts() {
+    [[ $# -gt 0 ]] || return 0
+    local p
+    if [[ -d /proc/self/fd ]]; then
+        for p in "$@"; do printf '%s\t%s\n' "$p" "$(readlink "/proc/$p/fd/1" 2>/dev/null || echo -)"; done
+    elif command -v lsof >/dev/null 2>&1; then
+        local IFS=,
+        lsof -b -w -a -d 1 -Fpn -p "$*" 2>/dev/null | awk '/^p/ { p = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) }'
+    fi
+}
+
+# _agents_hook_match SNAPSHOT CLAUDE TASKS STDOUTS — one line per task that
+# runs as a direct child of CLAUDE:
+#   pid@start <TAB> task id <TAB> how <TAB> name <TAB> wait(0|1)
+# TASKS: "id<TAB>path<TAB>args<TAB>scope" lines (the first line for an id
+# wins); STDOUTS: _agents_hook_stdouts. how is "output" (its stdout is the
+# task's output file: the path the result named, else tasks/<id>.output) or
+# "command" (its stdout can't be read, and it is the only tool shell running
+# that command, which no other unmatched task runs). A scope of wait keeps
+# polling loops only. name: "wait-loop", or the command's first word.
+_agents_hook_match() {
+    printf '%s\n' "$1" | H_TASKS="$3" H_OUTS="$4" AGENTS_NAMES="$AGENTS_NAMES" \
+    LC_ALL=C awk -v self="$AGENTS_SELF" -v c="$2" -v me="$AGENTS_UID" "$_AGENTS_AWK_LIB"'
+function norm(s) { gsub(/\/\/+/, "/", s); sub(/^\/private\//, "/", s); return s }
+function ends(s, t) { return length(s) >= length(t) && substr(s, length(s) - length(t) + 1) == t }
+function firstword(s,   w) { w = s; sub(/^[( ]+/, "", w); sub(/[ ;&|)].*$/, "", w); sub(/.*\//, "", w); return w == "" ? "command" : w }
+function hit(p, i, how,   s, w) {
+    if (taken[p]++) return
+    done[i] = 1
+    s = tool_cmd(ta[i] != "-" ? ta[i] : av[p]); w = waits(s) ? 1 : 0
+    if (ts[i] == "wait" && !w) return
+    gsub(/\t/, " ", s)
+    printf "%d@%s\t%s\t%s\t%s\t%d\n", p, st[p], tid[i], how, (w ? "wait-loop" : firstword(s)), w
+}
+BEGIN {
+    n = split(ENVIRON["H_TASKS"], t, "\n")
+    for (i = 1; i <= n; i++) {
+        if (split(t[i], f, "\t") < 4 || f[1] == "" || (f[1] in seen)) continue
+        seen[f[1]] = 1; nt++; tid[nt] = f[1]; tp[nt] = (f[2] == "-" ? "-" : norm(f[2])); ta[nt] = f[3]; ts[nt] = f[4]
+    }
+    n = split(ENVIRON["H_OUTS"], t, "\n")
+    for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 2 && f[2] ~ /^\//) out[f[1] + 0] = norm(f[2])
+}
+NF >= 14 { p = $1 + 0; pp[p] = $2 + 0; uid[p] = $3; st[p] = $9 "_" $10 "_" $11 "_" $12 "_" $13; av[p] = argv($0); ord[++np] = p }
+END {
+    c += 0; if (c <= 1 || !(c in pp) || nt == 0) exit
+    q = self + 0; d = 0
+    while (q > 0 && (q in pp) && d++ < 64) { anc[q] = 1; q = pp[q] }
+    for (k = 1; k <= np; k++) {
+        p = ord[k]
+        if (pp[p] != c || anc[p] || uid[p] != me) continue
+        if (p in out) {
+            for (i = 1; i <= nt; i++)
+                if (!done[i] && (tp[i] != "-" ? out[p] == tp[i] : ends(out[p], "/tasks/" tid[i] ".output"))) { hit(p, i, "output"); break }
+        } else if (tool_shell(av[p])) { nu++; up[nu] = p; uc[nu] = tool_cmd(av[p]) }
+    }
+    for (i = 1; i <= nt; i++) {
+        if (done[i] || ta[i] == "-") continue
+        want = tool_cmd(ta[i]); k = 0; m = 0
+        for (j = 1; j <= nu; j++) if (uc[j] == want) { k++; hp = up[j] }
+        for (j = 1; j <= nt; j++) if (!done[j] && ta[j] != "-" && tool_cmd(ta[j]) == want) m++
+        if (k == 1 && m == 1) hit(hp, i, "command")
+    }
+}'
+}
+
+# _agents_hook_say TEXT — a line for dry runs only (on stderr, so it never
+# mixes with data).
+_agents_hook_say() { [[ "$_AGENTS_HOOK_DRY" != true ]] || printf 'agents hook: %s\n' "$1" >&2; }
+
+# _agents_hook_collect EVENT TRANSCRIPT AGENT_TRANSCRIPT REASON — the tasks
+# (_agents_hook_match's TASKS) this event may stop. Fails, having said why,
+# when the event stops nothing by design.
+_agents_hook_collect() {
+    local event="$1" main="$2" agent="$3" reason="$4" f
+    case "$event" in
+        subagent-stop)
+            if [[ ! -f "$agent" ]]; then _agents_hook_say "no subagent transcript ($agent): nothing to do"; return 1; fi
+            if ! _agents_hook_final "$agent"; then
+                _agents_hook_say "the subagent has not handed back a final report: Claude Code resumes it when its commands end, so they stay"
+                return 1
+            fi
+            _agents_hook_own_tasks "$agent" "$main" all ;;
+        session-end)
+            case "$reason" in
+                clear|resume) ;;
+                *) _agents_hook_say "session ended ($reason): Claude Code stops its own background commands at exit"; return 1 ;;
+            esac
+            _agents_hook_tasks "$main" | awk '{ print $0 "\twait" }'
+            for f in "${main%.jsonl}"/subagents/agent-*.jsonl; do
+                if [[ -f "$f" ]] && grep -q '"backgroundTaskId"' "$f" 2>/dev/null && _agents_hook_final "$f"; then
+                    _agents_hook_own_tasks "$f" "$main" all
+                fi
+            done ;;
+    esac
+}
+
+# agents_hook subagent-stop|session-end [-n] < HOOK_JSON — the hook itself.
+# Returns 0 whatever happens: a failing SubagentStop hook would keep the
+# subagent running. Quiet unless -n (or AGENTS_DRY_RUN=true): then it prints
+# what it would stop and signals nothing.
+agents_hook() {
+    local event="${1:-}" a _AGENTS_HOOK_DRY="$_AGENTS_HOOK_DRY"   # -n lasts for this call only
+    [[ $# -gt 0 ]] && shift
+    for a in "$@"; do case "$a" in -n|--dry-run) _AGENTS_HOOK_DRY=true ;; esac; done
+    case "$event" in
+        subagent-stop|session-end) ;;
+        *) echo "usage: agents hook subagent-stop|session-end [-n] < HOOK_JSON" >&2; return 0 ;;
+    esac
+    [[ "$AGENTS_HOOK_REAP" == 1 ]] || { _agents_hook_say "AGENTS_HOOK_REAP=$AGENTS_HOOK_REAP: off"; return 0; }
+    command -v jq >/dev/null 2>&1 || return 0
+    local euid="$EUID"
+    [[ -z "${AGENTS_TESTING:-}" ]] || euid="${AGENTS_EUID:-$EUID}"
+    [[ "$euid" -ne 0 ]] || return 0
+    if [[ -t 0 ]]; then echo "agents hook: pipe the hook's JSON to stdin" >&2; return 0; fi
+    local fields _ev session main _aid atype agent cwd reason
+    fields="$(_agents_hook_input)"
+    [[ -n "$fields" ]] || { _agents_hook_say "no hook JSON on stdin"; return 0; }
+    IFS=$'\t' read -r _ev session main _aid atype agent cwd reason <<<"$fields"
+    main="$(_agents_hook_path "$main")"; agent="$(_agents_hook_path "$agent")"
+    local tasks snap claude kids matches
+    tasks="$(_agents_hook_collect "$event" "$main" "$agent" "$reason")" || return 0
+    [[ -n "$tasks" ]] || { _agents_hook_say "no background commands left running"; return 0; }
+    snap="$(agents_snapshot)"
+    [[ -n "$snap" ]] || { _agents_hook_say "cannot read the process table"; return 0; }
+    claude="$(_agents_hook_claude "$snap")"
+    [[ -n "$claude" ]] || { _agents_hook_say "not running under a claude process"; return 0; }
+    # shellcheck disable=SC2046  # one pid per word
+    kids="$(_agents_hook_stdouts $(_agents_hook_children "$snap" "$claude"))"
+    matches="$(_agents_hook_match "$snap" "$claude" "$tasks" "$kids")"
+    [[ -n "$matches" ]] || { _agents_hook_say "none of its background commands still runs"; return 0; }
+    _agents_hook_reap "$event" "$matches" "${session:--}" "$(agents_project "$cwd")" "$atype"
+    return 0
+}
+
+# _agents_hook_reap EVENT MATCHES SESSION PROJECT AGENT_TYPE — stop the
+# matched trees, log one event per stopped task, notify once.
+_agents_hook_reap() {
+    local event="$1" matches="$2" session="$3" proj="$4" atype="$5" tokens out planned token id how name _w n=0 who reason
+    tokens="$(printf '%s\n' "$matches" | cut -f1)"
+    if [[ "$event" == subagent-stop ]]; then
+        reason=subagent-end; who="a subagent"
+        [[ "$atype" == - || -z "$atype" ]] || who="a subagent ($atype)"
+    else
+        reason="session-end"; who="the ended session"
+    fi
+    if [[ "$_AGENTS_HOOK_DRY" == true ]]; then
+        echo "agents hook: background commands $who left running:"
+        while IFS=$'\t' read -r token id how name _w; do
+            printf '  task %s: %s, pid %s (matched by %s)\n' "$id" "$name" "${token%@*}" "$how"
+        done <<<"$matches"
+        # shellcheck disable=SC2086  # one PID@START token per word
+        AGENTS_DRY_RUN=true AGENTS_YES=true AGENTS_NOTIFY=false agents_kill_tokens true $tokens 2>&1
+        return 0
+    fi
+    # shellcheck disable=SC2086
+    out="$(AGENTS_DRY_RUN=false AGENTS_YES=true AGENTS_NOTIFY=false AGENTS_CONFIRM_GUI=false agents_kill_tokens true $tokens 2>&1)"
+    planned="$(printf '%s\n' "$out" | awk '/^  [0-9]+ / { print $1 }')"
+    while IFS=$'\t' read -r token id how name _w; do
+        [[ $'\n'"$planned"$'\n' == *$'\n'"${token%@*}"$'\n'* ]] || continue
+        n=$((n + 1))
+        agents_event hook "$reason" "${token%@*}" "$name" "$proj" "$session"
+    done <<<"$matches"
+    [[ $n -gt 0 ]] || return 0
+    AGENTS_NOTIFY=true _agents_notify "Stopped $n background command$([[ $n -gt 1 ]] && echo s) $who left running$([[ "$proj" != - ]] && echo " in $proj")"
+}
+
 # --- Confirmation and notification from the menu bar ---------------------------
 
 # _agents_gui_confirm MESSAGE — a native dialog with Cancel as the default;
@@ -2621,6 +2924,15 @@ KEEP AWAKE
   agents awake restore         let a closed lid sleep again (pmset disablesleep 0),
                                e.g. after a reboot killed the guard
     --notify                   report lid mode's results as macOS notifications
+
+CLAUDE CODE HOOKS (shipped in ~/.claude/settings.json; hook JSON on stdin)
+  agents hook subagent-stop    stop the background commands a subagent left
+                               running once it handed back its final report
+  agents hook session-end      on /clear or /resume: stop the session's polling
+                               loops and what its finished subagents left
+    -n, --dry-run              print what it would stop (or AGENTS_DRY_RUN=true)
+  Only tasks matched to their own process (its stdout is the task's output
+  file) under the claude that runs the hook. AGENTS_HOOK_REAP=0 turns it off
 
 SETTINGS
   agents config [--edit]       effective settings, and the file they came from;
@@ -2735,6 +3047,7 @@ agents_main() {
                   open -R "$c" ;;
         open-term) agents_open_term "$@" ;;
         _awake-loop) _agents_awake_loop ;;
+        hook)     agents_hook "$@"; return 0 ;;   # Claude Code hooks: never fail
         -h|--help|help) agents_usage ;;
         *)        echo "agents: unknown command '$cmd' (agents --help)" >&2; return 2 ;;
     esac
