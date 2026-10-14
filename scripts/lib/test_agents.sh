@@ -419,7 +419,9 @@ lidbin="$tmp/lidbin"; mkdir -p "$lidbin"
     printf '#!/bin/bash\necho "com.apple.system.thermalpressurelevel ${THERMAL:-0}"\n' > "$lidbin/notifyutil"
     printf '#!/bin/bash\nfields="" pid=""\nwhile [[ $# -gt 0 ]]; do case "$1" in -o) fields="$2"; shift 2 ;; -p) pid="$2"; shift 2 ;; *) shift ;; esac; done\n[[ -n "$pid" && -r "$PS_TABLE" ]] || exit 1\nwhile IFS=$'"'"'\\t'"'"' read -r p lst ru args; do\n    [[ "$p" == "$pid" ]] || continue\n    out=""; IFS=, read -r -a fs <<<"$fields"\n    for f in "${fs[@]}"; do case "$f" in pid=) v="$p" ;; lstart=) v="$lst" ;; ruid=|uid=) v="$ru" ;; args=) v="$args" ;; *) v="" ;; esac; out+="${out:+ }$v"; done\n    echo "$out"; exit 0\ndone < "$PS_TABLE"\nexit 1\n' > "$lidbin/ps"
 }
-chmod +x "$lidbin/osascript" "$lidbin/pmset" "$lidbin/notifyutil" "$lidbin/ps"
+# A caffeinate on PATH so the Linux container gets past the inhibitor probe.
+printf '#!/bin/bash\nexit 0\n' > "$lidbin/caffeinate"
+chmod +x "$lidbin/osascript" "$lidbin/pmset" "$lidbin/notifyutil" "$lidbin/ps" "$lidbin/caffeinate"
 export LID_LOG="$tmp/lid" PMSET_LOG="$tmp/pmset.log" PMSET_SD=0 PMSET_BATT="" THERMAL=0 PS_TABLE="$tmp/ps.table"
 # This shell's own row: ps works, so a pid it doesn't list is gone.
 self_row() { printf '%s\tWed Oct 14 08:00:00 2026\t501\tbash test\n' "$$" >> "$PS_TABLE"; }
@@ -473,7 +475,9 @@ lid_test_cmd() {   # LOG CMD — the root command, made harmless and runnable as
     [[ "$c" != *"pmset -a"* ]] || fail "a pmset write is left in the test command"
     printf '%s' "$c"
 }
-if [[ -x /usr/bin/perl ]]; then
+# The command uses macOS's absolute paths (/usr/bin/true, /usr/bin/false), so
+# these live runs are macOS-only.
+if [[ "$(uname -s)" == Darwin && -x /usr/bin/perl ]]; then
     : > "$tmp/nostart.log"
     c="$(lid_test_cmd "$tmp/nostart.log" "$(_agents_lid_cmd start 600 20)")"
     c="$(sub_all "$c" "'end=" "'exit 3; end=")"; c="$(sub_all "$c" "/bin/sleep 2" "/bin/sleep 0.3")"
@@ -482,13 +486,13 @@ if [[ -x /usr/bin/perl ]]; then
         || fail "fail-safe: rc $rc, out '$(cat "$tmp/nostart.out")', err '$(cat "$tmp/nostart.err")', log '$(cat "$tmp/nostart.log")'"
     pass "lid: when the guard is gone after two seconds, the root step restores sleep itself and fails"
 else
-    echo "SKIP: no /usr/bin/perl: lid fail-safe test not run"
+    echo "SKIP: not macOS: lid fail-safe test not run"
 fi
 
 # The real detach: the guard starts in a session of its own, so killing the
 # group that launched it (what ending a privileged dialog can do) leaves it
 # running. Needs perl and a usable ps (not in a sandbox).
-if [[ -x /usr/bin/perl ]] && /bin/ps -o pid= -p $$ >/dev/null 2>&1; then
+if [[ "$(uname -s)" == Darwin && -x /usr/bin/perl ]] && /bin/ps -o pid= -p $$ >/dev/null 2>&1; then
     : > "$tmp/detach.log"
     c="$(lid_test_cmd "$tmp/detach.log" "$(_agents_lid_cmd start 600 20)")"
     ( set -m; /bin/sh -c "$c" >"$tmp/detach.out" 2>"$tmp/detach.err" & l=$!; wait "$l"; echo "$l" > "$tmp/detach.leader" )
