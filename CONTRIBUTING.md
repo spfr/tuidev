@@ -26,7 +26,7 @@ Search existing issues first, then use the issue template. Include your tuidev v
 | `make lint` | shellcheck over every shell file (the list is `SHELL_FILES` in the Makefile) |
 | `make validate-configs` | JSON, TOML, Lua and shell syntax of everything in `configs/` |
 | `make check-links` | Every relative link in every tracked Markdown file |
-| `make test-lib` | `scripts/lib/test_*.sh`: agents, config_write, container, contract (cross-file names, documented packs), migrations, pkg, profile, theme |
+| `make test-lib` | Every `scripts/lib/test_*.sh` unit harness, including `test_contract.sh` (cross-file names, documented packs) |
 | `make test` / `test-core` / `test-all` | `scripts/test_suite.sh`: tagged checks against the installed machine |
 | `make container-test` | `test_suite.sh --tag core` in an Alpine image. It tests the scripts, configs and tool contract on Linux, **not** the installer. The apt path is exercised on a real Debian box. |
 | `make sbx-test` | On macOS: `sbx` can read the project and cannot read `~/.ssh` |

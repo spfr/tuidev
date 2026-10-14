@@ -7,26 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Docs
+### Added
+- **Reproducible screenshots: `make screenshots` (macOS).**
+  `docs/assets/agents.png`, `sbx.png` and the 1280×640 `social-preview.png`
+  are rendered with VHS from tapes in `docs/assets/tapes/`, in the Tokyo
+  Night palette and the Ghostty font. The `agents` and `sbx` tapes run in a
+  throwaway home, and `agents` reads fixture process tables and working
+  directories through stubbed `ps`, `lsof` and friends (and never signals),
+  so no image shows the machine that rendered it. The SwiftBar menu can't be
+  recorded headlessly; `docs/assets/tapes/README.md` has a by-hand recipe
+  over the same fixtures. How and when to re-render is in
+  `docs/engineering.md`.
+
+### Changed
 - **A README for newcomers.** One-line value proposition, a screenshot of
   `agents` up top, "Why tuidev" as outcomes (credentials kept from agents,
   agent processes in view, tiered subagents, an install you can undo,
   durable remote sessions, one palette, Linux), who it is and isn't for,
   and a packs-at-a-glance table. The docs index is unchanged, plus a row
   for the screenshot tapes; a release badge joins CI and license.
-- **Reproducible screenshots: `make screenshots`.** `docs/assets/agents.png`,
-  `sbx.png` and the 1280×640 `social-preview.png` are rendered with VHS from
-  tapes in `docs/assets/tapes/`, in the Tokyo Night palette and the Ghostty
-  font. Each tape runs in a throwaway home, and `agents` reads fixture
-  process tables through stubbed `ps`, `lsof` and friends (and never
-  signals), so no image shows the machine that rendered it. The SwiftBar menu
-  can't be recorded headlessly; `docs/assets/tapes/README.md` has a
-  by-hand recipe over the same fixtures. How and when to re-render is in
-  `docs/engineering.md`.
-- **The quick start installs `--pack ai-clis` in step 1**, so `claude` and
-  `codex` are sandboxed in step 2 as the guide says. VISION, the quick start
-  and CONTRIBUTING open with the same positioning as the README, and
-  CONTRIBUTING lists the agents test harness.
+- **The quick start says to install Claude Code and Codex first** (tuidev
+  configures them, it doesn't install them) **and installs `--pack ai-clis`
+  in step 1**, so `claude` and `codex` are sandboxed in step 2 as the guide
+  says. VISION, the quick start and CONTRIBUTING open with the same
+  positioning as the README.
 
 ### Fixed
 - **`agents` uses the full width of a wide terminal.** It asked `tput cols`

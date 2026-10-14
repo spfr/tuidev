@@ -1,9 +1,9 @@
 # tuidev
 
-**A terminal setup for running AI coding agents on macOS and Linux: sandboxed by default, easy to watch, and installed in layers you can undo.**
+**A terminal setup for running AI coding agents on macOS and Linux: Claude Code and Codex sandboxed by default (`--pack ai-clis`), easy to watch, and installed in layers you can undo.**
 
 [![CI](https://github.com/spfr/tuidev/actions/workflows/ci.yml/badge.svg)](https://github.com/spfr/tuidev/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/tag/spfr/tuidev?sort=semver&label=release)](CHANGELOG.md)
+[![Release](https://img.shields.io/github/v/release/spfr/tuidev?sort=semver)](https://github.com/spfr/tuidev/releases/latest)
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -17,7 +17,7 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal.
 ## Why tuidev
 
 - **Agents don't get your credentials.** `--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 21 paths on one [credential list](configs/sandbox/credential-paths.txt). For everything else, including Codex, whose sandbox limits writes and network but not reads, `sbx` runs any command under a macOS Seatbelt profile that denies the same list. A contract test keeps every copy of the list in step. [Sandboxing](docs/sandboxing.md)
-- **You see what your agents run, and can stop it.** `agents` lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, flags the MCP and dev servers a crashed session left running, and kills a tree descendants first, re-checking each process's start time before every signal. With [Herdr](https://herdr.dev/), sessions waiting for you come first. On macOS its SwiftBar menu shows the same, keeps the Mac awake while agents run, and shows CPU, memory, battery and thermal pressure, standing in for Amphetamine and Stats. [Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
+- **You see what your agents run, and can stop it.** `agents` lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, flags the MCP and dev servers a crashed session left running, and kills a tree, descendants first, re-checking each process's start time before every signal. With [Herdr](https://herdr.dev/), sessions waiting for you come first. On macOS its SwiftBar menu shows the same, keeps the Mac awake while agents run, and shows CPU, memory, battery and thermal pressure, standing in for Amphetamine and Stats. [Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 - **Subagents on the cheapest tier that works.** `--pack orchestration` pins Claude Code and Codex subagents to tiers (on Claude: Haiku for search and command runs, Sonnet for standard implementation, Opus for complex work and review) and adds a delegation skill for parallel worktrees. It installs on its own, without the rest of tuidev. [Orchestration](docs/orchestration.md)
 - **An install you can preview and undo.** Pick a profile or compose packs, and `--dry-run` shows every change first. Config goes into managed blocks, so your own lines survive, and a config file you edited keeps your changes through updates. Every install is recorded, `./uninstall.sh` removes only what tuidev put there, and one-shot migrations clean up after older releases. [Updating](docs/updating.md)
 - **Sessions that outlive your laptop.** On an always-on machine you reach over Tailscale, SSH or mosh, tmux or Herdr keeps an agent running while you're away; `t NAME` re-attaches. [Remote](docs/remote.md)
@@ -36,12 +36,15 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal.
 
 - a terminal IDE: there are no prebuilt tmux layouts, and Neovim is an optional pack;
 - a personal dotfiles dump, a kitchen-sink Homebrew installer, or a showcase of every modern CLI;
-- AI agents running unsandboxed on the host by default, or in-editor ACP agents shipped for you;
+- AI agents running unsandboxed on the host by default: `--pack ai-clis`, part of the quick start, turns on Claude Code's and Codex's sandboxes;
+- in-editor ACP agents shipped for you;
 - Docker Desktop or OrbStack (never installed), or `curl | sh` installers (the installer prints the official command instead).
 
 The reasoning is in [VISION.md](VISION.md).
 
 ## Quick start
+
+tuidev configures Claude Code and Codex but doesn't install them, since they update themselves. Install them first with their official instructions: [Claude Code](https://code.claude.com/docs/en/setup), [Codex](https://github.com/openai/codex). Then:
 
 ```bash
 git clone https://github.com/spfr/tuidev.git
@@ -106,7 +109,7 @@ Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.
 - AI CLI settings (`~/.claude/settings.json`, `~/.codex/config.toml`) are placed only where absent or unmodified. An edited `~/.claude/settings.json` gets new shipped settings merged in, and your values win ([docs/updating.md](docs/updating.md#shipped-configs-you-may-have-edited)).
 - Anything tuidev replaces is backed up to `~/.config/tuidev/backups/` first.
 - `~/.config/tuidev/manifest` records what was installed. `./uninstall.sh` removes only those records: a `ripgrep` you already had survives, and so do CLI logins and session state.
-- No telemetry.
+- tuidev sends no telemetry.
 
 ## Documentation
 
