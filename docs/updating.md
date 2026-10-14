@@ -147,7 +147,7 @@ had before you found this repo.
 It removes only what the manifest records:
 
 - managed blocks, including the `tuidev-theme` blocks (content outside the markers stays);
-- helpers in `~/.local/bin`;
+- helpers in `~/.local/bin`, and the `agents` modules in `~/.local/lib/tuidev`;
 - global git keys tuidev set, and only while they still hold tuidev's value;
 - optionally, the config files tuidev created (each one backed up first). A
   file tuidev adopted is never removed, and neither is a whole CLI home, so auth
