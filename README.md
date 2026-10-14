@@ -34,7 +34,7 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal 
 
 Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever your package manager lacks is skipped.
 
-### Agents sandboxed by default
+### Agents sandboxed by default with `--pack ai-clis`
 
 `--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper, and gates git and gh writes behind a prompt. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 21 paths on one [credential list](configs/sandbox/credential-paths.txt). Codex's sandbox limits writes and network but not reads, so for anything else `sbx` runs a command under a macOS Seatbelt profile that denies the same list. A contract test keeps every copy of the list in step. [Sandboxing](docs/sandboxing.md)
 
@@ -49,7 +49,7 @@ Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever 
 ### Agent workflow support
 
 - **Parallel work:** `claude -w NAME` starts a session in its own worktree, and subagents can too.
-- **Know when you're needed:** Claude Code hooks call `notify.sh`, which shows a Herdr toast, a tmux message, a macOS banner or a Linux desktop notification, and pushes to your phone through [ntfy](https://ntfy.sh) when you set `NTFY_URL`.
+- **Know when you're needed:** Claude Code hooks call `notify.sh`, which shows the first of a Herdr toast, a tmux message, a macOS banner or a Linux desktop notification that works, and falls back to a push through [ntfy](https://ntfy.sh) when nothing local can show it (set `NTFY_URL`).
 - **Herdr** (`--pack herdr`) is an agent-aware multiplexer that marks each pane `working`, `blocked`, `done` or `idle`.
 - **Review first:** `hunk` for review-first diffs, and a starter [`AGENTS.md`](templates/AGENTS_TEMPLATE.md) for your own projects.
 
