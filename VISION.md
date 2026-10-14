@@ -1,11 +1,11 @@
 # Vision
 
-tuidev is an opinionated, minimal terminal setup for engineering with AI agents. macOS is the daily driver, and Linux nodes are first-class for the remote path. It is a sharp system with a small core, not a kitchen-sink bootstrapper.
+tuidev is an opinionated, minimal terminal setup for running AI coding agents: sandboxed by default, easy to watch, and installed in layers you can undo. macOS is the daily driver, and Linux nodes are first-class for the remote path. It is a sharp system with a small core, not a kitchen-sink bootstrapper.
 
 Priorities, in order:
 
 1. A fast, clean terminal for running AI coding agents next to a GUI editor.
-2. Safe-by-default execution for those agents.
+2. Safe-by-default execution for those agents, and a clear view of what they run.
 3. Remote and mobile continuity, on the machines that need it, without making that the whole product.
 
 The forward-looking view (fleet-scale agents, sandbox succession, watch-list criteria) is in [docs/roadmap.md](docs/roadmap.md).

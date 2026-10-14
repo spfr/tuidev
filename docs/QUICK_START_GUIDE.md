@@ -1,16 +1,18 @@
 # Quick Start
 
-From a fresh clone to a sandboxed agent running next to your editor, in about ten minutes. For reference material, see [CHEATSHEET.md](CHEATSHEET.md).
+From a fresh clone to a sandboxed agent running next to your editor, in about ten minutes. tuidev sets up the terminal for running Claude Code and Codex: sandboxed by default, easy to watch, and installed in layers you can undo. For reference material, see [CHEATSHEET.md](CHEATSHEET.md).
 
 ## 1. Install
 
 ```bash
 git clone https://github.com/spfr/tuidev.git
 cd tuidev
-./install.sh --profile desktop --dry-run   # preview every change
-./install.sh --profile desktop
+./install.sh --profile desktop --pack ai-clis --dry-run   # preview every change
+./install.sh --profile desktop --pack ai-clis
 exec zsh -l
 ```
+
+`--pack ai-clis` writes the Claude Code and Codex settings that turn on their native sandboxes; without it, `claude` and `codex` run with whatever settings you already have.
 
 | Profile   | Packs                   | Use when                        |
 |-----------|-------------------------|----------------------------------|
@@ -18,7 +20,7 @@ exec zsh -l
 | `desktop` | core + ui + sandbox     | Your Mac (recommended)           |
 | `remote`  | core + remote + sandbox + `--pack tmux` | A headless box you SSH into |
 
-Add optional packs at any time: `./install.sh --pack ai-clis`. Re-running is safe. See [profiles.md](profiles.md) for every pack.
+Add optional packs at any time: `./install.sh --pack monitoring` (the `agents` command and, on macOS, its menu bar) or `--pack orchestration` (tiered subagents). Re-running is safe. See [profiles.md](profiles.md) for every pack.
 
 Check the result:
 
@@ -58,7 +60,7 @@ The prefix is `Ctrl+a`: press it, release, then press the key. The full table is
 
 ## 4. Run an agent in the sandbox
 
-`claude` and `codex` are sandboxed automatically, by settings each CLI ships with and that `--pack ai-clis` turns on (`sandbox.enabled` for Claude Code, `sandbox_mode = "workspace-write"` for Codex). Just run them:
+`claude` and `codex` are sandboxed automatically, by the settings `--pack ai-clis` writes (`sandbox.enabled` for Claude Code, `sandbox_mode = "workspace-write"` for Codex). If you skipped it in step 1, add it now; then just run them:
 
 ```bash
 ./install.sh --pack ai-clis
@@ -103,4 +105,4 @@ claude                   # sandboxed automatically, run it in the project direct
 
 If you installed `--pack tmux`, `t myproject` gives you a session that survives a disconnect, and tmux-resurrect/tmux-continuum save and restore it automatically (continuum saves every 15 minutes).
 
-For parallel agents, see [agent-workflows.md](agent-workflows.md). To work from another machine or your phone, see [remote.md](remote.md). When something breaks, check [FAQ.md](FAQ.md).
+With `--pack monitoring`, `agents` shows every session, what it runs and what a crashed one left behind (`agents reap` cleans that up). For parallel agents, see [agent-workflows.md](agent-workflows.md). To work from another machine or your phone, see [remote.md](remote.md). When something breaks, check [FAQ.md](FAQ.md).

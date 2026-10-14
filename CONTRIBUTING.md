@@ -1,6 +1,6 @@
 # Contributing to tuidev
 
-Thanks for your interest. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
+Thanks for your interest. tuidev is a terminal setup for running AI coding agents: sandboxed by default, easy to watch, and installed in layers you can undo. A good change makes it better at that without growing the core. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
 
 ## Reporting issues
 
@@ -26,7 +26,7 @@ Search existing issues first, then use the issue template. Include your tuidev v
 | `make lint` | shellcheck over every shell file (the list is `SHELL_FILES` in the Makefile) |
 | `make validate-configs` | JSON, TOML, Lua and shell syntax of everything in `configs/` |
 | `make check-links` | Every relative link in every tracked Markdown file |
-| `make test-lib` | `scripts/lib/test_*.sh`: config_write, container, contract (cross-file names, documented packs), migrations, pkg, profile, theme |
+| `make test-lib` | `scripts/lib/test_*.sh`: agents, config_write, container, contract (cross-file names, documented packs), migrations, pkg, profile, theme |
 | `make test` / `test-core` / `test-all` | `scripts/test_suite.sh`: tagged checks against the installed machine |
 | `make container-test` | `test_suite.sh --tag core` in an Alpine image. It tests the scripts, configs and tool contract on Linux, **not** the installer. The apt path is exercised on a real Debian box. |
 | `make sbx-test` | On macOS: `sbx` can read the project and cannot read `~/.ssh` |
@@ -41,6 +41,7 @@ CI runs lint, validate-configs (`--strict`), check-links, test-lib and the conta
 - **Optional tools like `nvim` and `tmux`** are packs like any other: follow the pack contract in [docs/engineering.md](docs/engineering.md#the-pack-contract), not a special case.
 - **Seatbelt profiles** go in `configs/sandbox/profiles/*.sb`. Every profile must parse under `sandbox-exec` (CI checks this on macOS).
 - **Themes** are one `configs/themes/<name>/palette.toml` with all 26 keys (see [docs/theming.md](docs/theming.md)).
+- **README images** are rendered from VHS tapes over demo fixtures: change the tape or a fixture in `docs/assets/tapes/` and run `make screenshots` (see [docs/engineering.md](docs/engineering.md#screenshots)). Never commit a capture of your own machine.
 
 Good areas to contribute: new packs, tighter Seatbelt rules, Linux parity (a `bubblewrap` backend for `sbx`; wider dnf and pacman coverage), bug fixes with a test, and docs that gain clarity without gaining volume.
 
