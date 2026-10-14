@@ -13,7 +13,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# As the installed agents will print it: macOS's TMPDIR ends in a slash, and
+# mktemp keeps the "//" that makes, which a path agents resolves has not.
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
+tmp="$(cd "$tmp" && pwd)"
 trap 'rm -rf "$tmp"' EXIT
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
