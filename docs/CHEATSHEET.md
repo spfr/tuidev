@@ -40,6 +40,8 @@ A window whose agent rings the bell, or has new activity, is flagged in the stat
 
 ## Shell
 
+<img src="assets/shell.png" width="720" alt="A terminal in a demo repo under the Starship prompt: ll src lists four Python files with icons and a git status column (new, staged, modified), rg finds three highlighted TODO matches across files, and git diff shows a change in delta, with line numbers and the changed words highlighted.">
+
 | Keys | Action |
 |------|--------|
 | `Up` / `Down` | History entries that start with what you have typed |

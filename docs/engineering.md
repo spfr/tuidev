@@ -164,12 +164,17 @@ CI (`.github/workflows/ci.yml`, with actions pinned to a SHA and updated by Depe
 
 ## Screenshots
 
-The README images in `docs/assets/` (`tour.gif`, `shell.png`, `agents.png`, `sbx.png`) and the social preview card (`social-preview.png`, 1280×640, uploaded by hand in the repo's Settings › Social preview) are rendered from [VHS](https://github.com/charmbracelet/vhs) tapes in `docs/assets/tapes/`. Re-render them whenever a change alters what they show, such as `agents` output, `sbx` messages, the prompt or the palette:
+The README's images in `docs/assets/` and the social preview card (`social-preview.png`, 1280×640, uploaded by hand in the repo's Settings › Social preview) are regenerated, never edited by hand:
+
+- the terminal shots (`tour.gif`, `herdr.gif` and `herdr.png`, `cleanup.gif`, `cli.gif`, `shell.png`, `agents.png`, `sbx.png`, the card) from [VHS](https://github.com/charmbracelet/vhs) tapes in `docs/assets/tapes/`;
+- the menu-bar picture (`menu-light.webp`, `menu-dark.webp`, `menu.gif`) by `scripts/render_menu.sh`, which draws the SwiftBar plugin's real output as a macOS menu and captures it with headless Chrome.
+
+Re-render them whenever a change alters what they show, such as `agents` output or its verdicts, the menu plugin, `sbx` messages, the shipped zsh, the prompt or the palette:
 
 ```bash
 brew install vhs                 # once; it brings ttyd and ffmpeg
-make screenshots                 # every tape (scripts/screenshots.sh)
-make screenshots TAPES=sbx       # just one
+make screenshots                 # every tape, then the menu (scripts/screenshots.sh)
+make screenshots TAPES=sbx       # just one; TAPES=menu for the menu picture
 ```
 
-The tapes run in a throwaway home with made-up projects, and `agents` reads fixture process tables, so nothing from your machine reaches an image. Look at every image before you commit it (for the GIF, pull frames out with `ffmpeg -ss SECONDS -i docs/assets/tour.gif -frames:v 1 frame.png`), and keep each under about 500 KB, the GIF under 2 MB. End a tape with a `Sleep` after its last `Screenshot`: VHS can drop one that is the final command, and the script fails when a tape's file is missing. `make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. If VHS fails, the script prints the end of its log. VHS listens on a local port, so it fails inside a sandbox that doesn't allow binding one, such as Claude Code's native sandbox unless `sandbox.network.allowLocalBinding` is on; run `make screenshots` outside it. The fixtures, the demo wrapper and the by-hand recipe for the SwiftBar menu, which VHS can't record, are in [docs/assets/tapes/README.md](assets/tapes/README.md).
+The tapes run in a throwaway home with made-up projects, `agents` reads fixture process tables and a made-up history, and the Herdr tape runs a real Herdr against two throwaway Linux containers with scripted agent stand-ins, so nothing from your machine reaches an image. Look at every image before you commit it (for a GIF, pull frames out with `ffmpeg -ss SECONDS -i docs/assets/tour.gif -frames:v 1 frame.png`), and keep each still under about 500 KB and each GIF under 2 MB (with `gifsicle` installed, the script optimizes them). End a tape with a `Sleep` after its last `Screenshot`: VHS can drop one that is the final command, and the script fails when a tape's file is missing. `make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. The Herdr tape also needs Apple's `container` CLI (without it, the tape is skipped), and the menu needs Chrome or Chromium and Swift. If VHS fails, the script prints the end of its log. VHS listens on a local port, so it fails inside a sandbox that doesn't allow binding one, such as Claude Code's native sandbox unless `sandbox.network.allowLocalBinding` is on; run `make screenshots` outside it. The fixtures, the demo wrappers, the Herdr fleet and the menu renderer are described in [docs/assets/tapes/README.md](assets/tapes/README.md).
