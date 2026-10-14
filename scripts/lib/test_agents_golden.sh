@@ -18,11 +18,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GOLDEN="$SCRIPT_DIR/testdata/agents"
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
-trap 'rm -rf "$tmp"' EXIT
-
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
+
+# Every path the fixtures name starts with $tmp, and the views shorten paths
+# longer than a menu line, so the outputs match the goldens only below that:
+# $tmp is /tmp/agolden.XXXXXX, or the same under $TMPDIR where /tmp is not
+# writable (a sandbox) and $TMPDIR is short, never macOS's long /var/folders.
+tmp="$(mktemp -d /tmp/agolden.XXXXXX 2>/dev/null)" || tmp="$(mktemp -d "${TMPDIR:-/tmp}/agolden.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+[[ ${#tmp} -le 40 ]] || fail "$tmp: /tmp is not writable and TMPDIR is long; point TMPDIR at a short directory"
 
 # A clean, fixed environment: no setting of yours leaks in, C locale, UTC.
 for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME TUIDEV_STATE_DIR HERDR_SOCKET_PATH COLUMNS; do
