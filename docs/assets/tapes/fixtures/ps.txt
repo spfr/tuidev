@@ -17,10 +17,10 @@
  1291  1290   501 NAME     71.5 268000   0:29.30 00:40 Wed Oct 14 09:59:20 2026     node /Users/NAME/myapp/node_modules/.bin/vite build
  1300  1201   501 NAME      0.0   1900   0:00.00 01:12 Wed Oct 14 09:58:48 2026     caffeinate -i -t 300
   620   600   501 NAME      0.0   3200   0:00.28 05:11:40 Wed Oct 14 04:48:20 2026     -zsh
- 2101   620   501 NAME      0.3 524000   4:02.10 01:22:10 Wed Oct 14 08:37:50 2026     claude --continue
- 2110  2101   501 NAME      0.0  70000   0:00.88 01:22:05 Wed Oct 14 08:37:55 2026     npm exec @modelcontextprotocol/server-postgres
- 2111  2110   501 NAME      0.0  81000   0:01.90 01:22:04 Wed Oct 14 08:37:56 2026     node /Users/NAME/.npm/_npx/77ad30/node_modules/.bin/mcp-server-postgres
- 2120  2101   501 NAME      0.0   4000   0:00.31 01:12:40 Wed Oct 14 08:47:20 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760425070000-p0c3vd.sh && eval 'until curl -sf localhost:8080/health; do sleep 5; done' < /dev/null && pwd -P >| /tmp/claude-a91b-cwd
+ 2101   620   501 NAME      0.3 524000  14:02.10 05:40:10 Wed Oct 14 04:19:50 2026     claude --continue
+ 2110  2101   501 NAME      0.0  70000   0:00.88 05:40:05 Wed Oct 14 04:19:55 2026     npm exec @modelcontextprotocol/server-postgres
+ 2111  2110   501 NAME      0.0  81000   0:01.90 05:40:04 Wed Oct 14 04:19:56 2026     node /Users/NAME/.npm/_npx/77ad30/node_modules/.bin/mcp-server-postgres
+ 2120  2101   501 NAME      0.0   4000   0:00.31 05:10:00 Wed Oct 14 04:50:00 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760425070000-p0c3vd.sh && eval 'F=@HOME@/.demo/claude-501/tasks/b1.output; until tail -1 $F | grep -qE "^(ok|FAIL)"; do sleep 5; done' < /dev/null && pwd -P >| /tmp/claude-a91b-cwd
  2121  2120   501 NAME      0.0   1200   0:00.00 00:03 Wed Oct 14 09:59:57 2026     sleep 5
   630   600   501 NAME      0.0   3200   0:00.25 05:11:30 Wed Oct 14 04:48:30 2026     -zsh
  3101   630   501 NAME      0.2 156000   0:41.20 47:12 Wed Oct 14 09:12:48 2026     codex

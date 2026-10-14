@@ -6,6 +6,14 @@
 _demo_tapes="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _demo_repo="$(cd "$_demo_tapes/../../.." && pwd)"
 
+# A time zone where it is mid-afternoon now, so the made-up history
+# (demo-history.sh) has a full working day behind its "Today" whenever the
+# shots are rendered, and the report's busiest hours stay the same.
+_demo_off=$(( (15 - 10#$(date -u +%H) + 36) % 24 - 12 ))
+if [[ $_demo_off -ge 0 ]]; then TZ="Etc/GMT-$_demo_off"; else TZ="Etc/GMT+${_demo_off#-}"; fi
+export TZ
+unset _demo_off
+
 if [[ -z "${DEMO_HOME:-}" ]]; then
     DEMO_HOME="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-demo.XXXXXX")/NAME"
 fi
