@@ -300,6 +300,25 @@ out="$(printf '%s\n' "$(hook_json SubagentStop aaa)" | PATH="$tmp/nojq" "$BASH" 
 [[ -z "$out" && "$(cat "$tmp/nojq.err")" != *"agents hook"* ]] || fail "missing jq: printed $out $(cat "$tmp/nojq.err")"
 pass "always exit 0 and silent: AGENTS_HOOK_REAP=0, malformed or empty JSON, unknown event, no ps, no claude, root, no jq"
 
+# --- AGENTS_HOOK_LOG: one line per run, off by default, private, no commands ------
+[[ ! -e "$AGENTS_DATA_DIR/hooks.log" ]] || fail "hooks.log written with AGENTS_HOOK_LOG unset"
+export AGENTS_HOOK_LOG=1
+run_hook subagent-stop "$(hook_json SubagentStop aaa)"
+run_hook subagent-stop "$(hook_json SubagentStop ddd)" -n
+run_hook subagent-stop '{"hook_event_name": "SubagentStop", "agent_id": "zzz"}'
+run_hook session-end "$(hook_json SessionEnd x other)"
+unset AGENTS_HOOK_LOG
+hl="$(cut -f2- "$AGENTS_DATA_DIR/hooks.log")"
+[[ "$(printf '%s\n' "$hl" | sed -n 1p)" == $'subagent-stop\taaa\tyes\t6\t3\tfalse' ]] || fail "hooks.log, handback run: $hl"
+[[ "$(printf '%s\n' "$hl" | sed -n 2p)" == $'subagent-stop\tddd\tno\t0\t0\ttrue' ]] || fail "hooks.log, refused handback, dry: $hl"
+[[ "$(printf '%s\n' "$hl" | sed -n 3p)" == $'subagent-stop\tzzz\tno\t0\t0\tfalse' ]] || fail "hooks.log, no transcript: $hl"
+[[ "$(printf '%s\n' "$hl" | sed -n 4p)" == $'session-end\t-\t-\t0\t0\tfalse' ]] || fail "hooks.log, session end: $hl"
+! grep -qE 'sleep|npm|pytest|make' "$AGENTS_DATA_DIR/hooks.log" || fail "hooks.log holds a command line"
+case "$(uname)" in Darwin) mode="$(stat -f %Lp "$AGENTS_DATA_DIR/hooks.log")" ;; *) mode="$(stat -c %a "$AGENTS_DATA_DIR/hooks.log")" ;; esac
+[[ "$mode" == 600 ]] || fail "hooks.log mode $mode"
+[[ "$(AGENTS_HOOK_LOG=yes bash "$REPO_DIR/bin/agents" config 2>/dev/null | grep '^AGENTS_HOOK_LOG=')" == AGENTS_HOOK_LOG=0 ]] || fail "a bad AGENTS_HOOK_LOG is not reset to 0"
+pass "AGENTS_HOOK_LOG: off by default; one private line per run with handback, tasks, matches, dry"
+
 # --- Live: a real throwaway task under a fake claude --------------------------------
 # A process named claude starts two tool shells (sh -c 'until …'), one writing
 # to a task file the transcript names, one a decoy; then runs the hook as its

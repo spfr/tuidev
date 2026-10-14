@@ -80,7 +80,8 @@ CLAUDE CODE HOOKS (shipped in ~/.claude/settings.json; hook JSON on stdin)
                                loops and what its finished subagents left
     -n, --dry-run              print what it would stop (or AGENTS_DRY_RUN=true)
   Only tasks matched to their own process (its stdout is the task's output
-  file) under the claude that runs the hook. AGENTS_HOOK_REAP=0 turns it off
+  file) under the claude that runs the hook. AGENTS_HOOK_REAP=0 turns it off;
+  AGENTS_HOOK_LOG=1 logs each run to $AGENTS_DATA_DIR/hooks.log
 
 SETTINGS
   agents config [--edit]       effective settings, and the file they came from;

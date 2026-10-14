@@ -22,7 +22,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_B
 _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP"
-_AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP"
+_AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
 _AGENTS_BAR_SECTION_NAMES="needs agents jobs stale hogs awake system"
@@ -55,7 +55,7 @@ _agents_conf_valid() {
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
         AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
-        AGENTS_HOOK_REAP)   [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_HOOK_REAP|AGENTS_HOOK_LOG) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_JOB_TEST|AGENTS_JOB_BUILD|AGENTS_JOB_SERVER|AGENTS_JOB_BROWSER|AGENTS_JOB_MCP) _agents_ere_ok "$2" ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
         AGENTS_LID_MIN_BATTERY) [[ "$2" =~ ^([0-9]|[1-9][0-9]|100)$ ]] ;;
@@ -227,6 +227,10 @@ _agents_is_root() {
 # 1 (the default) lets the hooks stop what they find; 0 turns them off.
 AGENTS_HOOK_REAP="${AGENTS_HOOK_REAP:-1}"
 _agents_env_check AGENTS_HOOK_REAP 1
+# 1 logs each hook run (no command lines) to $AGENTS_DATA_DIR/hooks.log, to
+# check on your machine when the hooks fire; off by default.
+AGENTS_HOOK_LOG="${AGENTS_HOOK_LOG:-0}"
+_agents_env_check AGENTS_HOOK_LOG 0
 # agents_main resets AGENTS_DRY_RUN, so the hook reads the caller's value here.
 _AGENTS_HOOK_DRY="${AGENTS_DRY_RUN:-false}"
 

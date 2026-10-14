@@ -106,5 +106,26 @@ bash "$REPO_DIR/uninstall.sh" --all </dev/null > "$tmp/uninstall.log" 2>&1 || fa
 [[ ! -e "$HOME/.local/lib/tuidev" ]] || fail "uninstall left $(find "$HOME/.local/lib/tuidev" | head -5)"
 pass "uninstall.sh removes agents, its modules and their directories"
 
+# 6. The agents history survives uninstall unless --purge-history; nothing else goes.
+printf '#!/bin/sh\nexit 1\n' > "$tmp/stub/brew"; chmod +x "$tmp/stub/brew"   # no manifest now: uninstall probes brew
+hist="$HOME/.local/state/tuidev/agents"
+mkdir -p "$hist/sample" "$HOME/.local/state/other"
+echo x > "$hist/history.tsv"; echo x > "$hist/sample/ledger"; echo keep > "$HOME/.local/state/other/f"
+bash "$REPO_DIR/uninstall.sh" --all </dev/null > "$tmp/u.log" 2>&1 || fail "uninstall.sh --all: $(tail -5 "$tmp/u.log")"
+[[ -f "$hist/history.tsv" ]] || fail "--all (no TTY, no flag) deleted the history"
+grep -q "kept the agents history" "$tmp/u.log" || fail "no 'kept' note: $(tail -5 "$tmp/u.log")"
+bash "$REPO_DIR/uninstall.sh" --all --purge-history --dry-run </dev/null > "$tmp/u.log" 2>&1 || fail "dry run: $(tail -5 "$tmp/u.log")"
+[[ -f "$hist/history.tsv" ]] || fail "--dry-run deleted the history"
+grep -q "rm -rf .*tuidev/agents" "$tmp/u.log" || fail "dry run does not show the removal: $(tail -8 "$tmp/u.log")"
+mkdir -p "$tmp/outside/tuidev/agents"; ln -s "$tmp/outside" "$HOME/.local/state/link"
+XDG_STATE_HOME="$tmp/outside" bash "$REPO_DIR/uninstall.sh" --all --purge-history </dev/null > "$tmp/u.log" 2>&1 || fail "outside: $(tail -5 "$tmp/u.log")"
+[[ -d "$tmp/outside/tuidev/agents" ]] || fail "deleted a history dir outside HOME"
+XDG_STATE_HOME="$HOME/.local/state/link" bash "$REPO_DIR/uninstall.sh" --all --purge-history </dev/null > "$tmp/u.log" 2>&1 || fail "symlink: $(tail -5 "$tmp/u.log")"
+[[ -d "$tmp/outside/tuidev/agents" ]] || fail "deleted a history dir reached through a symlink out of HOME"
+bash "$REPO_DIR/uninstall.sh" --all --purge-history </dev/null > "$tmp/u.log" 2>&1 || fail "purge: $(tail -5 "$tmp/u.log")"
+[[ ! -e "$hist" ]] || fail "--purge-history left $hist"
+[[ -f "$HOME/.local/state/other/f" ]] || fail "--purge-history touched a sibling"
+pass "uninstall.sh keeps the agents history by default; --purge-history deletes only that directory, inside HOME, never via symlink; --dry-run deletes nothing"
+
 echo ""
 echo "All agents install tests passed."

@@ -141,7 +141,8 @@ had before you found this repo.
 ```bash
 ./uninstall.sh --dry-run   # preview
 ./uninstall.sh             # interactive: asks before each step
-./uninstall.sh --all       # yes to every step
+./uninstall.sh --all       # yes to every step (keeps the agents history)
+./uninstall.sh --purge-history   # also delete the agents history, without asking
 ```
 
 It removes only what the manifest records:
@@ -154,7 +155,8 @@ It removes only what the manifest records:
   and session state (`~/.claude/…`, `~/.codex/auth.json`) always survive;
 - optionally, the Homebrew formulae and casks tuidev installed. apt, dnf and
   pacman packages are listed for you to remove, not removed;
-- tuidev's state dir, except `backups/`.
+- tuidev's state dir, except `backups/`;
+- the [agents history](agent-workflows.md#history-and-agents-report) (`~/.local/state/tuidev/agents`, or under `$XDG_STATE_HOME`), only when you say so. In a terminal, uninstall asks and the default is to keep it. `--purge-history` deletes it without asking; `--all` does not. It never asks when stdin isn't a terminal. Only that one directory goes, only inside `$HOME`, and never through a symlink. `--dry-run` shows the removal.
 
 An install that predates the manifest gets only the safe subset: managed blocks,
 and helpers still byte-identical to the repo copy. Everything else is listed for

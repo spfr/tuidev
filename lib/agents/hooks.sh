@@ -22,7 +22,7 @@
 # agents_kill_tokens (start-time pinned, refusals, SIGTERM then SIGKILL).
 # Always exits 0; prints nothing unless it is a dry run.
 #
-# Uses: config.sh (AGENTS_HOOK_REAP, _AGENTS_HOOK_DRY), util.sh, snapshot.sh,
+# Uses: config.sh (AGENTS_HOOK_REAP, AGENTS_HOOK_LOG, _AGENTS_HOOK_DRY), util.sh, snapshot.sh,
 #   classify.sh (agents_project), kill.sh (agents_kill_tokens), events.sh
 #   (agents_event), notify.sh; awk/hook_claude.awk, awk/hook_children.awk,
 #   awk/hook_match.awk.
@@ -217,12 +217,35 @@ _agents_hook_collect() {
     esac
 }
 
+# _agents_hook_log EVENT — with AGENTS_HOOK_LOG=1, append one line per hook
+# run to $AGENTS_DATA_DIR/hooks.log: epoch, event, agent id, whether the
+# agent's transcript held a handback, background tasks it named, processes
+# matched, dry run. No command lines. Pruned with the history.
+_agents_hook_log() {
+    [[ "$AGENTS_HOOK_LOG" == 1 ]] || return 0
+    (
+        umask 077
+        _agents_data_dir || exit 0
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$1" "$_AGENTS_HL_AID" "$_AGENTS_HL_HB" \
+            "$_AGENTS_HL_TASKS" "$_AGENTS_HL_MATCHED" "$_AGENTS_HOOK_DRY" >> "$AGENTS_DATA_DIR/hooks.log"
+    ) 2>/dev/null
+    return 0
+}
+
 # agents_hook subagent-stop|session-end [-n] < HOOK_JSON — the hook itself.
 # Returns 0 whatever happens: a failing SubagentStop hook would keep the
 # subagent running. Quiet unless -n (or AGENTS_DRY_RUN=true): then it prints
 # what it would stop and signals nothing.
 agents_hook() {
-    local event="${1:-}" a _AGENTS_HOOK_DRY="$_AGENTS_HOOK_DRY"   # -n lasts for this call only
+    local _AGENTS_HL_AID=- _AGENTS_HL_HB=- _AGENTS_HL_TASKS=0 _AGENTS_HL_MATCHED=0
+    local _AGENTS_HOOK_DRY="$_AGENTS_HOOK_DRY"   # -n lasts for this call only
+    _agents_hook_run "$@"
+    _agents_hook_log "${1:-}"
+    return 0
+}
+
+_agents_hook_run() {
+    local event="${1:-}" a
     [[ $# -gt 0 ]] && shift
     for a in "$@"; do case "$a" in -n|--dry-run) _AGENTS_HOOK_DRY=true ;; esac; done
     case "$event" in
@@ -238,9 +261,16 @@ agents_hook() {
     [[ -n "$fields" ]] || { _agents_hook_say "no hook JSON on stdin"; return 0; }
     IFS=$'\t' read -r _ev _sid main _aid atype agent cwd reason <<<"$fields"
     main="$(_agents_hook_path "$main")"; agent="$(_agents_hook_path "$agent")"
+    if [[ "$AGENTS_HOOK_LOG" == 1 ]]; then
+        [[ "$_aid" =~ ^[A-Za-z0-9_-]+$ ]] && _AGENTS_HL_AID="$_aid"
+        if [[ "$event" == subagent-stop ]]; then
+            if [[ -f "$agent" ]] && _agents_hook_final "$agent"; then _AGENTS_HL_HB=yes; else _AGENTS_HL_HB=no; fi
+        fi
+    fi
     local tasks snap claude kids matches
     tasks="$(_agents_hook_collect "$event" "$main" "$agent" "$reason")" || return 0
     [[ -n "$tasks" ]] || { _agents_hook_say "no background commands left running"; return 0; }
+    _AGENTS_HL_TASKS="$(printf '%s\n' "$tasks" | grep -c .)"
     snap="$(agents_snapshot)"
     [[ -n "$snap" ]] || { _agents_hook_say "cannot read the process table"; return 0; }
     claude="$(_agents_hook_claude "$snap")"
@@ -249,6 +279,7 @@ agents_hook() {
     kids="$(_agents_hook_stdouts $(_agents_hook_children "$snap" "$claude"))"
     matches="$(_agents_hook_match "$snap" "$claude" "$tasks" "$kids")"
     [[ -n "$matches" ]] || { _agents_hook_say "none of its background commands still runs"; return 0; }
+    _AGENTS_HL_MATCHED="$(printf '%s\n' "$matches" | grep -c .)"
     # The session as every other event names it (kind:pid), so a report
     # groups hook cleanups with the rest.
     _agents_hook_reap "$event" "$matches" "claude:$claude" "$(agents_project "$cwd")" "$atype"

@@ -331,6 +331,16 @@ Run it from inside the session, for example with Claude Code's `!` prefix, becau
 
 Transcripts grow to tens of megabytes, with dozens of subagents each. The hooks read each one with a fixed-string `grep` under `LC_ALL=C` (the main transcript once; all subagents in one pass), and run `jq` only on the lines it finds and only for tasks not yet shown as ended. On an Apple-silicon Mac, a `/clear` on an 82 MB session with 54 subagents takes about 2 seconds (9 before 3.5.0), and a 207 MB one about 3.5; the shipped `SessionEnd` hook allows 30.
 
+#### Verify the cleanup hooks
+
+Whether Claude Code has written a subagent's final `SubagentHandback` call to its transcript by the time `SubagentStop` fires has not been observed on every setup. If it hasn't, the hook sees no handback and, by design, stops nothing. To check on your machine, set `AGENTS_HOOK_LOG=1` (in `~/.config/agents.conf`; hooks read it on every run), run a session in auto mode with a subagent that starts a background command, then read the log:
+
+```bash
+cat ~/.local/state/tuidev/agents/hooks.log    # or $AGENTS_DATA_DIR/hooks.log
+```
+
+One line per hook run, tab-separated, never a command line: `epoch event agent_id handback tasks matched dry`. `handback` is `yes` when the subagent's transcript held a delivered final report at that moment, `no` when it didn't (or was unreadable), and `-` for `session-end`. `tasks` counts the background commands the hook found for that run (0 when the handback was missing, since they are only counted after it), `matched` how many of them it tied to a running process, and `dry` is `true` for `-n` runs. A subagent that did hand back and left a command running should log `yes` with `matched` of 1 or more; a steady `no` for such subagents means the line isn't flushed in time, so open an issue. The log is private (mode 600), is pruned with the history (`AGENTS_HISTORY_DAYS`, while `agents sample` runs), and is off by default: turn it off when you're done.
+
 Codex CLI has documented `SubagentStop` and `SessionEnd` hooks too, but it says its transcript format isn't a stable interface for hooks, and its hook input doesn't list the background (unified exec) commands still running. A command can't be tied to the agent that started it, so no Codex hook is shipped.
 
 ### Where the CPU goes: job types
@@ -354,7 +364,7 @@ A command and everything it starts share its job, so a `go test` and the test bi
 
 ### History and `agents report`
 
-With `AGENTS_HISTORY=1` (the default), `agents` keeps a local history in `~/.local/state/tuidev/agents` (`$XDG_STATE_HOME`), so you can see over days and weeks where agent work spends CPU and tune the tooling (a test suite that dominates, a dev server that never stops, a project that leaves helpers behind). It holds names only, never command lines, and nothing leaves the machine. The directory is private to you (mode 700, its files 600; an older, more open one is fixed on the next write).
+With `AGENTS_HISTORY=1` (the default), `agents` keeps a local history in `~/.local/state/tuidev/agents` (`$XDG_STATE_HOME`), so you can see over days and weeks where agent work spends CPU and tune the tooling (a test suite that dominates, a dev server that never stops, a project that leaves helpers behind). It holds names only, never command lines, and nothing leaves the machine. The directory is private to you (mode 700, its files 600; an older, more open one is fixed on the next write). `./uninstall.sh` keeps it unless you answer yes to its prompt or pass `--purge-history`, which deletes only that directory ([Uninstall](updating.md#uninstall)); to forget it earlier, delete the directory yourself.
 
 - **Sampling.** `agents sample` takes one sample: one `ps` snapshot, classified by job, and one row per job, project and session kind in `history.tsv`: `epoch job project session cpu_s rss_kib procs` (`session` is `claude` or `codex`, `-` for a stale tree). `cpu_s` is the CPU time used since the previous sample, from each process's CPU time keyed by `pid@start` (so a reused pid starts afresh), not the moment's `%cpu`. A process that ends between two samples loses its last interval, so runs much shorter than a minute count low. Rows without CPU are left out. One sample runs at a time, and history and events older than `AGENTS_HISTORY_DAYS` (30) are dropped once a day (under the same lock every event is appended with, so a prune never loses one). `sample.state` keeps each process's CPU time and whether a sample saw it under an agent: the provenance auto-reap needs before it stops a stale tree.
 - **Who samples.** The menu bar starts `agents sample` in the background whenever the last sample is a minute old, and so does `agents watch` while it runs. Without either (Linux, a headless box), add a cron line (`crontab -e`): `* * * * * $HOME/.local/bin/agents sample`.
@@ -454,6 +464,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_JOB_MCP` | empty | The same for `mcp` (never matched against a session's commands) |
 | `AGENTS_AUTO_REAP` | `0` | `1` lets the menu clean up, without asking and at most once a minute, only the leftovers of ended sessions that a sample saw under an agent and that listen on no port (needs `AGENTS_HISTORY=1`), and polling loops stuck twice as long as `AGENTS_WAIT_STUCK` reading a quiet file; each one is logged and notified ([auto-reap](#needs-you-is-it-safe-to-stop)) |
 | `AGENTS_HOOK_REAP` | `1` | The Claude Code [cleanup hooks](#cleanup-hooks-claude-code) stop what a finished subagent or a cleared session left running; `0` turns them off |
+| `AGENTS_HOOK_LOG` | `0` | `1` appends one line per hook run (event, agent id, handback found, tasks, matches, dry run; no command lines) to `hooks.log` in the data directory, to [verify the hooks](#verify-the-cleanup-hooks) |
 | `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
 | `AGENTS_BAR_TITLE` | `count awake` | Title tokens after the icon: `count` (sessions, and how many are blocked), `cpu`, `mem`, `load`, `battery`, `thermal` (only above nominal), `awake`, `warn` (a triangle as well as the tint). Empty shows the icon alone |
 | `AGENTS_BAR_SECTIONS` | `needs agents jobs stale hogs awake system` | Menu sections, in order; `jobs` is Where the CPU goes; `needs`, `stale` and `hogs` appear only when they have entries |

@@ -69,6 +69,7 @@ _agents_history_prune() {
     [[ -r "$AGENTS_DATA_DIR/prune.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/prune.stamp"
     [[ "$stamp" != "$2" ]] || return 0
     _agents_prune_file "$AGENTS_DATA_DIR/history.tsv" "$cut"
+    _agents_prune_file "$AGENTS_DATA_DIR/hooks.log" "$cut"
     if _agents_events_lock; then
         _agents_prune_file "$AGENTS_DATA_DIR/events.tsv" "$cut"
         _agents_events_unlock

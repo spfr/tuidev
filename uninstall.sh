@@ -16,7 +16,10 @@
 #     ~/.claude/…) always survive. Each removal is backed up first;
 #   - optionally, Homebrew formulae and casks tuidev installed (never one you
 #     already had). apt/dnf/pacman packages are listed, not removed;
-#   - tuidev's own state dir, except its backups/.
+#   - tuidev's own state dir, except its backups/;
+#   - the agents history (${XDG_STATE_HOME:-~/.local/state}/tuidev/agents)
+#     only when you say so: a prompt that defaults to keep (never asked when
+#     stdin is not a terminal), or --purge-history.
 #
 # Installs predating the manifest get only the safe subset: managed blocks,
 # and helpers still byte-identical to the repo copy. Everything else is listed
@@ -26,6 +29,7 @@
 #   ./uninstall.sh              # interactive
 #   ./uninstall.sh --all        # non-interactive: yes to every step
 #   ./uninstall.sh --dry-run    # preview mutations
+#   ./uninstall.sh --purge-history  # also delete the agents history, unasked
 
 set -eo pipefail
 
@@ -40,11 +44,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/scripts/lib/packs.sh"
 
 ALL=false
+PURGE_HISTORY=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --all)     ALL=true; shift ;;
         --dry-run) export DRY_RUN=true; shift ;;
-        -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
+        --purge-history) PURGE_HISTORY=true; shift ;;
+        -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
         *)         die "unknown flag: $1" ;;
     esac
 done
@@ -332,6 +338,39 @@ if [[ -d "$TUIDEV_STATE_DIR" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 6. Optional: the agents history (data, so kept unless you say otherwise).
+# ---------------------------------------------------------------------------
+
+# Only this one directory, only inside $HOME, and never through a symlink.
+# --all does not imply it: the history is yours, not tuidev's config.
+_purge_agents_history() {
+    local dir="${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents" real home purge=$PURGE_HISTORY reply
+    [[ -d "$dir" || -L "$dir" ]] || return 0
+    if [[ -L "$dir" ]]; then
+        print_warning "kept $dir (a symlink: remove it yourself if you like)"; return 0
+    fi
+    real="$(cd -P "$dir" 2>/dev/null && pwd -P)" || return 0
+    home="$(cd -P "$HOME" 2>/dev/null && pwd -P)" || return 0
+    case "$real" in
+        "$home"/?*/tuidev/agents) ;;
+        *) print_warning "kept $dir (resolves outside $HOME)"; return 0 ;;
+    esac
+    if ! $purge && [[ -t 0 ]]; then
+        read -r -p "also delete the agents history in $dir? (y/N) " -n 1 reply
+        echo ""
+        [[ $reply =~ ^[Yy]$ ]] && purge=true
+    fi
+    if ! $purge; then
+        print_info "kept the agents history: $dir (--purge-history deletes it)"
+        return 0
+    fi
+    run_cmd rm -rf "$real"
+    [[ "$DRY_RUN" == true ]] || rmdir "${real%/*}" 2>/dev/null || true
+    done_msg "removed the agents history: $dir"
+}
+_purge_agents_history
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 
@@ -345,4 +384,5 @@ printf '%b\n' "${GREEN}What was removed:${NC}
 ${CYAN}What was preserved:${NC}
   - Backups of everything removed or overwritten: $TUIDEV_BACKUP_DIR
   - Your own edits outside the managed blocks, and any config tuidev adopted
-  - CLI auth and session state, your git config, ssh keys, shell history"
+  - CLI auth and session state, your git config, ssh keys, shell history
+  - The agents history, unless you chose to delete it"

@@ -307,10 +307,12 @@ pd="$tmp/prune"; mkdir -p "$pd"
 old=$((FAKE_NOW - 31 * 86400)) new=$((FAKE_NOW - 86400))
 printf '%s\ttest\tapp\tclaude\t5\t1\t1\n%s\ttest\tapp\tclaude\t7\t1\t1\n' "$old" "$new" > "$pd/history.tsv"
 printf '%s\treap\tstale\t1\tnpx\tapp\t-\n%s\treap\tstale\t2\tnpx\tapp\t-\n' "$old" "$new" > "$pd/events.tsv"
+printf '%s\tsubagent-stop\ta\tyes\t1\t1\tfalse\n%s\tsubagent-stop\tb\tno\t0\t0\tfalse\n' "$old" "$new" > "$pd/hooks.log"
 (
     AGENTS_DATA_DIR="$pd"
     _agents_history_prune "$FAKE_NOW" 2026-10-15
     [[ "$(cut -f1 "$pd/history.tsv")" == "$new" && "$(cut -f1 "$pd/events.tsv")" == "$new" ]] || fail "prune: $(cat "$pd/history.tsv" "$pd/events.tsv")"
+    [[ "$(cut -f1 "$pd/hooks.log")" == "$new" ]] || fail "prune kept an old hooks.log line: $(cat "$pd/hooks.log")"
     [[ "$(cat "$pd/prune.stamp")" == 2026-10-15 ]] || fail "prune stamp"
     printf '%s\tkill\tmanual\t3\tx\tapp\t-\n' "$old" >> "$pd/events.tsv"
     _agents_history_prune "$FAKE_NOW" 2026-10-15
