@@ -20,7 +20,7 @@
  2101   620   501 NAME      0.3 524000   4:02.10 01:22:10 Wed Oct 14 08:37:50 2026     claude --continue
  2110  2101   501 NAME      0.0  70000   0:00.88 01:22:05 Wed Oct 14 08:37:55 2026     npm exec @modelcontextprotocol/server-postgres
  2111  2110   501 NAME      0.0  81000   0:01.90 01:22:04 Wed Oct 14 08:37:56 2026     node /Users/NAME/.npm/_npx/77ad30/node_modules/.bin/mcp-server-postgres
- 2120  2101   501 NAME      0.0   4000   0:00.31 06:40 Wed Oct 14 09:53:20 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760425070000-p0c3vd.sh && eval 'until curl -sf localhost:8080/health; do sleep 5; done' < /dev/null && pwd -P >| /tmp/claude-a91b-cwd
+ 2120  2101   501 NAME      0.0   4000   0:00.31 01:12:40 Wed Oct 14 08:47:20 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760425070000-p0c3vd.sh && eval 'until curl -sf localhost:8080/health; do sleep 5; done' < /dev/null && pwd -P >| /tmp/claude-a91b-cwd
  2121  2120   501 NAME      0.0   1200   0:00.00 00:03 Wed Oct 14 09:59:57 2026     sleep 5
   630   600   501 NAME      0.0   3200   0:00.25 05:11:30 Wed Oct 14 04:48:30 2026     -zsh
  3101   630   501 NAME      0.2 156000   0:41.20 47:12 Wed Oct 14 09:12:48 2026     codex

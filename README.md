@@ -8,7 +8,7 @@
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-![A short terminal tour in three scenes. First, the Starship prompt in a repo, ll listing files with a git status column, and git diff through delta. Second, the agents command listing a blocked Claude Code session, a working one, an idle Codex session, stale processes and a CPU hog. Third, cat reading a demo SSH key without a sandbox, then sbx refusing the same read and a write to ~/.zshrc with "Operation not permitted" while make test still runs and passes.](docs/assets/tour.gif)
+![A short terminal tour in three scenes. First, the Starship prompt in a repo, ll listing files with a git status column, and git diff through delta. Second, the agents command listing a blocked Claude Code session with a polling loop flagged stuck, a working one, an idle Codex session, stale processes and a CPU hog. Third, cat reading a demo SSH key without a sandbox, then sbx refusing the same read and a write to ~/.zshrc with "Operation not permitted" while make test still runs and passes.](docs/assets/tour.gif)
 
 <sub>The shell, `agents` and `sbx` in a demo home with made-up data, rendered with `make screenshots`.</sub>
 
@@ -57,9 +57,9 @@ Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever 
 
 ### See and stop what agents run
 
-`agents` (`--pack monitoring`) lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, and flags the MCP and dev servers a crashed session left running. It kills a tree, descendants first, re-checking each process's start time before every signal. With Herdr, sessions waiting for you come first. On macOS its SwiftBar menu shows the same, keeps the Mac awake while agents run, and shows CPU, memory, battery and thermal pressure. [Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
+`agents` (`--pack monitoring`) lists each session with its MCP servers, ports and the commands its subagents run in their worktrees, and flags the MCP and dev servers a crashed session left running, and polling loops stuck waiting for output that will never come (`agents reap --stuck` stops them). It kills a tree, descendants first, re-checking each process's start time before every signal. With Herdr, sessions waiting for you come first. On macOS its SwiftBar menu shows the same, keeps the Mac awake while agents run, and shows CPU, memory, battery and thermal pressure. Opt-in, it keeps the Mac awake with the lid closed too: it asks for your password, is always time-boxed, and turns lid sleep back on at timeout, on low battery or when the Mac runs hot. [Agent workflows](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 
-<img src="docs/assets/agents.png" width="800" alt="The agents command in a terminal. Three sessions: a Claude Code session in api, blocked and waiting for input, with its polling command; a working Claude Code session in myapp with two MCP servers and three commands, two of them from subagents in their own worktrees; an idle Codex session in web running a dev server on port 5173. Below them, two stale processes a crashed session left behind, one CPU hog, and a status line with CPU, memory, battery, thermal pressure and keep-awake.">
+<img src="docs/assets/agents.png" width="800" alt="The agents command in a terminal. Three sessions: a Claude Code session in api, blocked and waiting for input, whose health-check polling loop has run 1h12m and is flagged wait and stuck; a working Claude Code session in myapp with two MCP servers and three commands, two of them from subagents in their own worktrees; an idle Codex session in web running a dev server on port 5173. Below them, two stale processes a crashed session left behind, one CPU hog, and a status line with CPU, memory, battery, thermal pressure and keep-awake.">
 
 ### Sessions that outlive your laptop
 
