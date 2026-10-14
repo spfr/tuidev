@@ -122,7 +122,7 @@ awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents jobs stale hogs awake system" BAR_ICON=terminal CONF=""
-job_rows="" hist_state="" hist_total=0 hist_top=- hist_top_s=0
+job_rows="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text=""
 
 # Per-session activity, gathered from the act rows into variables named after
 # the session's pid (bash 3.2 has no associative arrays): A_<what>_<pid>.
@@ -329,6 +329,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         job)     job_rows+="$kind"$'	'"$pcpu"$'	'"$rss"$'	'"$kids"$'	'"$herdr"$'	'"$project"$'	'"$pid"$'	'"$start"$'	'"$cwd"$'
 ' ;;
         hist)    hist_state="$pid"; hist_total="$kind"; hist_top="$age_s"; hist_top_s="$pcpu" ;;   # hist STATE TODAY_S TOP TOP_S
+        insight) insight_view="$pid"; insight_text="$kind" ;;   # insight VIEW TEXT
         conf)
             [[ "$kind" == - ]] && kind=""
             case "$pid" in
@@ -535,6 +536,15 @@ section_jobs() {
         line="Today: nothing recorded yet (a sample a minute)"
     fi
     echo "$line | sfimage=chart.bar.xaxis $ROW symbolize=false"
+    # Today's top insight (from insight.txt, which `agents sample` refreshes):
+    # its text in the label only; the param is one of the report's fixed views.
+    case "$insight_view" in
+        summary|runs|waste|trends|agents)
+            if [[ -n "$insight_text" ]]; then
+                cl "$insight_text"
+                echo "${REPLY//\`/} | $TERM_OPEN param2=--hold param3=report param4=--view param5=$insight_view sfimage=lightbulb symbolize=false"
+            fi ;;
+    esac
     echo "Open report | $TERM_OPEN param2=--hold param3=report sfimage=doc.text.magnifyingglass"
 }
 

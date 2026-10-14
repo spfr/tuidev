@@ -1,0 +1,39 @@
+# A run ledger (runs.tsv) for the report tests. The first two columns are seconds
+# before "now"; the harnesses turn them into epochs. The numbers each view should
+# show are worked out in scripts/lib/test_agents_report.sh.
+29000	29060	test	app	claude:100	main	go	60	400	90000	0	0	0
+28000	28120	test	app	claude:100	main	go	120	400	90000	0	0	0
+27000	27180	test	app	claude:100	main	go	180	400	90000	0	1	0
+26000	26240	test	app	claude:100	main	go	240	400	90000	0	1	0
+25000	25300	test	app	claude:100	main	go	300	400	90000	0	1	0
+24000	24360	test	app	claude:100	main	go	360	400	90000	0	0	0
+23000	23420	test	app	claude:100	main	go	420	400	90000	0	0	0
+22000	22480	test	app	claude:100	main	go	480	400	90000	0	0	0
+21000	21540	test	app	claude:100	main	go	540	400	90000	1	0	0
+20000	20600	test	app	claude:100	main	go	600	400	90000	-	0	0
+49800	50000	test	shop	codex:200	Explore	pytest	200	200	50000	1	0	0
+49570	49770	test	shop	codex:200	Explore	pytest	200	200	50000	1	0	0
+49360	49560	test	shop	codex:200	Explore	pytest	200	200	50000	0	0	0
+39800	40000	test	shop	codex:200	Explore	pytest	200	200	50000	2	0	0
+38800	39000	test	shop	codex:200	Explore	pytest	200	200	50000	0	0	0
+20000	22520	wait	shop	codex:200	Explore	wait-loop	2520	5	2000	-	0	1
+19000	21520	wait	shop	codex:200	Explore	wait-loop	2520	5	2000	-	0	1
+18000	20520	wait	shop	codex:200	Explore	wait-loop	2520	5	2000	-	0	1
+10000	13600	wait	app	claude:100	main	wait-loop	3600	2	2000	0	0	0
+5000	8600	wait	app	claude:100	main	wait-loop	3600	2	2000	0	0	0
+7900	8000	build	api	claude:300	implementor-complex	make	100	480	70000	0	0	0
+7800	8000	build	api	claude:300	implementor-complex	make	200	480	70000	0	0	0
+7700	8000	build	api	claude:300	implementor-complex	make	300	480	70000	0	0	0
+7600	8000	build	api	claude:300	implementor-complex	make	400	480	70000	0	0	0
+7500	8000	build	api	claude:300	implementor-complex	make	500	480	70000	0	0	0
+100	110	other	-	-	-	node	10	1	1000	0	0	0
+99900	99960	build	api	claude:300	implementor-complex	make	60	160	70000	0	0	0
+99800	99860	build	api	claude:300	implementor-complex	make	60	160	70000	0	0	0
+99700	99760	build	api	claude:300	implementor-complex	make	60	160	70000	0	0	0
+99600	99660	build	api	claude:300	implementor-complex	make	60	160	70000	0	0	0
+99500	99560	build	api	claude:300	implementor-complex	make	60	160	70000	0	0	0
+120000	120300	test	app	claude:100	main	go	300	1500	90000	0	0	0
+119000	119300	test	app	claude:100	main	go	300	1500	90000	0	0	0
+864000	864300	test	old	claude:1	main	go	300	9999	1	0	0	0
+end_epoch	start_epoch	job
+50	60	test	broken

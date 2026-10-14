@@ -1,0 +1,19 @@
+agents report · runs · last 24h
+
+RUNS 26 · 2.06 CPU-h · 18% failed
+
+MOST REPEATED
+  PROJECT              COMMAND      JOB      RUNS   CPU-h  MEDIAN     P90  FAILED
+  app                  go           test       10    1.11   5m30s      9m     11%
+  api                  make         build       5    0.67      5m   8m20s      0%
+  shop                 pytest       test        5    0.28   3m20s   3m20s     60%
+  shop                 wait-loop    wait        3    0.00     42m     42m       -
+  app                  wait-loop    wait        2    0.00   1h00m   1h00m      0%
+  (none)               node         other       1    0.00     10s     10s      0%
+
+SLOWEST TESTS AND BUILDS (by median)
+  PROJECT              COMMAND      JOB      RUNS  MEDIAN     P90     MAX
+  app                  go           test       10   5m30s      9m     10m
+  api                  make         build       5      5m   8m20s   8m20s
+  shop                 pytest       test        5   3m20s   3m20s   3m20s
+[rc=0]

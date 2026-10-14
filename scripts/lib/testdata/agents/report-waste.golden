@@ -1,0 +1,18 @@
+agents report · waste · last 24h
+
+DUPLICATES  3 runs · 0.33 CPU-h (16% of the runs' CPU)
+  PROJECT              COMMAND      JOB      RUNS   CPU-h
+  app                  go           test        3    0.33
+
+LEFT RUNNING  3 runs, until a cleanup stopped them · 2.1 h · 0.00 CPU-h
+  by agent    Explore 3 (2.1 h)
+  by job      wait 3 (2.1 h)
+
+POLLING LOOPS  5 · 4.1 h waiting
+  by agent    Explore 3 (2.1 h) · main 2 (2.0 h)
+
+FAILED, RE-RUN AT ONCE  2 runs · 0.11 CPU-h
+  PROJECT              COMMAND      JOB      RUNS   CPU-h
+  shop                 pytest       test        2    0.11
+
+[rc=0]

@@ -717,7 +717,7 @@ if command -v jq >/dev/null 2>&1; then
     printf '%s' "$json" | jq -e '.awake.active == false' >/dev/null || fail "json awake"
     pass "agents json is valid JSON (checked with jq)"
 else
-    [[ "$json" == '{"agents":['* ]] || fail "json shape"
+    [[ "$json" == '{"schema_version":1,"agents":['* ]] || fail "json shape: ${json:0:80}"
     pass "agents json shape (jq not installed: not validated)"
 fi
 [[ "$(printf 'agent\t1\tclaude\t0\t0\t0\t0\t0\ts\t-\tme\t-\t-\ta "q" \\x\n' | agents_json | sed 's/.*\("command":".*"\),"activity".*/\1/')" == '"command":"a \"q\" \\x"' ]] \

@@ -1,0 +1,30 @@
+agents report · last 24h
+
+no runs recorded yet (runs.tsv): insights and the runs, waste, trends and agents views start with the first finished run
+
+CPU 2.14 CPU-h of agent work
+
+  JOB                 CPU-h      %
+  test                 1.17    55%  ███████████
+  server               0.33    16%  ███
+  build                0.25    12%  ██
+  agent                0.17     8%  ██
+  browser              0.11     5%  █
+  mcp                  0.08     4%  █
+  other                0.02     1%  
+  wait                 0.01     0%  
+
+  PROJECT                     CPU-h      %  MAIN JOB
+  app                          0.84    39%  test 59%
+  api                          0.68    32%  test 98%
+  shop                         0.50    23%  server 67%
+  (none)                       0.11     5%  browser 100%
+
+SESSIONS       claude 1.52 · codex 0.50 · stale 0.11 CPU-h
+BUSIEST HOURS  19:00 0.67 · 07:00 0.50 · 01:00 0.33 CPU-h
+
+CLEANUPS (4)
+  why          manual 1 · stale 1 · stuck 1 · subagent-end 1
+  how          auto 1 · hook 1 · kill 1 · reap 1
+  left behind  myapp 2 · app 1
+[rc=0]
