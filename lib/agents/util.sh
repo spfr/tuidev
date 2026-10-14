@@ -1,13 +1,14 @@
 # shellcheck shell=bash
 # lib/agents/util.sh — small helpers the other modules share.
 #
-# Owns: running the awk programs in awk/, durations and clock times, a word
+# Owns: running the awk programs in awk/, durations, --since windows and
+#   clock times, a word
 #   of a line, a command with a timeout or in the background, and the state
 #   files in the run and data directories: lock directories, epoch stamps,
 #   replacing or removing a file safely.
 # Uses: _AGENTS_AWK_DIR (set by bin/agents).
 # Public: _agents_awk, _agents_awk_eval, agents_parse_duration,
-#   _agents_clock, _agents_field, _agents_timeout, _agents_detach,
+#   _agents_window, _agents_clock, _agents_field, _agents_timeout, _agents_detach,
 #   _agents_lock, _agents_unlock, _agents_stamp_age, _agents_replace,
 #   _agents_rm_if_same.
 
@@ -43,6 +44,26 @@ agents_parse_duration() {
     done
     [[ $total -gt 0 ]] || return 1
     echo "$total"
+}
+
+# _agents_window SINCE — "START NOW UTC_OFFSET_S" for a --since window: a
+# duration back from now (24h, 7d, 30m) or today (since local midnight);
+# false on anything else.
+_agents_window() {
+    local now z off=0 secs start
+    read -r now z <<<"$(date '+%s %z')"
+    if [[ "$z" =~ ^([+-])([0-9][0-9])([0-9][0-9])$ ]]; then
+        off=$(( 10#${BASH_REMATCH[2]} * 3600 + 10#${BASH_REMATCH[3]} * 60 ))
+        [[ "${BASH_REMATCH[1]}" == + ]] || off=$((-off))
+    fi
+    if [[ "$1" == today ]]; then
+        start=$(( now - (now + off) % 86400 ))
+    elif secs="$(agents_parse_duration "$1")"; then
+        start=$((now - secs))
+    else
+        return 1
+    fi
+    echo "$start $now $off"
 }
 
 # _agents_timeout SECS CMD... — run CMD, killing it after SECS.

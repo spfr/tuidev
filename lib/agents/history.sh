@@ -8,17 +8,19 @@
 # each process's cputime minus the one sample.state recorded for it, keyed by
 # pid@start (a reused pid starts afresh); a process that started since then
 # counts whole, one seen for the first time otherwise counts from now on.
-# rss_kib and procs are the moment's. Rows without CPU are left out. A process
-# that ends between two samples loses its last interval, so short runs count
-# low. today.tsv keeps today's totals for the menu ("day<TAB>cpu_s", then
-# "job<TAB>cpu_s" lines, busiest first), sample.stamp the last sample's epoch.
-# sample.state: the epoch, then "pid@start<TAB>cputime_s<TAB>agent" for each
-# process in an agent tree or a stale one; agent is 1 once a sample has seen
-# it under an agent (kept while it lives, so an orphan keeps it): the
-# provenance auto-reap needs before it stops a stale tree.
+# rss_kib and procs are the moment's. Rows without CPU are left out. A
+# command's process that ends between two samples counts up to the last menu
+# refresh that saw it (runs.sh: the menu's run feed, every 10 s); any other
+# process loses its last interval. today.tsv keeps today's totals for the
+# menu ("day<TAB>cpu_s", then "job<TAB>cpu_s" lines, busiest first),
+# sample.stamp the last sample's epoch. sample.state: the epoch, then
+# "pid@start<TAB>cputime_s<TAB>agent" for each process in an agent tree or a
+# stale one; agent is 1 once a sample has seen it under an agent (kept while
+# it lives, so an orphan keeps it): the provenance auto-reap needs before it
+# stops a stale tree. Each sample also updates the run ledger (runs.sh).
 #
 # Uses: config.sh, util.sh, snapshot.sh, classify.sh, events.sh (the data
-#   directory and the events lock); awk/sample.awk.
+#   directory and the events lock), runs.sh (the run ledger); awk/sample.awk.
 # Public: agents_sample, _agents_sample_kick, _agents_hist_line.
 
 # agents_sample — take one sample (a no-op with AGENTS_HISTORY=0). One at a
@@ -37,7 +39,7 @@ agents_sample() {
 }
 
 _agents_sample_locked() {
-    local dir="$AGENTS_DATA_DIR" now day ps recs type pid rest
+    local dir="$AGENTS_DATA_DIR" now day ps recs type pid kind rest paths enr feed=""
     read -r now day <<<"$(date '+%s %Y-%m-%d')"
     # The stamp first: a failing sample is retried a minute later, not at once.
     _agents_replace "$dir/sample.stamp" "$now"
@@ -45,30 +47,45 @@ _agents_sample_locked() {
     [[ -n "$ps" ]] || { echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2; return 1; }
     recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC=1 agents_classify "" "$(_agents_keep_pids "$ps")")"
     set --
-    while IFS=$'\t' read -r type pid rest; do
-        case "$type" in agent|stale) set -- "$@" "$pid" ;; esac
+    while IFS=$'\t' read -r type pid kind rest; do
+        case "$type" in
+            agent|stale) set -- "$@" "$pid" ;;
+            act) [[ "$kind" == tool ]] && set -- "$@" "$pid" ;;   # where it runs (dup), its output file
+        esac
     done <<<"$recs"
-    { printf '%s\n' "$recs" | agents_enrich "$(_agents_cwds "$@")" "" ""; printf '%s\n' "$recs"; } \
+    paths="$(_agents_cwds --stdout "$@")"
+    enr="$(printf '%s\n' "$recs" | agents_enrich "$paths" "" "")"
+    # What the menu saw since the last sample (runs.sh), oldest first.
+    _agents_runs_take "$now"
+    [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || feed="$(cat "${_AGENTS_RUNS_FED[@]}" 2>/dev/null)"
+    { printf '%s\n' "$enr"; printf '%s\n' "$recs"; [[ -z "$feed" ]] || printf '%s\n' "$feed"; } \
         | _agents_sample_rows "$now" "$day" "$dir" >> "$dir/history.tsv" || return 1
-    mv -f "$dir/sample.state.new" "$dir/sample.state" && mv -f "$dir/today.tsv.new" "$dir/today.tsv"
+    _agents_runs_update "$now" "$feed" "$( { printf '%s\n' "$enr"; printf '%s\n' "$recs"; } | _agents_runs_observe "$now" "$paths")" || return 1
+    mv -f "$dir/sample.state.new" "$dir/sample.state" && mv -f "$dir/today.tsv.new" "$dir/today.tsv" \
+        && mv -f "$dir/runs.state.new" "$dir/runs.state"
+    [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || rm -f "${_AGENTS_RUNS_FED[@]}"
     _agents_history_prune "$now" "$day"
 }
 
-# _agents_sample_rows NOW DAY DIR < ENRICHED_AND_JP_RECORDS — the history rows
-# (stdout); writes DIR/sample.state.new and DIR/today.tsv.new.
+# _agents_sample_rows NOW DAY DIR < ENRICHED_AND_JP_RECORDS [RUNP_LINES] — the
+# history rows (stdout); writes DIR/sample.state.new and DIR/today.tsv.new.
+# RUNP_LINES: the menu's observations since the last sample (runs.sh), which
+# count the last stretch of a run's process that ended before this sample.
 _agents_sample_rows() {
     _agents_awk "lib_sort sample" -F '\t' -v now="$1" -v day="$2" -v sf="$3/sample.state" -v tf="$3/today.tsv"
 }
 
-# _agents_history_prune NOW DAY — drop history and events older than
-# AGENTS_HISTORY_DAYS, at most once a day. history.tsv has one writer (the
-# sample this runs in, under sample.lock); events.tsv is rewritten under the
-# events lock, or left for tomorrow when that can't be had.
+# _agents_history_prune NOW DAY — drop history, runs and events older than
+# AGENTS_HISTORY_DAYS, at most once a day. history.tsv and runs.tsv have one
+# writer (the sample this runs in, under sample.lock); events.tsv is
+# rewritten under the events lock, or left for tomorrow when that can't be
+# had.
 _agents_history_prune() {
     local stamp="" cut=$(( $1 - AGENTS_HISTORY_DAYS * 86400 ))
     [[ -r "$AGENTS_DATA_DIR/prune.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/prune.stamp"
     [[ "$stamp" != "$2" ]] || return 0
     _agents_prune_file "$AGENTS_DATA_DIR/history.tsv" "$cut"
+    _agents_prune_file "$AGENTS_DATA_DIR/runs.tsv" "$cut"
     if _agents_events_lock; then
         _agents_prune_file "$AGENTS_DATA_DIR/events.tsv" "$cut"
         _agents_events_unlock

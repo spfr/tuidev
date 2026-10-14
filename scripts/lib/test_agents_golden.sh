@@ -236,6 +236,19 @@ printf '%s\t5400\ntest\t3000\nbuild\t1800\nmcp\t600\n' "$FAKE_DAY" > "$AGENTS_DA
 } > "$AGENTS_DATA_DIR/history.tsv"
 printf '%s\treap\tstale\t60829\tnpm\tapp\t-\n%s\tauto\tstuck\t5010\tzsh\tmyapp\tclaude:5000\n%s\tkill\tmanual\t41198\tMessages\t-\t-\n%s\thook\tsubagent-end\t5200\twait-loop\tmyapp\tclaude:5000\n' \
     "$((FAKE_NOW - 3600))" "$((FAKE_NOW - 7200))" "$((FAKE_NOW - 600))" "$((FAKE_NOW - 900))" > "$AGENTS_DATA_DIR/events.tsv"
+# Finished runs: end start job project session agent cmd duration cpu peak exit dup cleaned.
+{
+    for row in "600 900 test myapp claude:5000 implementor-complex go 245 270000 1 0 0" \
+               "1200 1230 build myapp claude:5000 main make 41 74000 0 1 0" \
+               "3000 10000 server shop codex:2000 - pnpm 120 90000 - 0 1" \
+               "5000 9000 mcp app - - npx 3 50000 - 0 1" \
+               "90000 90060 test old claude:1 - pytest 50 1000 0 0 0"; do
+        # shellcheck disable=SC2086  # one field per word
+        set -- $row
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$((FAKE_NOW - $1))" "$((FAKE_NOW - $2))" "$3" "$4" "$5" "$6" "$7" \
+            "$(($2 - $1))" "$8" "$9" "${10}" "${11}" "${12}"
+    done
+} > "$AGENTS_DATA_DIR/runs.tsv"
 
 # --- Hook fixtures: one subagent that handed back with two live tasks -------------------
 if command -v jq >/dev/null 2>&1; then
@@ -317,6 +330,9 @@ case_ report-7d report --since 7d
 case_ report-today report --since today
 case_ report-json report --json
 case_ report-bad report --since yesterday
+case_ runs runs
+case_ runs-json runs --json
+case_ runs-7d runs --since 7d
 case_ reap-n reap -n
 case_ reap-stuck-n reap --stuck -n
 case_ reap-auto-n reap --auto -n
@@ -333,7 +349,7 @@ mkdir -p "$tmp/sample"
 printf '%s\n1012@Wed_Oct_14_08:58:05_2026\t50\t1\n22443@Wed_Oct_14_09:11:12_2026\t100\t1\n6001@Wed_Oct_14_08:10:01_2026\t0\t1\n' \
     "$((FAKE_NOW - 60))" > "$tmp/sample/sample.state"
 ( AGENTS_DATA_DIR="$tmp/sample" case_ sample sample
-  for f in history.tsv today.tsv sample.state sample.stamp; do printf '== %s\n' "$f"; cat "$tmp/sample/$f"; done | norm >> "$tmp/out/sample" )
+  for f in history.tsv today.tsv sample.state sample.stamp runs.state runs.tsv; do printf '== %s\n' "$f"; cat "$tmp/sample/$f" 2>/dev/null; done | norm >> "$tmp/out/sample" )
 if [[ -n "${HOOK_PS:-}" ]]; then
     hook_case() {   # NAME EVENT HOOK_JSON
         printf '%s\n' "$3" > "$tmp/hook.json"

@@ -61,7 +61,7 @@ BEGIN {
     home = ENVIRON["HOME"]
     nr = split(ENVIRON["AGENTS_CWD_ROOTS"], roots, "\n")
     n = split(ENVIRON["AGENTS_CWDS"], t, "\n")
-    for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 2) cwd[f[1]] = f[2]
+    for (i = 1; i <= n; i++) if ((m = split(t[i], f, "\t")) >= 2 && (m == 2 || f[3] == "cwd")) cwd[f[1]] = f[2]
     n = split(ENVIRON["AGENTS_HERDR"], t, "\n")
     for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 3 && !((f[1], f[3]) in hs)) hs[f[1], f[3]] = f[2]
     n = split(ENVIRON["AGENTS_WATCHED"], t, "\n")

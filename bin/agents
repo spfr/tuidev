@@ -49,7 +49,7 @@ _agents_find_lib() {
 }
 
 # config first: it reads agents.conf. The others only define functions.
-_AGENTS_MODULES="config util snapshot classify watched system awake lid kill notify events reap assess transcript history report render json tsv terminal hooks usage cli"
+_AGENTS_MODULES="config util snapshot classify watched system awake lid kill notify events reap assess transcript history runs report render json tsv terminal hooks usage cli"
 
 # Every module is checked before any is sourced: never half a program.
 _agents_missing=""

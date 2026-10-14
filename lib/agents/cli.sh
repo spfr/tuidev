@@ -92,6 +92,7 @@ agents_main() {
         why)      agents_why "$@" ;;
         tsv)      agents_tsv ;;
         report)   agents_report "$@" ;;
+        runs)     agents_runs "$@" ;;
         sample)   agents_sample ;;
         config)   agents_config "$@" ;;
         cwd)      agents_token_cwd "$@" ;;

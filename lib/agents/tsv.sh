@@ -16,11 +16,13 @@
 #   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar: Herdr is read from its cache (never waited on), and
-# the keep-awake state is read once.
+# the keep-awake state is read once. Each refresh also feeds the run ledger
+# (agents_collect with _AGENTS_FEED, runs.sh), so commands shorter than the
+# minute between samples are recorded too.
 agents_tsv() {
     local recs state pid="-" mode="off" until=0 lvl sys key val cores lmax lpid luntil
     _agents_awake_prime
-    recs="$(AGENTS_HERDR_MODE=async agents_collect)" || return 1
+    recs="$(AGENTS_HERDR_MODE=async _AGENTS_FEED=1 agents_collect)" || return 1
     _agents_with_needs "$recs"
     sys="$(agents_system)"
     cores="${sys#*$'\t'}"; cores="${cores%%$'\t'*}"

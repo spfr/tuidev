@@ -11,8 +11,9 @@
 # own: JOB is the unit process's own job (what `agents json` gives a tool or
 # an MCP server). KIND is the root's agent kind, "-" for a stale tree.
 # agents_enrich adds the root's cwd (13) and project (15). With
-# AGENTS_JOBS_PROC set (agents sample), also one line per process:
-#   jp PID START ROOT JOB CPUTIME_S RSS AGE_S
+# AGENTS_JOBS_PROC set (agents sample, the menu's run feed), also one line per
+# process:
+#   jp PID START ROOT JOB CPUTIME_S RSS AGE_S UNIT
 
 function jobinit() {
     if (job_ok++) return
@@ -62,7 +63,7 @@ function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc) {
         j = jobof(p); key = u SUBSEP j
         if (!(key in jn)) { nk++; jku[nk] = u; jkj[nk] = j }
         jc[key] += cpu[p]; jm[key] += rss[p]; jn[key]++
-        if (proc) printf "jp\t%d\t%s\t%d\t%s\t%d\t%d\t%d\n", p, st[p], r, j, ct[p], rss[p], et[p]
+        if (proc) printf "jp\t%d\t%s\t%d\t%s\t%d\t%d\t%d\t%d\n", p, st[p], r, j, ct[p], rss[p], et[p], u
     }
     for (i = 1; i <= nk; i++) {
         u = jku[i]; j = jkj[i]; key = u SUBSEP j; r = jroot[u]

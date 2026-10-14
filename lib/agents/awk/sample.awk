@@ -1,6 +1,15 @@
 # lib/agents/awk/sample.awk — _agents_sample_rows: one history sample from
 # enriched records and jp lines, against the previous sample.state
-# (history.sh documents the files). Needs lib_sort.
+# (history.sh documents the files), plus the menu's runp lines
+# (awk/runs_obs.awk) for the processes that ended since. Needs lib_sort.
+
+# group(job, proj, sess, cpu) — add cpu to that history row.
+function group(j, pj, s, d,   g) {
+    g = j SUBSEP pj SUBSEP s
+    if (!(g in gc)) go[++ng] = g
+    gc[g] += d
+    return g
+}
 
 BEGIN {
     last = 0; n = 0
@@ -19,20 +28,35 @@ BEGIN {
 }
 ($1 == "agent" || $1 == "stale") && NF >= 15 { proj[$2] = $15; sess[$2] = ($1 == "stale" ? "-" : ($3 == "daemon" ? "codex" : $3)) }
 $1 == "jp" && NF >= 8 { np++; jk[np] = $2 "@" $3; jr[np] = $4; jj[np] = $5; jc[np] = $6 + 0; jm[np] = $7 + 0; ja[np] = $8 + 0 }
+# The latest the menu saw of each process: CPU time, job, start, project, session kind.
+$1 == "runp" && NF >= 9 {
+    k = $4
+    if (!(k in fe)) fo[++nf] = k
+    if (!(k in fe) || $2 + 0 >= fe[k]) { fe[k] = $2 + 0; fc[k] = $5 + 0; fj[k] = $6; fs[k] = $7 + 0; fp[k] = $8; fk[k] = $9 }
+}
 END {
     out = sf ".new"; print now > out
     for (i = 1; i <= np; i++) {
-        k = jk[i]; c = jc[i]; r = jr[i]
+        k = jk[i]; c = jc[i]; r = jr[i]; cur[k] = 1
         print k "\t" c "\t" ((k in seen) || ((r in sess) && sess[r] != "-") ? 1 : 0) > out
         if (k in prev) d = c - prev[k]
         else if (last > 0 && ja[i] <= now - last) d = c
         else d = 0
         if (d < 0) d = 0
-        r = jr[i]; g = jj[i] SUBSEP (r in proj ? proj[r] : "-") SUBSEP (r in sess ? sess[r] : "-")
-        if (!(g in gc)) go[++ng] = g
-        gc[g] += d; gm[g] += jm[i]; gn[g]++
+        g = group(jj[i], (r in proj ? proj[r] : "-"), (r in sess ? sess[r] : "-"), d)
+        gm[g] += jm[i]; gn[g]++
     }
     close(out)
+    # Ended since the last sample: counted up to the last time the menu saw
+    # it, by the same rule (rss and procs are the moment's: none).
+    for (i = 1; i <= nf; i++) {
+        k = fo[i]
+        if (k in cur) continue
+        if (k in prev) d = fc[k] - prev[k]
+        else if (last > 0 && fs[k] >= last) d = fc[k]
+        else d = 0
+        if (d > 0) group(fj[k], fp[k], fk[k], d)
+    }
     for (i = 1; i <= ng; i++) {
         g = go[i]
         if (gc[g] <= 0) continue
