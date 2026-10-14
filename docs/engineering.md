@@ -42,7 +42,7 @@ scripts/lib/            shared libraries + test_*.sh unit harnesses
 scripts/install/        built-in packs (core remote sandbox ui extras); packs/ = optional packs (includes nvim.sh, tmux.sh)
 scripts/migrations/     timestamped one-shot fixups
 scripts/*.sh            update, health_check, test_suite, theme, validate_configs,
-                        check_links, container, notify, fix_completions, screenshots
+                        check_links, check_paths, container, notify, fix_completions, screenshots
 templates/              AGENTS_TEMPLATE.md for downstream projects
 docs/assets/            README images; tapes/ holds their VHS sources and demo fixtures
 ```
@@ -154,7 +154,7 @@ CI (`.github/workflows/ci.yml`, with actions pinned to a SHA and updated by Depe
 
 - **shellcheck** (`make lint`)
 - **validate configs** (`--strict`)
-- **no hardcoded paths**
+- **no hardcoded paths** (`scripts/check_paths.sh`, also `make check-paths`)
 - **required files**
 - **macOS**: Seatbelt profiles parse, the `sbx` smoke test, the lib tests under bash 3.2, and a `desktop` dry-run
 - **unit tests**, plus `minimal` and `remote` dry-runs

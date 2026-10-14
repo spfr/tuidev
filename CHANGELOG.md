@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`make screenshots` is stricter.** It deletes each tape's old images first
   and fails if one is not written: VHS can drop a `Screenshot` that is a
   tape's last command, so the tapes now end with a `Sleep`.
+- **`make check-paths`, and `make ci-test` runs it.** CI's "no hardcoded
+  paths" scan moved into `scripts/check_paths.sh`, which the workflow and the
+  new target both call, so the local gate catches what CI would. The
+  screenshot demo's home, `/Users/Shared/NAME`, is an accepted placeholder.
 
 ### Fixed
 - **A polling loop that never ends no longer reads as a calm "waiting".**

@@ -11,7 +11,7 @@
         update-security \
         test test-core test-ui test-all test-lib \
         check check-minimal check-desktop check-remote \
-        lint validate-configs validate check-links \
+        lint validate-configs validate check-links check-paths \
         sbx-test sandbox-up sandbox-down \
         adopt fix-completions clean \
         container-runtime container-build container-test container-clean \
@@ -143,6 +143,9 @@ validate-configs: ## Validate JSON, TOML, Lua and shell config syntax
 check-links: ## Check every relative link in the Markdown docs
 	@./scripts/check_links.sh
 
+check-paths: ## No hardcoded user paths or personal hosts (CI's check-paths job)
+	@./scripts/check_paths.sh
+
 validate: validate-configs ## Alias for validate-configs
 
 # ----------------------------------------------------------------------------
@@ -227,8 +230,9 @@ screenshots: ## Re-render docs/assets/*.png from their VHS tapes (TAPES="agents 
 # CI
 # ----------------------------------------------------------------------------
 
-ci-test: ## Everything CI runs that works locally (lint, validate, links, unit tests)
+ci-test: ## Everything CI runs that works locally (lint, validate, links, paths, unit tests)
 	@$(MAKE) lint
 	@$(MAKE) validate-configs
 	@$(MAKE) check-links
+	@$(MAKE) check-paths
 	@$(MAKE) test-lib

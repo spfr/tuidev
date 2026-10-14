@@ -23,6 +23,7 @@ make lint              # shellcheck -x over every shell file (list: SHELL_FILES 
 make validate-configs  # JSON / TOML / Lua / shell syntax
 make test-lib          # scripts/lib/test_*.sh unit harnesses
 make check-links       # relative links in every tracked .md
+make check-paths       # no hardcoded user paths or personal hosts (CI's check-paths job)
 make ci-test           # all of the above: what CI gates on, minus the macOS and container jobs
 ```
 

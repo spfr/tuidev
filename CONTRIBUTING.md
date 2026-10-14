@@ -12,7 +12,7 @@ Search existing issues first, then use the issue template. Include your tuidev v
 2. Make the change, following [docs/engineering.md](docs/engineering.md).
 3. Verify:
    ```bash
-   make ci-test        # lint + validate-configs + check-links + test-lib
+   make ci-test        # lint + validate-configs + check-links + check-paths + test-lib
    make test-core      # core-tagged tests against your machine
    make container-test # core-tagged tests in an Alpine container (Apple container → podman → docker)
    ```
@@ -26,12 +26,13 @@ Search existing issues first, then use the issue template. Include your tuidev v
 | `make lint` | shellcheck over every shell file (the list is `SHELL_FILES` in the Makefile) |
 | `make validate-configs` | JSON, TOML, Lua and shell syntax of everything in `configs/` |
 | `make check-links` | Every relative link in every tracked Markdown file |
+| `make check-paths` | No hardcoded user paths or personal mDNS hosts (CI's check-paths job) |
 | `make test-lib` | Every `scripts/lib/test_*.sh` unit harness, including `test_contract.sh` (cross-file names, documented packs) |
 | `make test` / `test-core` / `test-all` | `scripts/test_suite.sh`: tagged checks against the installed machine |
 | `make container-test` | `test_suite.sh --tag core` in an Alpine image. It tests the scripts, configs and tool contract on Linux, **not** the installer. The apt path is exercised on a real Debian box. |
 | `make sbx-test` | On macOS: `sbx` can read the project and cannot read `~/.ssh` |
 
-CI runs lint, validate-configs (`--strict`), check-links, test-lib and the container core-tag test. On macOS it also parses the Seatbelt profiles, runs the lib tests under bash 3.2, and does a `desktop` install dry-run. On Linux it does `minimal` and `remote` dry-runs. The job list is in [docs/engineering.md](docs/engineering.md#verification).
+CI runs lint, validate-configs (`--strict`), check-links, check-paths, test-lib and the container core-tag test. On macOS it also parses the Seatbelt profiles, runs the lib tests under bash 3.2, and does a `desktop` install dry-run. On Linux it does `minimal` and `remote` dry-runs. The job list is in [docs/engineering.md](docs/engineering.md#verification).
 
 ## Where changes go
 
