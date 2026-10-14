@@ -18,7 +18,7 @@
         docker-build docker-test docker-clean \
         brew-upgrade ci-test \
         quick-lazygit quick-sysinfo \
-        theme theme-list
+        theme theme-list screenshots
 
 .DEFAULT_GOAL := help
 # Recipes use bash (echo -e, [[ ]]); /bin/sh is dash on Debian.
@@ -129,7 +129,8 @@ check-remote: ## Health check against the remote profile
 # One file list for `make lint` and CI.
 SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
                scripts/install/*.sh scripts/install/packs/*.sh \
-               scripts/migrations/*.sh bin/sbx bin/agents configs/swiftbar/*.sh
+               scripts/migrations/*.sh bin/sbx bin/agents configs/swiftbar/*.sh \
+               docs/assets/tapes/*.sh docs/assets/tapes/bin/agents
 
 lint: ## Shellcheck every shell script (install, scripts, libs, packs, migrations, sbx)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found. brew install shellcheck"; exit 1; }
@@ -214,6 +215,13 @@ theme-list: ## List available color themes
 
 theme: ## Apply a theme: make theme NAME=catppuccin-mocha
 	@./scripts/theme.sh apply $(or $(NAME),tokyo-night)
+
+# ----------------------------------------------------------------------------
+# Docs
+# ----------------------------------------------------------------------------
+
+screenshots: ## Re-render docs/assets/*.png from their VHS tapes (TAPES="agents sbx" for some)
+	@./scripts/screenshots.sh $(TAPES)
 
 # ----------------------------------------------------------------------------
 # CI

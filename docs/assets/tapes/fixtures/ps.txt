@@ -1,0 +1,37 @@
+    1     0     0 root      0.0  21000  10:02.11 3-02:00:00 Sun Oct 11 08:00:00 2026     /sbin/launchd
+  500     1   501 NAME      1.2 214000   2:10.40 3-01:00:00 Sun Oct 11 09:00:00 2026     /Applications/Ghostty.app/Contents/MacOS/ghostty
+  510   500   501 NAME      0.0   3100   0:00.21 05:12:00 Wed Oct 14 04:48:00 2026     -zsh
+  520   510   501 NAME      0.1  18000   0:03.02 05:11:58 Wed Oct 14 04:48:02 2026     herdr
+  600     1   501 NAME      0.3  42000   0:31.70 05:11:59 Wed Oct 14 04:48:01 2026     herdr server
+  610   600   501 NAME      0.0   3200   0:00.30 05:11:50 Wed Oct 14 04:48:10 2026     -zsh
+ 1201   610   501 NAME     18.2 812000  21:14.33 02:40:55 Wed Oct 14 07:19:05 2026     claude
+ 1240  1201   501 NAME      0.0  88000   0:01.12 02:40:50 Wed Oct 14 07:19:10 2026     npm exec chrome-devtools-mcp@latest
+ 1241  1240   501 NAME      0.4 132000   0:09.80 02:40:49 Wed Oct 14 07:19:11 2026     chrome-devtools-mcp
+ 1250  1201   501 NAME      0.0  76000   0:00.97 02:40:50 Wed Oct 14 07:19:10 2026     npx -y @upstash/context7-mcp
+ 1251  1250   501 NAME      0.1  98000   0:02.40 02:40:49 Wed Oct 14 07:19:11 2026     node /Users/NAME/.npm/_npx/4b7c1a/node_modules/.bin/context7-mcp
+ 1270  1201   501 NAME      0.0   4100   0:00.02 03:12 Wed Oct 14 09:56:48 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760421545000-k2x9qa.sh && eval 'npm test' < /dev/null && pwd -P >| /tmp/claude-5c1e-cwd
+ 1271  1270   501 NAME     94.1 412000   2:58.20 03:10 Wed Oct 14 09:56:50 2026     node /Users/NAME/myapp/.claude/worktrees/agent-a3f9c1/node_modules/.bin/vitest run
+ 1280  1201   501 NAME      0.0   4000   0:00.02 01:05 Wed Oct 14 09:58:55 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760421545000-k2x9qa.sh && eval 'go test ./...' < /dev/null && pwd -P >| /tmp/claude-8b02-cwd
+ 1281  1280   501 NAME     36.3  52000   0:23.60 01:04 Wed Oct 14 09:58:56 2026     go test ./...
+ 1290  1201   501 NAME      0.0   4000   0:00.02 00:41 Wed Oct 14 09:59:19 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760421545000-k2x9qa.sh && eval 'npm run build' < /dev/null && pwd -P >| /tmp/claude-e4d7-cwd
+ 1291  1290   501 NAME     71.5 268000   0:29.30 00:40 Wed Oct 14 09:59:20 2026     node /Users/NAME/myapp/node_modules/.bin/vite build
+ 1300  1201   501 NAME      0.0   1900   0:00.00 01:12 Wed Oct 14 09:58:48 2026     caffeinate -i -t 300
+  620   600   501 NAME      0.0   3200   0:00.28 05:11:40 Wed Oct 14 04:48:20 2026     -zsh
+ 2101   620   501 NAME      0.3 524000   4:02.10 01:22:10 Wed Oct 14 08:37:50 2026     claude --continue
+ 2110  2101   501 NAME      0.0  70000   0:00.88 01:22:05 Wed Oct 14 08:37:55 2026     npm exec @modelcontextprotocol/server-postgres
+ 2111  2110   501 NAME      0.0  81000   0:01.90 01:22:04 Wed Oct 14 08:37:56 2026     node /Users/NAME/.npm/_npx/77ad30/node_modules/.bin/mcp-server-postgres
+ 2120  2101   501 NAME      0.0   4000   0:00.31 06:40 Wed Oct 14 09:53:20 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760425070000-p0c3vd.sh && eval 'until curl -sf localhost:8080/health; do sleep 5; done' < /dev/null && pwd -P >| /tmp/claude-a91b-cwd
+ 2121  2120   501 NAME      0.0   1200   0:00.00 00:03 Wed Oct 14 09:59:57 2026     sleep 5
+  630   600   501 NAME      0.0   3200   0:00.25 05:11:30 Wed Oct 14 04:48:30 2026     -zsh
+ 3101   630   501 NAME      0.2 156000   0:41.20 47:12 Wed Oct 14 09:12:48 2026     codex
+ 3110  3101   501 NAME      0.0   3900   0:00.05 45:02 Wed Oct 14 09:14:58 2026     bash -lc pnpm dev
+ 3111  3110   501 NAME      0.8 142000   0:22.10 45:00 Wed Oct 14 09:15:00 2026     node /Users/NAME/web/node_modules/.bin/vite
+61904     1   501 NAME      0.0  23000   0:02.94 18:20:43 Tue Oct 13 15:39:17 2026     /Users/NAME/.codex/packages/app-server-daemon/releases/0.1/bin/codex app-server daemon pid-update-loop
+  197 61904   501 NAME      0.0  48900   0:07.38 18:15:27 Tue Oct 13 15:44:33 2026     /Users/NAME/.codex/packages/app-server-daemon/releases/0.1/bin/codex app-server --listen unix:// --managed-daemon
+ 4410     1   501 NAME      0.0  64000   0:01.20 1-03:14:00 Tue Oct 13 06:46:00 2026     npm exec @modelcontextprotocol/server-memory
+ 4411  4410   501 NAME      0.0  71000   0:02.05 1-03:13:59 Tue Oct 13 06:46:01 2026     node /Users/NAME/.npm/_npx/c3e81f/node_modules/.bin/mcp-server-memory
+ 4500     1   501 NAME      0.0 118000   0:40.10 19:40:00 Tue Oct 13 14:20:00 2026     node /Users/NAME/myapp/node_modules/.bin/vite --port 5174
+ 5100     1   501 NAME      2.1 402000  31:00.00 1-02:00:00 Tue Oct 13 08:00:00 2026     /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+ 5200  5100   501 NAME     98.7 610000 1:52:00.00 02:13:00 Wed Oct 14 07:47:00 2026     /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/141.0/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer) --type=renderer
+ 8800     1   501 NAME      0.0   2400   0:00.12 58:00 Wed Oct 14 09:02:00 2026     /bin/bash /Users/NAME/.local/bin/agents _awake-loop
+ 8801  8800   501 NAME      0.0   1900   0:00.00 58:00 Wed Oct 14 09:02:00 2026     caffeinate -di -w 8800

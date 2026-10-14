@@ -1,0 +1,35 @@
+#!/bin/bash
+# Demo `agents` for the screenshot tapes (docs/assets/tapes/README.md): the
+# real bin/agents, reading fixtures/ instead of this machine. ps, lsof,
+# pmset and friends are stubs (demo-stub.sh), and `kill` is replaced, so the
+# demo never lists or signals a real process.
+tapes="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo="$(cd "$tapes/../../.." && pwd)"
+
+: "${DEMO_HOME:?DEMO_HOME is not set: source docs/assets/tapes/demo-env.sh first}"
+
+# Commands that would start real processes (caffeinate, a terminal window).
+case "${1:-ls} ${2:-}" in
+    "awake on"|"awake off"|"awake agents"|open-term*|_awake-loop*)
+        echo "agents demo: '$*' is not available in the demo" >&2; exit 2 ;;
+esac
+[[ -L "$DEMO_HOME/.demo/stubs/ps" ]] || bash "$tapes/demo-setup.sh" "$DEMO_HOME"
+
+export HOME="$DEMO_HOME" DEMO_FIXTURES="$tapes/fixtures"
+export PATH="$DEMO_HOME/.demo/stubs:$PATH"
+export HERDR_SOCKET_PATH="$DEMO_HOME/.demo/herdr.sock"
+export AGENTS_RUN_DIR="$DEMO_HOME/.config/tuidev/run" AGENTS_CONF="$DEMO_HOME/.config/agents.conf"
+# The fixture's uid, and a pid that is not in it (bin/agents hides its own tree).
+export AGENTS_TESTING=1 AGENTS_UID=501 AGENTS_SELF=99999 AGENTS_EUID=501
+
+# shellcheck source=../../../../bin/agents disable=SC1091
+. "$repo/bin/agents"
+
+# kill -0 (is the keep-awake holder alive?) says yes; anything else is a no-op.
+kill() {
+    [[ "${1:-}" == -0 ]] && return 0
+    echo "agents demo: not signalling $*" >&2
+    return 0
+}
+
+agents_main "$@"

@@ -42,8 +42,9 @@ scripts/lib/            shared libraries + test_*.sh unit harnesses
 scripts/install/        built-in packs (core remote sandbox ui extras); packs/ = optional packs (includes nvim.sh, tmux.sh)
 scripts/migrations/     timestamped one-shot fixups
 scripts/*.sh            update, health_check, test_suite, theme, validate_configs,
-                        check_links, container, notify, fix_completions
+                        check_links, container, notify, fix_completions, screenshots
 templates/              AGENTS_TEMPLATE.md for downstream projects
+docs/assets/            README images; tapes/ holds their VHS sources and demo fixtures
 ```
 
 ## Principles
@@ -160,3 +161,15 @@ CI (`.github/workflows/ci.yml`, with actions pinned to a SHA and updated by Depe
 - **docker core-tag test**
 - **documentation links** (`scripts/check_links.sh`)
 - **summary**, which fails if any job failed
+
+## Screenshots
+
+The README images in `docs/assets/` (`agents.png`, `sbx.png`) and the social preview card (`social-preview.png`, 1280×640, uploaded by hand in the repo's Settings › Social preview) are rendered from [VHS](https://github.com/charmbracelet/vhs) tapes in `docs/assets/tapes/`. Re-render them whenever a change alters what they show, such as `agents` output, `sbx` messages, the prompt or the palette:
+
+```bash
+brew install vhs                 # once; it brings ttyd and ffmpeg
+make screenshots                 # every tape (scripts/screenshots.sh)
+make screenshots TAPES=sbx       # just one
+```
+
+Each tape runs in a throwaway home with made-up projects, and `agents` reads fixture process tables, so nothing from your machine reaches an image. Look at every image before you commit it, and keep each under about 500 KB. The `sbx` shot needs macOS. VHS listens on a local port, so it fails inside a sandbox that doesn't allow binding one, such as Claude Code's native sandbox unless `sandbox.network.allowLocalBinding` is on; run `make screenshots` outside it. The fixtures, the demo wrapper and the by-hand recipe for the SwiftBar menu, which VHS can't record, are in [docs/assets/tapes/README.md](assets/tapes/README.md).
