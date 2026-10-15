@@ -261,4 +261,57 @@ AGENTS_UID=501 AGENTS_SELF=9999
 )
 pass "agents sample scans tokens, and a failing scan never stops it"
 
+# 12. A denial's subject: the program that acts (the last; past cd, echo and
+# filters: cat, grep, sed, jq…, which count only when nothing else runs) and a
+# known subcommand, never an option's value or another argument.
+# subj CMD — CMD's subject ("\n" in it a newline).
+subj() {
+    C="$1" _agents_awk_eval "lib_proc lib_activity tokens" 'BEGIN { c = ENVIRON["C"]; gsub(/\\n/, "\n", c); print "S\t" bashsubj(c) }' \
+        -v d="$tmp/nowhere" -v tyf=/dev/null -v frf=/dev/null < /dev/null | sed -n 's/^S	//p'
+}
+while IFS='%' read -r c want; do
+    got="$(subj "$c")"
+    [[ "$got" == "$want" ]] || fail "subject of '$c': '$got', want '$want'"
+done <<'CASES'
+kubectl -n prod-cluster delete pod web-1%kubectl
+kubectl delete pod web-1%kubectl delete
+aws --profile acme-prod s3 rm s3://bucket/key%aws
+aws s3 rm s3://bucket/key%aws s3
+gcloud --project acme-prod compute instances delete vm%gcloud
+docker --context acme-prod run --rm img%docker
+helm -n acme-prod uninstall web%helm
+helm uninstall web%helm uninstall
+git -C /work/app push --force origin main%git push
+git frobnicate-acme%git
+make deploy-acme-prod%make
+cd /work/app && make deploy%make deploy
+npm install left-pad%npm install
+npm acme-prod%npm
+cat /work/app/.env | grep KEY%cat
+grep -r token . | head -5%grep
+sed -n 1p x && kubectl apply -f k.yaml%kubectl apply
+cat k.yaml | kubectl apply -f -%kubectl apply
+git add . && git commit -m wip && git push origin main%git push
+ls | xargs rm -f%rm
+find . -name x | xargs%find
+echo hi%echo
+cd /x && ls%ls
+FOO=1 sudo -u root rm -rf /work/app/build%rm
+sleep 5 && curl -X POST https://acme.example/deploy%curl
+grep -n "content-preview\|content-draft" Makefile | head%grep
+cd /work && rg 'a|exit|b' src; make test%make test
+python3 -c 'import json;print(json.dumps(1))'%python3
+python3 - <<'EOF'\np='x'; s=open(p).read()\nos.remove(p)\nEOF%python3
+G=~/Library/Group\ Containers; du -sh "$G" | tail -1%du
+"$HOME/bin/acme-tool" --apply | tee log%tee
+git commit -m "fix: a; b | c" && git push%git push
+git "push" origin%git
+call() { curl -s "$1"; }; call https://acme.example/x%curl
+/usr/bin/time -p make build%make build
+command -v acmectl >/dev/null && echo yes%command
+for b in a b; do echo $b; done; exit 0%for
+$(which acme) --x | grep y%grep
+CASES
+pass "denial subjects: the acting program, a known subcommand only when nothing comes before it, never an option's value"
+
 echo "All agents tokens tests passed."

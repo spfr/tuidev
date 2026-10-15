@@ -93,15 +93,20 @@ function iso(t,   y, m, d, s) {
 
 # program(seg): the program a shell command segment runs (sets pw[], pk:
 # its words, the index of the program's, their count), past VAR=value, "!",
-# wrappers (sudo, env, nohup, time, timeout N, xargs…) and their options;
-# "" for none.
-function program(seg,   n, p, v) {
-    n = split(seg, pw, /[ \t]+/); pk = 1; pn = n
+# wrappers (sudo, env, nohup, time, timeout N, xargs…, by name or path) and
+# their options; "" for none (a wrapper with no command after it is its own
+# program; command -v NAME runs nothing: "command").
+function program(seg,   n, p, v, w) {
+    n = split(seg, pw, /[ \t]+/); pk = 1; pn = n; w = ""
     while (pk <= n) {
         p = pw[pk]; gsub(/^["'(]+|["')]+$/, "", p); pw[pk] = p
-        if (p == "" || p == "{" || p == "!" || p ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { pk++; continue }
+        if (p == "" || p == "{" || p == "!" || p ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || p ~ /^[A-Za-z_][A-Za-z0-9_-]*\(\)?$/) { pk++; continue }
+        if (p == "function") { pk += 2; continue }
+        sub(/^\/(usr\/)?(local\/)?s?bin\//, "", p)
+        if (p == "command" && pw[pk + 1] ~ /^-[vV]$/) return p
         if (p ~ /^(sudo|env|command|exec|nohup|time|nice|builtin|xargs|timeout|then|do|else)$/) {
             v = (p == "sudo" || p == "env") ? "^-[ugUChprtDSP]$" : p == "nice" ? "^-n$" : p == "xargs" ? "^-[InPLsdE]$" : "^$"
+            if (p !~ /^(then|do|else)$/) w = p
             pk++
             while (pk <= n && pw[pk] ~ /^-/) { if (pw[pk] ~ v) pk++; pk++ }
             if (p == "timeout") pk++
@@ -109,39 +114,118 @@ function program(seg,   n, p, v) {
         }
         break
     }
-    if (pk > n) return ""
+    if (pk > n) return w
     p = pw[pk]; sub(/.*\//, "", p)
     return p
 }
-# bashsubj(c): a denied command's subject: the program of its first segment
-# that does more than move around or set things (cd, export, echo…), and
-# for a multi-command tool its subcommand: never an argument; "-" for none.
-function bashsubj(c,   n, seg, i, p, first, k) {
+# bashsubj(c): a denied command's subject: of its segments' programs, the
+# last that acts (the action usually comes last: cd x && make deploy), past
+# those that only move around or set things (cd, export…) and those that
+# only read or filter (cat, grep, sed, jq…); else the first filter; else the
+# first program. A multi-command tool adds its subcommand (withsub). Never an
+# argument; "-" for none.
+function bashsubj(c,   n, seg, i, p, act, filt, first, fn, t) {
+    c = unquoted(c)
+    # A shell function the command defines is a name it made up, not a program.
+    t = c; split("", fn)
+    while (match(t, /[A-Za-z_][A-Za-z0-9_-]*[ \t]*\(\)/)) { p = substr(t, RSTART, RLENGTH); sub(/[ \t]*\(\)$/, "", p); fn[p] = 1; t = substr(t, RSTART + RLENGTH) }
     # What a command substitution runs is not what the command runs.
-    for (i = 0; i < 4; i++) { gsub(/\$\([^()]*\)/, "X", c); gsub(/`[^`]*`/, "X", c) }
+    for (i = 0; i < 4; i++) { gsub(/\$\([^()]*\)/, "\037", c); gsub(/`[^`]*`/, "\037", c) }
     gsub(/\n/, ";", c)
-    n = split(c, seg, /&&|\|\||;|\|/); first = ""
+    n = split(c, seg, /&&|\|\||;|\|/); act = filt = first = ""
     for (i = 1; i <= n; i++) {
         p = program(seg[i])
-        if (p == "") continue
-        if (first == "") { first = p; fk = pk; fn = pn; split("", fw); for (k = 1; k <= pn; k++) fw[k] = pw[k] }
-        if (p ~ /^(cd|pushd|popd|export|set|unset|source|\.|true|false|:|echo|printf|if|fi|then|done|while|until|for|test|\[|\[\[)$/) continue
-        return dash(clean(withsub(p), 64, "[^A-Za-z0-9._+@:/ -]"))
+        # Only a name: not a quoted or escaped word, nothing longer than one.
+        if (p == "" || length(p) > 40 || (p !~ /^[A-Za-z0-9_][A-Za-z0-9._+-]*$/ && p !~ /^(\.|:|\[|\[\[)$/) || (p in fn)) continue
+        if (first == "") first = withsub(p)
+        if (p ~ /^(cd|pushd|popd|export|set|unset|source|\.|true|false|:|echo|printf|if|fi|then|elif|done|while|until|for|case|esac|break|continue|exit|return|local|read|shift|trap|command|test|\[|\[\[|sleep|wait)$/) continue
+        if (p ~ /^(cat|grep|egrep|fgrep|rg|ag|head|tail|less|more|sed|awk|gawk|mawk|jq|yq|wc|sort|uniq|ls|find|fd|tr|cut|tee|xargs|column|diff|nl|stat|file|basename|dirname|realpath|readlink|pwd|which|date|env)$/) {
+            if (filt == "") filt = p
+            continue
+        }
+        act = withsub(p)
     }
-    if (first == "") return "-"
-    for (k = 1; k <= fn; k++) pw[k] = fw[k]
-    pk = fk; pn = fn
-    return dash(clean(withsub(first), 64, "[^A-Za-z0-9._+@:/ -]"))
+    return dash(clean(act != "" ? act : filt != "" ? filt : first, 64, "[^A-Za-z0-9._+@:/ -]"))
 }
+# unquoted(c): c with each quoted string ('…', "…") made one \037 and each
+# escaped character one \036 (neither is ever a program or a subcommand),
+# and a heredoc's body (the lines after "<<") dropped: what they hold is an
+# argument, and an operator in them (grep 'a|b', python3 -c 'a; b') is not
+# one.
+function unquoted(c,   o, i, q, t) {
+    if ((i = index(c, "<<")) > 0 && (q = index(substr(c, i), "\n")) > 0) c = substr(c, 1, i + q - 2)
+    o = ""
+    while (match(c, /[\\'"]/)) {
+        o = o substr(c, 1, RSTART - 1); q = substr(c, RSTART, 1); c = substr(c, RSTART + 1)
+        if (q == "\\") { o = o "\036"; c = substr(c, 2); continue }
+        o = o "\037"
+        if (q == "'") { i = index(c, "'"); c = i ? substr(c, i + 1) : ""; continue }
+        t = rawstr(c); c = substr(c, length(t) + 2)
+    }
+    return o c
+}
+# withsub(p): p, and when it is a multi-command tool (SUBS) its subcommand:
+# the word right after it, taken only when no option comes first (an
+# option's value can be any word: kubectl -n prod delete), and only when it
+# is one of the tool's known subcommands (SUBS[p]), or, for a tool whose
+# first word names a service ("*": aws, gcloud, az), a plain lowercase word.
+# git's -C DIR and -c KEY=VALUE, each one word, are passed over.
 function withsub(p,   k, w) {
-    if (p !~ /^(git|gh|npm|pnpm|yarn|bun|deno|docker|podman|kubectl|helm|terraform|tofu|cargo|go|brew|apt|apt-get|dnf|yum|pacman|pip|pip3|uv|poetry|systemctl|launchctl|aws|gcloud|az|fly|flyctl|vercel|netlify|wrangler|heroku|tmux|herdr|gem|bundle|rails|mix|dotnet|swift|make|claude|codex|agents|rustup|nix)$/) return p
+    if (!SUBS_SET) subs_init()
+    if (!(p in SUBS)) return p
     for (k = pk + 1; k <= pn; k++) {
         w = pw[k]; gsub(/^["']+|["')]+$/, "", w)
         if (w == "") continue
-        if (w ~ /^-/) { if (p == "git" && (w == "-C" || w == "-c")) k++; continue }
-        return w ~ /^[a-z][a-z0-9_-]*$/ ? p " " w : p
+        if (p == "git" && (w == "-C" || w == "-c")) { k++; continue }
+        if (w ~ /^-/) return p
+        if (SUBS[p] == "*") return w ~ /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/ && length(w) <= 24 ? p " " w : p
+        return index(" " SUBS[p] " ", " " w " ") ? p " " w : p
     }
     return p
+}
+# subs_init(): the subcommands withsub names (any other word after the
+# tool: none), set the first time one is needed.
+function subs_init() {
+    SUBS_SET = 1
+    subs("git", "add am apply archive bisect blame branch checkout cherry-pick clean clone commit config describe diff fetch filter-branch filter-repo format-patch gc grep init lfs log merge mv notes prune pull push rebase reflog remote reset restore revert rm show sparse-checkout stash status submodule switch tag update-index update-ref worktree")
+    subs("gh", "alias api attestation auth browse cache codespace completion config extension gist gpg-key issue label org pr project release repo ruleset run search secret ssh-key status variable workflow")
+    subs("npm pnpm yarn bun", "add audit build ci create dedupe dev dlx exec i init install link outdated pack publish rebuild remove rm run start test uninstall unlink up update upgrade version why x")
+    subs("deno", "add bench check compile deploy fmt info install lint publish remove run serve task test uninstall upgrade")
+    subs("docker podman", "attach build buildx commit compose container context cp create exec image images inspect kill load login logout logs machine network pause prune ps pull push restart rm rmi run save start stats stop system tag top unpause update volume")
+    subs("kubectl", "annotate apply attach auth autoscale certificate cluster-info config cordon cp create debug delete describe diff drain edit events exec explain expose get kustomize label logs patch port-forward proxy replace rollout run scale set taint top uncordon wait")
+    subs("helm", "create dependency get history install lint list package plugin pull push registry repo rollback search show status template test uninstall upgrade verify")
+    subs("terraform tofu", "apply console destroy fmt force-unlock get graph import init login logout output plan providers refresh show state taint test untaint validate workspace")
+    subs("cargo", "add bench build check clean clippy doc fetch fix fmt init install login new package publish remove run search test tree uninstall update yank")
+    subs("go", "build clean doc env fix fmt generate get install list mod run test tool vet work")
+    subs("brew", "bundle cleanup doctor fetch info install link list outdated reinstall remove search services tap uninstall unlink untap update upgrade")
+    subs("apt apt-get dnf yum", "autoremove build-dep check clean dist-upgrade download full-upgrade install purge reinstall remove search update upgrade")
+    subs("pip pip3", "check download freeze install list show uninstall wheel")
+    subs("uv", "add build cache export init lock pip publish python remove run sync tool tree venv")
+    subs("poetry", "add build check init install lock publish remove run show sync update")
+    subs("systemctl", "daemon-reload disable edit enable isolate kill mask reboot reload restart start status stop unmask")
+    subs("launchctl", "bootout bootstrap disable enable kickstart kill list load print remove start stop submit unload")
+    subs("aws gcloud az", "*")
+    subs("fly flyctl", "apps certs config deploy destroy launch logs machine machines postgres scale secrets ssh status volumes")
+    subs("vercel netlify", "build deploy dev env link login logout promote remove rm rollback")
+    subs("wrangler", "d1 delete deploy dev kv login pages publish queues r2 rollback secret tail")
+    subs("heroku", "addons apps config logs pg ps releases restart rollback run")
+    subs("tmux", "attach attach-session capture-pane kill-pane kill-server kill-session kill-window new new-session new-window send-keys split-window")
+    subs("herdr", "agent pane session")
+    subs("gem bundle", "add exec install list outdated uninstall update")
+    subs("rails", "console db generate new routes runner server test")
+    subs("mix", "compile deps.get ecto.migrate ecto.reset format phx.server release run test")
+    subs("dotnet", "add build clean new pack publish restore run test tool")
+    subs("swift", "build package run test")
+    subs("make", "all build check ci clean deploy dev dist docs fmt format install lint migrate publish push release run serve setup start stop test uninstall")
+    subs("claude codex", "agents config doctor exec mcp plugin resume update")
+    subs("agents", "awake hook json kill reap report runs sample term tsv watch why")
+    subs("rustup", "component default override target toolchain update")
+    subs("nix", "build develop flake profile run shell store")
+}
+# subs(TOOLS, WORDS): each of TOOLS takes WORDS as its subcommands.
+function subs(tools, words,   t, n, i) {
+    n = split(tools, t, " ")
+    for (i = 1; i <= n; i++) SUBS[t[i]] = words
 }
 # host(u): the host of a URL, lower case, nothing else of it.
 function host(u) {

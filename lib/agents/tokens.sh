@@ -36,9 +36,14 @@
 #   compacts.tsv  epoch cli project session agent trigger pre_tokens post_tokens
 #   denials.tsv   epoch cli project session agent tool by reason subject
 #                 by: classifier, safety or user; reason: the classifier's
-#                 [tag], else "-"; subject: never arguments: a Bash command's
-#                 program and, for a multi-command tool, its subcommand (git
-#                 push, gh pr, rm), WebFetch's host, else the tool name.
+#                 [tag], else "-"; subject: never arguments: for Bash the
+#                 program that acts (the last, past cd, echo and filters such
+#                 as cat, grep or sed, which count only when nothing else
+#                 runs; quoted text and heredocs are not commands) and, for
+#                 a multi-command tool, its subcommand when it comes first
+#                 and is a known one (git push, gh pr, kubectl delete;
+#                 kubectl -n X delete is kubectl); WebFetch's host; else the
+#                 tool name.
 #   limits.tsv    epoch cli used_percent window_minutes resets_at: Codex's
 #                 latest primary rate limit (one line, replaced).
 #   tokens.today  day total in cache_write cache_read out: today's sums (local
