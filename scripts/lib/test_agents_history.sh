@@ -419,7 +419,7 @@ first="$(printf '%s\n' "$section" | sed -n 2p)"
 [[ "$section" == *$'\n'"builds · 50% · 380M | sfimage=hammer "* ]] || fail "builds line:"$'\n'"$section"
 [[ "$section" == *$'\n'"--some · app · stale · 0% · 48M | bash="*"param1=reveal param2=500@Wed_Oct_14_08:10:00_2026 symbolize=false"* ]] || fail "stale tree under MCP servers:"$'\n'"$section"
 [[ "$section" == *$'\n'"Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis refresh=true symbolize=false"* ]] || fail "today line:"$'\n'"$section"
-[[ "$section" == *$'\n'"Open report | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report sfimage="* ]] || fail "Open report:"$'\n'"$section"
+[[ "$section" == *$'\n'"Open report | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today sfimage="* ]] || fail "Open report:"$'\n'"$section"
 for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$tmp/sampled" ]] && break; sleep 0.2; done
 [[ -s "$tmp/sampled" ]] || fail "the menu did not start agents sample when one was due"
 pass "menu: Where the CPU goes lists jobs busiest first with their sessions, today's CPU-h and Open report"

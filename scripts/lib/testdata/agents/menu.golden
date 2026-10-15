@@ -422,7 +422,7 @@ other · 0% · 12M | sfimage=ellipsis.circle refresh=true symbolize=false
 ----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90419@Wed_Oct_14_07:31:08_2026 param5=60 sfimage=eye
 ----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90419@Wed_Oct_14_07:31:08_2026 sfimage=info.circle
 Today: 1.5 CPU-h · tests 56% | sfimage=chart.bar.xaxis refresh=true symbolize=false
-Open report | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report sfimage=doc.text.magnifyingglass
+Open report | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today sfimage=doc.text.magnifyingglass
 ---
 Stale (7) | size=12
 npm exec chrome-devtools-mcp@latest · 50m · 210M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension

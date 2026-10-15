@@ -786,17 +786,19 @@ section_jobs() {
     # Today's top insight (from insight.txt, which `agents sample` refreshes):
     # what it found as the label (the text before " — ", at most 70
     # characters, cut at a word), the whole sentence with its advice as the
-    # tooltip; the only param is one of the report's fixed views.
+    # tooltip; a click opens its view of the report (one of the fixed views),
+    # for today, as the insight is.
     case "$insight_view" in
         summary|runs|waste|trends|agents|tokens|denials)
             if [[ -n "$insight_text" ]]; then
                 cl "${insight_text//\`/}"
                 tip="${REPLY//\"/$q}" line="${REPLY%% — *}"
                 [[ ${#line} -le 70 ]] || { line="${line:0:67}"; line="${line% *}..."; }
-                put "$line | $TERM_OPEN param2=--hold param3=report param4=--view param5=$insight_view tooltip=\"$tip\" sfimage=lightbulb symbolize=false"
+                put "$line | $TERM_OPEN param2=--hold param3=report param4=--view param5=$insight_view param6=--since param7=today tooltip=\"$tip\" sfimage=lightbulb symbolize=false"
             fi ;;
     esac
-    put "Open report | $TERM_OPEN param2=--hold param3=report sfimage=doc.text.magnifyingglass"
+    # Today's, like the rows above it (agents report alone covers the last 24h).
+    put "Open report | $TERM_OPEN param2=--hold param3=report param4=--since param5=today sfimage=doc.text.magnifyingglass"
 }
 
 section_stale() {
