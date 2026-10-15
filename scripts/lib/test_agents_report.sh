@@ -98,6 +98,19 @@ jqt "$json" '.duplicates == {"runs":3,"cpu_s":1200,"commands":[{"project":"app",
 jqt "$json" '.cleaned.runs == 3 and .cleaned.cpu_s == 15 and .cleaned.wall_s == 7560 and .cleaned.agents[0] == {"agent":"Explore","runs":3,"cpu_s":15,"wall_s":7560,"wait_runs":3}' "waste json cleaned" '.cleaned'
 jqt "$json" '.wait.runs == 5 and .wait.wall_s == 14760 and .reruns.runs == 2 and .reruns.cpu_s == 400' "waste json wait and reruns"
 pass "waste: duplicates and their CPU, leaks and their hours, polling, re-runs (only within 120s)"
+# Re-runs follow the times the runs ended, not the order runs.tsv got them: the
+# ledger reversed, and a re-run appended before the failure it follows.
+mkdir -p "$tmp/rev"
+awk '{ l[NR] = $0 } END { for (i = NR; i > 0; i--) print l[i] }' "$d/runs.tsv" > "$tmp/rev/runs.tsv"
+json="$(AGENTS_DATA_DIR="$tmp/rev" agents_report --view waste --json)"
+jqt "$json" '.reruns.runs == 2 and .reruns.cpu_s == 400' "re-runs from a reversed ledger" '.reruns'
+mkdir -p "$tmp/ooo"
+# (end start ... exit): the re-run, then the earlier run that failed.
+printf '%s\t%s\ttest\tx\tclaude:1\tmain\tgo\t50\t30\t1\t%s\t0\t0\n' \
+    $((FAKE_NOW - 100)) $((FAKE_NOW - 150)) 0 $((FAKE_NOW - 200)) $((FAKE_NOW - 260)) 1 > "$tmp/ooo/runs.tsv"
+out="$(AGENTS_DATA_DIR="$tmp/ooo" agents_report --view waste)"
+[[ "$out" == *"FAILED, RE-RUN AT ONCE  1 run "* ]] || fail "a re-run logged before the failure it follows:"$'\n'"$out"
+pass "re-runs: paired by when the runs ended, whatever order runs.tsv holds them in"
 
 # 3. trends: this window against the one before.
 out="$(rep --view trends --since 24h)"

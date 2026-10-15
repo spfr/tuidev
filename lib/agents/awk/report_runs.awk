@@ -1,5 +1,6 @@
 # lib/agents/awk/report_runs.awk — the run ledger, read once for every view
-# of `agents report`. Part of report.awk's program; needs lib_sort.
+# of `agents report`. Part of report.awk's program; needs lib_sort (sortn,
+# sorti).
 #
 # runs.tsv, one row per finished run:
 #   end_epoch start_epoch job project session agent cmd duration_s cpu_s
@@ -30,8 +31,9 @@
 #   Both windows, W 1 (this) or 2 (before), by project and by job: TPn[W, p]
 #     TPcpu[W, p] TPd[W, p, i]; TJn TJcpu TJd likewise; TPJcpu[W, p, j];
 #     TPO[1..TPC] and TJO[1..TJC] the names seen in either.
-function runs_load(rf, start, pstart, pend,   ln, f, e, w, j, p, a, c, d, cpu, k, rk, x, cln, dup, known, failed, n) {
+function runs_load(rf, start, pstart, pend,   ln, f, e, w, j, p, a, c, d, cpu, k, rk, x, cln, dup, known, failed, n, i, rn, re, rs, rkey, rcmd, rfail, rcpu, ix) {
     RERUN_GAP = 120
+    rn = 0; split("", re); split("", ix)
     RL = 0; RN = 0; RCPU = 0; RDUR = 0; RKNOWN = RFAIL = RDUP = RCLN = 0; GC = 0; AC = 0; CJC = 0; TPC = 0; TJC = 0
     while ((getline ln < rf) > 0) {
         if (split(ln, f, "\t") < 13 || f[1] !~ /^[0-9]+$/) continue
@@ -71,17 +73,23 @@ function runs_load(rf, start, pstart, pend,   ln, f, e, w, j, p, a, c, d, cpu, k
             if (!(j in CJn)) CJO[++CJC] = j
             CJn[j]++; CJcpu[j] += cpu; CJdur[j] += d
         }
-        # A re-run: the last failed run of this command in this session ended
-        # just before this one started (rows come in the order runs ended).
-        rk = k SUBSEP f[5]
+        rn++; re[rn] = e; rs[rn] = f[2] + 0; rkey[rn] = k SUBSEP f[5]; rcmd[rn] = k; rfail[rn] = failed; rcpu[rn] = cpu
+    }
+    close(rf)
+    # Re-runs, in the order the runs ended (not the order the ledger got
+    # them): the last failed run of a command in a session ended just before
+    # the next one of it started.
+    for (i = 1; i <= rn; i++) ix[i] = i
+    sorti(re, ix, rn)
+    for (n = 1; n <= rn; n++) {
+        i = ix[n]; rk = rkey[i]; k = rcmd[i]
         if (rk in LFe) {
-            x = f[2] - LFe[rk]
+            x = rs[i] - LFe[rk]
             if (x >= -2 && x <= RERUN_GAP) { Grer[k]++; Grercpu[k] += LFc[rk] }
             if (x >= -2) { delete LFe[rk]; delete LFc[rk] }
         }
-        if (failed) { LFe[rk] = e; LFc[rk] = cpu }
+        if (rfail[i]) { LFe[rk] = re[i]; LFc[rk] = rcpu[i] }
     }
-    close(rf)
 }
 
 # dstats ARR KEY N — D_MED (the middle run; the mean of the middle two),

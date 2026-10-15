@@ -18,6 +18,22 @@ function _sortk_sift(arr, keys, i, n,   c, t) {
     }
 }
 
+# sorti ARR IX N — IX[1..N], indices into ARR, by ARR[index] (a number),
+# smallest first; ties by index, so every awk agrees.
+function sorti(a, ix, n,   i, t) {
+    for (i = int(n / 2); i >= 1; i--) _sorti_sift(a, ix, i, n)
+    for (i = n; i > 1; i--) { t = ix[1]; ix[1] = ix[i]; ix[i] = t; _sorti_sift(a, ix, 1, i - 1) }
+}
+# _sorti_after ARR X Y — true when index X goes after index Y.
+function _sorti_after(a, x, y) { return a[x] + 0 > a[y] + 0 || (a[x] + 0 == a[y] + 0 && x + 0 > y + 0) }
+function _sorti_sift(a, ix, i, n,   c, t) {
+    while ((c = 2 * i) <= n) {
+        if (c < n && _sorti_after(a, ix[c + 1], ix[c])) c++
+        if (!_sorti_after(a, ix[c], ix[i])) return
+        t = ix[i]; ix[i] = ix[c]; ix[c] = t; i = c
+    }
+}
+
 # sortn ARR N — ARR[1..N], numbers, smallest first.
 function sortn(a, n,   i, t) {
     for (i = int(n / 2); i >= 1; i--) _sortn_sift(a, i, n)
