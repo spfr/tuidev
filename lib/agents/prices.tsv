@@ -20,6 +20,10 @@
 # (claude-opus- would take any opus without a closer line). OpenAI has no
 # one-hour cache tier: its CACHE_WRITE_1H repeats its 5-minute price. A
 # model without a line shows as unpriced, never $0.
+#
+# Only prices checked on those pages are here: a model whose list price was
+# not (such as gpt-5-codex, gpt-5.1-codex, gpt-5.2-codex) is left out on
+# purpose. To price one, add its line to your own AGENTS_PRICES file.
 
 # Anthropic                    in     w5m    w1h    read   out
 claude-fable-5-1               10     12.50  20     0.25   50

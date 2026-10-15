@@ -195,7 +195,7 @@ tx="$CLAUDE_CONFIG_DIR/projects/-repo/sess-600.jsonl"
     jq -nc '{type: "assistant", timestamp: "2026-10-14T08:59:00.000Z", message: {model: "claude-test-1", content: [{type: "text", text: "Looking at it.\nRunning the tests now."}]}}'
     jq -nc '{type: "assistant", timestamp: "2026-10-14T08:59:30.000Z", message: {model: "claude-test-1", content: [{type: "tool_use", name: "Bash", input: {command: "go test ./...", description: "run"}}]}}'
 } > "$tx"
-agents_session_tokens() { [[ "$1" == sess-600 ]] && printf 'sess-600\tyou\tclaude\trepo\tclaude-test-1\t42\t1234567\t3.40\n'; }
+agents_session_tokens() { [[ "$1" == sess-600 ]] && printf 'sess-600\tyou\tclaude\trepo\tclaude-test-1\t42\t1234567\t3.40\t0\n'; }
 out="$(agents_show 601)" || fail "show failed: $out"
 for want in "command · go test ./..." "in claude 600" "session   repo-1 · sess-600" "model     claude-test-1 · claude 2.1.300" \
             "tokens    1.2M · 42 calls" "cost      \$3.40 API-equivalent" "origin    you" "project   repo · branch feat-x" "where     Ghostty" \
@@ -210,6 +210,10 @@ printf '%s' "$json" | jq -e '.schema_version == 1 and .class == "tool" and .sess
     and .activity.tool == "Bash" and .activity.target == "go test ./..." and .where.kind == "app" and .where.place == "Ghostty"
     and .threads == 9 and .open_files == 12 and .branch == "feat-x" and (.children | length) == 1 and .info.tokens == "1.2M · 42 calls" and .info.origin == "you"' >/dev/null \
     || fail "show --json: $json"
+[[ "$out" != *"part unpriced"* ]] || fail "a session priced whole says part of it is unpriced"
+# Some of its tokens (a subagent's model) have no price: the cost says so.
+agents_session_tokens() { [[ "$1" == sess-600 ]] && printf 'sess-600\tyou\tclaude\trepo\tclaude-test-1\t42\t1234567\t3.40\t105000\n'; }
+[[ "$(agents_show 601)" == *"cost      \$3.40 API-equivalent (part unpriced)"* ]] || fail "a session priced in part: $(agents_show 601 | grep cost)"
 agents_session_tokens() { :; }
 [[ "$(agents_show 601)" != *tokens* ]] || fail "a session the scanner has not seen shows no tokens"
 ! agents_show 4242 2>/dev/null || fail "show a pid that is gone"

@@ -121,14 +121,15 @@ _agents_show_open() { printf '%s\n' "$1" | awk -F '\t' '$1 == "open" { print $2 
 # _agents_show_f — "key<TAB>value" lines as show.awk's "f" rows.
 # _agents_session_info SESSION — "info<TAB>key<TAB>value" lines for show.awk:
 # who started the session, its tokens and calls so far, and their
-# API-equivalent cost (agents_session_tokens); nothing when it has none yet.
+# API-equivalent cost (agents_session_tokens; "part unpriced" when some of
+# its tokens have no price); nothing when it has none yet.
 _agents_session_info() {
     [[ -n "$1" ]] || return 0
     agents_session_tokens "$1" 2>/dev/null | awk -F '\t' 'NR == 1 {
         t = $7 + 0; s = t >= 1e9 ? sprintf("%.1fB", t / 1e9) : t >= 1e6 ? sprintf("%.1fM", t / 1e6) : t >= 1e3 ? sprintf("%.0fk", t / 1e3) : t
         if ($2 != "-") print "info\torigin\t" $2
         print "info\ttokens\t" s " · " $6 " call" ($6 == 1 ? "" : "s")
-        if ($8 != "-") print "info\tcost\t$" $8 " API-equivalent"
+        if ($8 != "-") print "info\tcost\t$" $8 " API-equivalent" ($9 + 0 > 0 ? " (part unpriced)" : "")
     }'
 }
 _agents_show_f() { awk -F '\t' 'NF >= 2 { print "f\t" $1 "\t" $2 }'; }

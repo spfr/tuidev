@@ -538,14 +538,14 @@ pass "the daily rollup: a month of rows to a day each (calls kept), the same rep
 
 # 12. One session's tokens for another view (agents show): origin, CLI,
 # project, its main conversation's latest model, calls, tokens, cost.
-want="S1	you	claude	app	claude-opus-5-5	3	2005000	1.31
-C1	you	codex	web	gpt-6-luna	1	520000	0.02
-S2	headless	claude	shop	claude-opus-5-5	2	111000	0.11"
+want="S1	you	claude	app	claude-opus-5-5	3	2005000	1.31	105000
+C1	you	codex	web	gpt-6-luna	1	520000	0.02	0
+S2	headless	claude	shop	claude-opus-5-5	2	111000	0.11	0"
 [[ "$(AGENTS_PRICES="" AGENTS_DATA_DIR="$d" agents_session_tokens S1 C1 nope S2 S1 'bad;id')" == "$want" ]] \
     || fail "session tokens:"$'\n'"$(AGENTS_PRICES="" AGENTS_DATA_DIR="$d" agents_session_tokens S1 C1 nope S2 S1 'bad;id')"
-[[ "$(AGENTS_DATA_DIR="$d" agents_session_tokens S2)" == "S2	headless	claude	shop	claude-opus-5-5	2	111000	-" ]] || fail "session tokens with AGENTS_PRICES=off"
+[[ "$(AGENTS_DATA_DIR="$d" agents_session_tokens S2)" == "S2	headless	claude	shop	claude-opus-5-5	2	111000	-	-" ]] || fail "session tokens with AGENTS_PRICES=off"
 [[ -z "$(AGENTS_DATA_DIR="$tmp/none" agents_session_tokens S1)" && -z "$(AGENTS_DATA_DIR="$d" agents_session_tokens)" ]] || fail "session tokens without data"
-pass "agents_session_tokens: a session's origin, CLI, project, model, calls, tokens and API-equivalent cost; nothing for one without tokens"
+pass "agents_session_tokens: a session's origin, CLI, project, model, calls, tokens, API-equivalent cost and its unpriced tokens; nothing for one without tokens"
 
 # 13. The context view: the MCP servers sessions call and list, skills,
 # subagent types, the plugins enabled and what each brings, Codex's MCP

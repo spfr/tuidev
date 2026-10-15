@@ -84,11 +84,13 @@ _agents_prices_files() {
 
 # agents_session_tokens SESSION... — what each session cost so far, for a
 # view of one session (agents show): one line per session that has tokens,
-#   session origin cli project model calls tokens usd
+#   session origin cli project model calls tokens usd unpriced
 # origin: you, headless (tokens.sh), "-" when unknown; project: as the token
 # report folds it; model: its main conversation's latest (any agent's when
 # it has none); tokens: every token of the session and its subagents; usd:
-# their API-equivalent cost ("-" when unpriced, or AGENTS_PRICES=off). One
+# their API-equivalent cost ("-" when unpriced, or AGENTS_PRICES=off);
+# unpriced: of those tokens, the ones no price names (the cost leaves them
+# out; "-" with AGENTS_PRICES=off). One
 # grep and one awk over tokens.tsv, however many sessions; a session id is
 # matched whole.
 agents_session_tokens() {

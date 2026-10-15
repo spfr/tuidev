@@ -73,8 +73,9 @@ minute-by-minute sample stays cheap on a heavy machine.
   counts only; no config value is ever printed or stored. The scan records
   what it needs in `uses.tsv`.
 - `agents_session_tokens` (`lib/agents/report.sh`): one session's origin,
-  CLI, project, model, calls, tokens and API-equivalent cost, for a view of
-  a single session.
+  CLI, project, model, calls, tokens, API-equivalent cost and the tokens no
+  price names, for a view of a single session. `agents show` says
+  `$3.40 API-equivalent (part unpriced)` when some of them have no price.
 
 ### Changed
 
@@ -107,6 +108,19 @@ minute-by-minute sample stays cheap on a heavy machine.
   tokens --since 30d` goes from 1.3 s to 0.2 s on 123,000 rows; windows of
   up to 24 hours still count each row by its time, and longer ones count
   their first day whole (the view says from when).
+
+### Migration
+
+- **`AGENTS_PRICES` prefixes now match only at a version boundary.** A line
+  from 3.7.1 such as `claude-sonnet` no longer applies to
+  `claude-sonnet-4-5`, which then takes the price that ships with `agents`,
+  or shows as `unpriced` when none does: write full model ids
+  (`claude-sonnet-4-5`), or end a prefix in `-` to name a whole family
+  (`claude-sonnet-`). Your file only needs what the shipped prices leave
+  out or what you price differently. Models whose list
+  price could not be checked (such as `gpt-5-codex`, `gpt-5.1-codex`,
+  `gpt-5.2-codex`) are left out on purpose: add them to your file to price
+  them.
 
 ## [3.7.1] - 2026-10-15
 
