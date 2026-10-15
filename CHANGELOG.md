@@ -8,9 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 A notification that an agent needs you now takes you to it: click the banner
-and you land in that session's Herdr pane, tmux pane or Ghostty tab.
+and you land in that session's Herdr pane, tmux pane or Ghostty tab. And the
+MCP servers in the menu and `agents mcp` explain themselves: what each is,
+who configured it, how many copies run (one per session) and how much
+memory they hold.
 
 ### Added
+
+- **`agents mcp` says what runs.** A RUNNING column gives each server's
+  copies now (every session starts its own, and stale trees keep theirs) and
+  their memory in use (RSS), from one `ps` and the classify pass. A Claude
+  Code server at user scope running in several sessions gets a hint
+  (`chrome-devtools: 5 copies · 851M — user scope starts one per session;
+  scope it to the projects that use it`), and so do stale copies.
 
 - **Click a notification to jump to its session.** On a Mac, `notify.sh`
   posts its banner through terminal-notifier, which the `monitoring` pack now
@@ -41,6 +51,19 @@ and you land in that session's Herdr pane, tmux pane or Ghostty tab.
 
 ### Changed
 
+- **The menu's MCP servers group by server.** Where the CPU goes › MCP
+  servers opens with a gray line saying its size is memory in use now (RSS),
+  not data sent. A server in several sessions is one line
+  (`chrome-devtools · 5 copies · 0% · 851M`, `, 2 stale` when some outlived
+  their session) whose submenu says who configured it and what that means
+  (`user scope (~/.claude.json) — starts in every session`, a project's
+  `.mcp.json`, local scope, a plugin, Codex's config), how it starts when its
+  command line shows a launcher (`via npx (adds an npm wrapper process)`,
+  uvx, docker), then each copy with its Jump, Peek and Details as before. A
+  server running once keeps its single line, with those lines in its
+  submenu. Only scopes and paths are shown, never a command line. `agents
+  tsv` adds `mcpcfg` rows (while an MCP server runs) and a launcher column on
+  MCP job rows; the inventory's cache is read once a refresh, as before.
 - **On a Mac, the banner also fires inside Herdr and tmux**, next to the
   toast or status line, which can't be seen from another app. Over ssh the
   toast or status line is still the only channel, unless `agents root-of`

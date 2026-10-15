@@ -1,7 +1,7 @@
 MCP server chrome-devtools · repo  pid 1001 · me
 in claude 1000
 
-mcp       not in any config agents read (named by its package)
+mcp       configured in claude (user, ~/.claude.json) · starts with chrome-devtools-mcp
 project   repo
 cwd       /Users/NAME/repo
 where     tmux pane work:1.0

@@ -71,7 +71,7 @@ _agents_find_lib() {
 _AGENTS_MODULES="config util snapshot classify mcp where watched system awake lid kill notify events reap assess transcript history runs tokens context report render json tsv terminal activity show pick hooks usage cli"
 # The awk programs the modules run (awk/NAME.awk; test_agents_install.sh keeps
 # this list and the directory in step).
-_AGENTS_AWK_FILES="assess classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_price lib_proc lib_sort lib_where mcp mcp_toml new_members pick refusal render report report_context report_denials report_fmt report_insights report_runs report_tokens report_views root runs runs_obs runs_view sample show show_tree tokens tokens_plan tokens_rollup tokens_session tokens_state tree where"
+_AGENTS_AWK_FILES="assess classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_price lib_proc lib_sort lib_where mcp mcp_toml mcp_view new_members pick refusal render report report_context report_denials report_fmt report_insights report_runs report_tokens report_views root runs runs_obs runs_view sample show show_tree tokens tokens_plan tokens_rollup tokens_session tokens_state tree where"
 
 # Every module and awk program is checked before any is sourced: never half a
 # program.

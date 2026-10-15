@@ -1,7 +1,8 @@
 # lib/agents/awk/lib_activity.awk — what a session runs: tool shells and the
 # command they run, MCP servers, polling loops and the file they watch.
-#   tool_shell, is_mcp, mcp_known, mcp_name (mcp_word, mcp_tidy), waits, watched,
-#   tool_cmd, cmd_name. ENVIRON AGENTS_MCP: the configured servers (mcp.sh).
+#   tool_shell, is_mcp, mcp_known, mcp_name (mcp_word, mcp_tidy), mcp_via,
+#   waits, watched, tool_cmd, cmd_name. ENVIRON AGENTS_MCP: the configured
+#   servers (mcp.sh).
 # Needs lib_proc.awk (base, pname, hostinit and its name lists).
 
 # A tool shell: a shell running one command line, "/bin/zsh -c …" (the Claude
@@ -90,6 +91,19 @@ function mcp_name(a, cli,   s) {
     if (s == "") s = mcp_tidy(mcp_word(a))
     gsub(/[[:cntrl:]]/, "", s)
     return s == "" ? pname(a) : s
+}
+# mcp_via(a): the launcher an MCP server's command line starts it through, a
+# process of its own above the server's: npx (npm exec, as ps shows it),
+# pnpm (dlx), bunx, uvx (uv tool), docker or podman (run); "-" for none.
+# Only that word: never the rest of the command line.
+function mcp_via(a) {
+    if (a ~ /(^|\/)npm exec( |$)|(^|\/)npx( |$)/) return "npx"
+    if (a ~ /(^|\/)pnpm dlx( |$)|(^|\/)pnpx( |$)/) return "pnpm"
+    if (a ~ /(^|\/)bunx( |$)|(^|\/)bun x( |$)/) return "bunx"
+    if (a ~ /(^|\/)uvx( |$)|(^|\/)uv tool (uvx|run)( |$)/) return "uvx"
+    if (a ~ /(^|\/)docker run( |$)/) return "docker"
+    if (a ~ /(^|\/)podman run( |$)/) return "podman"
+    return "-"
 }
 # A polling loop a session waits on ("until …; do sleep 5; done"), given the
 # tidied command: never dup or long, it is how the agent waits for something.

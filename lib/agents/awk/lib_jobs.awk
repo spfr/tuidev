@@ -7,13 +7,13 @@
 #
 # One "job" record per unit and job, a unit being the root of an agent tree
 # or of a stale one, or a child of that root (a tool command, an MCP server…):
-#   job ROOT JOB 0 CPU 0 RSS PROCS ROOT_START own|sub UNIT KIND - NAME
+#   job ROOT JOB 0 CPU 0 RSS PROCS ROOT_START own|sub UNIT KIND - NAME - VIA
 # own: JOB is the unit process's own job (what `agents json` gives a tool or
-# an MCP server). KIND is the root's agent kind, "-" for a stale tree. NAME:
-# an MCP server's name (mcp_name) on its own mcp row, else "-".
-# agents_enrich adds the root's cwd (13) and project (15). With
-# AGENTS_JOBS_PROC set (agents sample, the menu's run feed), also one line per
-# process:
+# an MCP server). KIND is the root's agent kind, "-" for a stale tree. NAME
+# and VIA: an MCP server's name (mcp_name) and launcher (mcp_via) on its own
+# mcp row, else "-". agents_enrich adds the root's cwd (13) and project
+# (15). With AGENTS_JOBS_PROC set (agents sample, the menu's run feed), also
+# one line per process:
 #   jp PID START ROOT JOB CPUTIME_S RSS AGE_S UNIT
 
 function jobinit() {
@@ -46,7 +46,7 @@ function jobof(p,   j) {
     j = jobmatch(av[p])
     return jb[p] = (j == "" ? "other" : j)
 }
-function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc) {
+function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc, m) {
     proc = (ENVIRON["AGENTS_JOBS_PROC"] != "")
     for (k = 1; k <= n; k++) {
         p = ord[k]
@@ -68,6 +68,7 @@ function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc) {
     }
     for (i = 1; i <= nk; i++) {
         u = jku[i]; j = jkj[i]; key = u SUBSEP j; r = jroot[u]
-        printf "job\t%d\t%s\t0\t%.1f\t0\t%d\t%d\t%s\t%s\t%d\t%s\t-\t%s\n", r, j, jc[key], jm[key], jn[key], st[r], (j == jobof(u) ? "own" : "sub"), u, (kind[r] == "" ? "-" : kind[r]), (j == "mcp" && j == jobof(u) ? mcp_name(av[u], kind[r]) : "-")
+        m = (j == "mcp" && j == jobof(u))
+        printf "job\t%d\t%s\t0\t%.1f\t0\t%d\t%d\t%s\t%s\t%d\t%s\t-\t%s\t-\t%s\n", r, j, jc[key], jm[key], jn[key], st[r], (j == jobof(u) ? "own" : "sub"), u, (kind[r] == "" ? "-" : kind[r]), (m ? mcp_name(av[u], kind[r]) : "-"), (m ? mcp_via(av[u]) : "-")
     }
 }

@@ -30,8 +30,9 @@ LOOK
                                the last LINES (40) lines of its tmux or Herdr pane
   agents mcp [DIR]             the MCP servers Claude Code and Codex are configured
                                with (all, or those a session in DIR loads): name,
-                               scope, what starts it, where; processes go by these
-                               names (never shows args, env, headers or URLs)
+                               scope, copies running now (one per session) and
+                               their memory, what starts it, where; processes go
+                               by these names (never shows args, env, headers or URLs)
   agents json | tsv            machine-readable snapshot (tsv feeds SwiftBar)
   agents why [--copy] PID[@START]
                                why an item is listed, the evidence (owner, age,

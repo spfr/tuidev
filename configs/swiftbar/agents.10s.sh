@@ -150,7 +150,7 @@ awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents jobs stale hogs awake system" BAR_ICON=terminal CONF=""
-job_rows="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text="" tok_total=0 tok_cache=0
+job_rows="" mcp_cfg="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text="" tok_total=0 tok_cache=0
 
 # Per-session activity, gathered from the act rows into variables named after
 # the session's pid (bash 3.2 has no associative arrays): A_<what>_<pid>.
@@ -407,9 +407,11 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         thermal) thermal="$pid"; thermal_name="$kind" ;;
         power)   power="$pid" ;;
         lid)     lid_state="$pid"; lid_until="$age_s"; lid_max="$pcpu" ;;   # lid STATE PID UNTIL MAX
-        # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD NAME PROJECT
-        # (NAME: the MCP server's for the mcp job, else "-")
-        job)     job_rows+="$kind"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$herdr"$'\t'"$project"$'\t'"$pid"$'\t'"$start"$'\t'"$cwd"$'\t'"$args"$'\t'"$user"$'\n' ;;
+        # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD NAME PROJECT VIA
+        # (NAME and VIA: the MCP server's name and launcher for the mcp job, else "-")
+        job)     job_rows+="$kind"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$herdr"$'\t'"$project"$'\t'"$pid"$'\t'"$start"$'\t'"$cwd"$'\t'"$args"$'\t'"$user"$'\t'"${aflags:--}"$'\n' ;;
+        # mcpcfg CLI SCOPE NAME SOURCE PROJECT: who configured each MCP server
+        mcpcfg)  mcp_cfg+="$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$avg"$'\n' ;;
         hist)    hist_state="$pid"; hist_total="$kind"; hist_top="$age_s"; hist_top_s="$pcpu" ;;   # hist STATE TODAY_S TOP TOP_S
         insight) insight_view="$pid"; insight_text="$kind" ;;   # insight VIEW TEXT
         tokens)  tok_total="$pid"; tok_cache="$kind" ;;         # tokens TOTAL CACHE_PCT (today)
@@ -575,39 +577,123 @@ job_symbol() {
         wait) REPLY=hourglass ;; *) REPLY=ellipsis.circle ;;
     esac
 }
-# job_lines — job_rows summed per job ("J job cpu rss procs") and per job and
-# session, or for MCP servers per server and session ("S job cpu rss procs
-# project kind root start cwd name unit": name "-" but for a named MCP
-# server, unit its first process), busiest first.
+# job_lines — job_rows summed per job ("J job cpu rss procs"), then per job
+# and session ("S job cpu rss procs project kind root start cwd name unit
+# about via", unit its first process), busiest first. MCP servers go by
+# server: one running once is an S row with its name, about (who configured
+# it, in words, from the mcpcfg rows in MCP_CFG) and via (the launcher its
+# command line shows); one running in several sessions is a "G mcp cpu rss
+# procs copies stale - - - name - about via" row, then a C row (S's
+# columns) per copy. Elsewhere name, about and via are "-".
 job_lines() {
-    printf '%s' "$job_rows" | LC_ALL=C awk -F '\t' -v OFS='\t' '
+    printf '%s' "$job_rows" | MCP_CFG="$mcp_cfg" LC_ALL=C awk -F '\t' -v OFS='\t' '
         function pc(x) { return (x > 0 && x < 0.5) ? "<1" : sprintf("%.0f", x) }
         function sortk(arr, keys, n,   i, j, b, t) {
             for (i = 1; i <= n; i++) { b = i; for (j = i + 1; j <= n; j++) if (arr[keys[j]] > arr[keys[b]]) b = j; t = keys[i]; keys[i] = keys[b]; keys[b] = t }
+        }
+        function tilde(s,   i, h) {
+            h = ENVIRON["HOME"]; if (h == "" || h == "/") return s
+            while ((i = index(s, h)) > 0) s = substr(s, 1, i - 1) "~" substr(s, i + length(h))
+            return s
+        }
+        # cfg(name, kind, cwd): the mcpcfg row that starts server name in a
+        # session of kind (any CLI for a stale tree) started in cwd: local
+        # scope there, then project scope there, then user or plugin; a row
+        # for another project only when nothing else names it; 0 for none.
+        function cfg(nm, kd, cwd,   i, r, b, br) {
+            b = 0; br = -1
+            for (i = 1; i <= nc; i++) {
+                if (Cn[i] != nm || ((kd == "claude" || kd == "codex") && Cc[i] != kd)) continue
+                r = 1
+                if (Cs[i] == "local" || Cs[i] == "project") r = (Cp[i] != cwd) ? 0 : (Cs[i] == "local") ? 3 : 2
+                if (r > br) { br = r; b = i }
+            }
+            return b
+        }
+        # about(i): what config row i means, in words: a scope and a path,
+        # never a command line.
+        function about(i,   f) {
+            if (!i) return "not found in the configs agents reads"
+            if (Cc[i] == "codex") return "Codex config (" tilde(Csrc[i]) ") — starts in every Codex session"
+            if (Cs[i] == "user") return "user scope (" tilde(Csrc[i]) ") — starts in every session"
+            if (Cs[i] == "plugin") { f = Csrc[i]; sub(/@.*/, "", f); return "plugin " f " — starts in every session" }
+            if (Cs[i] == "local") { f = substr(Csrc[i], 1, length(Csrc[i]) - length(Cp[i]) - 1); return "local scope (" tilde(f) ") — starts in sessions in " tilde(Cp[i]) }
+            if (Cs[i] == "project") return "project scope (" tilde(Csrc[i]) ") — starts in sessions in " tilde(Cp[i])
+            return Cs[i] " scope (" tilde(Csrc[i]) ")"
+        }
+        function srow(tag, j, k, ab, via,   r) {
+            split(k, r, SUBSEP)
+            print tag, j, pc(sc[k]), sm[k], sx[k], sp[k], sd[k], r[2], ss[k], sw[k], r[3], su[k], ab, via
+        }
+        BEGIN {
+            n = split(ENVIRON["MCP_CFG"], t, "\n")
+            for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 5) { nc++; Cc[nc] = f[1]; Cs[nc] = f[2]; Cn[nc] = f[3]; Csrc[nc] = f[4]; Cp[nc] = f[5] }
         }
         NF >= 9 {
             if (!($1 in jc)) jo[++nj] = $1
             jc[$1] += $2 + 0.001 * ($3 / 1048576); jcpu[$1] += $2; jm[$1] += $3; jn[$1] += $4
             nm = ($1 == "mcp" && $10 != "" && $10 != "-") ? $10 : "-"
             k = $1 SUBSEP $7 SUBSEP nm
-            if (!(k in sc)) { sn[$1]++; sk[$1, sn[$1]] = k; sp[k] = $6; sd[k] = $5; ss[k] = $8; sw[k] = $9; su[k] = ($11 == "" ? "-" : $11) }
+            if (!(k in sc)) {
+                sn[$1]++; sk[$1, sn[$1]] = k; sp[k] = $6; sd[k] = $5; ss[k] = $8; sw[k] = $9; su[k] = ($11 == "" ? "-" : $11); sv[k] = "-"
+                if (nm != "-") { sa[k] = cfg(nm, $5, $9); if (!(nm in gn)) go[++ng] = nm; gn[nm]++; if ($5 == "-") gst[nm]++ }
+            }
+            if (sv[k] == "-" && NF >= 12 && $12 != "") sv[k] = $12
             sc[k] += $2; sm[k] += $3; sx[k] += $4
             so[k] += $2 + 0.000000001 * $3          # the sort key: ties go to more memory
+            if (nm != "-") { gc[nm] += $2; gm[nm] += $3; gx[nm] += $4; gso[nm] += $2 + 0.000000001 * $3 }
         }
         END {
             sortk(jc, jo, nj)
+            sortk(gso, go, ng)
             for (i = 1; i <= nj; i++) {
                 j = jo[i]; print "J", j, pc(jcpu[j]), jm[j], jn[j]
                 m = sn[j]; for (q = 1; q <= m; q++) l[q] = sk[j, q]
                 sortk(so, l, m)
-                for (q = 1; q <= m; q++) { k = l[q]; split(k, r, SUBSEP); print "S", j, pc(sc[k]), sm[k], sx[k], sp[k], sd[k], r[2], ss[k], sw[k], r[3], su[k] }
+                if (j != "mcp") { for (q = 1; q <= m; q++) srow("S", j, l[q], "-", "-"); continue }
+                for (g = 1; g <= ng; g++) {
+                    nm = go[g]; a = -1; v = ""
+                    for (q = 1; q <= m; q++) {
+                        split(l[q], r, SUBSEP); if (r[3] != nm) continue
+                        a = (a == -1 || a == sa[l[q]]) ? sa[l[q]] : -2
+                        v = (v == "" || v == sv[l[q]]) ? sv[l[q]] : "-"
+                    }
+                    ab = (a == -2) ? "configured in more than one place (agents mcp lists them)" : about(a)
+                    if (gn[nm] > 1) print "G", j, pc(gc[nm]), gm[nm], gx[nm], gn[nm], gst[nm] + 0, "-", "-", "-", nm, "-", ab, v
+                    for (q = 1; q <= m; q++) {
+                        split(l[q], r, SUBSEP); if (r[3] != nm) continue
+                        if (gn[nm] > 1) srow("C", j, l[q], "-", "-"); else srow("S", j, l[q], ab, v)
+                    }
+                }
+                for (q = 1; q <= m; q++) { split(l[q], r, SUBSEP); if (r[3] == "-") srow("S", j, l[q], "-", "-") }
             }
         }'
 }
-# job_submenu JOB PROCS KIND ROOT START NAME UNIT — under a session's share of
-# a job (or one MCP server): Jump to session, what it is and where, Peek and
-# Details (of the MCP server itself, else of the session), and Kill tree for
-# a stale one. Sets SUB, one level deeper ("----").
+# mcp_about PREFIX ABOUT VIA — REPLY = an MCP server's info lines (gray, at
+# PREFIX's depth): who configured it and how it starts; "-" leaves one out.
+mcp_about() {
+    local p="$1" out=""
+    if [[ "$2" != - ]]; then cl "$2"; out+="$p$REPLY | symbolize=false"$'\n'; fi
+    if via_text "$3"; then out+="$p$REPLY | symbolize=false"$'\n'; fi
+    REPLY="$out"
+}
+# via_text VIA — REPLY = how an MCP server is started, from the launcher its
+# command line shows (job rows' via); false when it shows none.
+via_text() {
+    case "$1" in
+        npx)           REPLY="via npx (adds an npm wrapper process)" ;;
+        pnpm)          REPLY="via pnpm dlx" ;;
+        bunx|uvx)      REPLY="via $1" ;;
+        docker|podman) REPLY="via $1 run (the container's own memory is not counted)" ;;
+        *)             REPLY=""; return 1 ;;
+    esac
+}
+# job_submenu JOB PROCS KIND ROOT START NAME UNIT [ABOUT VIA] — under a
+# session's share of a job (or one MCP server): Jump to session, what it is
+# and where (and for an MCP server, who configured it and how it starts:
+# mcp_about), Peek and Details (of the MCP server itself, else of the
+# session), and Kill tree for a stale one. Sets SUB, one level deeper
+# ("----").
 job_submenu() {
     local job="$1" n="$2" kind="$3" root="$4" start="$5" name="$6" unit="$7" t="" d v s es=es
     SUB=""
@@ -628,6 +714,7 @@ job_submenu() {
         *)      cl "$kind"; s+=" · $REPLY $root"; where_text "$root"; [[ -z "$REPLY" ]] || s+=" · $REPLY" ;;
     esac
     SUB+="----$s | symbolize=false"$'\n'
+    mcp_about "----" "${8:--}" "${9:--}"; SUB+="$REPLY"
     local keep="$SUB"
     SUB=""; look_items "$d" "$root"
     SUB="$keep--${SUB//$'\n'--/$'\n'----}"
@@ -635,27 +722,42 @@ job_submenu() {
     [[ "$kind" != - ]] || SUB+="----Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
 }
 section_jobs() {
-    local tag job cpu rss n proj kind root start cwd name unit line t sym click tip q="'"
+    local tag job cpu rss n proj kind root start cwd name unit about via line t sym click tip q="'" d named
     [[ -n "$job_rows" || "$hist_state" == ok || "$hist_state" == due ]] || return 0
     put "Where the CPU goes | size=12"
-    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd name unit; do
+    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd name unit about via; do
         case "$tag" in
             J)  job_symbol "$job"; sym="$REPLY"; job_label "$job"; line="$REPLY · ${cpu}%"; memv "${rss:-0}"
-                put "$line · $REPLY | sfimage=$sym $ROW symbolize=false" ;;
-            S)  # An MCP server: server · project; anything else: project · kind.
+                put "$line · $REPLY | sfimage=$sym $ROW symbolize=false"
+                # The size is memory, which "1.2G" alone does not say.
+                [[ "$job" != mcp ]] || put "--memory in use now (RSS), not data sent | size=11 symbolize=false" ;;
+            G)  # An MCP server in several sessions (proj: its copies, kind:
+                # the stale ones), who configured it and how it starts, then
+                # its copies (C).
+                cl "$name"; line="$REPLY · $proj copies"
+                [[ "$kind" == 0 ]] || line+=", $kind stale"
+                memv "${rss:-0}"; put "--$line · ${cpu}% · $REPLY | $ROW symbolize=false"
+                mcp_about "----" "${about:--}" "${via:--}"; OUT+="$REPLY"
+                put "-------" ;;
+            S|C) # An MCP server running once: server · project; a copy of
+                # one (C, a level deeper) or anything else: project · kind.
+                d="--" named=""
+                [[ "$tag" == C ]] && d="----"
+                [[ "$tag" == S && -n "$name" && "$name" != - ]] && named=1
                 line=""
-                [[ -n "$name" && "$name" != - ]] && { cl "$name"; line="$REPLY · "; }
+                [[ -z "$named" ]] || { cl "$name"; line="$REPLY · "; }
                 cl "${proj:--}"; line+="$REPLY"
                 case "$kind" in
                     -)      line+=" · stale" ;;
                     daemon) line+=" · codex daemon" ;;
-                    *)      [[ -n "$name" && "$name" != - ]] || { cl "$kind"; line+=" · $REPLY"; } ;;
+                    *)      [[ -n "$named" ]] || { cl "$kind"; line+=" · $REPLY"; } ;;
                 esac
                 memv "${rss:-0}"; line+=" · ${cpu}% · $REPLY"
                 click="$ROW"
                 tok "$root" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
-                put "--$line | $click symbolize=false"
-                job_submenu "$job" "$n" "$kind" "$root" "$start" "$name" "${unit:--}"
+                put "$d$line | $click symbolize=false"
+                job_submenu "$job" "$n" "$kind" "$root" "$start" "$name" "${unit:--}" "${about:--}" "${via:--}"
+                [[ "$tag" == S ]] || { SUB="--${SUB//$'\n'/$'\n'--}"; SUB="${SUB%--}"; }
                 OUT+="$SUB" ;;
         esac
     done < <([[ -z "$job_rows" ]] || job_lines)

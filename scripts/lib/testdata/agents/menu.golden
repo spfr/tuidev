@@ -351,37 +351,47 @@ dev servers · 2% · 321M | sfimage=server.rack refresh=true symbolize=false
 ----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
 ----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
 MCP servers · 0% · 1.1G | sfimage=puzzlepiece.extension refresh=true symbolize=false
---chrome-devtools · repo · 0% · 253M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----MCP server chrome-devtools · 3 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1001@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1001@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
---chrome-devtools · ~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60829@Wed_Oct_14_08:23:56_2026 symbolize=false
-----MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
---chrome-devtools · ~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6000@Wed_Oct_14_08:10:00_2026 symbolize=false
-----MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
---chrome-devtools · app · 0% · 200M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
-----MCP server chrome-devtools · 2 processes · claude 90419 · in tmux pane main:2.1 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90466@Wed_Oct_14_07:31:11_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90466@Wed_Oct_14_07:31:11_2026 sfimage=info.circle
+--memory in use now (RSS), not data sent | size=11 symbolize=false
+--chrome-devtools · 4 copies, 2 stale · 0% · 874M | refresh=true symbolize=false
+----user scope (~/.claude.json) — starts in every session | symbolize=false
+----via npx (adds an npm wrapper process) | symbolize=false
+-------
+----repo · claude · 0% · 253M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------MCP server chrome-devtools · 3 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1001@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1001@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
+----~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60829@Wed_Oct_14_08:23:56_2026 symbolize=false
+------MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
+----~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6000@Wed_Oct_14_08:10:00_2026 symbolize=false
+------MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
+----app · claude · 0% · 200M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
+------MCP server chrome-devtools · 2 processes · claude 90419 · in tmux pane main:2.1 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90466@Wed_Oct_14_07:31:11_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90466@Wed_Oct_14_07:31:11_2026 sfimage=info.circle
 --playwright · app · stale · 0% · 166M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=200@Wed_Oct_14_08:10:00_2026 symbolize=false
 ----MCP server playwright · 2 processes · stale: its session ended | symbolize=false
+----project scope (~/work/app/.mcp.json) — starts in sessions in ~/work/app | symbolize=false
+----via npx (adds an npm wrapper process) | symbolize=false
 ----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=200@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
 ----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=200@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
---example-agent · ~ · stale · 0% · 54M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60831@Wed_Oct_14_08:23:56_2026 symbolize=false
-----MCP server example-agent · 1 process · stale: its session ended | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
---example-agent · repo · 0% · 48M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----MCP server example-agent · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1004@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1004@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
+--example-agent · 2 copies, 1 stale · 0% · 103M | refresh=true symbolize=false
+----local scope (~/.claude.json) — starts in sessions in /Users/NAME/repo | symbolize=false
+-------
+----~ · stale · 0% · 54M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60831@Wed_Oct_14_08:23:56_2026 symbolize=false
+------MCP server example-agent · 1 process · stale: its session ended | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
+----repo · claude · 0% · 48M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------MCP server example-agent · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1004@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1004@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
 polling loops · 0% · 16M | sfimage=hourglass refresh=true symbolize=false
 --myapp · claude · 0% · 14M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
 ----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app

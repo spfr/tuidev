@@ -5,12 +5,14 @@
 # Uses: config.sh, util.sh (_agents_bg), snapshot.sh (agents_collect),
 #   assess.sh (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
 #   (_agents_hist_line), report.sh (_agents_insight_line,
-#   _agents_tokens_line).
+#   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv).
 # Public: agents_tsv.
 
 # agents_tsv — agents_assess's need/evid rows (first, so the menu knows an
 # item's verdict when it meets the item), the records (agent, stale, hog, top,
-# total, act, watched), then:
+# total, act, watched, job), then:
+#   mcpcfg cli scope name source project  each configured MCP server, while
+#     one runs (agents_mcp_tsv: who configured it, for the menu)
 #   sys  cpu_pct load1 cores mem_free_pct mem_pressure battery_pct battery_state
 #   awake mode pid until · thermal level name · power mode
 #   hist state today_cpu_s top_job top_job_cpu_s  (_agents_hist_line)
@@ -20,22 +22,25 @@
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar, every few seconds: Herdr is read from its cache
 # (never waited on), the keep-awake state is read once, and the machine's
-# state is read while the processes are collected (_agents_tsv_machine). Each
-# refresh also feeds the run ledger (agents_collect with _AGENTS_FEED,
-# runs.sh), so commands shorter than the minute between samples are recorded
-# too.
+# state is read while the processes are collected (_agents_tsv_machine), and
+# the MCP inventory's cache is read once, for the classify pass and the
+# mcpcfg rows. Each refresh also feeds the run ledger (agents_collect with
+# _AGENTS_FEED, runs.sh), so commands shorter than the minute between
+# samples are recorded too.
 agents_tsv() {
-    local recs state pid="-" mode="off" until=0 sys thermal power lid key val cores mach
+    local recs state pid="-" mode="off" until=0 sys thermal power lid key val cores mach _AGENTS_MCP_HAVE=1
     # One clock for the whole refresh: every _agents_now under it reads this.
     local _AGENTS_CLOCK=""
     _agents_now _AGENTS_CLOCK
     _agents_bg 6 _agents_tsv_machine
     _agents_awake_prime
+    _agents_mcp_load
     if ! recs="$(AGENTS_HERDR_MODE=async _AGENTS_FEED=1 agents_collect)"; then
         _agents_bg_wait mach 6 || true
         return 1
     fi
     _agents_with_needs "$recs"
+    [[ "$recs" != *$'\tmcp\t'* ]] || agents_mcp_tsv
     _agents_bg_wait mach 6 || true
     { IFS= read -r sys; IFS= read -r thermal; IFS= read -r power; IFS= read -r lid; } <<<"$mach"
     cores="${sys#*$'\t'}"; cores="${cores%%$'\t'*}"

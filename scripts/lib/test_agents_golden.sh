@@ -173,6 +173,17 @@ FIX_CWDS="$(
 )"
 
 agents_snapshot() { printf '%s\n' "$FIX_PS"; }
+# The MCP inventory (mcp.sh's srv rows), as its cache would hold it: no
+# config is read (that is test_agents_mcp.sh's), so no golden needs jq.
+# chrome-devtools at user scope (one copy per session), example-agent at
+# local scope in /Users/NAME/repo, playwright in ~/work/app's .mcp.json, and
+# an http server, which runs no process.
+FIX_MCP="$(printf 'srv\tclaude\t%s\t%s\t%s\t%s\t%s\t%s\t1\n' \
+    local example-agent "$HOME/.claude.json:/Users/NAME/repo" /Users/NAME/repo stdio /Users/NAME/.local/lib/example-agent-mcp.cjs \
+    user chrome-devtools "$HOME/.claude.json" - stdio chrome-devtools-mcp \
+    project playwright "$HOME/work/app/.mcp.json" "$HOME/work/app" stdio @playwright/mcp \
+    user docs "$HOME/.claude.json" - http -)"
+_agents_mcp_load() { _AGENTS_MCP_ROWS="$FIX_MCP"$'\n'; }
 _agents_listeners() { printf '%s\n' "$FIX_LISTEN"; }
 _agents_cwds() {
     [[ $# -gt 0 ]] || return 0
@@ -320,6 +331,7 @@ case_ stale stale
 case_ hogs hogs
 case_ json json
 case_ tsv tsv
+case_ mcp mcp
 # The menu: the SwiftBar plugin over that same tsv, which a stub agents
 # replays (the plugin runs in its own bash, so it sees none of the functions
 # stubbed here; its one clock read, awake's time left, is long past). The menu

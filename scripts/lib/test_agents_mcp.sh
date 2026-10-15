@@ -289,10 +289,53 @@ for pair in "node /srv/app-db/index.js=app-db" "node /backup/srv/app-db/index.js
 done
 pass "a needle matches a whole word of the command line, never part of one"
 
+# The launcher an MCP server's command line shows (the menu's "via npx").
+via() { _agents_awk_eval "lib_proc lib_activity" 'BEGIN { print mcp_via(ENVIRON["A"]) }'; }
+for pair in "npm exec chrome-devtools-mcp@latest=npx" "/opt/homebrew/bin/npx -y @playwright/mcp=npx" "pnpm dlx mcp-x=pnpm" \
+            "bunx mcp-x=bunx" "uv tool uvx mcp-server-fetch=uvx" "/u/.local/bin/uvx mcp-server-fetch=uvx" \
+            "docker run -i --rm ghcr.io/github/github-mcp-server=docker" "podman run -i img/x=podman" \
+            "node /srv/app-db/index.js=-" "chrome-devtools-mcp=-" "/u/bin/mcp-npxish --npx=-"; do
+    [[ "$(A="${pair%=*}" via)" == "${pair##*=}" ]] || fail "launcher of ${pair%=*}: $(A="${pair%=*}" via)"
+done
+printf '%s\n' "$recs" | awk -F '\t' '$1 == "job" && $3 == "mcp" { v[$11] = $16 } END { exit !(v[1001] == "npx" && v[1002] == "-" && v[2001] == "npx" && v[3000] == "npx") }' \
+    || fail "job rows do not carry the launcher"
+pass "launchers: npx (npm exec), pnpm dlx, bunx, uvx, docker and podman run; job rows carry them"
+
+# agents mcp: the inventory, with what runs of each now (copies, one per
+# session, and their memory in use), from a fixed process table: two more
+# claude sessions start chrome-devtools (user scope) too.
+agents_snapshot() {
+    printf '%s\n' "$snap"
+    psl 1100 900 "claude"
+    psl 1101 1100 "npm exec chrome-devtools-mcp@latest"
+    psl 1102 1101 "node /u/.npm/_npx/a/node_modules/chrome-devtools-mcp/build/index.js"
+    psl 1200 900 "claude"
+    psl 1201 1200 "npm exec chrome-devtools-mcp@latest"
+}
 out="$(agents_main mcp 2>&1)"
-[[ "$out" == *"$(printf '%-22s %-6s %-8s %-6s %-34s %s' playwright claude plugin stdio @playwright/mcp pw@m)"* ]] || fail "agents mcp: $out"
-[[ "$out" == *"$(printf '%-22s %-6s %-8s %-6s %-34s' remote claude user http "(a URL)")"* ]] || fail "agents mcp: an http server"
+tl='~'   # how agents mcp writes $HOME
+row() { printf '%-22s %-6s %-8s %-6s %-15s %-34s %s' "$@"; }
+[[ "$out" == *"$(row playwright claude plugin stdio "1 copy, 87M" @playwright/mcp pw@m)"* ]]          || fail "agents mcp: a plugin server:"$'\n'"$out"
+[[ "$out" == *"$(row playwright codex user stdio "1 copy, 87M" @playwright/mcp "$tl/.codex/config.toml")"* ]] || fail "agents mcp: a Codex server's copies are its own"
+[[ "$out" == *"$(row chrome-devtools claude user stdio "3 copies, 351M" chrome-devtools-mcp "$tl/.claude.json")"* ]] \
+    || fail "agents mcp: copies of a user-scope server (two sessions' and a stale one):"$'\n'"$out"
+[[ "$out" == *"$(row remote claude user http - "(a URL)" "$tl/.claude.json")"* ]]                       || fail "agents mcp: an http server runs no process"
+[[ "$out" == *"$(row tok claude user stdio - - "$tl/.claude.json")"* ]]                                  || fail "agents mcp: a server not running"
+[[ "$out" == *$'\n'"chrome-devtools: 2 copies · 263M — user scope starts one per session; scope it to the projects that use it"$'\n'* ]] \
+    || fail "agents mcp: no hint for a user-scope server in several sessions:"$'\n'"$out"
+[[ "$out" == *$'\n'"chrome-devtools: 1 stale copy · 87M — its session ended; agents stale lists it"* ]] || fail "agents mcp: no hint for a stale copy"
+[[ "$out" == *"RUNNING: copies now (each session starts its own) and their memory in use (RSS), not data sent"* ]] || fail "agents mcp: RUNNING is not explained"
+[[ "$(printf '%s\n' "$out" | grep -c 'scope it to the projects')" == 1 ]] || fail "agents mcp: a hint for a server in one session"
 [[ "$(agents_main mcp "$other")" != *app-db* ]] || fail "agents mcp DIR shows another project's server"
-pass "agents mcp lists the servers, what starts each and where it is configured"
+pass "agents mcp lists the servers, the copies of each running now and their memory, what starts each and where it is configured; hints for user scope and stale copies"
+
+# The menu's rows: who configured each server (agents tsv prints them while
+# an MCP server runs).
+_agents_mcp_load
+got="$(agents_mcp_tsv | grep -e $'\tapp-db\t' -e $'\tchrome-devtools\t')"
+[[ "$got" == *"mcpcfg	claude	local	app-db	$HOME/.claude.json:$proj	$proj"* && "$got" == *"mcpcfg	claude	user	chrome-devtools	$HOME/.claude.json	-"* ]] \
+    || fail "agents_mcp_tsv:"$'\n'"$got"
+for s in $SECRETS; do [[ "$(agents_mcp_tsv)" != *"$s"* ]] || fail "agents_mcp_tsv shows a secret: $s"; done
+pass "agents_mcp_tsv: each server's CLI, scope, name, source and project, never a secret"
 
 echo "All agents MCP tests passed."
