@@ -1,25 +1,38 @@
-# agents-prices.tsv — prices for the estimate in `agents report --view tokens`.
+# agents-prices.tsv — your prices for `agents report`'s API-equivalent cost.
 #
-# tuidev ships no prices: they change, and they depend on your plan. Copy this
-# file to ~/.config/tuidev/agents-prices.tsv (or point AGENTS_PRICES in
-# ~/.config/agents.conf at another path), then add one line per model from the
+# API list prices ship with agents (prices.tsv beside its modules, as of the
+# date in its header, replaced on every update), so you need this file only
+# to change one of them or to price a model they do not list. Copy it to
+# ~/.config/tuidev/agents-prices.tsv (or point AGENTS_PRICES in
+# ~/.config/agents.conf at another path), then add a line per model from the
 # vendors' own pages:
 #
-#   Anthropic: https://www.anthropic.com/pricing (API pricing; Claude Code
-#              uses the same per-token prices)
-#   OpenAI:    https://openai.com/api/pricing/
+#   Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+#   OpenAI:    https://developers.openai.com/api/docs/pricing
 #
 # Format: one model per line, tab- or space-separated, # starts a comment:
 #
+#   MODEL_PREFIX  IN  CACHE_WRITE_5M  CACHE_WRITE_1H  CACHE_READ  OUT
+#
+# each price in US dollars per million tokens: input, cache writes cached for
+# five minutes and for an hour (OpenAI has one cache-write price: write it
+# twice), cache reads and output. A line of the older form,
+#
 #   MODEL_PREFIX  IN  CACHE_WRITE  CACHE_READ  OUT
 #
-# each price in US dollars per million tokens: input, cache writes (Anthropic's
-# cache-creation price; 0 for OpenAI, which has none), cache reads (OpenAI's
-# cached input) and output. A model takes the line whose prefix is the longest
-# match of its name (claude-opus-5 matches claude-opus-5-5); of a prefix listed
-# twice, the later line wins. A malformed line is reported and ignored.
+# prices both kinds of cache write at CACHE_WRITE. Your lines are read after
+# the shipped ones: a prefix listed in both takes yours. A model takes the
+# longest prefix that names it up to a version boundary: the prefix itself,
+# or followed by a date (-20251001), a version tag (-v1, :0), [1m] or @...,
+# after routing prefixes such as us.anthropic. or openai/ are dropped. A
+# prefix ending in - or . names a family (my-model- prices my-model-2 and
+# my-model-3 alike). A malformed line is reported and ignored.
 #
-# The report then adds an "EST $" column and a total, labelled as an estimate,
-# with "-" for models no line matches. On a subscription plan the dollars are
-# what the same tokens would cost on the API, not what you pay. Without this
-# file, the report shows tokens only.
+# The cost is what the same tokens would cost on the API: on a subscription
+# plan you pay the plan, not this. AGENTS_PRICES=off shows no cost at all.
+#
+# Examples: a negotiated price for one model, and a local model family that
+# costs nothing per token.
+#
+#   claude-sonnet-4-5   2.40  3      4.80   0.24   12
+#   my-local-model-     0     0      0      0      0

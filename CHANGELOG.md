@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+`agents` keeps its minute-by-minute sample cheap on a heavy machine, and the
+token report learns what the tokens would cost at API list prices, who drove
+them, and which MCP servers, skills and plugins your sessions load but never
+use.
+
+### Added
+
+- **API-equivalent cost.** `agents report` (the summary's Tokens line, the
+  tokens view and their JSON) shows what the tokens would cost at API list
+  prices, which now ship with `agents` (`lib/agents/prices.tsv`, Anthropic's
+  and OpenAI's list prices as of 2026-09-29, with their sources). One-hour
+  cache writes cost their own price, apart from 5-minute ones. A model takes
+  the longest price prefix that names it up to a version boundary, so
+  `claude-opus-4-8` never takes `claude-opus-4`'s price; a model without a
+  price shows as `unpriced`, never `$0`. `AGENTS_PRICES` now changes or adds
+  prices over the shipped ones (its old five-column lines still work), and
+  `AGENTS_PRICES=off` hides costs. Costs never appear in the menu bar.
+- **Tokens by session and by origin.** The tokens view adds a session table
+  and splits sessions and tokens by who drove them: `you` (the CLI, desktop
+  app or an IDE), `headless` (the Agent SDK, `claude -p`, `codex exec`),
+  `subagent` or `fork`. `tokens.tsv` rows gain two columns,
+  `cache_write_1h` and `origin`; rows written before stay valid.
+- **`agents report --view context`**: per window (default 7d), the MCP
+  servers sessions call and the ones their deferred tool lists load (with
+  how many tools each lists, a proxy for the context it takes), skills and
+  subagent types used, the enabled Claude Code plugins with what each brings
+  (skills, agents, commands, MCP servers, hook events), Codex's MCP servers,
+  and cleanup candidates: what is loaded or enabled but unused. Names and
+  counts only; no config value is ever printed or stored. The scan records
+  what it needs in `uses.tsv`.
+- `agents_session_tokens` (`lib/agents/report.sh`): one session's origin,
+  CLI, project, model, calls, tokens and API-equivalent cost, for a view of
+  a single session.
+
+### Changed
+
+- **The run ledger no longer searches transcripts.** Finding which agent
+  started a background command used to `grep` the session's whole main and
+  subagent transcripts each time commands ended (10 s on a 395 MB session).
+  The token scan, which reads every new line anyway, now notes each task id
+  and whose transcript named it (`tasks.idx`), and runs before the ledger:
+  the lookup takes 25 ms, with the same answers. An id not indexed yet is
+  searched for only in the transcripts changed since the run started, in
+  their last 8 MiB.
+- **The scan state stays put.** `tokens.state` (800 KB on a heavy machine)
+  was rewritten every minute. A sample now rewrites only `tokens.hot`, the
+  few transcripts active within the hour, and only when it changed; the cold
+  majority is rewritten when 64 lines have gone cold and once a day.
+- **A month of tokens reads in a fraction of the time.** Once a day, the
+  token rows from before yesterday become one row per day and name, at the
+  top of `tokens.tsv` (some fortyfold fewer rows). `agents report --view
+  tokens --since 30d` goes from 1.3 s to 0.2 s on 123,000 rows; windows of
+  up to 24 hours still count each row by its time, and longer ones count
+  their first day whole (the view says from when).
+
 ## [3.7.1] - 2026-10-15
 
 A process that has exited is gone, even before its parent reaps it.

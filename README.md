@@ -52,7 +52,7 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
   1. Explore subagents left 3 polling loops running in 24h (7.7 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
   ```
 
-- **Where the tokens go.** `agents report --view tokens` reads the Claude Code and Codex transcripts already on disk: tokens by model, CLI, subagent type and project, the cache hit rate, what polling cost, context compactions and the Codex plan's headroom, with a dollar estimate once you add your own price file. `--view denials` shows which commands you or auto mode keep denying, and what to change. All local; nothing is sent anywhere.
+- **Where the tokens go.** `agents report --view tokens` reads the Claude Code and Codex transcripts already on disk: tokens by model, CLI, subagent type, project, session and who drove them (you, a headless run, a subagent), the cache hit rate, what polling cost, context compactions and the Codex plan's headroom, and what it all would cost at API list prices. `--view context` shows which MCP servers, skills and plugins your sessions load but never use, and `--view denials` which commands you or auto mode keep denying, each with what to change. All local; nothing is sent anywhere.
 
 [Local processes: `agents`](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 
