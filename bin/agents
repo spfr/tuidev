@@ -23,26 +23,38 @@
 # This script, as run (open-term and `awake agents` start it again).
 AGENTS_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
-# _agents_find_lib SCRIPT — set _AGENTS_LIB to the module directory for the
+# _agents_find_lib SCRIPT — set _AGENTS_LIB to the module directory of the
 # agents at SCRIPT: PREFIX/lib/agents (a checkout) or PREFIX/lib/tuidev/agents
-# (an install), where SCRIPT is PREFIX/bin/agents, following symlinks to it
-# (and, once, a symlinked directory on its path). False when there is none.
+# (an install). PREFIX/bin/agents is first the file SCRIPT resolves to (its
+# symlinks, and symlinked directories on its path, followed), so a link to a
+# checkout runs the checkout's modules even beside an older install; then
+# SCRIPT itself (a copy whose modules sit beside it). False when neither has
+# them. Forks only to follow a symlink.
 _agents_find_lib() {
     local s="$1" d n=0
     while [[ $n -lt 32 ]]; do
         n=$((n + 1))
-        d="${s%/*}"; d="${d%/*}"
-        for _AGENTS_LIB in "$d/lib/agents" "$d/lib/tuidev/agents"; do
-            [[ -f "$_AGENTS_LIB/cli.sh" ]] && return 0
-        done
         if [[ -L "$s" ]]; then
             d="$(readlink "$s")" || break
             case "$d" in /*) s="$d" ;; *) s="${s%/*}/$d" ;; esac
-        else
-            d="$(cd -P "${s%/*}" 2>/dev/null && pwd)" || break
-            [[ "$d/${s##*/}" != "$s" ]] || break
-            s="$d/${s##*/}"
+            continue
         fi
+        # A symlinked directory, or a .. or ., on its path (tests, no forks).
+        d="${s%/*}"
+        case "$d/" in */../*|*/./*) ;; *) while [[ -n "$d" && ! -L "$d" ]]; do d="${d%/*}"; done ;; esac
+        [[ -n "$d" ]] || break
+        d="$(cd -P "${s%/*}" 2>/dev/null && pwd)" || break
+        s="$d/${s##*/}"
+    done
+    for s in "$s" "$1"; do
+        d="${s%/*}"; d="${d%/*}"
+        for _AGENTS_LIB in "$d/lib/agents" "$d/lib/tuidev/agents"; do
+            [[ -f "$_AGENTS_LIB/cli.sh" ]] || continue
+            # Spelled as the path it was run as, when that is the same directory.
+            s="${1%/*}"; s="${s%/*}/${_AGENTS_LIB#"$d"/}"
+            [[ "$s" == "$_AGENTS_LIB" || ! "$s" -ef "$_AGENTS_LIB" ]] || _AGENTS_LIB="$s"
+            return 0
+        done
     done
     _AGENTS_LIB=""
     return 1
@@ -50,12 +62,19 @@ _agents_find_lib() {
 
 # config first: it reads agents.conf. The others only define functions.
 _AGENTS_MODULES="config util snapshot classify watched system awake lid kill notify events reap assess transcript history runs report render json tsv terminal hooks usage cli"
+# The awk programs the modules run (awk/NAME.awk; test_agents_install.sh keeps
+# this list and the directory in step).
+_AGENTS_AWK_FILES="assess classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_proc lib_sort new_members refusal render report report_fmt report_insights report_runs report_views runs runs_obs runs_view sample tree"
 
-# Every module is checked before any is sourced: never half a program.
+# Every module and awk program is checked before any is sourced: never half a
+# program.
 _agents_missing=""
 if _agents_find_lib "$AGENTS_PATH"; then
     for _agents_m in $_AGENTS_MODULES; do
         [[ -r "$_AGENTS_LIB/$_agents_m.sh" ]] || _agents_missing+=" $_AGENTS_LIB/$_agents_m.sh"
+    done
+    for _agents_m in $_AGENTS_AWK_FILES; do
+        [[ -r "$_AGENTS_LIB/awk/$_agents_m.awk" ]] || _agents_missing+=" $_AGENTS_LIB/awk/$_agents_m.awk"
     done
 else
     _agents_m="${AGENTS_PATH%/*}"

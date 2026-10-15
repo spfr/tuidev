@@ -50,7 +50,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 
 ### The agents modules
 
-`bin/agents` only finds its modules and sources them: `lib/agents/` next to `bin/` in a checkout, `lib/tuidev/agents/` next to an installed `~/.local/bin/agents` (symlinks to either are followed). It checks that every module is there before it sources any, and names what is missing. `config.sh` comes first, because it reads `agents.conf`; every other module only defines functions, so the test harnesses can source `bin/agents` and replace any function. Each module starts with what it owns, what it uses and its public functions.
+`bin/agents` only finds its modules and sources them: `lib/agents/` next to `bin/` in a checkout, `lib/tuidev/agents/` next to an installed `~/.local/bin/agents`. It looks first beside the file it resolves to (through every symlink, and symlinked directories on the way), so a link to a checkout runs the checkout's modules even next to an older install, and only then beside the path it was run as. It checks that every module and every `awk/` program (`_AGENTS_AWK_FILES`, kept in step with the directory by `test_agents_install.sh`) is there before it sources any, and names what is missing. `config.sh` comes first, because it reads `agents.conf`; every other module only defines functions, so the test harnesses can source `bin/agents` and replace any function. Each module starts with what it owns, what it uses and its public functions.
 
 | Module | Owns |
 |--------|------|

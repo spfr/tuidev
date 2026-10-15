@@ -89,18 +89,47 @@ done
     || fail "a symlink to the checkout's agents does not load the checkout's modules"
 pass "symlinks to agents (absolute or relative) find its modules"
 
+# 3b. A link to a checkout in PREFIX/bin, beside an older PREFIX/lib/tuidev/agents:
+# the checkout's modules win; a copy (no link) still uses the ones beside it.
+mkdir -p "$tmp/pfx/bin" "$tmp/pfx/lib/tuidev"
+cp -R "$REPO_DIR/lib/agents" "$tmp/pfx/lib/tuidev/agents"
+ln -s "$REPO_DIR/bin/agents" "$tmp/pfx/bin/agents"
+[[ "$(bash -c '. "$1"; printf "%s\n" "$_AGENTS_LIB"' _ "$tmp/pfx/bin/agents")" == "$REPO_DIR/lib/agents" ]] \
+    || fail "a link to a checkout beside an older install loads the install's modules"
+ln -s "$tmp/pfx/bin" "$tmp/linkdir"   # a symlinked directory on the way
+[[ "$(bash -c '. "$1"; printf "%s\n" "$_AGENTS_LIB"' _ "$tmp/linkdir/agents")" == "$REPO_DIR/lib/agents" ]] \
+    || fail "through a symlinked directory: not the checkout's modules"
+rm "$tmp/pfx/bin/agents"; cp "$REPO_DIR/bin/agents" "$tmp/pfx/bin/agents"
+[[ "$(bash -c '. "$1"; printf "%s\n" "$_AGENTS_LIB"' _ "$tmp/pfx/bin/agents")" == "$tmp/pfx/lib/tuidev/agents" ]] \
+    || fail "a copied agents does not load the modules beside it"
+pass "a link to a checkout's agents loads the checkout's modules, even beside an older install"
+
+# 3c. The awk programs bin/agents checks for are exactly awk/*.awk, and every
+# one the modules run is among them.
+listed="$(bash -c '. "$1"; printf "%s\n" $_AGENTS_AWK_FILES' _ "$REPO_DIR/bin/agents" | LC_ALL=C sort)"
+present="$(cd "$REPO_DIR/lib/agents/awk" && for f in *.awk; do printf '%s\n' "${f%.awk}"; done | LC_ALL=C sort)"
+[[ "$listed" == "$present" ]] || fail "_AGENTS_AWK_FILES and lib/agents/awk differ: $(diff <(echo "$listed") <(echo "$present") | grep '^[<>]' | tr '\n' ' ')"
+used="$(sed -nE 's/.*_agents_awk(_eval)? "([a-z_ ]+)".*/\2/p' "$REPO_DIR"/lib/agents/*.sh | tr ' ' '\n' | LC_ALL=C sort -u)"
+[[ -n "$used" && -z "$(LC_ALL=C comm -23 <(echo "$used") <(echo "$listed"))" ]] \
+    || fail "modules run awk programs bin/agents does not check: $(LC_ALL=C comm -23 <(echo "$used") <(echo "$listed") | tr '\n' ' ')"
+pass "_AGENTS_AWK_FILES lists every awk program, and the modules run only those"
+
 # 4. A missing module, or no modules at all: a clear error, nothing half loaded.
 mv "$lib/tsv.sh" "$tmp/tsv.sh"
 out="$("$bin" --help 2>&1)" && fail "agents ran without tsv.sh"
 [[ "$out" == "agents: missing $lib/tsv.sh (reinstall: ./install.sh --pack monitoring)" ]] || fail "missing module message: $out"
 mv "$tmp/tsv.sh" "$lib/tsv.sh"
+mv "$lib/awk/report_runs.awk" "$tmp/report_runs.awk"
+out="$("$bin" tsv 2>&1)" && fail "agents ran without awk/report_runs.awk"
+[[ "$out" == "agents: missing $lib/awk/report_runs.awk (reinstall: ./install.sh --pack monitoring)" ]] || fail "missing awk program message: $out"
+mv "$tmp/report_runs.awk" "$lib/awk/report_runs.awk"
 mv "$lib" "$tmp/lib-away"
 out="$("$bin" --help 2>&1)" && fail "agents ran without its modules"
 [[ "$out" == "agents: missing $HOME/.local/lib/tuidev/agents/ (reinstall: ./install.sh --pack monitoring)" ]] || fail "missing modules message: $out"
 # shellcheck source=/dev/null
 ( . "$bin" ) 2>/dev/null && fail "sourcing agents without its modules succeeded"
 mv "$tmp/lib-away" "$lib"
-pass "a missing module or module directory is named, and agents exits 1"
+pass "a missing module, awk program or module directory is named, and agents exits 1 before running anything"
 
 # 5. uninstall.sh removes the command, every module and their directories.
 cd "$tmp"
