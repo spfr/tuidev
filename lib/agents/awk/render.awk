@@ -24,7 +24,7 @@ function activity(r, full,   i, j, k, f, g, nm, mp, mr, nt, tl, ns, ss, no, oth,
         else if (f[3] == "session") ss[++ns] = x[i]
         else oth[++no] = x[i]
     }
-    if (nm) printf "%s      mcp: %d server%s · %d procs · %s%s%s\n", ENVIRON["DIM"], nm, (nm > 1 ? "s" : ""), mp, mem(mr), (full ? " (" names ")" : ""), e
+    if (nm) printf "%s      mcp: %d server%s · %d procs · %s%s%s\n", ENVIRON["DIM"], nm, (nm > 1 ? "s" : ""), mp, mem(mr), " (" names ")", e
     for (j = 1; j <= nt; j++) {          # busiest first
         k = j
         for (i = j + 1; i <= nt; i++) { split(tl[i], f, "\t"); split(tl[k], g, "\t"); if (f[5] + 0 > g[5] + 0) k = i }

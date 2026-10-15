@@ -134,7 +134,7 @@ END {
             c = tool_cmd(a); act(p, "tool", r, (tool_cd == "" ? "-" : tool_cd), c)
             if (tool_watch != "" && waits(c)) { gsub(/\t/, " ", tool_watch); printf "watch\t%d\t%s\t%s\n", p, tool_watch, (watch_reads ? "read" : "exists") }
         }
-        else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a), a)
+        else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a, kind[r]), a)
         else act(p, "other", r, "-", a)
     }
     jobs_emit()

@@ -236,12 +236,13 @@ dev servers · 2% · 321M | sfimage=server.rack refresh=true symbolize=false
 --app · stale · 0% · 78M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6100@Wed_Oct_14_06:00:00_2026 symbolize=false
 --repo · claude · 0% · 8M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
 MCP servers · 0% · 1.1G | sfimage=puzzlepiece.extension refresh=true symbolize=false
---repo · claude · 0% · 302M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
---~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60829@Wed_Oct_14_08:23:56_2026 symbolize=false
---~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6000@Wed_Oct_14_08:10:00_2026 symbolize=false
---app · claude · 0% · 200M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
---app · stale · 0% · 166M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=200@Wed_Oct_14_08:10:00_2026 symbolize=false
---~ · stale · 0% · 54M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60831@Wed_Oct_14_08:23:56_2026 symbolize=false
+--chrome-devtools · repo · 0% · 253M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+--chrome-devtools · ~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60829@Wed_Oct_14_08:23:56_2026 symbolize=false
+--chrome-devtools · ~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6000@Wed_Oct_14_08:10:00_2026 symbolize=false
+--chrome-devtools · app · 0% · 200M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+--playwright · app · stale · 0% · 166M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=200@Wed_Oct_14_08:10:00_2026 symbolize=false
+--example-agent · ~ · stale · 0% · 54M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60831@Wed_Oct_14_08:23:56_2026 symbolize=false
+--example-agent · repo · 0% · 48M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
 polling loops · 0% · 16M | sfimage=hourglass refresh=true symbolize=false
 --myapp · claude · 0% · 14M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
 --repo · claude · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false

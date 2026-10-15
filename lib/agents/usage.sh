@@ -21,6 +21,10 @@ LOOK
   agents hogs                  top $AGENTS_HOG_TOP CPU hogs, any owner: lifetime average
                                >= ${AGENTS_HOG_PCT}% after ${AGENTS_HOG_MIN}m, or >= ${AGENTS_HOG_NOW}% now outside agent trees
   agents thermal               thermal pressure and energy mode (display only)
+  agents mcp [DIR]             the MCP servers Claude Code and Codex are configured
+                               with (all, or those a session in DIR loads): name,
+                               scope, what starts it, where; processes go by these
+                               names (never shows args, env, headers or URLs)
   agents json | tsv            machine-readable snapshot (tsv feeds SwiftBar)
   agents why [--copy] PID[@START]
                                why an item is listed, the evidence (owner, age,

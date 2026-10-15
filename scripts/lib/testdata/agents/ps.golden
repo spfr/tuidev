@@ -1,13 +1,13 @@
 AGENTS (6) + codex daemon
   PID     KIND    STATUS       AGE   CPU%    MEM KIDS  PORTS       PROJECT                CWD
   90419   claude  working    1h42m  102.4   1.0G    4  41234,41235 app                    ~/work/app
-      mcp: 1 server · 2 procs · 200M (chrome-devtools-mcp)
+      mcp: 1 server · 2 procs · 200M (chrome-devtools)
       26603   keepawake · caffeinate -i -t 300 · 0% · 1M
       22443   other · /tmp/go-build1/b001/web.test -test.count=1 · 102% · 180M
   84091   claude  -            33m    6.8   632M    1  -           shop/fix-cart          ~/work/shop/.claude/worktrees/fix-cart
       6999    agents ls · 5s · 0% · -
   1000    claude  -          1h00m  107.0   1.4G   16  -           repo                   /Users/NAME/repo
-      mcp: 2 servers · 4 procs · 302M (chrome-devtools-mcp, example-agent-mcp)
+      mcp: 2 servers · 4 procs · 302M (chrome-devtools, example-agent)
       1010    go test -race ./internal/web · 2m00s · 100% · feat-a  x3 dup  hot
       1040    claude -p hello · 3m00s · 2% · -
       1030    until [ -s /nonexistent/x ]; do sleep 5; done · 52m00s · 0% · main  wait

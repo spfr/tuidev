@@ -352,9 +352,9 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         thermal) thermal="$pid"; thermal_name="$kind" ;;
         power)   power="$pid" ;;
         lid)     lid_state="$pid"; lid_until="$age_s"; lid_max="$pcpu" ;;   # lid STATE PID UNTIL MAX
-        # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD - PROJECT
-        job)     job_rows+="$kind"$'	'"$pcpu"$'	'"$rss"$'	'"$kids"$'	'"$herdr"$'	'"$project"$'	'"$pid"$'	'"$start"$'	'"$cwd"$'
-' ;;
+        # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD NAME PROJECT
+        # (NAME: the MCP server's for the mcp job, else "-")
+        job)     job_rows+="$kind"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$herdr"$'\t'"$project"$'\t'"$pid"$'\t'"$start"$'\t'"$cwd"$'\t'"$args"$'\t'"$user"$'\n' ;;
         hist)    hist_state="$pid"; hist_total="$kind"; hist_top="$age_s"; hist_top_s="$pcpu" ;;   # hist STATE TODAY_S TOP TOP_S
         insight) insight_view="$pid"; insight_text="$kind" ;;   # insight VIEW TEXT
         tokens)  tok_total="$pid"; tok_cache="$kind" ;;         # tokens TOTAL CACHE_PCT (today)
@@ -521,7 +521,9 @@ job_symbol() {
     esac
 }
 # job_lines — job_rows summed per job ("J job cpu rss procs") and per job and
-# session ("S job cpu rss procs project kind root start cwd"), busiest first.
+# session, or for MCP servers per server and session ("S job cpu rss procs
+# project kind root start cwd name unit": name "-" but for a named MCP
+# server, unit its first process), busiest first.
 job_lines() {
     printf '%s' "$job_rows" | LC_ALL=C awk -F '\t' -v OFS='\t' '
         function pc(x) { return (x > 0 && x < 0.5) ? "<1" : sprintf("%.0f", x) }
@@ -531,8 +533,9 @@ job_lines() {
         NF >= 9 {
             if (!($1 in jc)) jo[++nj] = $1
             jc[$1] += $2 + 0.001 * ($3 / 1048576); jcpu[$1] += $2; jm[$1] += $3; jn[$1] += $4
-            k = $1 SUBSEP $7
-            if (!(k in sc)) { sn[$1]++; sk[$1, sn[$1]] = k; sp[k] = $6; sd[k] = $5; ss[k] = $8; sw[k] = $9 }
+            nm = ($1 == "mcp" && $10 != "" && $10 != "-") ? $10 : "-"
+            k = $1 SUBSEP $7 SUBSEP nm
+            if (!(k in sc)) { sn[$1]++; sk[$1, sn[$1]] = k; sp[k] = $6; sd[k] = $5; ss[k] = $8; sw[k] = $9; su[k] = ($11 == "" ? "-" : $11) }
             sc[k] += $2; sm[k] += $3; sx[k] += $4
             so[k] += $2 + 0.000000001 * $3          # the sort key: ties go to more memory
         }
@@ -542,20 +545,27 @@ job_lines() {
                 j = jo[i]; print "J", j, pc(jcpu[j]), jm[j], jn[j]
                 m = sn[j]; for (q = 1; q <= m; q++) l[q] = sk[j, q]
                 sortk(so, l, m)
-                for (q = 1; q <= m; q++) { k = l[q]; split(k, r, SUBSEP); print "S", j, pc(sc[k]), sm[k], sx[k], sp[k], sd[k], r[2], ss[k], sw[k] }
+                for (q = 1; q <= m; q++) { k = l[q]; split(k, r, SUBSEP); print "S", j, pc(sc[k]), sm[k], sx[k], sp[k], sd[k], r[2], ss[k], sw[k], r[3], su[k] }
             }
         }'
 }
 section_jobs() {
-    local tag job cpu rss n proj kind root start cwd line t sym click tip q="'"
+    local tag job cpu rss n proj kind root start cwd name line t sym click tip q="'"
     [[ -n "$job_rows" || "$hist_state" == ok || "$hist_state" == due ]] || return 0
     put "Where the CPU goes | size=12"
-    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd; do
+    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd name _; do
         case "$tag" in
             J)  job_symbol "$job"; sym="$REPLY"; job_label "$job"; line="$REPLY · ${cpu}%"; memv "${rss:-0}"
                 put "$line · $REPLY | sfimage=$sym $ROW symbolize=false" ;;
-            S)  cl "${proj:--}"; line="$REPLY"
-                case "$kind" in -) line+=" · stale" ;; daemon) line+=" · codex daemon" ;; *) cl "$kind"; line+=" · $REPLY" ;; esac
+            S)  # An MCP server: server · project; anything else: project · kind.
+                line=""
+                [[ -n "$name" && "$name" != - ]] && { cl "$name"; line="$REPLY · "; }
+                cl "${proj:--}"; line+="$REPLY"
+                case "$kind" in
+                    -)      line+=" · stale" ;;
+                    daemon) line+=" · codex daemon" ;;
+                    *)      [[ -n "$name" && "$name" != - ]] || { cl "$kind"; line+=" · $REPLY"; } ;;
+                esac
                 memv "${rss:-0}"; line+=" · ${cpu}% · $REPLY"
                 click="$ROW"
                 tok "$root" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"

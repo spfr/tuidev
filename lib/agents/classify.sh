@@ -5,7 +5,8 @@
 #   helpers, dev-server candidates, hogs, what each session runs, jobs) and
 #   agents_enrich (cwds, Herdr status, projects, flags), and the rule for a
 #   session's project name.
-# Uses: config.sh (the patterns), util.sh (_agents_awk); awk/classify.awk,
+# Uses: config.sh (the patterns), util.sh (_agents_awk), mcp.sh
+#   (_agents_mcp_needles: which MCP server is which); awk/classify.awk,
 #   awk/enrich.awk and the lib_*.awk they need.
 # Public: agents_classify, agents_enrich, agents_project.
 
@@ -19,8 +20,10 @@
 # it or only tests that it exists (agents_collect checks its age,
 # agents_enrich drops them), and "job" records (awk/lib_jobs.awk).
 agents_classify() {
+    local mcp
+    _agents_mcp_needles mcp     # which configured MCP server each process is
     local IFS=$'\n'
-    AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
+    AGENTS_MCP="$mcp" AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
     AGENTS_UID="$AGENTS_UID" AGENTS_SELF="$AGENTS_SELF" AGENTS_NAMES="$AGENTS_NAMES" \
     AGENTS_DAEMON="$AGENTS_DAEMON_PATTERN" AGENTS_SYSTEM="$AGENTS_SYSTEM_PATTERN" \
     AGENTS_HOG_PCT="$AGENTS_HOG_PCT" AGENTS_HOG_MIN="$AGENTS_HOG_MIN" \

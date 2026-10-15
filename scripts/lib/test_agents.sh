@@ -1015,7 +1015,7 @@ for pair in 1001:mcp 1004:mcp 1005:keepawake 1010:tool 1020:tool 1030:tool 1040:
     [[ "$(afield "${pair%%:*}" 3)" == "${pair#*:}" ]] || fail "activity class of ${pair%%:*}: $(afield "${pair%%:*}" 3), want ${pair#*:}"
 done
 [[ -z "$(afield 1002 3)$(afield 1011 3)$(afield 1012 3)" ]] || fail "grandchildren listed as their own units"
-[[ "$(afield 1001 12)/$(afield 1001 8)" == "chrome-devtools-mcp/2" && "$(afield 1004 12)" == example-agent-mcp ]] || fail "MCP names and process counts"
+[[ "$(afield 1001 12)/$(afield 1001 8)" == "chrome-devtools/2" && "$(afield 1004 12)" == example-agent ]] || fail "MCP names and process counts"
 [[ "$(afield 1010 14)" == "go test -race ./internal/web" ]] || fail "Claude tool command: '$(afield 1010 14)'"
 [[ "$(afield 1020 14)" == "go test -race ./internal/web" ]] || fail "trailing slash makes a different command: '$(afield 1020 14)'"
 [[ "$(afield 1030 14)" == "until [ -s /tmp/x ]; do sleep 5; done" ]] || fail "loop command: '$(afield 1030 14)'"
@@ -1180,8 +1180,8 @@ if command -v jq >/dev/null 2>&1; then
     printf '%s' "$aj" | jq -e '.schema_version == 1' >/dev/null || fail "schema_version"
     printf '%s' "$aj" | jq -e '.agents[] | (.start_epoch | type) == "number"' >/dev/null || fail "session start_epoch"
     printf '%s' "$aj" | jq -e '.agents[] | select(.pid == 1000) | .activity
-        | (.mcp | map(.name) | sort) == ["chrome-devtools-mcp", "example-agent-mcp"]
-        and (.mcp[] | select(.name == "chrome-devtools-mcp") | .procs) == 3
+        | (.mcp | map(.name) | sort) == ["chrome-devtools", "example-agent"]
+        and (.mcp[] | select(.name == "chrome-devtools") | .procs) == 3
         and (.tools | length) == 6
         and (.tools[] | select(.pid == 1010) | .token == "1010@Wed_Oct_14_08:58:00_2026" and .origin == "feat-a" and .flags == ["dup","hot"] and .dup_count == 3)
         and (.tools[] | select(.pid == 1010) | (.start_epoch | type) == "number" and .start_epoch > 1700000000)

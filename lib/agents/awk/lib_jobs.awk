@@ -7,9 +7,10 @@
 #
 # One "job" record per unit and job, a unit being the root of an agent tree
 # or of a stale one, or a child of that root (a tool command, an MCP server…):
-#   job ROOT JOB 0 CPU 0 RSS PROCS ROOT_START own|sub UNIT KIND - -
+#   job ROOT JOB 0 CPU 0 RSS PROCS ROOT_START own|sub UNIT KIND - NAME
 # own: JOB is the unit process's own job (what `agents json` gives a tool or
-# an MCP server). KIND is the root's agent kind, "-" for a stale tree.
+# an MCP server). KIND is the root's agent kind, "-" for a stale tree. NAME:
+# an MCP server's name (mcp_name) on its own mcp row, else "-".
 # agents_enrich adds the root's cwd (13) and project (15). With
 # AGENTS_JOBS_PROC set (agents sample, the menu's run feed), also one line per
 # process:
@@ -28,7 +29,7 @@ function jobmatch(a,   c, t) {
     if (t) { c = tool_cmd(a); if (waits(c)) return "wait" } else c = a
     if (jre_test != "" && c ~ jre_test) return "test"
     if (jre_build != "" && c ~ jre_build) return "build"
-    if (!t && jre_mcp != "" && c ~ jre_mcp) return "mcp"
+    if (!t && ((jre_mcp != "" && c ~ jre_mcp) || mcp_known(c, "") != "")) return "mcp"
     if (jre_server != "" && c ~ jre_server) return "server"
     return ""
 }
@@ -67,6 +68,6 @@ function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc) {
     }
     for (i = 1; i <= nk; i++) {
         u = jku[i]; j = jkj[i]; key = u SUBSEP j; r = jroot[u]
-        printf "job\t%d\t%s\t0\t%.1f\t0\t%d\t%d\t%s\t%s\t%d\t%s\t-\t-\n", r, j, jc[key], jm[key], jn[key], st[r], (j == jobof(u) ? "own" : "sub"), u, (kind[r] == "" ? "-" : kind[r])
+        printf "job\t%d\t%s\t0\t%.1f\t0\t%d\t%d\t%s\t%s\t%d\t%s\t-\t%s\n", r, j, jc[key], jm[key], jn[key], st[r], (j == jobof(u) ? "own" : "sub"), u, (kind[r] == "" ? "-" : kind[r]), (j == "mcp" && j == jobof(u) ? mcp_name(av[u], kind[r]) : "-")
     }
 }

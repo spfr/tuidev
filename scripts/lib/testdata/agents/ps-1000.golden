@@ -1,7 +1,7 @@
 AGENTS (1)
   PID     KIND    STATUS       AGE   CPU%    MEM KIDS  PORTS       PROJECT                CWD
   1000    claude  -          1h00m  107.0   1.4G   16  -           repo                   /Users/NAME/repo
-      mcp: 2 servers · 4 procs · 302M (chrome-devtools-mcp, example-agent-mcp)
+      mcp: 2 servers · 4 procs · 302M (chrome-devtools, example-agent)
       1010    go test -race ./internal/web · 2m00s · 100% · feat-a  x3 dup  hot
       1040    claude -p hello · 3m00s · 2% · -
       1030    until [ -s /nonexistent/x ]; do sleep 5; done · 52m00s · 0% · main  wait

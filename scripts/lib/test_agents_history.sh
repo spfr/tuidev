@@ -154,7 +154,7 @@ json="$(printf '%s\n' "$enr" | agents_json)"
 if command -v jq >/dev/null 2>&1; then
     printf '%s' "$json" | jq -e '.agents[0].job == "agent"' >/dev/null || fail "json: agent job"
     printf '%s' "$json" | jq -e '[.agents[0].activity.tools[] | select(.pid == 101) | .job] == ["test"]' >/dev/null || fail "json: tool job"
-    printf '%s' "$json" | jq -e '[.agents[0].activity.mcp[] | select(.name == "chrome-devtools-mcp") | .job] == ["mcp"]' >/dev/null || fail "json: mcp job"
+    printf '%s' "$json" | jq -e '[.agents[0].activity.mcp[] | select(.name == "chrome-devtools") | .job] == ["mcp"]' >/dev/null || fail "json: mcp job"
     printf '%s' "$json" | jq -e '.agents[0].activity.child_sessions[0].job == "agent"' >/dev/null || fail "json: nested session job"
     printf '%s' "$json" | jq -e '.stale[0].job == "mcp"' >/dev/null || fail "json: stale job"
     printf '%s' "$json" | jq -e '.jobs[0].job == "test" and (.jobs[0].sessions[0].project == "repo") and (.jobs | map(.job) | index("browser") != null)' >/dev/null \
@@ -417,7 +417,7 @@ first="$(printf '%s\n' "$section" | sed -n 2p)"
 [[ "$section" == *$'\n'"--app · claude · 99% · 178M | bash=\"$tmp/agents-stub\" terminal=false param1=reveal param2=300@Wed_Oct_14_08:00:00_2026 symbolize=false"* ]] \
     || fail "session under a job:"$'\n'"$section"
 [[ "$section" == *$'\n'"builds · 50% · 380M | sfimage=hammer "* ]] || fail "builds line:"$'\n'"$section"
-[[ "$section" == *$'\n'"--app · stale · 0% · 48M | bash="*"param1=reveal param2=500@Wed_Oct_14_08:10:00_2026 symbolize=false"* ]] || fail "stale tree under MCP servers:"$'\n'"$section"
+[[ "$section" == *$'\n'"--some · app · stale · 0% · 48M | bash="*"param1=reveal param2=500@Wed_Oct_14_08:10:00_2026 symbolize=false"* ]] || fail "stale tree under MCP servers:"$'\n'"$section"
 [[ "$section" == *$'\n'"Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis refresh=true symbolize=false"* ]] || fail "today line:"$'\n'"$section"
 [[ "$section" == *$'\n'"Open report | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report sfimage="* ]] || fail "Open report:"$'\n'"$section"
 for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$tmp/sampled" ]] && break; sleep 0.2; done
