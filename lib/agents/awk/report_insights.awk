@@ -69,9 +69,13 @@ function insights(   i, k, a, p, j, n, wd, wn, c, q, bj, bd, x, dash, x2) {
                 nouns(n, Aclnw[a] == n ? "polling loop" : "run") " running " wword() " (" hrs(Aclndur[a]) \
                 (Aclncpu[a] >= 30 ? ", " cpuw(Aclncpu[a]) : "") ")" dash "have them stop what they start, or set AGENTS_AUTO_REAP=1")
         wd = Awdur[a] - Aclnwdur[a]; wn = Aw[a] - Aclnw[a]
-        if (wd >= 3600)
-            ins_add("wait", "waste", wd / 10, "-", a, "-", "wait", who(cut(a, 32)) " spent " hrs(wd) " in " wn " " nouns(wn, "polling loop") " " \
-                wword() dash "wait on a background task's notification instead of a sleep loop")
+        if (wd >= 3600) {
+            p = wait_where(a)
+            ins_add("wait", "waste", wd / 10, (a == "-" ? p : "-"), a, "-", "wait", who(cut(a, 32)) " spent " hrs(wd) " in " wn " " nouns(wn, "polling loop") " " \
+                wword() (p == "-" ? "" : " (" (AwPn[a, p] < Aw[a] ? AwPn[a, p] " " : "") "in " cut(proj(p), 32) ")") dash \
+                (a == "-" ? "they ran in the foreground, where no record names the agent (agents runs lists them); " : "") \
+                "wait on a background task's notification instead of a sleep loop")
+        }
     }
     for (i = 1; i <= TPC; i++) {
         p = TPO[i]; c = TPcpu[1, p]; q = TPcpu[2, p]
@@ -87,6 +91,14 @@ function insights(   i, k, a, p, j, n, wd, wn, c, q, bj, bd, x, dash, x2) {
     token_insights(dash, x2)
     for (i = 1; i <= IC; i++) if (II[i] >= INSIGHT_MIN) { IO[++IN] = i; IR[i] = II[i] + (IC - i) / (IC + 1) / 1000 }
     sortk(IR, IO, IN)
+}
+
+# wait_where AGENT — the project where AGENT's polling loops waited longest
+# ("-" when they all ran in one place no project names).
+function wait_where(a,   i, p, b) {
+    b = "-"
+    for (i = 1; i <= AwPC[a]; i++) { p = AwPO[a, i]; if (b == "-" || AwPd[a, p] > AwPd[a, b]) b = p }
+    return b
 }
 
 # token_insights DASH TIMES — the cache, poll, compact and denied findings.

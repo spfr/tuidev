@@ -17,9 +17,15 @@ function proj(s) { return s == "-" ? "(none)" : s }
 # Claude Code made for a subagent (REPO/agent-ID, as projname names it)
 # folds into REPO; a worktree you named (REPO/NAME) stays its own.
 function pfold(s) { if (s ~ /^[^\/]+\/agent-[A-Za-z0-9_-]+$/) sub(/\/.*$/, "", s); return s }
+# agentn: an agent type in a table of tokens or denials ("-": a
+# transcript whose subagent type is not known).
 function agentn(s) { return s == "-" ? "(unknown)" : s }
+# agentr: the agent that ran a command, in a table of runs; "-", one no
+# record ties to an agent (a foreground command: only a background task's
+# output and a subagent's worktree name theirs), is "(no agent)".
+function agentr(s) { return s == "-" ? "(no agent)" : s }
 # who: an agent type as the subject of a sentence.
-function who(s) { return s == "-" ? "Sessions of unknown type" : s == "main" ? "Main sessions" : s " subagents" }
+function who(s) { return s == "-" ? "Commands with no known agent" : s == "main" ? "Main sessions" : s " subagents" }
 # cpuw: CPU seconds in words, in the unit that reads best.
 function cpuw(s) {
     if (s >= 3600) return sprintf("%.1f CPU-h", s / 3600)

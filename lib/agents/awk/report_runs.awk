@@ -66,7 +66,11 @@ function runs_load(rf, start, pstart, pend,   ln, f, e, w, j, p, a, c, d, cpu, k
         if (known) Aknown[a]++
         if (failed) Afail[a]++
         if (dup) { Adup[a]++; Adupcpu[a] += cpu }
-        if (j == "wait") { Aw[a]++; Awdur[a] += d; Awcpu[a] += cpu }
+        if (j == "wait") {
+            Aw[a]++; Awdur[a] += d; Awcpu[a] += cpu
+            if (!((a, p) in AwPn)) AwPO[a, ++AwPC[a]] = p
+            AwPn[a, p]++; AwPd[a, p] += d
+        }
         if (cln) {
             Acln[a]++; Aclncpu[a] += cpu; Aclndur[a] += d
             if (j == "wait") { Aclnw[a]++; Aclnwdur[a] += d }

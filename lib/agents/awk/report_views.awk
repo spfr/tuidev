@@ -101,7 +101,7 @@ function view_waste(   i, k, a, j, nd, dc, nr, rcpu, nc, ccpu, cdur, nw, wdur, w
     subtable(DK, nd, Gdup, Gdupcpu)
     printf "%sLEFT RUNNING%s  %s\n", b, e, (nc ? nruns(sumn(Acln, ak, nc)) ", until a cleanup stopped them \302\267 " hrs(cdur) " \302\267 " ch(ccpu) " CPU-h" : "none")
     if (nc) {
-        s = ""; for (i = 1; i <= nc && i <= 5; i++) { a = ak[i]; s = s (i > 1 ? " \302\267 " : "") agentn(a) " " Acln[a] " (" hrs(Aclndur[a]) ")" }
+        s = ""; for (i = 1; i <= nc && i <= 5; i++) { a = ak[i]; s = s (i > 1 ? " \302\267 " : "") agentr(a) " " Acln[a] " (" hrs(Aclndur[a]) ")" }
         print "  by agent    " s
         s = ""; for (i = 1; i <= CJC && i <= 5; i++) { j = jk[i]; s = s (i > 1 ? " \302\267 " : "") j " " CJn[j] " (" hrs(CJdur[j]) ")" }
         print "  by job      " s
@@ -109,7 +109,7 @@ function view_waste(   i, k, a, j, nd, dc, nr, rcpu, nc, ccpu, cdur, nw, wdur, w
     print ""
     printf "%sPOLLING LOOPS%s  %s\n", b, e, (nw ? nw " \302\267 " hrs(wdur) " waiting" : "none")
     if (wa) {
-        s = ""; for (i = 1; i <= wa && i <= 5; i++) { a = wk[i]; s = s (i > 1 ? " \302\267 " : "") agentn(a) " " Aw[a] " (" hrs(Awdur[a]) ")" }
+        s = ""; for (i = 1; i <= wa && i <= 5; i++) { a = wk[i]; s = s (i > 1 ? " \302\267 " : "") agentr(a) " " Aw[a] " (" hrs(Awdur[a]) ")" }
         print "  by agent    " s
     }
     print ""
@@ -212,12 +212,14 @@ function view_agents(   i, a, o, ak, av, lk, lv, dk, dv, nl, nd, s) {
     th("  " lc("AGENT", 20) " " rc("RUNS", 5) " " rc("CPU-h", 7) " " rc("%", 5) " " rc("FAILED", 7) " " rc("DUPS", 5) " " rc("DUP CPU-h", 9) " " rc("LEFT", 5) " " rc("LEFT h", 7) " " rc("WAIT h", 7))
     for (i = 1; i <= AC; i++) {
         a = ak[i]
-        print "  " lc(cut(agentn(a), 20), 20) " " rc(An[a], 5) " " rc(ch(Acpu[a]), 7) " " rc(pct(Acpu[a], RCPU), 5) " " rc(pctn(Afail[a], Aknown[a]), 7) \
+        print "  " lc(cut(agentr(a), 20), 20) " " rc(An[a], 5) " " rc(ch(Acpu[a]), 7) " " rc(pct(Acpu[a], RCPU), 5) " " rc(pctn(Afail[a], Aknown[a]), 7) \
             " " rc(Adup[a] + 0, 5) " " rc(ch(Adupcpu[a]), 9) " " rc(Acln[a] + 0, 5) " " rc(sprintf("%.1f", Aclndur[a] / 3600), 7) " " rc(sprintf("%.1f", Awdur[a] / 3600), 7)
     }
     print ""
-    s = ""; for (i = 1; i <= nl && i <= 5; i++) { a = lk[i]; s = s (i > 1 ? " \302\267 " : "") agentn(a) " " Acln[a] " (" hrs(Aclndur[a]) ")" }
+    s = ""; for (i = 1; i <= nl && i <= 5; i++) { a = lk[i]; s = s (i > 1 ? " \302\267 " : "") agentr(a) " " Acln[a] " (" hrs(Aclndur[a]) ")" }
     printf "%sLEAKS MOST%s       %s\n", b, e, (s != "" ? s : "none")
-    s = ""; for (i = 1; i <= nd && i <= 5; i++) { a = dk[i]; s = s (i > 1 ? " \302\267 " : "") agentn(a) " " Adup[a] " (" ch(Adupcpu[a]) " CPU-h)" }
+    s = ""; for (i = 1; i <= nd && i <= 5; i++) { a = dk[i]; s = s (i > 1 ? " \302\267 " : "") agentr(a) " " Adup[a] " (" ch(Adupcpu[a]) " CPU-h)" }
     printf "%sDUPLICATES MOST%s  %s\n", b, e, (s != "" ? s : "none")
+    if ("-" in An)
+        printf "%s(no agent): commands run in the foreground; only a background task's output or a subagent's worktree names the agent that ran one%s\n", dim, (dim != "" ? e : "")
 }

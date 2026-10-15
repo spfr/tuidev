@@ -130,8 +130,9 @@ pass "trends: CPU-h, runs and median against the window before, with ↑/↓ and
 out="$(rep --view agents)"
 row "$out" " main 12 1.11 54% 9% 3 0.33 0 0.0 2.0" || fail "agents: main:"$'\n'"$out"
 row "$out" " Explore 8 0.28 14% 60% 0 0.00 3 2.1 2.1" || fail "agents: Explore:"$'\n'"$out"
-row "$out" " (unknown) 1 0.00 0% 0% 0 0.00 0 0.0 0.0" || fail "agents: no agent type:"$'\n'"$out"
-[[ "$out" == *"LEAKS MOST       Explore 3 (2.1 h)"$'\n'"DUPLICATES MOST  main 3 (0.33 CPU-h)" ]] || fail "agents: leaks and duplicates most:"$'\n'"$out"
+row "$out" " (no agent) 1 0.00 0% 0% 0 0.00 0 0.0 0.0" || fail "agents: no agent type:"$'\n'"$out"
+[[ "$out" == *"LEAKS MOST       Explore 3 (2.1 h)"$'\n'"DUPLICATES MOST  main 3 (0.33 CPU-h)"$'\n'"(no agent): commands run in the foreground; "* ]] \
+    || fail "agents: leaks and duplicates most, then what (no agent) means:"$'\n'"$out"
 json="$(rep --view agents --json)"
 jqt "$json" '[.agents[].agent] == ["main","implementor-complex","Explore",null] and .agents[2].cleaned_s == 7560 and .agents[0].dup_cpu_s == 1200' "agents json" '.agents'
 pass "agents: runs, CPU, failures, duplicates, leaks and polling per agent type"
@@ -155,7 +156,7 @@ jqt "$json" '.runs == {count: 26, failed: 4, dup: 3, cleaned: 3}' "summary json:
 awk -F '\t' '!($4 == "api" || ($7 == "go" && $4 == "app") || ($7 == "wait-loop" && $4 == "shop"))' "$d/runs.tsv" > "$tmp/r"
 mkdir -p "$tmp/d2"; cp "$tmp/r" "$tmp/d2/runs.tsv"
 out="$(AGENTS_DATA_DIR="$tmp/d2" agents_report)"
-[[ "$out" == *"  1. Main sessions spent 2.0 h in 2 polling loops in 24h — wait on a background task's notification instead of a sleep loop"$'\n'"  2. shop: \`pytest\` test failed and was re-run at once ×2 in 24h (7 CPU-min) — find the flaky failure, or re-run only what failed"$'\n'"  more:"* ]] \
+[[ "$out" == *"  1. Main sessions spent 2.0 h in 2 polling loops in 24h (in app) — wait on a background task's notification instead of a sleep loop"$'\n'"  2. shop: \`pytest\` test failed and was re-run at once ×2 in 24h (7 CPU-min) — find the flaky failure, or re-run only what failed"$'\n'"  more:"* ]] \
     || fail "insights: polling and re-runs:"$'\n'"$out"
 awk -F '\t' -v OFS='\t' '$7 == "wait-loop" { next } $7 == "pytest" { $9 = 20 } { print }' "$tmp/r" > "$tmp/d2/runs.tsv"
 out="$(AGENTS_DATA_DIR="$tmp/d2" agents_report)"
@@ -232,14 +233,14 @@ chmod +x "$tmp/agents-stub"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
 section="$(printf '%s\n' "$menu" | awk '/^Where the CPU goes/ { on = 1 } on && /^---$/ { exit } on')"
 want="Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis refresh=true symbolize=false
-a¦b: go test ×3 | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=trends tooltip=\"a¦b: go test ×3 — do 'this'\" sfimage=lightbulb symbolize=false
+a¦b: go test ×3 | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=trends param6=--since param7=today tooltip=\"a¦b: go test ×3 — do 'this'\" sfimage=lightbulb symbolize=false
 Open report | "
 [[ "$section" == *"$want"* ]] || fail "menu insight line:"$'\n'"$section"
 long="api: 40 CPU-min today, ↑200% on yesterday by this hour (build +27 CPU-min) — see what changed: agents report --view trends"
 printf 'hist\tok\t3600\ttest\t1800\ninsight\ttrends\t%s\n' "$long" > "$tmp/tsv"
 line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'sfimage=lightbulb')"
 # (67 characters or bytes, by the locale, then back to a word.)
-[[ "$line" == "api: 40 CPU-min today, ↑200% on yesterday by this hour "*"... | "*" param5=trends tooltip=\"$long\" "* \
+[[ "$line" == "api: 40 CPU-min today, ↑200% on yesterday by this hour "*"... | "*" param5=trends param6=--since param7=today tooltip=\"$long\" "* \
    && "${line%% | *}" != *" ..." && "${line%% | *}" != *"CPU-min)"* ]] \
     || fail "a long insight: label cut at a word, the sentence in the tooltip:"$'\n'"$line"
 for bad in '--x' 'trends extra' ''; do
