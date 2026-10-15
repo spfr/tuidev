@@ -6,8 +6,8 @@
 # tokens.add.limits only when Codex logged a newer rate limit than
 # limits.tsv holds. Prints tokens.today's line: today's sums (the old ones
 # when tokens.today is today's, else those in tokens.tsv from mid, local
-# midnight, on; plus this scan's). tyf: _agents_tx_agent_types lines. Rows
-# older than cut are not written.
+# midnight, on; plus this scan's). tyf: _agents_tx_agent_types lines; frf:
+# _agents_tokens_forks lines. Rows older than cut are not written.
 # JSON is read by its keys' spelling, never parsed whole: Claude Code's
 # top-level keys follow the message, so a line's own type, timestamp and cwd
 # are the first after '"type":"assistant","uuid"' (or the line's type);
@@ -280,13 +280,17 @@ function tooluses(s, lim,   pat, p, b, e, id, nm, cmd, url, nx) {
 
 # --- Rows -------------------------------------------------------------------
 
-function keep(ts) { return ts >= cut && !(floor > 0 && ts <= floor) }
+# keep(ts, id): a row that counts: not older than cut and, in a transcript
+# read again from 0, newer than the last row counted (floor), or as new for
+# a message other than the last one counted (flid; id "" for a compaction or
+# a denial, which then needs a newer time).
+function keep(ts, id) { return ts >= cut && !(floor > 0 && (ts < floor || (ts == floor && (id == "" || id == flid)))) }
 function today(ts, i, w, r, o) {
     if (ts >= mid && ts < mid + 86400) { si += i; sw += w; sr += r; so += o }
 }
-function trow(ts, proj, model, i, w, r, o, poll) {
+function trow(ts, id, proj, model, i, w, r, o, poll) {
     if (ts > lastep) lastep = ts
-    if (!keep(ts)) return
+    if (!keep(ts, id)) return
     printf "%d\t%s\t%s\t%s\t%s\t%s\t%.0f\t%.0f\t%.0f\t%.0f\t%d\n", ts, cli, proj, sess, agent, model, i, w, r, o, poll > tf
     today(ts, i, w, r, o)
 }
@@ -295,7 +299,7 @@ function flush() {
     if (!gpend) return
     gpend = 0
     if (!gskip && gmodel != "" && gmodel != "<synthetic>")
-        trow(gts, gproj, clean(gmodel, 64, "[^A-Za-z0-9._:/@+-]"), gi, gw, gr, go, gtools > 0 && gpolls == gtools)
+        trow(gts, gid, gproj, clean(gmodel, 64, "[^A-Za-z0-9._:/@+-]"), gi, gw, gr, go, gtools > 0 && gpolls == gtools)
     lastid = gid; lasttids = gtids
 }
 function assistant(s, o,   a, mp, id, up, ts, cwd) {
@@ -307,8 +311,15 @@ function assistant(s, o,   a, mp, id, up, ts, cwd) {
     if (id != gid || !gpend) {
         flush()
         gid = id; gpend = 1; gstart = o; gtools = 0; gpolls = 0; gtids = ""
-        gskip = (id == lastid) || (fsub && index(s, "{\"parentUuid\":null,") == 1)
         gmodel = str(s, "model", 1, 128); gts = iso(str(s, "timestamp", a, 64))
+        # Not counted: the message counted last; a fork's copy of its
+        # parent's last message (its first line), or of its parent
+        # subagent's history (fork: until its first message of its own); a
+        # message older by a minute than the newest line already read here
+        # (a rewound or resumed session writes earlier messages again).
+        if (fork != "-" && !((fpp SUBSEP id) in pids)) fork = "-"
+        gskip = (id == lastid) || (fsub && index(s, "{\"parentUuid\":null,") == 1) || fork != "-" \
+            || (gts > 0 && gts < lastep - 60)
         cwd = unesc(str(s, "cwd", a, 4096)); if (cwd != "") proj = projname(cwd)
         gproj = proj; gi = gw = gr = go = 0
     }
@@ -326,7 +337,7 @@ function compact(s,   a, ts, cwd, m, trig) {
     m = at(s, "compactMetadata", 1)
     trig = clean(str(s, "trigger", m, 32), 16, "[^a-z]")
     if (ts > lastep) lastep = ts
-    if (!m || !keep(ts)) return
+    if (!m || fork != "-" || !keep(ts, "")) return
     printf "%d\t%s\t%s\t%s\t%s\t%s\t%.0f\t%.0f\n", ts, cli, proj, sess, agent, dash(trig), num(s, "preTokens", m), num(s, "postTokens", m) > cf
 }
 # denials(s): the tool results in a user line that say a call was denied.
@@ -334,7 +345,7 @@ function denials(s,   a, ts, cwd, k, pat, b, p) {
     a = index(s, "\"type\":\"user\""); ts = iso(str(s, "timestamp", a, 64))
     cwd = unesc(str(s, "cwd", a, 4096)); if (cwd != "") proj = projname(cwd)
     if (ts > lastep) lastep = ts
-    if (!keep(ts)) return
+    if (fork != "-" || !keep(ts, "")) return
     for (k = 1; k <= 6; k++) {
         pat = (k <= 3 ? "\"content\":\"" : "\"text\":\"") dpre[(k - 1) % 3 + 1]; b = 1
         while ((p = index(substr(s, b), pat)) > 0) {
@@ -387,23 +398,26 @@ function codex(s,   ts, p, cwd, t, i, c, o) {
     if (!(p = at(s, "last_token_usage", 1))) return
     i = num(s, "input_tokens", p); c = num(s, "cached_input_tokens", p); o = num(s, "output_tokens", p)
     if (c > i) c = i
-    trow(ts, proj, model, i - c, 0, c, o, 0)
+    trow(ts, t, proj, model, i - c, 0, c, o, 0)
 }
 
 # --- One transcript at a time -------------------------------------------------
 
 # begin(): a header: "F|K END work cli path inode size mtime offset last_epoch
-# last_id session project agent model pending".
+# last_id session project agent model pending fork". fork: while a fork of a
+# subagent is still in the history it copied, that subagent's id, else "-".
 function begin(   h, n, i, a, b, pa, pb) {
     split($0, h, "\t")
     mode = h[1]; fend = h[2] + 0; cli = h[4]; path = h[5]; ino = h[6]; fsize = h[7] + 0; mtime = h[8] + 0
     foff = h[9] + 0; lastep = h[10] + 0; lastid = h[11]; sess = h[12]; proj = h[13]; agent = h[14]; model = h[15]
-    pending = h[16]
-    floor = foff == 0 ? lastep : 0
+    pending = h[16]; fork = h[17] == "" ? "-" : h[17]
+    floor = foff == 0 ? lastep : 0; flid = lastid
     flen = fend - foff
     fsub = (cli == "claude" && path ~ /\/subagents\/agent-[^\/]*\.jsonl$/)
     if (cli != "claude" || !fsub) agent = "main"
     else if (agent == "-" && (path in ty)) agent = ty[path]
+    if (fsub && fork == "-" && foff == 0 && (path in fpar)) fork = fpar[path]
+    a = path; sub(/\/[^\/]*$/, "", a); fpp = a "/agent-" fork ".jsonl"
     if (cli == "codex" && sess == "-") {
         a = path; sub(/\.jsonl$/, "", a); b = substr(a, length(a) - 35)
         if (length(b) == 36 && b ~ /^[0-9a-f-]+$/) sess = b
@@ -430,7 +444,7 @@ function finish(   off, n, i, ids, pend, line) {
     for (i = 1; i <= n && i <= 32; i++) if (ids[i] in tun) pend = pend (pend == "" ? "" : ";") ids[i] "=" tun[ids[i]] "=" tus[ids[i]]
     # Joined, not sprintf'd: mawk's sprintf stops at 8 KiB.
     line = path "\t" cli "\t" ino "\t" sprintf("%.0f", off) "\t" sprintf("%.0f", lastep) "\t" dash(lastid) "\t" dash(sess) \
-        "\t" dash(proj) "\t" dash(agent) "\t" dash(model) "\t" dash(pend)
+        "\t" dash(proj) "\t" dash(agent) "\t" dash(model) "\t" dash(pend) "\t" dash(fork)
     if (!(path in olds) || olds[path] != line) dirty = 1
     news[++nnew] = line
     mode = ""
@@ -449,6 +463,8 @@ BEGIN {
     dby[1] = "classifier"; dby[2] = "safety"; dby[3] = "user"
     while ((getline line < tyf) > 0) if (split(line, f, "\t") == 2) ty[f[1]] = f[2]
     close(tyf)
+    while ((getline line < frf) > 0) if (split(line, f, "\t") == 3) { if (f[1] == "F") fpar[f[2]] = f[3]; else if (f[1] == "I") pids[f[2], f[3]] = 1 }
+    close(frf)
     # Today's sums so far: tokens.today when it is today's; else, when there
     # is none, what tokens.tsv holds of today (once); else nothing yet.
     yf = d "/tokens.today"; si = sw = sr = so = 0

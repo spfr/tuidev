@@ -4,8 +4,9 @@
 # Claude Code's layout: a session's transcript is
 #   $CLAUDE_CONFIG_DIR/projects/<slug>/<session>.jsonl   (~/.claude by default)
 # its subagents' are <slug>/<session>/subagents/agent-<id>.jsonl, each with an
-# agent-<id>.meta.json (its agentType, or customAgentType for a named one),
-# and a tool command's output goes to <tmp>/claude-<uid>/<slug>/<session>/
+# agent-<id>.meta.json (its agentType, or customAgentType for a named one;
+# parentAgentId for one a subagent spawned, which, as a fork, starts with a
+# copy of that subagent's history), and a tool command's output goes to <tmp>/claude-<uid>/<slug>/<session>/
 # tasks/<task id>.output. A background command's task id is named, under the
 # key "backgroundTaskId", in the transcript of the agent that started it (and
 # in the copy a fork inherits).
@@ -21,8 +22,8 @@
 # Uses: nothing.
 # Public: _AGENTS_TX_TASK_KEY, _agents_tx_path, _agents_tx_started,
 #   _agents_tx_ids, _agents_tx_meta, _agents_tx_type_ok, _agents_tx_agent_type,
-#   _agents_tx_agent_types, _agents_tx_main_of, _agents_tx_task_owners,
-#   _agents_tx_find, _agents_tx_session_of.
+#   _agents_tx_agent_types, _agents_tx_fork_parents, _agents_tx_main_of,
+#   _agents_tx_task_owners, _agents_tx_find, _agents_tx_session_of.
 
 # The key on every transcript line that names a background task.
 _AGENTS_TX_TASK_KEY='"backgroundTaskId"'
@@ -103,6 +104,23 @@ _agents_tx_agent_types() {
                 if (bad) continue
                 f = m; sub(/\.meta\.json$/, ".jsonl", f); print f "\t" v
             }
+        }'
+}
+
+# _agents_tx_fork_parents TRANSCRIPT... — "transcript<TAB>parent id" for each
+# subagent transcript whose meta.json names the subagent that spawned it
+# (parentAgentId, whose transcript is agent-<parent id>.jsonl beside it): one
+# grep for all of them. A transcript without one gets no line.
+_agents_tx_fork_parents() {
+    local f metas=()
+    [[ $# -gt 0 ]] || return 0
+    for f in "$@"; do metas+=("${f%.jsonl}.meta.json"); done
+    LC_ALL=C grep -HoE '"parentAgentId": ?"[A-Za-z0-9_-]{1,64}"' "${metas[@]}" 2>/dev/null | LC_ALL=C awk '
+        match($0, /:"parentAgentId": ?"[A-Za-z0-9_-]+"$/) {
+            m = substr($0, 1, RSTART - 1); v = substr($0, RSTART + 1)
+            sub(/^"parentAgentId": ?"/, "", v); sub(/"$/, "", v)
+            if (m in seen) next
+            seen[m] = 1; sub(/\.meta\.json$/, ".jsonl", m); print m "\t" v
         }'
 }
 

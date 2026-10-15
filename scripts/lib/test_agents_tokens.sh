@@ -261,6 +261,87 @@ AGENTS_UID=501 AGENTS_SELF=9999
 )
 pass "agents sample scans tokens, and a failing scan never stops it"
 
+# 10. A transcript not listed in one sample (a CLAUDE_CONFIG_DIR or
+# CODEX_HOME not set for it, a file gone for a while) keeps its state: listed
+# again, it goes on from its offset, never counting a row twice. A state line
+# whose last row is older than the window is dropped.
+(
+    src="$tmp/f1src"; mkdir -p "$src"; cp -R "$tmp/orig/claude" "$tmp/orig/codex" "$src/"
+    CLAUDE_CONFIG_DIR="$src/claude" CODEX_HOME="$src/codex" AGENTS_DATA_DIR="$tmp/f1"; D="$tmp/f1"
+    scan; n=$(rows)
+    [[ $n -eq 9 ]] || fail "F1: the first scan: $n rows"
+    st="$(cat "$D/tokens.state")"
+    ( CLAUDE_CONFIG_DIR="$tmp/f1empty" CODEX_HOME="$tmp/f1empty"; mkdir -p "$tmp/f1empty"; scan )
+    [[ "$(cat "$D/tokens.state")" == "$st" ]] || fail "F1: a sample that listed nothing changed the state:"$'\n'"$(cat "$D/tokens.state")"
+    scan; [[ $(rows) -eq $n ]] || fail "F1: a transcript listed again was counted again: $(rows) rows, want $n"
+    m="$src/claude/projects/-work-app/$S.jsonl"
+    ( CLAUDE_CONFIG_DIR="$tmp/f1empty"; scan )
+    { asst msg_N claude-test-1 80 6 6 6 6 "$text"; plain 81; } >> "$m"; old "$m" 10
+    scan; [[ $(rows) -eq $((n + 1)) ]] || fail "F1: after an unlisted sample, $(rows) rows, want $((n + 1))"
+    grep -q "^$((B + 80))	.*	6	6	6	6	0\$" "$D/tokens.tsv" || fail "F1: the new message: $(tail -1 "$D/tokens.tsv")"
+    # Carried while its last row is in the window, then dropped.
+    printf '%s\tclaude\t1\t10\t%s\tmsg_x\t-\t-\tmain\t-\t-\t-\n' /gone/recent.jsonl $((NOW - 86400)) /gone/old.jsonl $((NOW - 31 * 86400)) >> "$D/tokens.state"
+    scan
+    grep -q '^/gone/recent.jsonl	' "$D/tokens.state" || fail "F1: a recent unlisted transcript's state was dropped"
+    ! grep -q '^/gone/old.jsonl	' "$D/tokens.state" || fail "F1: an unlisted transcript's state older than the window was kept"
+)
+pass "a transcript missing from one sample keeps its state and goes on from its offset; one older than the window is forgotten"
+
+# 11. A fork a subagent spawned starts with a copy of that subagent's
+# history (the same message ids and times, its own agentId): only its own
+# messages count, and the copied denials not again. A session rewound or
+# resumed writes earlier messages again: they do not count twice.
+(
+    fx="$tmp/fork"; S="99999999-2222-3333-4444-555555555555"
+    CLAUDE_CONFIG_DIR="$fx/claude" CODEX_HOME="$fx/codex" AGENTS_DATA_DIR="$tmp/forkd"; D="$tmp/forkd"
+    fp="$fx/claude/projects/-work-app"; fs="$fp/$S/subagents"; mkdir -p "$fs"
+    parent() {
+        plain 100
+        asst msg_P1 claude-test-1 101 1 10 100 5 "$(bash_tu toolu_P1 'git push')"
+        user 102 '{"tool_use_id":"toolu_P1","type":"tool_result","content":"'"$USR"'","is_error":true}'
+        asst msg_P2 claude-test-1 103 2 20 200 6 "$(tool_tu toolu_T Task '{"subagent_type":"fork"}')"
+    }
+    { parent; asst msg_P3 claude-test-1 110 3 30 300 7 "$text"; plain 111; } > "$fs/agent-par.jsonl"
+    printf '{"agentType":"implementor-complex","spawnDepth":1}' > "$fs/agent-par.meta.json"
+    { parent | sed 's/"isSidechain":false/"isSidechain":true,"agentId":"frk"/'
+      asst msg_K1 claude-test-1 105 4 40 400 8 "$text"
+      asst msg_K2 claude-test-1 106 5 50 500 9 "$text"; plain 107; } > "$fs/agent-frk.jsonl"
+    printf '{"agentType":"fork","isFork":true,"description":"d","parentAgentId":"par","spawnDepth":2}' > "$fs/agent-frk.meta.json"
+    # The main session: msg_M1, msg_M2, then msg_M1 again as it was (a
+    # rewind), then msg_M3.
+    { asst msg_M1 claude-test-2 0 1 1 1 1 "$text"; asst msg_M2 claude-test-2 200 2 2 2 2 "$text"
+      asst msg_M1 claude-test-2 0 1 1 1 1 "$text"; asst msg_M3 claude-test-2 210 3 3 3 3 "$text"; plain 211; } > "$fp/$S.jsonl"
+    for f in "$fp/$S.jsonl" "$fs"/agent-*.jsonl; do old "$f" 10; done
+    mkdir -p "$tmp/forkorig"; cp -R "$fx/claude" "$tmp/forkorig/"
+    scan
+    want="$(printf '%s\n' \
+        "$B	claude	app	$S	main	claude-test-2	1	1	1	1	0" \
+        "$((B + 101))	claude	app	$S	implementor-complex	claude-test-1	1	10	100	5	0" \
+        "$((B + 103))	claude	app	$S	implementor-complex	claude-test-1	2	20	200	6	0" \
+        "$((B + 105))	claude	app	$S	fork	claude-test-1	4	40	400	8	0" \
+        "$((B + 106))	claude	app	$S	fork	claude-test-1	5	50	500	9	0" \
+        "$((B + 110))	claude	app	$S	implementor-complex	claude-test-1	3	30	300	7	0" \
+        "$((B + 200))	claude	app	$S	main	claude-test-2	2	2	2	2	0" \
+        "$((B + 210))	claude	app	$S	main	claude-test-2	3	3	3	3	0")"
+    got="$(LC_ALL=C sort "$D/tokens.tsv")"
+    [[ "$got" == "$want" ]] || fail "F2: tokens.tsv:"$'\n'"$got"$'\n'"want:"$'\n'"$want"
+    [[ "$(wc -l < "$D/denials.tsv" | tr -d ' ')" == 1 ]] || fail "F2: the fork's copy of a denial counted: $(cat "$D/denials.tsv")"
+    awk -F '\t' '$1 ~ /agent-frk/ && $12 != "-" { exit 1 }' "$D/tokens.state" || fail "F2: the fork's copied history is not marked done: $(grep agent-frk "$D/tokens.state")"
+    # Once past its copy, the parent is not read for it again.
+    { asst msg_K3 claude-test-1 120 6 60 600 1 "$text"; plain 121; } >> "$fs/agent-frk.jsonl"; old "$fs/agent-frk.jsonl" 10
+    ( _agents_tokens_forks() { echo "F	$fs/agent-frk.jsonl	par"; echo "I	$fs/agent-par.jsonl	msg_K3"; }; scan )
+    grep -q "^$((B + 120))	.*	fork	claude-test-1	6	60	600	1	0\$" "$D/tokens.tsv" || fail "F2: the fork's next message: $(tail -2 "$D/tokens.tsv")"
+    # A budget that cuts the fork's copy in two: the same rows.
+    _AGENTS_TOKENS_BUDGET=700; CLAUDE_CONFIG_DIR="$tmp/forkorig/claude"; AGENTS_DATA_DIR="$tmp/forkcap"; D="$tmp/forkcap"; n=0
+    while [[ $n -lt 100 ]]; do
+        scan; n=$((n + 1))
+        [[ "$(_agents_tokens_list | _agents_awk tokens_plan -F '\t' -v OFS='\t' -v sf="$D/tokens.state" | LC_ALL=C awk -F '\t' '$1 == 1' | wc -l | tr -d ' ')" != 0 ]] || break
+    done
+    [[ $n -gt 3 ]] || fail "F2: a 700-byte budget read everything in $n scans"
+    [[ "$(LC_ALL=C sort "$D/tokens.tsv")" == "$want" ]] || fail "F2: in $n capped scans:"$'\n'"$(LC_ALL=C sort "$D/tokens.tsv")"
+)
+pass "a fork of a subagent counts only its own messages (its copied history, and the denials in it, not again); a rewound session's repeated messages count once"
+
 # 12. A denial's subject: the program that acts (the last; past cd, echo and
 # filters: cat, grep, sed, jq…, which count only when nothing else runs) and a
 # known subcommand, never an option's value or another argument.
@@ -313,5 +394,21 @@ for b in a b; do echo $b; done; exit 0%for
 $(which acme) --x | grep y%grep
 CASES
 pass "denial subjects: the acting program, a known subcommand only when nothing comes before it, never an option's value"
+
+# 16. A transcript read again from 0 (replaced): a message in the same second
+# as the last one counted, but another, counts; the last one does not again.
+(
+    AGENTS_DATA_DIR="$tmp/same"; D="$tmp/same"; CLAUDE_CONFIG_DIR="$tmp/samec"; CODEX_HOME="$tmp/samec"
+    sp="$tmp/samec/projects/-work-app"; mkdir -p "$sp"; f="$sp/$S.jsonl"
+    { asst msg_A claude-test-1 5 1 1 1 1 "$text"; plain 6; } > "$f"; old "$f" 10
+    scan; [[ "$(rows)" == 1 ]] || fail "F8: the first scan: $(rows) rows"
+    { asst msg_A claude-test-1 5 1 1 1 1 "$text"; asst msg_Q claude-test-1 5 2 2 2 2 "$text"; asst msg_R claude-test-1 9 3 3 3 3 "$text"; plain 10; } > "$f.new"
+    mv "$f.new" "$f"; old "$f" 10
+    scan
+    got="$(cut -f1,7-10 "$D/tokens.tsv" | LC_ALL=C sort)"
+    want="$(printf '%s\n' "$((B + 5))	1	1	1	1" "$((B + 5))	2	2	2	2" "$((B + 9))	3	3	3	3")"
+    [[ "$got" == "$want" ]] || fail "F8: after a restart:"$'\n'"$got"$'\n'"want:"$'\n'"$want"
+)
+pass "a transcript read again from 0 counts a message in the last one's second, not the last one again"
 
 echo "All agents tokens tests passed."

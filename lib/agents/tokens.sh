@@ -6,10 +6,16 @@
 # Codex writes ${CODEX_HOME:-~/.codex}/sessions/YYYY/MM/DD/rollout-*.jsonl)
 # and appends what they say about tokens to files `agents report` reads.
 # Claude Code writes one API message as several lines, one per content
-# block, each repeating its usage: a message counts once, by its id, and a
-# subagent's copy of its parent's last message (a fork's first line) not at
-# all. Model "<synthetic>" made no API call. Codex logs a token_count event
-# per turn, sometimes twice: a turn counts once, by its running total.
+# block, each repeating its usage: a message counts once, by its id. Copies
+# count not at all: a fork's copy of the main session's last message (its
+# first line); a fork a subagent spawned starts with a copy of that
+# subagent's whole history (same ids and times), passed over until its first
+# message of its own (_agents_tokens_forks; then tokens.state remembers it is
+# past it); and a rewound or resumed session writes earlier messages again,
+# with their old times: a message a minute older than the newest line read
+# from its transcript is one of those. Model "<synthetic>" made no API call.
+# Codex logs a token_count event per turn, sometimes twice: a turn counts
+# once, by its running total.
 #
 # Transcripts run to tens of megabytes and gigabytes in all, so a scan reads
 # only new bytes (tail -c), whole lines only, at most _AGENTS_TOKENS_BUDGET
@@ -48,18 +54,24 @@
 #                 latest primary rate limit (one line, replaced).
 #   tokens.today  day total in cache_write cache_read out: today's sums (local
 #                 day), rewritten after each scan, for the menu.
-#   tokens.state  one line per transcript changed within the window:
-#                   path cli inode offset last_epoch last_id session project agent model pending
+#   tokens.state  one line per transcript read, kept while its last_epoch is
+#                 within the window (listed or not: a sample that does not
+#                 see a transcript must not make the next count it again):
+#                   path cli inode offset last_epoch last_id session project agent model pending fork
 #                 offset: the bytes read (whole lines; the last message of an
 #                 active file is read again next time, until it is complete);
 #                 a new inode or a shorter file is read again from 0, and only
-#                 rows after last_epoch count. last_id: the last message id
-#                 (Codex: running total) counted; pending: the last message's
-#                 tool calls, "id=tool=subject;…", for a denial that follows.
+#                 rows after last_epoch count (or at it, another message
+#                 than last_id). last_id: the last message id (Codex: running
+#                 total) counted; pending: the last message's tool calls,
+#                 "id=tool=subject;…", for a denial that follows; fork: the
+#                 id of the subagent a fork copied, while it is still in
+#                 that copy, else "-".
 #
 # Uses: config.sh, util.sh (_agents_awk, _agents_window, _agents_replace),
 #   transcript.sh (_agents_tx_find, _agents_tx_session_of,
-#   _agents_tx_agent_types); awk/tokens_plan.awk, awk/tokens.awk.
+#   _agents_tx_agent_types, _agents_tx_fork_parents); awk/tokens_plan.awk,
+#   awk/tokens.awk.
 # Public: _agents_tokens_scan.
 
 # The most a sample reads (bytes, files), and how long a transcript must be
@@ -78,20 +90,25 @@ _AGENTS_TOKENS_CODEX_RE='"type":"(session_meta|turn_context|token_count)"'
 _agents_tokens_scan() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
     # shellcheck disable=SC2034  # _agents_window sets off and period too
-    local dir="$AGENTS_DATA_DIR" now="$1" day="$2" start off period plan types f ag today subs=()
-    _agents_window today || return 1
-    now="$1"
-    plan="$(_agents_tokens_list | _agents_awk tokens_plan -F '\t' -v OFS='\t' -v sf="$dir/tokens.state" \
+    local dir="$AGENTS_DATA_DIR" now="$1" day="$2" start off period plan types forks f o ag fk today subs=() kids=()
+    _agents_window today "$1" || return 1
+    plan="$(_agents_tokens_list | _agents_awk tokens_plan -F '\t' -v OFS='\t' -v sf="$dir/tokens.state" -v cut="$((now - AGENTS_HISTORY_DAYS * 86400))" \
         | LC_ALL=C sort -t "$(printf '\t')" -k6,6nr -k3,3)" || return 1
-    # The types of the subagents this scan may read, in one grep.
-    while IFS=$'\t' read -r _ _ f _ _ _ _ _ _ _ _ ag _; do
-        [[ "$f" == */subagents/agent-*.jsonl && "$ag" == - ]] && subs+=("$f")
+    # The subagents this scan may read: the types of those not known yet, in
+    # one grep; and the forks among them that a subagent spawned, with the
+    # ids of the messages they copied from it (_agents_tokens_forks).
+    while IFS=$'\t' read -r _ _ f _ _ _ o _ _ _ _ ag _ _ fk; do
+        [[ "$f" == */subagents/agent-*.jsonl ]] || continue
+        [[ "$ag" != - ]] || subs+=("$f")
+        [[ ( "$ag" != - || "$o" != 0 ) && "$fk" == - ]] || kids+=("$f")
     done < <(LC_ALL=C awk -F '\t' '$1 == 1' <<<"$plan" | head -n "$_AGENTS_TOKENS_FILES")
     types="$(_agents_tx_agent_types ${subs[@]+"${subs[@]}"})"
+    forks="$(_agents_tokens_forks ${kids[@]+"${kids[@]}"})"
     rm -f "$dir"/tokens.add.* "$dir/tokens.state.new" 2>/dev/null
     if ! today="$(_agents_tokens_feed "$now" <<<"$plan" \
             | _agents_awk "lib_proc lib_activity tokens" -v now="$now" -v cut="$((now - AGENTS_HISTORY_DAYS * 86400))" \
-                -v mid="$start" -v day="$day" -v quiet="$_AGENTS_TOKENS_QUIET" -v d="$dir" -v tyf=/dev/fd/3 3<<<"$types")" \
+                -v mid="$start" -v day="$day" -v quiet="$_AGENTS_TOKENS_QUIET" -v d="$dir" -v tyf=/dev/fd/3 -v frf=/dev/fd/4 \
+                3<<<"$types" 4<<<"$forks")" \
         || [[ "$today" != "$day"$'\t'* ]] \
         || { [[ -f "$dir/tokens.state.new" ]] && ! mv -f "$dir/tokens.state.new" "$dir/tokens.state"; }; then
         rm -f "$dir"/tokens.add.* "$dir/tokens.state.new" 2>/dev/null
@@ -108,6 +125,32 @@ _agents_tokens_scan() {
 # _agents_tokens_list — "@claude" then Claude Code's transcripts, "@codex"
 # then Codex's, changed within AGENTS_HISTORY_DAYS: "inode<TAB>size<TAB>
 # mtime<TAB>path", one stat per batch of files (no device: BSD stat's %d
+# _agents_tokens_forks TRANSCRIPT... — of these subagent transcripts, those
+# whose meta.json names the subagent that spawned them (a fork of a
+# subagent, which starts with a copy of that one's history: the same
+# messages, ids and times): "F<TAB>transcript<TAB>parent id"; then, for each
+# such parent, "I<TAB>parent transcript<TAB>message id" for every message it
+# logged so far. One grep for the metas, one for the parents.
+_agents_tokens_forks() {
+    local t p fp seen=$'\n' pars=()
+    [[ $# -gt 0 ]] || return 0
+    fp="$(_agents_tx_fork_parents "$@")"
+    [[ -n "$fp" ]] || return 0
+    while IFS=$'\t' read -r t p; do
+        printf 'F\t%s\t%s\n' "$t" "$p"
+        p="${t%/*}/agent-$p.jsonl"
+        [[ "$seen" == *$'\n'"$p"$'\n'* || ! -f "$p" ]] || { pars+=("$p"); seen+="$p"$'\n'; }
+    done <<<"$fp"
+    [[ ${#pars[@]} -gt 0 ]] || return 0
+    # grep -H: "PATH:MATCH"; the match starts at :"model":".
+    LC_ALL=C grep -aHoE '"model":"[^"]*","id":"[^"]*"' "${pars[@]}" 2>/dev/null | LC_ALL=C awk '
+        (i = index($0, ":\"model\":\"")) > 0 {
+            id = substr($0, i + 1); sub(/^.*","id":"/, "", id); sub(/"$/, "", id); gsub(/[^A-Za-z0-9_-]/, "", id)
+            if (id != "") print "I\t" substr($0, 1, i - 1) "\t" substr(id, 1, 128)
+        }'
+    return 0
+}
+
 # looks each one up by name, a thousand times slower).
 _agents_tokens_list() {
     local c="${CODEX_HOME:-$HOME/.codex}/sessions" st
@@ -124,7 +167,7 @@ _agents_tokens_list() {
 # transcript a header, "F<TAB>END<TAB>PLAN_LINE" followed by the lines it
 # reads (grep -b: "OFFSET:LINE", OFFSET from the old offset), or
 # "K<TAB>-<TAB>PLAN_LINE" for one it leaves as it was. PLAN_LINE:
-#   work cli path inode size mtime offset last_epoch last_id session project agent model pending
+#   work cli path inode size mtime offset last_epoch last_id session project agent model pending fork
 _agents_tokens_feed() {
     local now="$1" budget="$_AGENTS_TOKENS_BUDGET" n=0 work cli path ino size mtime off le lid sess rest end
     while IFS=$'\t' read -r work cli path ino size mtime off le lid sess rest; do
