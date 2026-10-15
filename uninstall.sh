@@ -18,8 +18,8 @@
 #     already had). apt/dnf/pacman packages are listed, not removed;
 #   - tuidev's own state dir, except its backups/;
 #   - the agents history (${XDG_STATE_HOME:-~/.local/state}/tuidev/agents)
-#     only when you say so: a prompt that defaults to keep (never asked when
-#     stdin is not a terminal), or --purge-history.
+#     only when you say so: a prompt that defaults to keep (never asked with
+#     --all or when stdin is not a terminal), or --purge-history.
 #
 # Installs predating the manifest get only the safe subset: managed blocks,
 # and helpers still byte-identical to the repo copy. Everything else is listed
@@ -27,7 +27,7 @@
 #
 # Usage:
 #   ./uninstall.sh              # interactive
-#   ./uninstall.sh --all        # non-interactive: yes to every step
+#   ./uninstall.sh --all        # non-interactive: yes to every step (keeps the history)
 #   ./uninstall.sh --dry-run    # preview mutations
 #   ./uninstall.sh --purge-history  # also delete the agents history, unasked
 
@@ -55,13 +55,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# yes_no "question" — true when the answer is y; no answer (EOF) is no.
+yes_no() {
+    local reply=""
+    read -r -p "$1 (y/N) " -n 1 reply || reply=""
+    echo ""
+    [[ $reply =~ ^[Yy]$ ]]
+}
+
 # ask "question" -> sets ANSWER=y|n. --all answers yes.
 ask() {
     if $ALL; then ANSWER=y; return; fi
-    local reply
-    read -r -p "$1 (y/N) " -n 1 reply
-    echo ""
-    [[ $reply =~ ^[Yy]$ ]] && ANSWER=y || ANSWER=n
+    if yes_no "$1"; then ANSWER=y; else ANSWER=n; fi
 }
 
 # done_msg MSG — report a completed mutation; run_cmd already echoed it in a
@@ -344,7 +349,7 @@ fi
 # Only this one directory, only inside $HOME, and never through a symlink.
 # --all does not imply it: the history is yours, not tuidev's config.
 _purge_agents_history() {
-    local dir="${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents" real home purge=$PURGE_HISTORY reply
+    local dir="${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents" real home purge=$PURGE_HISTORY
     [[ -d "$dir" || -L "$dir" ]] || return 0
     if [[ -L "$dir" ]]; then
         print_warning "kept $dir (a symlink: remove it yourself if you like)"; return 0
@@ -355,10 +360,8 @@ _purge_agents_history() {
         "$home"/?*/tuidev/agents) ;;
         *) print_warning "kept $dir (resolves outside $HOME)"; return 0 ;;
     esac
-    if ! $purge && [[ -t 0 ]]; then
-        read -r -p "also delete the agents history in $dir? (y/N) " -n 1 reply
-        echo ""
-        [[ $reply =~ ^[Yy]$ ]] && purge=true
+    if ! $purge && ! $ALL && [[ -t 0 ]] && yes_no "also delete the agents history in $dir?"; then
+        purge=true
     fi
     if ! $purge; then
         print_info "kept the agents history: $dir (--purge-history deletes it)"

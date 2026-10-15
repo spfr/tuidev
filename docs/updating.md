@@ -156,7 +156,7 @@ It removes only what the manifest records:
 - optionally, the Homebrew formulae and casks tuidev installed. apt, dnf and
   pacman packages are listed for you to remove, not removed;
 - tuidev's state dir, except `backups/`;
-- the [agents history](agent-workflows.md#history-and-agents-report) (`~/.local/state/tuidev/agents`, or under `$XDG_STATE_HOME`), only when you say so. In a terminal, uninstall asks and the default is to keep it. `--purge-history` deletes it without asking; `--all` does not. It never asks when stdin isn't a terminal. Only that one directory goes, only inside `$HOME`, and never through a symlink. `--dry-run` shows the removal.
+- the [agents history](agent-workflows.md#history-and-agents-report) (`~/.local/state/tuidev/agents`, or under `$XDG_STATE_HOME`), only when you say so. In a terminal, uninstall asks and the default is to keep it (no answer is no). `--purge-history` deletes it without asking; `--all` keeps it and never asks. It never asks when stdin isn't a terminal. Only that one directory goes, only inside `$HOME`, and never through a symlink. `--dry-run` shows the removal.
 
 An install that predates the manifest gets only the safe subset: managed blocks,
 and helpers still byte-identical to the repo copy. Everything else is listed for

@@ -146,6 +146,25 @@ echo x > "$hist/history.tsv"; echo x > "$hist/sample/ledger"; echo keep > "$HOME
 bash "$REPO_DIR/uninstall.sh" --all </dev/null > "$tmp/u.log" 2>&1 || fail "uninstall.sh --all: $(tail -5 "$tmp/u.log")"
 [[ -f "$hist/history.tsv" ]] || fail "--all (no TTY, no flag) deleted the history"
 grep -q "kept the agents history" "$tmp/u.log" || fail "no 'kept' note: $(tail -5 "$tmp/u.log")"
+# No answer (EOF on stdin, set -e) is no: the run is cancelled cleanly, not aborted.
+bash "$REPO_DIR/uninstall.sh" </dev/null > "$tmp/u.log" 2>&1 || fail "uninstall.sh aborted on EOF: $(tail -5 "$tmp/u.log")"
+grep -q "^cancelled" "$tmp/u.log" && [[ -f "$hist/history.tsv" ]] || fail "uninstall.sh on EOF: $(tail -5 "$tmp/u.log")"
+# --all never asks about the history, even in a terminal with a "y" waiting.
+# on_tty CMD... — CMD with a pseudo-terminal on stdin (script(1)): util-linux
+# and BusyBox take -c, BSD the command after the file; 99 where no pty can be had.
+on_tty() {
+    if script -qc true /dev/null >/dev/null 2>&1 </dev/null; then script -qc "$(printf '%q ' "$@")" /dev/null
+    elif script -q /dev/null true >/dev/null 2>&1 </dev/null; then script -q /dev/null "$@"
+    else return 99; fi
+}
+rc=0; { printf 'y'; sleep 3; } | on_tty bash "$REPO_DIR/uninstall.sh" --all > "$tmp/u.log" 2>&1 || rc=$?
+if [[ $rc == 99 ]]; then
+    echo "SKIP: no pseudo-terminal here (sandbox?): --all in a terminal not checked"
+else
+    [[ -f "$hist/history.tsv" ]] || fail "--all in a terminal deleted the history: $(tail -5 "$tmp/u.log")"
+    ! grep -q "also delete the agents history" "$tmp/u.log" || fail "--all asked about the history"
+    grep -q "kept the agents history" "$tmp/u.log" || fail "--all in a terminal: no 'kept' note: $(tail -5 "$tmp/u.log")"
+fi
 bash "$REPO_DIR/uninstall.sh" --all --purge-history --dry-run </dev/null > "$tmp/u.log" 2>&1 || fail "dry run: $(tail -5 "$tmp/u.log")"
 [[ -f "$hist/history.tsv" ]] || fail "--dry-run deleted the history"
 grep -q "rm -rf .*tuidev/agents" "$tmp/u.log" || fail "dry run does not show the removal: $(tail -8 "$tmp/u.log")"
@@ -157,7 +176,7 @@ XDG_STATE_HOME="$HOME/.local/state/link" bash "$REPO_DIR/uninstall.sh" --all --p
 bash "$REPO_DIR/uninstall.sh" --all --purge-history </dev/null > "$tmp/u.log" 2>&1 || fail "purge: $(tail -5 "$tmp/u.log")"
 [[ ! -e "$hist" ]] || fail "--purge-history left $hist"
 [[ -f "$HOME/.local/state/other/f" ]] || fail "--purge-history touched a sibling"
-pass "uninstall.sh keeps the agents history by default; --purge-history deletes only that directory, inside HOME, never via symlink; --dry-run deletes nothing"
+pass "uninstall.sh keeps the agents history by default and with --all (never asked); EOF is no; --purge-history deletes only that directory, inside HOME, never via symlink; --dry-run deletes nothing"
 
 echo ""
 echo "All agents install tests passed."
