@@ -102,7 +102,35 @@ BEGIN {
         run(b + 9 * 3600, 8 * 3600, "server", "web", "codex:3101", "-", "npm", 420, 180000, "-", 0, 0)
     }
 }'
-chmod 600 "$dir"/*.tsv
+# Tokens, as the transcript scan records them (tokens.tsv: epoch cli project
+# session agent model in cache_write cache_read out poll; and today's sums in
+# tokens.today), with a few compactions and denials: a healthy week (a warm
+# cache, little polling), so they add no insight of their own.
+LC_ALL=C awk -v now="$now" -v midnight="$midnight" -v day="$day" -v dir="$dir" '
+function call(t, cli, p, s, a, m, i, cw, cr, o, poll) {
+    if (t > now - 30) return
+    printf "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\n", t, cli, p, s, a, m, i, cw, cr, o, poll > (dir "/tokens.tsv")
+    if (t >= midnight) { n++; ti += i; tcw += cw; tcr += cr; to += o }
+}
+BEGIN {
+    srand(11)
+    for (d = 6; d >= 0; d--) {
+        b = midnight - d * 86400
+        for (h = 9; h < 18; h += 0.1) {
+            t = b + int(h * 3600 + rand() * 300)
+            call(t, "claude", "myapp", "11111111-aaaa", "main", "claude-opus-5-5", 40 + int(rand() * 400), 900 + int(rand() * 4000), 60000 + int(rand() * 60000), 300 + int(rand() * 1500), rand() < 0.015)
+            if (rand() < 0.5) call(t + 40, "claude", "myapp", "11111111-aaaa", "implementor-complex", "claude-sonnet-5", 30 + int(rand() * 200), 2000 + int(rand() * 6000), 30000 + int(rand() * 30000), 400 + int(rand() * 2000), 0)
+            if (rand() < 0.6) call(t + 90, "claude", "api", "22222222-bbbb", (rand() < 0.3 ? "Explore" : "main"), "claude-opus-5-5", 40 + int(rand() * 300), 700 + int(rand() * 3000), 50000 + int(rand() * 50000), 200 + int(rand() * 1200), rand() < 0.02)
+            if (rand() < 0.3) call(t + 150, "codex", "web", "33333333-cccc", "main", "gpt-6-luna", 4000 + int(rand() * 8000), 0, 40000 + int(rand() * 30000), 500 + int(rand() * 2000), 0)
+        }
+        printf "%d\tclaude\tmyapp\t11111111-aaaa\tmain\tauto\t%d\t%d\n", b + 13 * 3600, 150000 + int(rand() * 20000), 18000 > (dir "/compacts.tsv")
+        printf "%d\tclaude\tapi\t22222222-bbbb\tmain\tclassifier\tGit Destructive\tgit push\n", b + 16 * 3600 > (dir "/denials.tsv")
+    }
+    printf "%d\tclaude\tmyapp\t11111111-aaaa\timplementor-complex\tBash\tuser\t-\tnpm install\n", now - 7200 > (dir "/denials.tsv")
+    printf "%d\tcodex\t31.0\t300\t%d\n", now - 900, now + 7800 > (dir "/limits.tsv")
+    printf "%s\t%d\t%d\t%d\t%d\t%d\n", day, ti + tcw + tcr + to, ti, tcw, tcr, to > (dir "/tokens.today")
+}'
+chmod 600 "$dir"/*.tsv "$dir/tokens.today"
 echo "$now" > "$dir/sample.stamp"
 # The menu's top insight, as `agents sample` writes it, by the real code.
 (
