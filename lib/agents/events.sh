@@ -7,8 +7,10 @@
 #   _agents_events_lock, _agents_events_unlock.
 #
 # $AGENTS_DATA_DIR holds what `agents report` reads. Names only, never full
-# command lines, and nothing leaves the machine. Private: the directory is
-# 700 and its files 600 (every writer runs under umask 077).
+# command lines (runs.state, the ledger's working file, also keeps the task
+# output paths of live runs: runs.sh), and nothing leaves the machine.
+# Private: the directory is 700 and its files 600 (every writer runs under
+# umask 077).
 #   events.tsv  one line per cleanup: epoch kind reason pid name project session
 #               kind:   kill (you), reap (`agents reap`), auto (AGENTS_AUTO_REAP),
 #                       hook (a session's or subagent's end)
