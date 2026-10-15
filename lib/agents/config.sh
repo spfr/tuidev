@@ -21,7 +21,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_AWAKE_POLL AGENTS_NAMES AGENTS_NO_HERDR AGENTS_TERMI
 _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH"
 _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
-_AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP"
+_AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
@@ -56,6 +56,7 @@ _agents_conf_valid() {
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
         AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
+        AGENTS_PRICES)      [[ -z "$2" || "$2" =~ ^(/|~/)[^[:cntrl:]]+$ ]] ;;
         AGENTS_HOOK_REAP|AGENTS_HOOK_LOG) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_JOB_TEST|AGENTS_JOB_BUILD|AGENTS_JOB_SERVER|AGENTS_JOB_BROWSER|AGENTS_JOB_MCP) _agents_ere_ok "$2" ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
@@ -136,6 +137,11 @@ AGENTS_AUTO_REAP="${AGENTS_AUTO_REAP:-0}"
 _agents_env_check AGENTS_HISTORY 1
 _agents_env_check AGENTS_HISTORY_DAYS 30
 _agents_env_check AGENTS_AUTO_REAP 0
+# The token report's cost estimate: a price file you write (USD per million
+# tokens; none ship, see configs/agents/agents-prices.example.tsv), an
+# absolute or ~/ path. Without the file the report shows tokens only.
+_agents_env_check AGENTS_PRICES ""
+AGENTS_PRICES="${AGENTS_PRICES:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/agents-prices.tsv}"
 # Job types: where an agent tree's CPU goes. Each process in an agent tree (or
 # a stale one) gets one job: agent (the CLIs themselves), browser (headless
 # Chrome and friends, whatever started them), wait (a polling loop and what it

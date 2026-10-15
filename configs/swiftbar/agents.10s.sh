@@ -102,6 +102,19 @@ NOREF="bash=$(qv "$AGENTS") terminal=false"
 TERM_OPEN="bash=$(qv "$AGENTS") param1=open-term terminal=false"
 CALLBACK="bash=$(qv "$SELF") terminal=false"
 num() { [[ "$1" =~ ^[0-9]+$ ]]; }
+# humanize N — a count for people, in REPLY: 950, 64.2k, 640k, 12.4M, 1.2B.
+humanize() {
+    local n="$1" u=1 s="" t
+    if [[ $n -ge 999500000 ]]; then u=1000000000 s=B
+    elif [[ $n -ge 999500 ]]; then u=1000000 s=M
+    elif [[ $n -ge 1000 ]]; then u=1000 s=k
+    else REPLY="$n"; return; fi
+    t=$(( (n * 10 + u / 2) / u ))
+    if [[ $t -lt 1000 ]]; then
+        REPLY="$((t / 10))"; [[ $((t % 10)) -eq 0 ]] || REPLY+=".$((t % 10))"
+    else REPLY="$(( (n + u / 2) / u ))"; fi
+    REPLY+="$s"
+}
 charging() { [[ "$1" == charging || "$1" == charged || "$1" == "AC attached" || "$1" == "finishing charge" ]]; }
 battery_symbol() {
     local p="$1" s="battery.0percent"
@@ -122,7 +135,7 @@ awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents jobs stale hogs awake system" BAR_ICON=terminal CONF=""
-job_rows="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text=""
+job_rows="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text="" tok_total=0 tok_cache=0
 
 # Per-session activity, gathered from the act rows into variables named after
 # the session's pid (bash 3.2 has no associative arrays): A_<what>_<pid>.
@@ -330,6 +343,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
 ' ;;
         hist)    hist_state="$pid"; hist_total="$kind"; hist_top="$age_s"; hist_top_s="$pcpu" ;;   # hist STATE TODAY_S TOP TOP_S
         insight) insight_view="$pid"; insight_text="$kind" ;;   # insight VIEW TEXT
+        tokens)  tok_total="$pid"; tok_cache="$kind" ;;         # tokens TOTAL CACHE_PCT (today)
         conf)
             [[ "$kind" == - ]] && kind=""
             case "$pid" in
@@ -466,7 +480,7 @@ section_agents() {
 
 # Where the CPU goes: CPU now by job type, busiest first, each with the
 # sessions behind it (clicking one shows its project in Finder); then today's
-# CPU-hours from the history, and the report.
+# CPU-hours and tokens from the history, and the report.
 job_label() {
     case "$1" in
         test) REPLY=tests ;; build) REPLY=builds ;; server) REPLY="dev servers" ;;
@@ -536,12 +550,18 @@ section_jobs() {
         line="Today: nothing recorded yet (a sample a minute)"
     fi
     echo "$line | sfimage=chart.bar.xaxis $ROW symbolize=false"
+    # Today's tokens (from tokens.today, which `agents sample` writes) and the
+    # share read from the prompt cache; opens today's token report.
+    if num "$tok_total" && num "$tok_cache" && [[ $tok_total -gt 0 ]]; then
+        humanize "$tok_total"
+        echo "$REPLY tokens today · ${tok_cache}% cached | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
+    fi
     # Today's top insight (from insight.txt, which `agents sample` refreshes):
     # what it found as the label (the text before " — ", at most 70
     # characters, cut at a word), the whole sentence with its advice as the
     # tooltip; the only param is one of the report's fixed views.
     case "$insight_view" in
-        summary|runs|waste|trends|agents)
+        summary|runs|waste|trends|agents|tokens|denials)
             if [[ -n "$insight_text" ]]; then
                 cl "${insight_text//\`/}"
                 tip="${REPLY//\"/$q}" line="${REPLY%% — *}"

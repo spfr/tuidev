@@ -70,7 +70,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `runs.sh` | the run ledger (`runs.state`, `runs.tsv`), the menu's run feed, `agents runs` |
 | `tokens.sh` | the token scanner `agents sample` runs: what Claude Code and Codex transcripts say about tokens, read incrementally and within a byte budget (`tokens.state`), into `tokens.tsv`, `compacts.tsv`, `denials.tsv`, `limits.tsv` and the menu's `tokens.today` |
 | `transcript.sh` | reading Claude Code transcripts: task-id lines, subagent meta and type, which agent started a task, which transcripts changed lately and whose session each is (shared by `hooks.sh`, `runs.sh` and `tokens.sh`) |
-| `report.sh` | `agents report` and its views, `insight.txt` (`agents_insight_write`, the menu's top insight) |
+| `report.sh` | `agents report` and its views, `insight.txt` (`agents_insight_write`, the menu's top insight), the menu's tokens row (from `tokens.today`) |
 | `render.sh` | the human views: the table, its status lines, `agents watch` |
 | `json.sh` | `agents json`, a versioned contract |
 | `tsv.sh` | `agents tsv`, what the SwiftBar plugin reads |
@@ -80,7 +80,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `usage.sh` | `agents --help` |
 | `cli.sh` | `agents_main`: options and the subcommand table; `agents cwd` |
 | `awk/lib_*.awk` | awk functions shared by several programs: process-table primitives (`lib_proc`), what a tool shell runs and the name it goes by (`lib_activity`), jobs (`lib_jobs`), JSON strings (`lib_json`), ordering, heapsorts (`lib_sort`), durations and sizes for people (`lib_fmt`) |
-| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `tokens_plan`, `tokens`, `refusal`, `tree`, `new_members`, `hook_*`), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_insights`, `report_views` |
+| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `tokens_plan`, `tokens`, `refusal`, `tree`, `new_members`, `hook_*`), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_tokens` (`tokens.tsv`, `compacts.tsv`, `limits.tsv`, the price file, and the tokens view), `report_denials` (`denials.tsv` and the denials view), `report_insights`, `report_views` |
 
 The monitoring pack installs each file with `install_config --overwrite`, so the manifest records it and `uninstall.sh` removes it. Adding a module needs no migration; renaming or removing one does, like any installed file. `scripts/lib/test_agents_golden.sh` compares every view and dry run with recorded output byte for byte, and `test_agents_install.sh` runs the installed command outside the repo.
 
@@ -182,7 +182,7 @@ Run these locally, in this order. `make ci-test` runs the first four.
 make lint              # shellcheck -x over every shell file (the list lives in the Makefile)
 make validate-configs  # JSON, TOML, Lua, zsh/sh syntax (CI adds --strict)
 make check-links       # every relative link in every tracked .md resolves
-make test-lib          # scripts/lib/test_*.sh: agents, agents_golden, agents_history, agents_hooks, agents_report, agents_install, agents_needs, agents_runs, config_write, container, contract, gitconfig, migrations, orchestration, pkg, profile, theme, update_packages
+make test-lib          # scripts/lib/test_*.sh: agents, agents_golden, agents_history, agents_hooks, agents_report, agents_report_tokens, agents_install, agents_needs, agents_runs, agents_tokens, config_write, container, contract, gitconfig, migrations, orchestration, pkg, profile, theme, update_packages
 make test-core         # core-tagged tests against this machine
 make container-test    # core-tagged tests in an Alpine container (tests scripts and configs, not the installer)
 ```

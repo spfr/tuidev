@@ -21,7 +21,7 @@ You run Claude Code in one tab, Codex in another, and a long job on a Linux box 
 tuidev is shell scripts and configs for coding with AI agents from the terminal on macOS and Linux. Claude Code is the primary CLI and Codex the second: run them in a Ghostty tab and review the diff in VS Code or Cursor. It installs a small core, and everything else is an opt-in pack.
 
 - **[Every agent, on every machine, in one sidebar](#every-agent-on-every-machine-in-one-sidebar):** Herdr shows which agent needs you, here or on your always-on box.
-- **[Cleanup with evidence](#cleanup-with-evidence):** `agents` finds what sessions left behind, says whether it is safe to stop and why, and shows where the CPU went.
+- **[Cleanup with evidence](#cleanup-with-evidence):** `agents` finds what sessions left behind, says whether it is safe to stop and why, and shows where the CPU and the tokens went.
 - **[In your menu bar](#in-your-menu-bar):** the same on macOS, one click away, with keep-awake and a system view.
 - **[Sandboxed by default](#sandboxed-by-default):** Claude Code's and Codex's own sandboxes on, and `sbx` for everything else.
 - **[A modern shell in one command](#a-modern-shell-in-one-command):** Ghostty, zsh and the CLI tools you and your agents both reach for.
@@ -39,7 +39,7 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal 
 
 Every `claude` session starts its own MCP servers, and its subagents start test runs, dev servers and polling loops. When a session crashes, or a subagent hands back its report, some of that keeps running. `agents` (`--pack monitoring`) lists each session with what it runs, flags what was left behind, and gives every flagged process a verdict with its evidence, so you stop the right thing and leave the rest.
 
-<img src="docs/assets/cleanup.gif" width="800" alt="Three commands in a terminal. agents lists three sessions; under the Claude Code session in api, a polling loop, until tail -1 $F | grep -qE &quot;^(ok|FAIL)&quot;; do sleep 5; done, has waited 5h10m and is flagged wait and stuck. agents why 2120 explains it: verdict, safe to stop, because what it waits for already finished ([exited with code 0], 5h0m ago), with high confidence; the evidence is its owner, its age, the file it watches, that file's last line and how long it has been quiet, then how to look and how to stop it. agents report opens with its top insights (Explore subagents left 3 polling loops running for 7.7 hours; api's CPU is up 147 percent on the day before, mostly its build; myapp's tests ran 4 duplicates), then shows the CPU-hours of agent work in the last 24 hours by job, with tests first, by project and session, the busiest hours, and the cleanups by reason.">
+<img src="docs/assets/cleanup.gif" width="800" alt="Three commands in a terminal. agents lists three sessions; under the Claude Code session in api, a polling loop, until tail -1 $F | grep -qE &quot;^(ok|FAIL)&quot;; do sleep 5; done, has waited 5h10m and is flagged wait and stuck. agents why 2120 explains it: verdict, safe to stop, because what it waits for already finished ([exited with code 0], 5h0m ago), with high confidence; the evidence is its owner, its age, the file it watches, that file's last line and how long it has been quiet, then how to look and how to stop it. agents report opens with its top insights (Explore subagents left 3 polling loops running for 7.7 hours; api's CPU is up 147 percent on the day before, mostly its build; myapp's tests ran 4 duplicates), then shows the CPU-hours of agent work in the last 24 hours by job, with tests first, by project and session, the busiest hours, the tokens (17.6M, 94% cache hits, 2% polling), one denial, and the cleanups by reason.">
 
 <sub>The demo fixtures and a made-up week of history, rendered with `make screenshots`.</sub>
 
@@ -52,15 +52,17 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
   1. Explore subagents left 3 polling loops running in 24h (7.7 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
   ```
 
+- **Where the tokens go.** `agents report --view tokens` reads the Claude Code and Codex transcripts already on disk: tokens by model, CLI, subagent type and project, the cache hit rate, what polling cost, context compactions and the Codex plan's headroom, with a dollar estimate once you add your own price file. `--view denials` shows which commands you or auto mode keep denying, and what to change. All local; nothing is sent anywhere.
+
 [Local processes: `agents`](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 
 ## In your menu bar
 
-On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu. Sessions waiting for you come first (with Herdr), then each flagged command with its verdict, and Stop, Copy details and Show session in its submenu. Below them: every session, the CPU by job with today's CPU-hours and top insight, stale processes and hogs, and CPU, memory, battery and thermal pressure. It keeps the Mac awake while agents run, and with the lid closed too: each time it asks for your password, it is always time-boxed, and a guard turns lid sleep back on at timeout, on low battery or when the Mac runs hot.
+On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu. Sessions waiting for you come first (with Herdr), then each flagged command with its verdict, and Stop, Copy details and Show session in its submenu. Below them: every session, the CPU by job with today's CPU-hours, tokens (`12.4M tokens today · 94% cached`) and top insight, stale processes and hogs, and CPU, memory, battery and thermal pressure. It keeps the Mac awake while agents run, and with the lid closed too: each time it asks for your password, it is always time-boxed, and a guard turns lid sleep back on at timeout, on low battery or when the Mac runs hot.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/menu-dark.webp">
-  <img src="docs/assets/menu-light.webp" width="800" alt="The agents menu open under its menu-bar item, which reads 3 · 1 blocked with a cup for keep-awake. Needs you lists the blocked api session, a polling loop in api stuck for 5h10m marked safe to stop, and a dev server in web running 45 minutes marked check first. The loop's submenu is open: safe to stop, what it waits for already finished ([exited with code 0], 5h0m ago), its owner, how long it has waited, the file it watches and that file's last line, that auto-reap would stop it, then Stop command…, Copy details and Show session. Below: Agents with three sessions and the Codex daemon; Where the CPU goes, with tests at 130 percent, builds, agents, dev servers, MCP servers, polling loops and other, then today's CPU-hours, with tests the largest share, and today's top insight, Explore subagents left 3 polling loops running today (7.7 h); Stale with two items and Reap all stale; Hogs; Awake: while agents run; CPU, memory and load; battery, thermal pressure and energy mode.">
+  <img src="docs/assets/menu-light.webp" width="800" alt="The agents menu open under its menu-bar item, which reads 3 · 1 blocked with a cup for keep-awake. Needs you lists the blocked api session, a polling loop in api stuck for 5h10m marked safe to stop, and a dev server in web running 45 minutes marked check first. The loop's submenu is open: safe to stop, what it waits for already finished ([exited with code 0], 5h0m ago), its owner, how long it has waited, the file it watches and that file's last line, that auto-reap would stop it, then Stop command…, Copy details and Show session. Below: Agents with three sessions and the Codex daemon; Where the CPU goes, with tests at 130 percent, builds, agents, dev servers, MCP servers, polling loops and other, then today's CPU-hours, with tests the largest share, 12.4M tokens today, 94% from the cache, and today's top insight, Explore subagents left 3 polling loops running today (7.7 h); Stale with two items and Reap all stale; Hogs; Awake: while agents run; CPU, memory and load; battery, thermal pressure and energy mode.">
 </picture>
 
 <sub>The plugin's actual output over the demo fixtures, drawn as a macOS menu by `scripts/render_menu.sh`; it is not a screenshot of a real menu bar. [More submenus, animated](docs/assets/menu.gif).</sub>
@@ -159,7 +161,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 |---------------|------|
 | `ai-clis` | Claude Code and Codex settings with their native sandboxes on, and git and gh write gates |
 | `orchestration` | Tiered subagents and the delegation skill for Claude Code and Codex |
-| `monitoring` | `agents` (cleanup verdicts, CPU by job), its SwiftBar menu (macOS), `lazydocker` and `bottom` |
+| `monitoring` | `agents` (cleanup verdicts, CPU by job, tokens by model and agent), its SwiftBar menu (macOS), `lazydocker` and `bottom` |
 | `tmux`, `herdr` | Durable sessions; Herdr's agent-aware runtime |
 | `nvim`, `vim` | LazyVim, or a zero-plugin vimrc for servers |
 | `sandbox-container` | Tier 2 sandboxing in a container runtime (Apple `container`, Podman or Docker) |

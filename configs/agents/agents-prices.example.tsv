@@ -1,0 +1,25 @@
+# agents-prices.tsv — prices for the estimate in `agents report --view tokens`.
+#
+# tuidev ships no prices: they change, and they depend on your plan. Copy this
+# file to ~/.config/tuidev/agents-prices.tsv (or point AGENTS_PRICES in
+# ~/.config/agents.conf at another path), then add one line per model from the
+# vendors' own pages:
+#
+#   Anthropic: https://www.anthropic.com/pricing (API pricing; Claude Code
+#              uses the same per-token prices)
+#   OpenAI:    https://openai.com/api/pricing/
+#
+# Format: one model per line, tab- or space-separated, # starts a comment:
+#
+#   MODEL_PREFIX  IN  CACHE_WRITE  CACHE_READ  OUT
+#
+# each price in US dollars per million tokens: input, cache writes (Anthropic's
+# cache-creation price; 0 for OpenAI, which has none), cache reads (OpenAI's
+# cached input) and output. A model takes the line whose prefix is the longest
+# match of its name (claude-opus-5 matches claude-opus-5-5); of a prefix listed
+# twice, the later line wins. A malformed line is reported and ignored.
+#
+# The report then adds an "EST $" column and a total, labelled as an estimate,
+# with "-" for models no line matches. On a subscription plan the dollars are
+# what the same tokens would cost on the API, not what you pay. Without this
+# file, the report shows tokens only.

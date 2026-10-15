@@ -36,7 +36,11 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
                                insights from the runs (default 24h). VIEW: runs
                                (repeated and slowest commands), waste (duplicates,
                                leaks, polling, failed re-runs), trends (against the
-                               window before; default 7d), agents (by agent type)
+                               window before; default 7d), agents (by agent type),
+                               tokens (by model, CLI, agent type and project; cache
+                               hits, polling, compactions, Codex plan headroom, and
+                               an estimate in $ with AGENTS_PRICES), denials (tool
+                               calls denied, by command, with what to try)
   agents runs [--since 24h|7d|30d|today] [--json]
                                finished commands, newest first: when, how long, CPU,
                                peak memory, exit code, project, session, the agent
@@ -102,8 +106,9 @@ SETTINGS
   AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. The same
   names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
   AGENTS_ORPHAN_PATTERNS in $_AGENTS_LIB/config.sh. History: AGENTS_HISTORY
-  AGENTS_HISTORY_DAYS; extra job patterns (EREs): AGENTS_JOB_TEST AGENTS_JOB_BUILD
-  AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Data: $AGENTS_DATA_DIR
+  AGENTS_HISTORY_DAYS AGENTS_PRICES; extra job patterns (EREs): AGENTS_JOB_TEST
+  AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Data:
+  $AGENTS_DATA_DIR
 
 SAFETY
   Never signals pid 1, this shell or its parents, another user's process

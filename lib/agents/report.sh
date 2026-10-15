@@ -1,22 +1,26 @@
 # shellcheck shell=bash
-# lib/agents/report.sh — `agents report`: where the CPU went, what was cleaned
-# up, and what the run ledger says is worth changing.
+# lib/agents/report.sh — `agents report`: where the CPU and the tokens went,
+# what was denied or cleaned up, and what is worth changing.
 #
-# Owns: the report's views and insight.txt (the menu's top
+# Owns: the report's views, insight.txt (the menu's top
 #   insight: "EPOCH<TAB>UNTIL<TAB>VIEW<TAB>TEXT", or just "EPOCH<TAB>UNTIL"
-#   when nothing stands out).
+#   when nothing stands out) and the menu's tokens row (from tokens.today,
+#   which the scanner writes; the report only reads the token files).
 # Uses: config.sh, util.sh (_agents_window, _agents_replace),
 #   events.sh (_agents_data_dir), render.sh (colors); awk/report.awk and its
-#   parts (report_fmt, report_runs, report_insights, report_views).
-# Public: agents_report, agents_insight_write, _agents_insight_line.
+#   parts (report_fmt, report_runs, report_tokens, report_denials,
+#   report_insights, report_views).
+# Public: agents_report, agents_insight_write, _agents_insight_line,
+#   _agents_tokens_line.
 
-_AGENTS_REPORT_VIEWS="summary runs waste trends agents"
+_AGENTS_REPORT_VIEWS="summary runs waste trends agents tokens denials"
 
 # agents_report [--view VIEW] [--since 24h|7d|30d|today] [--json] — the
 # summary (default): where the CPU went (by job, project, session and hour of
-# day, from history.tsv), what was cleaned up (events.tsv), and the top
-# insights from the run ledger (runs.tsv); or one of the ledger's views: runs,
-# waste, trends (default --since 7d), agents.
+# day, from history.tsv), the tokens and denials, what was cleaned up
+# (events.tsv), and the top insights; or one of the ledger's views: runs,
+# waste, trends (default --since 7d), agents; or tokens (tokens.tsv,
+# compacts.tsv, limits.tsv, AGENTS_PRICES), denials (denials.tsv).
 agents_report() {
     local view=summary since="" json="" start now off period
     while [[ $# -gt 0 ]]; do
@@ -40,16 +44,28 @@ agents_report() {
     _agents_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
     _agents_report_awk "$view" "$since" "$json"
 }
-_agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents] [--since 24h|7d|30d|today] [--json]" >&2; }
+_agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents|tokens|denials] [--since 24h|7d|30d|today] [--json]" >&2; }
 
 # _agents_report_awk VIEW LABEL JSON — report.awk over the data directory,
 # for the window the caller's _agents_window set.
 _agents_report_awk() {
+    local d="$AGENTS_DATA_DIR" pf
+    pf="$(_agents_prices_file)"
     B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" \
-    _agents_awk "lib_json lib_sort lib_fmt report_fmt report_runs report_insights report_views report" -F '\t' \
+    _agents_awk "lib_json lib_sort lib_fmt report_fmt report_runs report_tokens report_denials report_insights report_views report" -F '\t' \
         -v view="$1" -v label="$2" -v json="$3" -v start="$start" -v now="$now" -v off="$off" \
         -v pstart="$((start - period))" -v pend="$((now - period))" -v hist="$AGENTS_HISTORY" \
-        -v hf="$AGENTS_DATA_DIR/history.tsv" -v ef="$AGENTS_DATA_DIR/events.tsv" -v rf="$AGENTS_DATA_DIR/runs.tsv"
+        -v hf="$d/history.tsv" -v ef="$d/events.tsv" -v rf="$d/runs.tsv" \
+        -v tf="$d/tokens.tsv" -v cf="$d/compacts.tsv" -v df="$d/denials.tsv" -v lf="$d/limits.tsv" -v pf="$pf"
+}
+
+# _agents_prices_file — AGENTS_PRICES (~/ expanded) when it is a readable
+# file; nothing otherwise, and the report then shows no $ at all.
+_agents_prices_file() {
+    local f="$AGENTS_PRICES" t='~'
+    [[ "${f%%/*}" != "$t" ]] || f="$HOME/${f#*/}"
+    [[ -f "$f" && -r "$f" ]] && printf '%s' "$f"
+    return 0
 }
 
 # agents_insight_write — refresh insight.txt with today's top insight (the
@@ -81,4 +97,19 @@ _agents_insight_line() {
     _agents_now now
     [[ $now -lt $until ]] || return 0
     printf 'insight\t%s\t%s\n' "$view" "$text"
+}
+
+# _agents_tokens_line — the menu's tokens row, from tokens.today alone (the
+# scanner's sums for the local day: DAY TOTAL IN CACHE_WRITE CACHE_READ OUT):
+#   tokens TOTAL CACHE_PCT  when its day is today; nothing otherwise.
+_agents_tokens_line() {
+    [[ "$AGENTS_HISTORY" == 1 && -r "$AGENTS_DATA_DIR/tokens.today" ]] || return 0
+    local d="" tot="" tin="" tcw="" tcr="" inputs hit=0
+    IFS=$'\t' read -r d tot tin tcw tcr _ < "$AGENTS_DATA_DIR/tokens.today"
+    [[ "$d" == "$(date +%Y-%m-%d)" && "$tot" =~ ^[0-9]{1,15}$ && "$tin" =~ ^[0-9]{1,15}$ \
+       && "$tcw" =~ ^[0-9]{1,15}$ && "$tcr" =~ ^[0-9]{1,15}$ ]] || return 0
+    inputs=$((10#$tin + 10#$tcw + 10#$tcr))
+    # (bash 3.2 evaluates both arms of ?:, so no division in one.)
+    [[ $inputs -eq 0 ]] || hit=$(( (10#$tcr * 100 + inputs / 2) / inputs ))
+    printf 'tokens\t%s\t%s\n' "$((10#$tot))" "$hit"
 }
