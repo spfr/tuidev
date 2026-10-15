@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-10-14
+
+`agents` now remembers every command your agents run and tells you what to
+change: a run ledger, report views with top insights (in the menu too), on a
+modular codebase. And the README finally shows it: Herdr across machines,
+cleanup with evidence, the menu bar and the shell, each with a picture.
+
+### Added
+- **Run ledger and `agents runs`.** Every finished command (a tool shell and
+  everything under it, or a stale tree) gets one row in `runs.tsv`: when, how
+  long, CPU, peak memory, exit code (from Claude Code's task output), project,
+  session, the agent type that started it (`main`, `Explore`, a named
+  subagent, `fork`), and whether it was a duplicate or stopped by agents. The
+  menu's 10 s refresh feeds the ledger from the snapshot it already takes, so
+  runs shorter than a minute count too, and `history.tsv` no longer loses a
+  command's last minute. Names only, never arguments. `agents runs [--since
+  24h|7d|30d|today] [--json]` lists them, newest first.
+- **`agents report --view runs|waste|trends|agents`.** The most repeated and
+  slowest commands (median, p90, failure rate); waste (duplicate runs, runs
+  left running until a cleanup, polling time, failed runs re-run at once);
+  trends against the window before, with regressions flagged; and all of it
+  per agent type. `--json` for each (additive, `schema_version` 1); the
+  summary adds `insights` and `runs` (`count`, `failed`, `dup`, `cleaned`).
+- **Top insights.** The report opens with the three findings worth acting
+  on, ranked by the CPU at stake, each saying what to do: "agentic-vms: `go`
+  test runs ×281 in 7d, 50 duplicates (9.5 CPU-h) — consider a shared test
+  cache or serializing them". Each sample refreshes today's top one, and the
+  menu shows it under Today (the full sentence as its tooltip); a click opens
+  that view.
+- **`./uninstall.sh --purge-history`** deletes the agents history; in a
+  terminal uninstall asks (default: keep), `--all` keeps it.
+- **`AGENTS_HOOK_LOG=1`** logs each cleanup-hook run (event, agent id,
+  handback seen, tasks, matches; no command lines) to a private `hooks.log`,
+  with a "Verify the cleanup hooks" guide.
+- **The README tells the story, with proof:** `herdr.gif` (a real Herdr
+  driving three machines, with scripted agent stand-ins), `cleanup.gif` (a
+  loop stuck on a finished task, `agents why`, the report's Top insights),
+  `cli.gif` (the shipped zsh and tools), and the menu bar in light and dark,
+  drawn from the plugin's real output by `scripts/render_menu.sh`. All of it
+  regenerates with `make screenshots`, on demo data only.
+
+### Changed
+- **`agents` is modular:** a thin `bin/agents` and `lib/agents/*.sh` plus
+  `lib/agents/awk/*.awk`, one responsibility each, shared helpers in one
+  place (map in docs/engineering.md). The monitoring pack installs the
+  modules to `~/.local/lib/tuidev/agents`, each recorded for `uninstall.sh`;
+  the health check catches a missing one. Output is byte-identical to 3.5.1
+  (checked by 73 golden files under BSD awk, gawk, mawk and BusyBox), except
+  durations, which now read the same everywhere: `42s`, `7m03s`, `1h05m`.
+- The menu refresh forks less: one clock per refresh, and the run feed is
+  skipped when nothing runs.
+
+### Security
+- Names that come from transcripts (agent types) or directories (projects)
+  are reduced to plain text before they are stored or shown: no control
+  characters reach your terminal, the menu or a notification.
+- Locks record their holder and are taken over only when it is gone, and a
+  run releases only its own lock. A sample commits its history before the run
+  ledger, so a ledger failure can't make the next sample count CPU twice.
+- `agents` started through a symlink to a checkout loads that checkout's
+  modules, even next to an older install, and checks every awk program is
+  present before it runs anything.
+- `AGENTS_NOW` is honored only under `AGENTS_TESTING`, so a stray export can't
+  freeze the caches.
+- The screenshot tapes run in a clean environment and can't pick up the
+  renderer's shell history, zoxide database or zsh config.
+
+### Fixed
+- A bad `AGENTS_JOB_*` pattern no longer prints bash's regex error.
+- A sample with nothing running no longer prints an `mv` error.
+- `agents report` pairs failed runs with their re-runs in the order the runs
+  ended, not the order `runs.tsv` stored them.
+- `uninstall.sh`: a prompt that gets no answer counts as no instead of
+  aborting.
+- Tests no longer depend on the length of `$TMPDIR` or its trailing slash.
+- `make screenshots`: demo homes live under `/tmp`, so the demo Herdr
+  socket fits the 104-byte limit.
+
 ## [3.5.1] - 2026-10-14
 
 ### Fixed
