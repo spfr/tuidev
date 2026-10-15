@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-10-14
+
+`agents` now shows where your tokens go: by model, CLI, subagent type and
+project, how much the prompt cache saves, what polling and compactions cost,
+and which commands you or auto mode keep denying. It reads the transcripts
+Claude Code and Codex already write. Nothing is sent anywhere, and nothing
+needs setting up.
+
+### Added
+- **Token telemetry.** Each `agents sample` reads what is new in the Claude
+  Code transcripts (`~/.claude/projects`, subagents included) and the Codex
+  session logs (`~/.codex/sessions`). It records one row per model call in
+  `tokens.tsv`: model, CLI, project, session, agent type, input, cache write,
+  cache read, output, and whether the call only waited on something
+  (polling). It also records context compactions (`compacts.tsv`), denied
+  tool calls (`denials.tsv`) and the Codex plan's rate-limit window
+  (`limits.tsv`).
+  - Each message counts once: the repeated lines of one message, forks'
+    copies of their parent's history, and resumed or rewound sessions are
+    skipped.
+  - The scan reads at most 64 MiB per sample and resumes where it stopped,
+    newest files first. Today's numbers arrive within minutes; a heavy
+    month's history fills in over the first hour or two.
+  - It works with BSD, GNU and BusyBox tools. Rows are kept for
+    `AGENTS_HISTORY_DAYS` like the rest of the history; `AGENTS_HISTORY=0`
+    turns it off.
+- **`agents report --view tokens`.**
+  - Totals and the cache hit rate, then the same columns by model, by CLI, by
+    agent type (`main`, `Explore`, `implementor-complex`, `fork`…) and by
+    project. Subagent worktrees count toward their repo.
+  - Tokens spent polling, by agent; compactions, auto and manual; the Codex
+    plan's used share and when it resets.
+  - `--json`, with `schema_version` 1.
+- **`agents report --view denials`.** Tool calls denied by you, by Claude
+  Code's auto-mode classifier (with its reason) or by a safety check, grouped
+  by command, agent and project. For a command that keeps being denied, a
+  hint says what to change: an allow rule, an instruction, or nothing, when
+  the classifier is holding it for you on purpose.
+  - A command is recorded by its program and a known subcommand only
+    (`git push`, `kubectl apply`), never an argument or option value. In a
+    compound command it is the program that acts, not the `cd` or `grep`
+    around it. A web fetch is recorded by host only.
+- **Insights for tokens and denials.** The report's Top insights (and the
+  menu's) now also flag:
+  - a CLI below 70% cache hits on 1M+ input tokens;
+  - polling above 5% of tokens;
+  - a session that filled its context and compacted automatically 3 or more
+    times;
+  - a command you denied 3 or more times.
+- **The menu shows today's tokens:** `12.4M tokens today · 94% cached`, under
+  today's CPU. A click opens the tokens view.
+- **An optional cost estimate.** Copy
+  `configs/agents/agents-prices.example.tsv` to
+  `~/.config/tuidev/agents-prices.tsv` (or set `AGENTS_PRICES`) and fill in
+  your prices per million tokens. The tokens view and the summary then show
+  an estimated dollar figure, labelled as an estimate. tuidev ships no
+  prices: without the file, you see tokens only.
+
+### Changed
+- The summary report gains a Tokens line (total, cache hits, polling share,
+  compactions, and the estimate when priced) and a Denials line.
+
 ## [3.6.0] - 2026-10-14
 
 `agents` now remembers every command your agents run and tells you what to
