@@ -154,7 +154,8 @@ printf '%s\n' "$HERDR_AGENTS" > "$tmp/herdr.json"
 pass "jump: a Herdr pane by session id, else its processes, else (a known session) its directory; then the Herdr client's terminal tab"
 
 clear_logs
-out="$(agents_jump 601)" && [[ "$out" == "pid 601: Ghostty" ]] || fail "jump to Ghostty: $out"
+out="$(agents_jump 601)" || fail "jump to Ghostty failed: $out"
+[[ "$out" == "pid 601: Ghostty" ]] || fail "jump to Ghostty: $out"
 [[ "$(log osascript)" == *'tell application "Ghostty"'*"/dev/ttys001"* ]] || fail "Ghostty's terminal by tty: $(log osascript)"
 clear_logs; agents_jump 960 >/dev/null
 [[ "$(log osascript)" == *'tell application "iTerm"'*"/dev/ttys006"* ]] || fail "iTerm's session by tty: $(log osascript)"
@@ -174,8 +175,9 @@ out="$(agents_peek 820)"; [[ "$out" == *"Herdr w2:p1"*"herdr pane text" && "$(lo
 # agent alone in the directory (and a session id it knows).
 printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api","agent_session":{"value":"zzz"}}]}}' > "$tmp/herdr.json"
 printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
-clear_logs; ! out="$(agents_peek 820 2>&1)" && [[ "$out" == *"its pane was not found"* && "$(log herdr)" != *"pane read"* ]] \
-    || fail "peek guessed a Herdr pane: $out / $(log herdr)"
+clear_logs
+if out="$(agents_peek 820 2>&1)"; then fail "peek guessed a Herdr pane: $out"; fi
+[[ "$out" == *"its pane was not found"* && "$(log herdr)" != *"pane read"* ]] || fail "peek guessed a Herdr pane: $out / $(log herdr)"
 printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api"},{"pane_id":"w8:p1","agent":"claude","cwd":"/y","agent_session":{"value":"sess-820"}}]}}' > "$tmp/herdr.json"
 clear_logs; out="$(agents_peek 820)"; [[ "$(log herdr)" == *"pane read w8:p1"* ]] || fail "peek by session id: $out / $(log herdr)"
 rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"; printf '%s\n' "$HERDR_AGENTS" > "$tmp/herdr.json"
@@ -251,7 +253,7 @@ done
 stub fzf 'exit 2'
 [[ "$(_agents_pick_argv)" != *"every("* ]] || fail "an older fzf gets every()"
 rm -f "$tmp/bin/fzf"
-out="$(PATH="$tmp/bin:/usr/bin:/bin" agents_pick 2>&1)" || true
+out="$(AGENTS_FZF=fzf-not-installed agents_pick 2>&1)" || true
 [[ "$out" == *"pick needs fzf"*"AGENTS ("* ]] || fail "pick without fzf: $out"
 pass "pick: the list (pid, PID@START, line), fzf's preview and keys, every() only where fzf has it; agents ls without fzf"
 

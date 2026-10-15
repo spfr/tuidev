@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.1] - 2026-10-15
+
+CI is green again for 3.8: the new tests pass where fzf is installed and
+under shellcheck 0.9. No change to what `agents` does.
+
+### Fixed
+
+- **Tests:** `agents pick`'s "without fzf" test no longer finds the Alpine
+  image's fzf (a test names a missing one through `AGENTS_FZF`, read only
+  under `AGENTS_TESTING`), and the MCP and show tests are clean under
+  shellcheck 0.9 (stubs marked, no `A && B || C`).
+
 ## [3.8.0] - 2026-10-15
 
 Every process the menu lists now has a detail view and one click to the session

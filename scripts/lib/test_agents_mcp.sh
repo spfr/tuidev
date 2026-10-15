@@ -189,6 +189,7 @@ pass "needles for classify: longest first, one per CLI, none for http servers"
 # --- Cache: rebuilt when a config changes, appears or goes away -------------------------
 # builds: how many times the inventory was built (it runs in a subshell).
 eval "$(declare -f _agents_mcp_build | sed '1s/_agents_mcp_build/_agents_mcp_build_real/')"
+# shellcheck disable=SC2317,SC2329  # stub: counts the builds
 _agents_mcp_build() { echo x >> "$tmp/builds"; _agents_mcp_build_real; }
 builds() { build_count=0; [[ ! -f "$tmp/builds" ]] || build_count="$(grep -c . "$tmp/builds")"; }
 _agents_mcp_load sync; builds; [[ $build_count == 0 ]] || fail "an unchanged cache was rebuilt"
@@ -200,6 +201,7 @@ printf '%s' "$_AGENTS_MCP_ROWS" | grep -q $'\tlate\t' || fail "the new server is
 # Classifying never waits: a stale cache is used as is, rebuilt in the background,
 # at most every 30 s.
 detached=""
+# shellcheck disable=SC2317,SC2329  # stub: the background rebuild is recorded, not run
 _agents_detach() { detached+="$* "; }
 sleep 1; touch "$HOME/.claude.json"
 _agents_mcp_load; builds; [[ $build_count == 2 && -z "$detached" ]] || fail "a cache built under 30 s ago was rebuilt ($build_count, $detached)"
@@ -212,6 +214,7 @@ _agents_mcp_load; builds; [[ $build_count == 3 ]] || fail "the first build is no
 # A config written while the inventory is being built (after it was read,
 # in the same second) leaves the cache stale: the cache's mtime is when the
 # build began.
+# shellcheck disable=SC2317,SC2329  # stub: the build, then a config written during it
 _agents_mcp_build() { _agents_mcp_build_real; jq -n '{mcpServers: {during: {command: "during-mcp"}}}' > "$other/.mcp.json"; }
 rm -f "$cache"; _agents_mcp_load sync
 printf '%s' "$_AGENTS_MCP_ROWS" | grep -q $'\tduring\t' && fail "the build read a config written after it"

@@ -24,7 +24,7 @@ agents_pick() {
         "")     ;;
         *)      echo "usage: agents pick [--list]" >&2; return 2 ;;
     esac
-    if ! command -v fzf >/dev/null 2>&1; then
+    if ! command -v "$(_agents_fzf)" >/dev/null 2>&1; then
         echo "agents: pick needs fzf (the ui pack installs it: ./install.sh --pack ui, or brew install fzf); here is agents ls" >&2
         agents_main ls
         return
@@ -32,6 +32,11 @@ agents_pick() {
     while IFS= read -r line; do argv+=("$line"); done < <(_agents_pick_argv)
     _agents_pick_list | SHELL="${BASH:-/bin/bash}" "${argv[@]}" >/dev/null
     return 0
+}
+
+# _agents_fzf — the fzf to run (a test may name another, as AGENTS_FZF).
+_agents_fzf() {
+    if [[ -n "${AGENTS_TESTING:-}" && -n "${AGENTS_FZF:-}" ]]; then echo "$AGENTS_FZF"; else echo fzf; fi
 }
 
 # _agents_pick_list — the list (awk/pick.awk), Herdr from its cache.
@@ -45,7 +50,7 @@ _agents_pick_list() {
 # cursor on the same process: every() and --id-nth (an unknown option or
 # event is fzf's exit status 2).
 _agents_pick_live() {
-    fzf --track --id-nth 1 --bind 'every(2):abort' --filter x </dev/null >/dev/null 2>&1
+    "$(_agents_fzf)" --track --id-nth 1 --bind 'every(2):abort' --filter x </dev/null >/dev/null 2>&1
     [[ $? -ne 2 ]]
 }
 
@@ -55,7 +60,7 @@ _agents_pick_argv() {
     local a list
     a="$(printf '%q' "$AGENTS_PATH")"
     list="$a pick --list"
-    printf '%s\n' fzf --delimiter "$(printf '\t')" --with-nth '3..' --header-lines 1 --layout reverse --no-sort \
+    printf '%s\n' "$(_agents_fzf)" --delimiter "$(printf '\t')" --with-nth '3..' --header-lines 1 --layout reverse --no-sort \
         --prompt 'agents> ' \
         --header 'enter jump · ctrl-p peek · ctrl-d details · ctrl-k kill · ctrl-r reload · esc quit' \
         --preview "$a show {1}" --preview-window 'right,55%,wrap' \
