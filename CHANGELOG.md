@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.1] - 2026-10-15
+
+Verified end to end on a Mac: a click on an agent's banner lands in its
+Herdr pane in the running Ghostty, and the menu's windows open there too.
+
+### Fixed
+
+- **Docs:** turning notifications back on after a "Don't Allow" goes
+  through System Settings › Notifications › terminal-notifier; on macOS 27
+  `tccutil reset UserNotification` fails, so the docs no longer offer it.
+
 ## [3.9.0] - 2026-10-15
 
 A fully linked loop. When an agent needs you, the banner is a door: click it
