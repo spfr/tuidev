@@ -22,9 +22,11 @@
 # bytes and _AGENTS_TOKENS_FILES files per sample, newest files first; the
 # rest waits for the next sample. One grep under LC_ALL=C picks the lines
 # that matter (an ERE whose branches share their first byte: BSD grep makes
-# one pass per -F pattern), and only those reach awk/tokens.awk. The first
-# scan reads the files changed within AGENTS_HISTORY_DAYS; a row older than
-# that is never written.
+# one pass per -F pattern), and only those reach awk/tokens.awk; where grep
+# gives no line offsets (BusyBox), awk does (_agents_tokens_grep). The first
+# scan reads the files changed within AGENTS_HISTORY_DAYS, a row older than
+# that never written: on a heavy machine the budget makes that a catch-up
+# over many samples (64 MiB each: some 16 a GiB), the newest files first.
 #
 # Files, private like the rest of $AGENTS_DATA_DIR, none with AGENTS_HISTORY=0;
 # one writer (agents sample, under sample.lock); tab-separated, no header,
@@ -86,7 +88,7 @@ _AGENTS_TOKENS_CODEX_RE='"type":"(session_meta|turn_context|token_count)"'
 # AGENTS_HISTORY=0). Runs inside agents_sample (sample.lock, umask 077); the
 # state is replaced before the rows are appended, so a failure loses rows
 # rather than counting them twice. False, with tokens.state as it was, when
-# the scan could not be made.
+# the scan could not be made. Today (DAY, and its midnight) is NOW's.
 _agents_tokens_scan() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
     # shellcheck disable=SC2034  # _agents_window sets off and period too
@@ -105,6 +107,7 @@ _agents_tokens_scan() {
     types="$(_agents_tx_agent_types ${subs[@]+"${subs[@]}"})"
     forks="$(_agents_tokens_forks ${kids[@]+"${kids[@]}"})"
     rm -f "$dir"/tokens.add.* "$dir/tokens.state.new" 2>/dev/null
+    _agents_tokens_probe
     if ! today="$(_agents_tokens_feed "$now" <<<"$plan" \
             | _agents_awk "lib_proc lib_activity tokens" -v now="$now" -v cut="$((now - AGENTS_HISTORY_DAYS * 86400))" \
                 -v mid="$start" -v day="$day" -v quiet="$_AGENTS_TOKENS_QUIET" -v d="$dir" -v tyf=/dev/fd/3 -v frf=/dev/fd/4 \
@@ -122,9 +125,6 @@ _agents_tokens_scan() {
     _agents_replace "$dir/tokens.today" "$today"
 }
 
-# _agents_tokens_list — "@claude" then Claude Code's transcripts, "@codex"
-# then Codex's, changed within AGENTS_HISTORY_DAYS: "inode<TAB>size<TAB>
-# mtime<TAB>path", one stat per batch of files (no device: BSD stat's %d
 # _agents_tokens_forks TRANSCRIPT... — of these subagent transcripts, those
 # whose meta.json names the subagent that spawned them (a fork of a
 # subagent, which starts with a copy of that one's history: the same
@@ -151,6 +151,9 @@ _agents_tokens_forks() {
     return 0
 }
 
+# _agents_tokens_list — "@claude" then Claude Code's transcripts, "@codex"
+# then Codex's, changed within AGENTS_HISTORY_DAYS: "inode<TAB>size<TAB>
+# mtime<TAB>path", one stat per batch of files (no device: BSD stat's %d
 # looks each one up by name, a thousand times slower).
 _agents_tokens_list() {
     local c="${CODEX_HOME:-$HOME/.codex}/sessions" st
@@ -165,7 +168,7 @@ _agents_tokens_list() {
 
 # _agents_tokens_feed NOW < PLAN — awk/tokens.awk's input: for each planned
 # transcript a header, "F<TAB>END<TAB>PLAN_LINE" followed by the lines it
-# reads (grep -b: "OFFSET:LINE", OFFSET from the old offset), or
+# reads ("OFFSET:LINE", OFFSET from the old offset: _agents_tokens_grep), or
 # "K<TAB>-<TAB>PLAN_LINE" for one it leaves as it was. PLAN_LINE:
 #   work cli path inode size mtime offset last_epoch last_id session project agent model pending fork
 _agents_tokens_feed() {
@@ -213,17 +216,42 @@ _agents_tokens_end() {
 }
 
 # _agents_tokens_read CLI FILE OFFSET END SIZE — the lines between OFFSET and
-# END that matter to tokens.awk, with their offsets from OFFSET (grep -b).
-# Lines past END (the file grew) are dropped by tokens.awk.
+# END that matter to tokens.awk, with their offsets from OFFSET. Lines past
+# END (the file grew) are dropped by tokens.awk.
 _agents_tokens_read() {
     local re="$_AGENTS_TOKENS_CLAUDE_RE"
     [[ "$1" != codex ]] || re="$_AGENTS_TOKENS_CODEX_RE"
     if [[ $3 -eq 0 && $4 -eq $5 ]]; then
-        LC_ALL=C grep -bE "$re" -- "$2" 2>/dev/null
+        _agents_tokens_grep "$re" "$2" 2>/dev/null
     elif [[ $4 -eq $5 ]]; then
-        tail -c "+$(($3 + 1))" -- "$2" 2>/dev/null | LC_ALL=C grep -bE "$re"
+        tail -c "+$(($3 + 1))" -- "$2" 2>/dev/null | _agents_tokens_grep "$re"
     else
-        tail -c "+$(($3 + 1))" -- "$2" 2>/dev/null | head -c "$(($4 - $3))" | LC_ALL=C grep -bE "$re"
+        tail -c "+$(($3 + 1))" -- "$2" 2>/dev/null | head -c "$(($4 - $3))" | _agents_tokens_grep "$re"
     fi
     return 0
+}
+
+# _agents_tokens_probe — once per process: whether grep -ab prints each
+# matching line's own byte offset (GNU and BSD grep do; BusyBox grep has no
+# -b, and ugrep's is the match's offset): _AGENTS_TOKENS_GREPB 1 or 0.
+_agents_tokens_probe() {
+    [[ -z "${_AGENTS_TOKENS_GREPB:-}" ]] || return 0
+    _AGENTS_TOKENS_GREPB=0
+    [[ "$(printf 'ab\nxyz\n' | LC_ALL=C grep -abE 'y' 2>/dev/null)" != 3:xyz ]] || _AGENTS_TOKENS_GREPB=1
+}
+
+# _agents_tokens_grep ERE [FILE] — FILE's (or stdin's) lines that match ERE,
+# as "OFFSET:LINE", OFFSET the line's first byte: grep -ab (-a: a stray NUL
+# byte must not turn the rest into "Binary file matches"), or, where that
+# gives no line offsets (_agents_tokens_probe), awk counting bytes under
+# LC_ALL=C (slower; a NUL byte, which JSON lines never hold raw, would put
+# BusyBox awk's count off).
+_agents_tokens_grep() {
+    if [[ "${_AGENTS_TOKENS_GREPB:-1}" == 1 ]]; then
+        if [[ $# -gt 1 ]]; then LC_ALL=C grep -abE "$1" -- "$2"; else LC_ALL=C grep -abE "$1"; fi
+    elif [[ $# -gt 1 ]]; then
+        _agents_tokens_grep "$1" < "$2"
+    else
+        LC_ALL=C awk -v re="$1" '$0 ~ re { print o ":" $0 } { o += length($0) + 1 }'
+    fi
 }

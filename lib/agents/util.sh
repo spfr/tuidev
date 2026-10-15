@@ -46,15 +46,22 @@ agents_parse_duration() {
     echo "$total"
 }
 
-# _agents_window SINCE — set the caller's start, now, off and period (declare
-# them local) for a --since window: a duration back from now (24h, 7d, 30m)
-# or today (since local midnight). The window is [start, now]; the one before
-# it is [start - period, now - period) (for today: yesterday up to this time
-# of day); off is the UTC offset in seconds. False on any other SINCE.
+# _agents_window SINCE [NOW] — set the caller's start, now, off and period
+# (declare them local) for a --since window: a duration back from now (24h,
+# 7d, 30m) or today (since local midnight). The window is [start, now]; the
+# one before it is [start - period, now - period) (for today: yesterday up to
+# this time of day); off is the UTC offset in seconds. NOW (epoch) is the
+# clock to use instead of a fresh one, and off is then its own (date -d @NOW
+# on GNU and BusyBox, -r on BSD). False on any other SINCE.
 # shellcheck disable=SC2034  # it sets the caller's variables
 _agents_window() {
     local z secs
-    read -r now z <<<"$(date '+%s %z')"
+    if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+        now=$2
+        z="$(date -d "@$now" +%z 2>/dev/null || date -r "$now" +%z 2>/dev/null || date +%z)"
+    else
+        read -r now z <<<"$(date '+%s %z')"
+    fi
     off=0
     if [[ "$z" =~ ^([+-])([0-9][0-9])([0-9][0-9])$ ]]; then
         off=$(( 10#${BASH_REMATCH[2]} * 3600 + 10#${BASH_REMATCH[3]} * 60 ))

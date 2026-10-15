@@ -465,7 +465,7 @@ Read them as leads, not verdicts: a regression may be a bigger change landing, a
 
 #### Tokens and denials
 
-Each `agents sample` also reads what the Claude Code and Codex transcripts on disk logged since the last one (`~/.claude/projects`, `~/.codex/sessions`), and keeps four more files beside the history, private and pruned with it, tab-separated:
+Each `agents sample` also reads what the Claude Code and Codex transcripts on disk logged since the last one (`~/.claude/projects`, `~/.codex/sessions`), and keeps four more files beside the history, private and pruned with it, tab-separated. A sample reads at most 64 MiB of transcripts, newest first, so on the first run today's numbers arrive within a minute or two, while a heavy machine's 7d and 30d windows fill in over the next hour or two as the samples work back through older transcripts.
 
 - `tokens.tsv`, one row per API message (Claude Code writes one message as several lines; each counts once, and so does a message written again: a fork's copy of the history it inherits, or the earlier messages a rewound or resumed session writes again) or Codex turn: `epoch cli project session agent model in cache_write cache_read out poll`. `agent` is `main`, the subagent type, or `-`; `poll` is 1 when every tool call in that message only waited (a sleep loop, reading a background task's output). Codex's input counts its cached part as `cache_read`, so `in` is the uncached rest. `tokens.today` holds today's sums, for the menu.
 - `compacts.tsv`: `epoch cli project session agent trigger pre_tokens post_tokens` (`trigger` is `auto` or `manual`).

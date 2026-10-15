@@ -395,6 +395,47 @@ $(which acme) --x | grep y%grep
 CASES
 pass "denial subjects: the acting program, a known subcommand only when nothing comes before it, never an option's value"
 
+# 13. grep without line byte offsets (BusyBox has no -b): the probe falls
+# back to awk counting bytes, with the same rows.
+(
+    CLAUDE_CONFIG_DIR="$tmp/orig/claude" CODEX_HOME="$tmp/orig/codex" AGENTS_DATA_DIR="$tmp/nob"; D="$tmp/nob"
+    grep() { case "$1" in -*b*) echo "grep: unrecognized option: b" >&2; return 2 ;; esac; command grep "$@"; }
+    unset _AGENTS_TOKENS_GREPB
+    _agents_tokens_probe; [[ "$_AGENTS_TOKENS_GREPB" == 0 ]] || fail "F4: the probe took a grep without -b"
+    scan
+    for f in tokens.tsv compacts.tsv denials.tsv limits.tsv tokens.today; do
+        [[ "$(LC_ALL=C sort "$tmp/nob/$f")" == "$(LC_ALL=C sort "$tmp/full/$f")" ]] || fail "F4: without grep -b, $f differs:"$'\n'"$(diff <(LC_ALL=C sort "$tmp/nob/$f") <(LC_ALL=C sort "$tmp/full/$f"))"
+    done
+    # And a budget that cuts reads, through awk too.
+    _AGENTS_TOKENS_BUDGET=1500; AGENTS_DATA_DIR="$tmp/nobcap"; D="$tmp/nobcap"; n=0
+    while [[ $n -lt 200 ]]; do
+        scan; n=$((n + 1))
+        [[ "$(_agents_tokens_list | _agents_awk tokens_plan -F '\t' -v OFS='\t' -v sf="$D/tokens.state" | LC_ALL=C awk -F '\t' '$1 == 1' | wc -l | tr -d ' ')" != 0 ]] || break
+    done
+    [[ "$(LC_ALL=C sort "$D/tokens.tsv")" == "$(LC_ALL=C sort "$tmp/full/tokens.tsv")" ]] || fail "F4: capped scans without grep -b differ"
+)
+pass "without grep -b (BusyBox), awk counts the bytes: the same rows"
+
+# 14. Today is the sample's: a scan at 23:59:30 whose clock reads midnight
+# when it runs sums the day it was given, not the next one.
+(
+    AGENTS_DATA_DIR="$tmp/mid"; D="$tmp/mid"
+    CLAUDE_CONFIG_DIR="$tmp/orig/claude" CODEX_HOME="$tmp/orig/codex"
+    N2=$((MID - 30)); D2="$(date -u -r "$N2" +%Y-%m-%d 2>/dev/null || date -u -d "@$N2" +%Y-%m-%d)"
+    ( umask 077; _agents_data_dir; _agents_tokens_scan "$N2" "$D2" ) || fail "F5: the scan failed"
+    [[ "$(cat "$D/tokens.today")" == "$D2	0	0	0	0	0" ]] || fail "F5: tokens.today for $D2 holds another day's sums: $(cat "$D/tokens.today")"
+)
+pass "tokens.today sums the sample's own day, even when the scan runs past midnight"
+
+# 15. A NUL byte in a transcript does not hide the lines after it.
+(
+    AGENTS_DATA_DIR="$tmp/nul"; D="$tmp/nul"; CLAUDE_CONFIG_DIR="$tmp/nulc"; CODEX_HOME="$tmp/nulc"
+    np="$tmp/nulc/projects/-work-app"; mkdir -p "$np"
+    { printf '{"type":"progress","data":"a\0b"}\n'; asst msg_Z claude-test-1 5 1 2 3 4 "$text"; plain 6; } > "$np/$S.jsonl"; old "$np/$S.jsonl" 10
+    scan; [[ "$(rows)" == 1 ]] || fail "F6: a NUL byte hid the rows after it: $(cat "$D/tokens.tsv" 2>&1)"
+)
+pass "a NUL byte in a transcript hides nothing"
+
 # 16. A transcript read again from 0 (replaced): a message in the same second
 # as the last one counted, but another, counts; the last one does not again.
 (
