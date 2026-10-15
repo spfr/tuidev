@@ -30,7 +30,7 @@ pass() { echo "PASS: $1"; }
 # shellcheck source=../../bin/agents disable=SC1091
 . "$REPO_DIR/bin/agents"
 
-SECRETS="sk-live-SECRET1 ghp_SECRET2 SECRET3-header SECRET4-env SECRET5-url SECRET6-codex SECRET7-from sk-abc123 SECRET8-flag"
+SECRETS="sk-live-SECRET1 ghp_SECRET2 SECRET3-header SECRET4-env SECRET5-url SECRET6-codex SECRET7-from sk-abc123 SECRET8-flag SECRET9-inline"
 
 # --- awk/mcp.awk: the needle of a command line, from raw records ----------------------
 needle_of() {   # COMMAND ARG... — the needle awk/mcp.awk picks
@@ -73,7 +73,8 @@ pass "needles: npx/uvx/npm exec packages without versions, scripts, python -m, d
 
 # --- Fixture configs -----------------------------------------------------------------
 proj="$tmp/work/app"; other="$tmp/work/other"
-mkdir -p "$proj" "$other" "$HOME/.claude/plugins/cache/m/pw/1" "$HOME/.claude/plugins/cache/m/off/1" "$HOME/.codex"
+mkdir -p "$proj" "$other" "$HOME/.claude/plugins/cache/m/pw/1" "$HOME/.claude/plugins/cache/m/off/1" "$HOME/.codex" \
+    "$HOME/.claude/plugins/cache/m/inl/1/.claude-plugin" "$HOME/.claude/plugins/cache/m/ref/1/.claude-plugin" "$HOME/.claude/plugins/cache/m/ref/1/cfg"
 jq -n --arg proj "$proj" --arg other "$other" '{
   numStartups: 3,
   mcpServers: {
@@ -86,10 +87,19 @@ jq -n --arg proj "$proj" --arg other "$other" '{
     ($other): {mcpServers: {}}
   }}' > "$HOME/.claude.json"
 jq -n '{mcpServers: {"files": {command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]}}}' > "$proj/.mcp.json"
-jq -n '{enabledPlugins: {"pw@m": true, "off@m": false}}' > "$HOME/.claude/settings.json"
+jq -n '{enabledPlugins: {"pw@m": true, "off@m": false, "inl@m": true, "ref@m": true}}' > "$HOME/.claude/settings.json"
 jq -n --arg r "$HOME/.claude/plugins/cache/m" '{version: 2, plugins: {
   "pw@m": [{scope: "user", installPath: ($r + "/pw/1")}],
-  "off@m": [{scope: "user", installPath: ($r + "/off/1")}]}}' > "$HOME/.claude/plugins/installed_plugins.json"
+  "off@m": [{scope: "user", installPath: ($r + "/off/1")}],
+  "inl@m": [{scope: "user", installPath: ($r + "/inl/1")}],
+  "ref@m": [{scope: "user", installPath: ($r + "/ref/1")}]}}' > "$HOME/.claude/plugins/installed_plugins.json"
+# Plugins whose servers are in .claude-plugin/plugin.json: inline, or in a
+# file of the plugin it names (never one outside it).
+jq -n '{name: "inl", mcpServers: {"inline-db": {command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/db.js", "--key", "SECRET9-inline"], env: {K: "SECRET9-inline"}}}}' \
+    > "$HOME/.claude/plugins/cache/m/inl/1/.claude-plugin/plugin.json"
+jq -n '{name: "ref", mcpServers: ["./cfg/mcp.json", "../escape.json"]}' > "$HOME/.claude/plugins/cache/m/ref/1/.claude-plugin/plugin.json"
+jq -n '{mcpServers: {refsrv: {command: "ref-mcp-server"}}}' > "$HOME/.claude/plugins/cache/m/ref/1/cfg/mcp.json"
+jq -n '{mcpServers: {escaped: {command: "escaped-mcp"}}}' > "$HOME/.claude/plugins/cache/m/ref/escape.json"
 jq -n '{playwright: {command: "npx", args: ["@playwright/mcp@latest"]}}' > "$HOME/.claude/plugins/cache/m/pw/1/.mcp.json"
 jq -n '{mcpServers: {offsrv: {command: "off-mcp"}}}' > "$HOME/.claude/plugins/cache/m/off/1/.mcp.json"
 cat > "$HOME/.codex/config.toml" <<'EOF'
@@ -122,7 +132,8 @@ EOF
 # Written long ago: a config written in the second a build begins makes the
 # cache stale, and these must not.
 touch -t 202601010000 "$HOME/.claude.json" "$proj/.mcp.json" "$HOME/.claude/settings.json" "$HOME/.claude/plugins/installed_plugins.json" \
-    "$HOME/.claude/plugins/cache/m/pw/1/.mcp.json" "$HOME/.claude/plugins/cache/m/off/1/.mcp.json" "$HOME/.codex/config.toml"
+    "$HOME/.claude/plugins/cache/m/pw/1/.mcp.json" "$HOME/.claude/plugins/cache/m/off/1/.mcp.json" "$HOME/.codex/config.toml" \
+    "$HOME/.claude/plugins/cache/m"/*/1/.claude-plugin/plugin.json "$HOME/.claude/plugins/cache/m/ref/1/cfg/mcp.json"
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "SKIP: jq not installed (the fixtures and Claude Code's configs need it)"
@@ -136,6 +147,8 @@ want="$(printf '%s\n' \
     "claude	user	chrome-devtools	$HOME/.claude.json	1" \
     "claude	project	files	$proj/.mcp.json	1" \
     "claude	plugin	playwright	pw@m	1" \
+    "claude	plugin	inline-db	inl@m	1" \
+    "claude	plugin	refsrv	ref@m	1" \
     "claude	user	remote	$HOME/.claude.json	1" \
     "claude	user	tok	$HOME/.claude.json	1" \
     "codex	user	docs	$HOME/.codex/config.toml	0" \
@@ -143,11 +156,12 @@ want="$(printf '%s\n' \
     "codex	user	playwright	$HOME/.codex/config.toml	1" | LC_ALL=C sort)"
 got="$(agents_mcp_configured | LC_ALL=C sort)"
 [[ "$got" == "$want" ]] || fail "configured servers:"$'\n'"$got"$'\n'"want:"$'\n'"$want"
-[[ "$(agents_mcp_configured "$other" | cut -f3 | LC_ALL=C sort | tr '\n' ' ')" == "chrome-devtools docs node repl playwright playwright remote tok " ]] \
+[[ "$(agents_mcp_configured "$other" | cut -f3 | LC_ALL=C sort | tr '\n' ' ')" == "chrome-devtools docs inline-db node repl playwright playwright refsrv remote tok " ]] \
     || fail "a session in another project loads only user and plugin servers: $(agents_mcp_configured "$other" | cut -f3 | tr '\n' ' ')"
 [[ "$(agents_mcp_configured "$proj" | cut -f3 | grep -c -e app-db -e files)" == 2 ]] || fail "a session in the project loads its local and project servers"
 [[ "$(agents_mcp_configured | awk -F '\t' '$5 == 0 { printf "%s ", $3 }')" == "docs " ]] || fail "only Codex's docs (enabled = false) is off; a sub-table's enabled is not its server's"
-pass "inventory: user, local, project and enabled-plugin servers from Claude Code, Codex's [mcp_servers.NAME] tables with their enabled flag; a disabled plugin left out"
+_agents_context_inventory | grep -q "^plugin	inl@m	1	1	0	0	0	1	0	inline-db\$" || fail "the context view does not count a plugin's inline server: $(_agents_context_inventory | grep inl@m)"
+pass "inventory: user, local, project and enabled-plugin servers (.mcp.json, plugin.json) from Claude Code, Codex's [mcp_servers.NAME] tables with their enabled flag; a disabled plugin left out"
 
 cache="$AGENTS_RUN_DIR/mcp.tsv"
 [[ -f "$cache" ]] || fail "no cache written"
@@ -163,9 +177,11 @@ done
 pass "the cache is private, and no arg past the needle, env, header or URL reaches it or any output"
 
 _agents_mcp_needles n
-[[ "$(printf '%s\n' "$n" | head -1)" == $'@modelcontextprotocol/server-filesystem\tfiles\tclaude' ]] \
-    || fail "needles: longest first: $(printf '%s\n' "$n" | head -1)"
+printf '%s\n' "$n" | awk -F '\t' 'NF { if (NR > 1 && length($1) > l) bad = 1; l = length($1) } END { exit bad }' \
+    || fail "needles: not longest first:"$'\n'"$n"
+printf '%s\n' "$n" | grep -q $'^@modelcontextprotocol/server-filesystem\tfiles\tclaude$' || fail "project needle"
 printf '%s\n' "$n" | grep -q $'^@playwright/mcp\tplaywright\tclaude$' || fail "plugin needle"
+printf '%s\n' "$n" | grep -q "^$HOME/.claude/plugins/cache/m/inl/1/db.js	inline-db	claude\$" || fail "an inline plugin server's needle"
 printf '%s\n' "$n" | grep -q $'^@playwright/mcp\tplaywright\tcodex$' || fail "codex needle"
 ! printf '%s\n' "$n" | grep -q -e $'\tremote\t' -e $'\tdocs\t' || fail "an http server has a needle"
 pass "needles for classify: longest first, one per CLI, none for http servers"

@@ -5,8 +5,10 @@
 # Claude Code reads its servers from .claude.json ($HOME's, or
 # $CLAUDE_CONFIG_DIR's): mcpServers (user scope) and projects[DIR].mcpServers
 # (local scope); from a project's DIR/.mcp.json (project scope); and from each
-# enabled plugin's .mcp.json (settings.json's enabledPlugins, located through
-# plugins/installed_plugins.json). Codex reads its own from config.toml's
+# enabled plugin's .mcp.json and its .claude-plugin/plugin.json's mcpServers
+# (servers inline, or the plugin's JSON files that hold them), the plugins
+# being settings.json's enabledPlugins, located through
+# plugins/installed_plugins.json. Codex reads its own from config.toml's
 # [mcp_servers.NAME] tables ($CODEX_HOME, default ~/.codex). Of a server,
 # agents keeps its name, scope, where it is configured, its transport (stdio
 # or http) and its needle: the one word of its command line that names it in
@@ -92,17 +94,45 @@ _agents_mcp_build() {
     if [[ -n "$jq" && -f "$cdir/settings.json" && -f "$cdir/plugins/installed_plugins.json" ]]; then
         while IFS=$'\t' read -r p f; do
             [[ -n "$p" && "$f" == /* ]] || continue
-            if [[ -f "$f/.mcp.json" ]]; then
-                deps+="dep"$'\t'"1"$'\t'"$f/.mcp.json"$'\n'
-                raw+="$(_agents_mcp_file "$f/.mcp.json" plugin "$p" - "$f")"$'\n'
-            else
-                deps+="dep"$'\t'"0"$'\t'"$f/.mcp.json"$'\n'
-            fi
+            _agents_mcp_plugin "$p" "$f"
         done < <(_agents_mcp_plugins "$cdir")
     fi
     [[ ! -f "$codex" ]] || raw+="$(_agents_awk mcp_toml -v src="$codex" < "$codex" 2>/dev/null)"$'\n'
     printf '%s' "$deps"
     printf '%s' "$raw" | _agents_awk mcp
+}
+
+# _agents_mcp_plugin NAME ROOT — a plugin's servers, into the caller's deps
+# and raw: its .mcp.json, and what its .claude-plugin/plugin.json's
+# mcpServers holds: servers (an object), or paths of JSON files in the
+# plugin that hold them (a string, or an array of them; never one outside
+# it). A server both name is one (awk/mcp.awk keeps the first).
+_agents_mcp_plugin() {
+    local p="$1" root="$2" pj="$2/.claude-plugin/plugin.json" line rel files=("$2/.mcp.json") f
+    if [[ -f "$pj" ]]; then
+        deps+="dep"$'\t'"1"$'\t'"$pj"$'\n'
+        while IFS= read -r line; do
+            case "$line" in
+                file$'\t'*) rel="${line#file$'\t'}"; rel="${rel#./}"
+                            [[ -n "$rel" && "$rel" != /* && "$rel" != *..* ]] && files+=("$root/$rel") ;;
+                ?*)         raw+="$line"$'\n' ;;
+            esac
+        done < <(jq -r --arg src "$p" --arg root "$root" "$_AGENTS_MCP_JQ_ROWS"'
+            .mcpServers | if type == "object" then rows("claude"; "plugin"; $src; "-"; $root)
+                elif type == "string" then "file\t" + gsub("[\t\n\r]"; " ")
+                elif type == "array" then .[] | strings | "file\t" + gsub("[\t\n\r]"; " ")
+                else empty end' "$pj" 2>/dev/null)
+    else
+        deps+="dep"$'\t'"0"$'\t'"$pj"$'\n'
+    fi
+    for f in "${files[@]}"; do
+        if [[ -f "$f" ]]; then
+            deps+="dep"$'\t'"1"$'\t'"$f"$'\n'
+            raw+="$(_agents_mcp_file "$f" plugin "$p" - "$root")"$'\n'
+        else
+            deps+="dep"$'\t'"0"$'\t'"$f"$'\n'
+        fi
+    done
 }
 
 # _agents_mcp_file FILE SCOPE SOURCE PROJECT ROOT — a .mcp.json's raw records

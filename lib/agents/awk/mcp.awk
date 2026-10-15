@@ -88,6 +88,8 @@ function needle(cmd, args, root,   b, i, s, w) {
 }
 BEGIN { FS = "\t"; m = 0 }
 NF >= 8 {
+    if (($1, $2, $3, $4, $5) in seen) next      # one server, named twice (a plugin's .mcp.json and plugin.json)
+    seen[$1, $2, $3, $4, $5] = 1
     nd = needle($8, (NF >= 9 ? $9 : ""), $6)
     if (weak(nd)) nd = ""
     nm = $3; gsub(/[[:cntrl:]]/, "", nm)
