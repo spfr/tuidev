@@ -126,7 +126,7 @@ pass "inventory: user, local, project and enabled-plugin servers from Claude Cod
 
 cache="$AGENTS_RUN_DIR/mcp.tsv"
 [[ -f "$cache" ]] || fail "no cache written"
-[[ "$(stat -f %Lp "$cache" 2>/dev/null || stat -c %a "$cache")" == 600 ]] || fail "the cache is not private"
+[[ "$(stat -c %a "$cache" 2>/dev/null || stat -f %Lp "$cache")" == 600 ]] || fail "the cache is not private"
 for s in $SECRETS; do
     ! grep -q -- "$s" "$cache" || fail "the cache holds a secret: $s"
 done
