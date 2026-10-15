@@ -326,6 +326,7 @@ function trow(ts, id, proj, model, i, w, r, o, poll, h) {
 function flush(   k, w, h) {
     if (!gpend) return
     gpend = 0
+    unstash()
     # Cache writes: the 5-minute and 1-hour ones (usage.cache_creation),
     # else all of them as 5-minute ones.
     h = gh; w = max(gw, g5 + gh); if (h > w) h = w
@@ -380,6 +381,22 @@ function assistant(s, o,   a, mp, id, up, ts, cwd, ep, cc, it) {
         }
     }
     tooluses(s, up ? up : a)
+}
+# aside(s): a line read for its task ids or its deferred tool list.
+function aside(s) {
+    if (index(s, "\"backgroundTaskId\"")) tasks(s)
+    if (index(s, "\"type\":\"deferred_tools_delta\"")) deferred(s)
+}
+# stash(s), unstash(): such a line read while a message is pending, kept
+# (with the project it was read in) until that message is counted (flush);
+# when the scan stops before it instead (finish), the next scan reads them
+# again from the message's first line, so they are dropped: tasks.idx and
+# uses.tsv never take a line twice.
+function stash(s) { stl[++nstash] = s; stp[nstash] = proj }
+function unstash(   i, p) {
+    p = proj
+    for (i = 1; i <= nstash; i++) { proj = stp[i]; aside(stl[i]) }
+    proj = p; nstash = 0
 }
 # tasks(s): the background tasks a line names ("backgroundTaskId", never in
 # a string: a quote there is escaped), each once a scan, for the run
@@ -528,7 +545,7 @@ function begin(   h, n, i, a, b, pa, pb) {
         a = path; sub(/\.jsonl$/, "", a); b = substr(a, length(a) - 35)
         if (length(b) == 36 && b ~ /^[0-9a-f-]+$/) sess = b
     }
-    gpend = 0; gid = ""; gtids = ""; lasttids = ""; split("", tun); split("", tus); split("", dseen)
+    gpend = 0; gid = ""; gtids = ""; lasttids = ""; nstash = 0; split("", tun); split("", tus); split("", dseen)
     un = 0; split("", uo); split("", ut); split("", uc)
     if (pending != "-") {
         n = split(pending, pa, ";")
@@ -544,7 +561,7 @@ function finish(   off, n, i, ids, pend, line, q) {
         # again next time, once a line after it shows it complete; one that
         # fills a cut read whole counts now, so the scan moves on.
         if (gpend && gend == flen && (fend < fsize || now - mtime < quiet) && !(gstart == 0 && fend < fsize))
-            { off = foff + gstart; gpend = 0 }
+            { off = foff + gstart; gpend = 0; nstash = 0 }
         else flush()
     }
     # This transcript's uses, one row per hour, project, kind and name.
@@ -607,8 +624,9 @@ mode == "F" {
     }
     # A line read only for a task id or a deferred tool list never ends the
     # message before it: a tool's result can come between two of its lines.
-    if (index(s, "\"backgroundTaskId\"")) tasks(s)
-    if (index(s, "\"type\":\"deferred_tools_delta\"")) deferred(s)
+    # While that message is pending, the line waits with it (stash): a
+    # message read again next scan takes its lines with it.
+    if (index(s, "\"backgroundTaskId\"") || index(s, "\"type\":\"deferred_tools_delta\"")) { if (gpend) stash(s); else aside(s) }
     if (!index(s, "\"type\":\"assistant\"") && !index(s, "\"subtype\":\"compact_boundary\"") && !index(s, "\"is_error\":true")) next
     flush()
     if (index(s, "\"subtype\":\"compact_boundary\"") && index(s, "\"type\":\"system\"")) compact(s)

@@ -99,7 +99,9 @@
 #                 see a transcript must not make the next count it again):
 #                   path cli inode offset last_epoch last_id session project agent model pending fork origin
 #                 offset: the bytes read (whole lines; the last message of an
-#                 active file is read again next time, until it is complete);
+#                 active file is read again next time, until it is complete,
+#                 and the task ids and tool lists between its lines are
+#                 taken once, when it counts);
 #                 a new inode or a shorter file is read again from 0, and only
 #                 rows after last_epoch count (or at it, another message
 #                 than last_id). last_id: the last message id (Codex: running

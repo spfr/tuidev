@@ -623,4 +623,25 @@ pass "a scan lists the transcripts changed since the last one and the hot ones; 
 )
 pass "a catch-up reads more every scan, however many transcripts it holds, until it is done"
 
+# 21. A message still pending in an active transcript is read again next
+# scan from its first line; a task id or a deferred tool list between its
+# lines goes to tasks.idx and uses.tsv once, when the message counts.
+(
+    AGENTS_DATA_DIR="$tmp/reread"; D="$AGENTS_DATA_DIR"; CLAUDE_CONFIG_DIR="$tmp/rereadc"; CODEX_HOME="$tmp/rereadx"
+    rp="$CLAUDE_CONFIG_DIR/projects/-work-app"; mkdir -p "$rp"; rf="$rp/$S.jsonl"
+    tl() { printf '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t","type":"tool_result","content":"ok"}]},"uuid":"t-%s","timestamp":"%s","toolUseResult":{"stdout":"","backgroundTaskId":"%s"}}\n' "$RANDOM" "$(iso $((B + $1)))" "$2"; }
+    deferred() { printf '{"attachment":{"type":"deferred_tools_delta","addedNames":[%s]},"type":"attachment","uuid":"a-%s","timestamp":"%s"}\n' "$2" "$RANDOM" "$(iso $((B + $1)))"; }
+    { plain 0; asst msg_R1 claude-test-1 1 1 1 1 1 "$think"; tl 2 brr01; deferred 3 '"mcp__srv__a","mcp__srv__b"'
+      asst msg_R1 claude-test-1 4 1 1 1 1 "$text"; } > "$rf"
+    scan; scan
+    [[ ! -s "$D/tokens.tsv" && ! -s "$D/tasks.idx" && ! -s "$D/uses.tsv" ]] \
+        || fail "R1: a pending message's lines were taken before it counted: $(cat "$D/tokens.tsv" "$D/tasks.idx" "$D/uses.tsv" 2>/dev/null)"
+    plain 5 >> "$rf"
+    scan; scan
+    [[ "$(rows)" == 1 ]] || fail "R1: $(rows) rows, want 1"
+    [[ "$(cut -f3 "$D/tasks.idx")" == brr01 ]] || fail "R1: tasks.idx: $(cat "$D/tasks.idx")"
+    [[ "$(cut -f6,7,8 "$D/uses.tsv")" == "listed	srv	2" ]] || fail "R1: uses.tsv: $(cat "$D/uses.tsv")"
+)
+pass "a pending message read again takes its task ids and tool lists once"
+
 echo "All agents tokens tests passed."
