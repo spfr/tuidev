@@ -8,9 +8,10 @@
 # logged a newer rate limit than limits.tsv holds. Prints two lines:
 # tokens.today's (today's sums: the old ones when tokens.today is today's,
 # else those in tokens.tsv from mid, local midnight, on; plus this scan's),
-# then "hot<TAB>LINES<TAB>COLD": the hot state's lines, and how many of them
-# have had no row for hotsecs (the next compaction moves them to
-# tokens.state). tyf: _agents_tx_agent_types lines; frf: _agents_tokens_forks
+# then "hot<TAB>LINES<TAB>COLD<TAB>LEFT": the hot state's lines, how many of
+# them have had no row for hotsecs (the next compaction moves them to
+# tokens.state), and how many transcripts the budget left work in (work 2:
+# never counted cold, and the next scan lists every transcript). tyf: _agents_tx_agent_types lines; frf: _agents_tokens_forks
 # lines. Rows older than cut are not written.
 # JSON is read by its keys' spelling, never parsed whole: Claude Code's
 # top-level keys follow the message, so a line's own type, timestamp, cwd
@@ -504,13 +505,14 @@ function codex(s,   ts, p, cwd, t, i, c, o) {
 # --- One transcript at a time -------------------------------------------------
 
 # begin(): a header: "F|K END work cli path inode size mtime offset last_epoch
-# last_id session project agent model pending fork origin". fork: while a
+# last_id session project agent model pending fork origin" (work 2: the
+# budget left some or all of it for a later scan). fork: while a
 # fork of a subagent is still in the history it copied, that subagent's id,
 # else "-". origin: who drove the session (you, headless; a subagent's
 # transcript is subagent's, or fork's), "-" until a line says.
 function begin(   h, n, i, a, b, pa, pb) {
     split($0, h, "\t")
-    mode = h[1]; fend = h[2] + 0; cli = h[4]; path = h[5]; ino = h[6]; fsize = h[7] + 0; mtime = h[8] + 0
+    mode = h[1]; fend = h[2] + 0; fwork = h[3]; cli = h[4]; path = h[5]; ino = h[6]; fsize = h[7] + 0; mtime = h[8] + 0
     foff = h[9] + 0; lastep = h[10] + 0; lastid = h[11]; sess = h[12]; proj = h[13]; agent = h[14]; model = h[15]
     pending = h[16]; fork = h[17] == "" ? "-" : h[17]; origin = h[18] == "" ? "-" : h[18]
     floor = foff == 0 ? lastep : 0; flid = lastid
@@ -557,7 +559,8 @@ function finish(   off, n, i, ids, pend, line, q) {
         "\t" dash(proj) "\t" dash(agent) "\t" dash(model) "\t" dash(pend) "\t" dash(fork) "\t" dash(origin)
     if (!(path in olds) || olds[path] != line) dirty = 1
     news[++nnew] = line
-    if (lastep < now - hotsecs) ncold++
+    if (fwork == 2) nleft++
+    else if (lastep < now - hotsecs) ncold++
     mode = ""
 }
 
@@ -618,6 +621,6 @@ END {
         for (i = 1; i <= nnew; i++) print news[i] > (d "/tokens.hot.new")
     }
     printf "%s\t%.0f\t%.0f\t%.0f\t%.0f\t%.0f\n", day, si + sw + sr + so, si, sw, sr, so
-    printf "hot\t%d\t%d\n", nnew, ncold
+    printf "hot\t%d\t%d\t%d\n", nnew, ncold, nleft
     if (lim_row != "" && lim_ep > lim_old) print lim_row > (d "/tokens.add.limits")
 }

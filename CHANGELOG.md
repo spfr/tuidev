@@ -94,7 +94,10 @@ minute-by-minute sample stays cheap on a heavy machine.
 - **The scan state stays put.** `tokens.state` (800 KB on a heavy machine)
   was rewritten every minute. A sample now rewrites only `tokens.hot`, the
   few transcripts active within the hour, and only when it changed; the cold
-  majority is rewritten when 64 lines have gone cold and once a day.
+  majority is rewritten when 64 lines have gone cold and once a day. A
+  sample also lists only the transcripts changed since the last one and the
+  hot ones; every hour it lists them all, and so does every sample while a
+  first catch-up still has transcripts to read.
 - **A month of tokens reads in a fraction of the time.** Once a day, the
   token rows from before yesterday become one row per day and name, at the
   top of `tokens.tsv` (some fortyfold fewer rows). `agents report --view

@@ -90,7 +90,9 @@
 #                 when the last scan began (the stamp's mtime, 2 s early)
 #                 and the epoch of the last full listing: a scan lists only
 #                 the transcripts changed since the stamp, and the hot ones,
-#                 unless the full listing is _AGENTS_TOKENS_FULL old.
+#                 unless the full listing is _AGENTS_TOKENS_FULL old, or the
+#                 last scan's budget left work (tokens.full is then 0: a
+#                 catch-up lists them all every sample until it is done).
 #   tokens.state, tokens.hot
 #                 one line per transcript read, kept while its last_epoch is
 #                 within the window (listed or not: a sample that does not
@@ -145,7 +147,7 @@ _AGENTS_TOKENS_CODEX_RE='"type":"(session_meta|turn_context|token_count|function
 _agents_tokens_scan() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
     # shellcheck disable=SC2034  # _agents_window sets off and period too
-    local dir="$AGENTS_DATA_DIR" now="$1" day="$2" start off period plan types forks f o ag fk out today hot cold since="" age subs=() kids=()
+    local dir="$AGENTS_DATA_DIR" now="$1" day="$2" start off period plan types forks f o ag fk out today hot cold left since="" age subs=() kids=()
     _agents_window today "$1" || return 1
     # The transcripts changed since the last scan's listing (tokens.stamp,
     # whose mtime is just before it), unless a full listing is due.
@@ -170,14 +172,20 @@ _agents_tokens_scan() {
         | _agents_awk "lib_proc lib_activity tokens" -v now="$now" -v cut="$((now - AGENTS_HISTORY_DAYS * 86400))" \
             -v mid="$start" -v day="$day" -v quiet="$_AGENTS_TOKENS_QUIET" -v hotsecs="$_AGENTS_TOKENS_HOT" \
             -v d="$dir" -v tyf=/dev/fd/3 -v frf=/dev/fd/4 3<<<"$types" 4<<<"$forks")" || out=""
-    { IFS= read -r today; IFS=$'\t' read -r hot _ cold; } <<<"$out" || true
+    { IFS= read -r today; IFS=$'\t' read -r hot _ cold left; } <<<"$out" || true
     if [[ "$today" != "$day"$'\t'* || "$hot" != hot ]] \
         || { [[ -f "$dir/tokens.hot.new" ]] && ! mv -f "$dir/tokens.hot.new" "$dir/tokens.hot"; }; then
         rm -f "$dir"/tokens.add.* "$dir/tokens.hot.new" "$dir/tokens.stamp.new" 2>/dev/null
         return 1
     fi
     [[ ! -f "$dir/tokens.stamp.new" ]] || mv -f "$dir/tokens.stamp.new" "$dir/tokens.stamp"
-    [[ -n "$since" ]] || _agents_replace "$dir/tokens.full" "$now"
+    # Work the budget left (a catch-up) is listed again by the next scan,
+    # whether its transcripts changed or not: the full listing stays due.
+    if [[ "$left" =~ ^[0-9]+$ && $left -gt 0 ]]; then
+        _agents_replace "$dir/tokens.full" 0
+    elif [[ -z "$since" ]]; then
+        _agents_replace "$dir/tokens.full" "$now"
+    fi
     for f in tokens compacts denials uses; do
         [[ ! -s "$dir/tokens.add.$f" ]] || cat "$dir/tokens.add.$f" >> "$dir/$f.tsv"
     done
@@ -330,15 +338,20 @@ _agents_tokens_hot() {
 # reads ("OFFSET:LINE", OFFSET from the old offset: _agents_tokens_grep), or
 # "K<TAB>-<TAB>PLAN_LINE" for one it leaves as it was. PLAN_LINE:
 #   work cli path inode size mtime offset last_epoch last_id session project agent model pending fork origin
+# work, in a header, is 2 for a transcript the budget (bytes or files) left
+# unread, or read only in part: work a later scan must come back to.
 _agents_tokens_feed() {
     local now="$1" budget="$_AGENTS_TOKENS_BUDGET" n=0 work cli path ino size mtime off le lid sess rest end
     while IFS=$'\t' read -r work cli path ino size mtime off le lid sess rest; do
         [[ "$path" == /* ]] || continue   # an empty plan is one empty line
         end=""
-        if [[ "$work" == 1 && $budget -gt 0 && $n -lt $_AGENTS_TOKENS_FILES && -f "$path" && ! -L "$path" ]]; then
+        if [[ "$work" == 1 && ( $budget -le 0 || $n -ge $_AGENTS_TOKENS_FILES ) ]]; then
+            work=2
+        elif [[ "$work" == 1 && -f "$path" && ! -L "$path" ]]; then
             end=$size
-            [[ $((size - off)) -le $budget ]] || end=$((off + budget))
+            [[ $((size - off)) -le $budget ]] || { end=$((off + budget)); work=2; }
             end="$(_agents_tokens_end "$path" "$off" "$end" "$size" "$((now - mtime))")"
+            [[ "$work" != 2 || -z "$end" || $end -lt $size ]] || work=1
         fi
         [[ "$cli" != claude || "$sess" != - ]] || _agents_tx_session_of sess "$path"
         if [[ -n "$end" && $end -gt $off ]]; then

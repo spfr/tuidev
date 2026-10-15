@@ -595,4 +595,32 @@ pass "the scan state: a scan writes only tokens.hot, only when it changed; a com
 )
 pass "a scan lists the transcripts changed since the last one and the hot ones; every hour, all of them"
 
+# 20. A catch-up never stalls: a hundred old transcripts and a small budget;
+# every scan reads more (the transcripts the budget left are listed again,
+# changed or not, and never compacted away as cold) until all are read; then
+# the scans go back to listing only what changed.
+(
+    _AGENTS_TOKENS_FULL=3600 _AGENTS_TOKENS_BUDGET=3000
+    AGENTS_DATA_DIR="$tmp/catch"; D="$AGENTS_DATA_DIR"; CLAUDE_CONFIG_DIR="$tmp/catchc"; CODEX_HOME="$tmp/catchx"
+    cp="$CLAUDE_CONFIG_DIR/projects/-work-app"; mkdir -p "$cp"
+    i=0
+    while [[ $i -lt 100 ]]; do
+        f="$cp/$(printf '%08d' $i)-2222-3333-4444-555555555555.jsonl"
+        { B=$((NOW - 2 * 86400)) asst "msg_C$i" claude-test-1 "$i" 1 1 1 1 "$text"; B=$((NOW - 2 * 86400)) plain $((i + 1)); } > "$f"
+        old "$f" $((2 * 1440)); i=$((i + 1))
+    done
+    n=0 last=0
+    while [[ $n -lt 100 ]]; do
+        scan; n=$((n + 1)); r="$(rows 2>/dev/null || echo 0)"
+        [[ $r -gt $last ]] || fail "C1: scan $n read nothing new ($r rows of 100)"
+        last=$r; [[ $r -lt 100 ]] || break
+    done
+    [[ $last -eq 100 ]] || fail "C1: $last rows of 100 after $n scans"
+    [[ $n -gt 5 ]] || fail "C1: a 3000-byte budget read 100 transcripts in $n scans"
+    [[ "$(cat "$D/tokens.full")" == "$NOW" ]] || fail "C1: caught up, the full listing is not stamped: $(cat "$D/tokens.full")"
+    scan; [[ "$(rows)" == 100 ]] || fail "C1: a scan after the catch-up counted again: $(rows)"
+    echo "    (100 transcripts, a 3000-byte budget: $n scans)"
+)
+pass "a catch-up reads more every scan, however many transcripts it holds, until it is done"
+
 echo "All agents tokens tests passed."
