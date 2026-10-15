@@ -5,7 +5,8 @@
 # Installs container and system monitoring TUIs (lazydocker, bottom) and
 # `agents`, a command that shows and controls agentic-coding processes
 # (sessions, orphaned MCP servers, CPU hogs, keep-awake, thermal pressure).
-# On macOS it adds SwiftBar and a menu-bar plugin built on `agents`.
+# On macOS it adds SwiftBar and a menu-bar plugin built on `agents`, and
+# terminal-notifier, so a click on an agent's notification jumps to its session.
 #
 # Entrypoint: monitoring_install
 # Invoked via: ./install.sh --pack monitoring
@@ -21,6 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/../../lib/config_write.sh"
 
 MONITORING_FORMULAE=(lazydocker bottom)
+# macOS: notify.sh's banners become clickable (a click jumps to the session).
+if [[ "${OSTYPE:-}" == darwin* ]]; then MONITORING_FORMULAE+=(terminal-notifier); fi
 MONITORING_CASKS=(swiftbar)   # macOS only; casks are Homebrew-on-macOS
 
 MONITORING_REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -103,6 +106,7 @@ _monitoring_swiftbar() {
     _monitoring_prune_plugins "$dir" "$name"
 
     print_info "Open SwiftBar once (open -a SwiftBar) and turn on Launch at login in its settings."
+    print_info "terminal-notifier: allow its notifications when macOS asks (or in System Settings > Notifications), so a click on an agent's banner jumps to its session; 'terminal-notifier -diagnose' says why none appear."
 }
 
 monitoring_install() {

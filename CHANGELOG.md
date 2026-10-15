@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+A notification that an agent needs you now takes you to it: click the banner
+and you land in that session's Herdr pane, tmux pane or Ghostty tab.
+
+### Added
+
+- **Click a notification to jump to its session.** On a Mac, `notify.sh`
+  posts its banner through terminal-notifier, which the `monitoring` pack now
+  installs. When the hook runs under a `claude` or `codex` process,
+  `agents root-of` pins that session as `PID@START` when the hook runs, and a
+  click runs `agents jump PID@START`: the Herdr pane, the tmux pane, or the
+  Ghostty (1.3+), iTerm2 or Terminal tab, worked out at the click and refused
+  if the pid has been reused. The banner also brings the session's terminal app
+  forward (`-activate`, by its bundle id), and a newer notification from the
+  same session replaces the older one. What a click runs is only `agents` by
+  its absolute path, the hook's `PATH` and the checked token; titles and
+  messages reach terminal-notifier as arguments, never a shell. Without
+  terminal-notifier, the banner is `osascript`'s as before.
+- **`agents root-of PID`**: the agent session a process runs under, as
+  `PID@START`, with its terminal app and that app's bundle id (for tmux and
+  Herdr, the app their clients run in). It takes one `ps` and calls neither
+  tmux nor Herdr.
+- **The menu's notifications** (`--notify`) use terminal-notifier too, and
+  the cleanup hooks' "Stopped N background commands" notification jumps to
+  its session.
+
+### Changed
+
+- **On a Mac, the banner also fires inside Herdr and tmux**, next to the
+  toast or status line, which can't be seen from another app. Over ssh the
+  toast or status line is still the only channel. Linux is unchanged.
+- **`notify.sh` bounds every command it waits for** (the Herdr toast, tmux,
+  the banner, `notify-send`) with a timeout, so a hung notifier can't hold a
+  hook, and passes the `osascript` banner's text as arguments instead of
+  escaping it into the script.
+
 ## [3.8.1] - 2026-10-15
 
 CI is green again for 3.8: the new tests pass where fzf is installed and

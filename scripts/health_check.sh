@@ -370,7 +370,8 @@ check_packs() {
     case " ${packs[*]} " in
         *" monitoring "*)
             check_optional "agents runs (its modules are in place)" agents_runs
-            is_macos && check_optional "SwiftBar agents plugin" swiftbar_plugin_present ;;
+            is_macos && check_optional "SwiftBar agents plugin" swiftbar_plugin_present
+            is_macos && check_optional "terminal-notifier (a click on a notification jumps to its session)" "have_cmd terminal-notifier" ;;
     esac
     return 0
 }
