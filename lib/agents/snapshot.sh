@@ -7,7 +7,8 @@
 #   agents_collect, the full record set every view starts from.
 # Uses: config.sh, util.sh, classify.sh (agents_classify, agents_enrich),
 #   watched.sh (_agents_watched, _agents_watch_info), awake.sh
-#   (_agents_awake_pid), runs.sh (_agents_runs_feed).
+#   (_agents_awake_pid), runs.sh (_agents_runs_feed), where.sh
+#   (_agents_tmux_up, _agents_panes).
 # Public: agents_snapshot, agents_collect, agents_secs, _agents_start,
 #   _agents_cwds, _agents_proc_paths.
 
@@ -222,29 +223,33 @@ _agents_keep_pids() {
 # agents_collect — the full record set for this moment, ending in
 # "probe listen ok|fail": whether the listening ports could be listed (when
 # not, a stale tree's "no ports" proves nothing, and auto-reap leaves it).
-# With _AGENTS_FEED=1 (agents tsv) and history on, it also hands what it saw
-# to the run ledger (_agents_runs_feed): the same snapshot and lsof, plus the
-# tool shells' stdout from that lsof.
+# Each session's "where" record (its tmux pane, Herdr, ssh or terminal app)
+# comes just before. With _AGENTS_FEED=1 (agents tsv) and history on, it also
+# hands what it saw to the run ledger (_agents_runs_feed): the same snapshot
+# and lsof, plus the tool shells' stdout from that lsof.
 agents_collect() {
-    local ps listen keep kbg="" recs pids lprobe=ok enr feed="" hint=""
+    local ps listen keep kbg="" panes="" tbg="" recs pids lprobe=ok enr feed="" hint=""
     [[ "${_AGENTS_FEED:-}" == 1 && "$AGENTS_HISTORY" == 1 ]] && feed=1
     # Listing the listeners scans every process (lsof): the slowest probe, so
     # it runs while ps reads the process table; so do launchctl on macOS,
-    # whose jobs (pids never stale) need no snapshot, and the cwd lookup for
-    # the pids the last run asked about (_agents_cwd_prefetch).
+    # whose jobs (pids never stale) need no snapshot, tmux's pane list, and
+    # the cwd lookup for the pids the last run asked about
+    # (_agents_cwd_prefetch).
     _agents_bg 5 _agents_listeners
     if command -v launchctl >/dev/null 2>&1; then _agents_bg 7 _agents_keep_pids ""; kbg=1; fi
+    if _agents_tmux_up; then _agents_bg 9 _agents_panes; tbg=1; fi
     _agents_cwd_prefetch 8 ${feed:+--stdout} || true
     ps="$(agents_snapshot)"
     _agents_bg_wait listen 5 || lprobe=fail
     if [[ -n "$kbg" ]]; then _agents_bg_wait keep 7; else keep="$(_agents_keep_pids "$ps")"; fi
+    [[ -z "$tbg" ]] || _agents_bg_wait panes 9 || true
     if [[ -z "$ps" ]]; then
         [[ -z "$hint" ]] || _agents_bg_wait _ 8 || true
         echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2
         return 1
     fi
-    recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep")"
-    local type pid kind rest watch="" runs=""
+    recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+    local type pid kind rest watch="" where="" runs=""
     set --
     while IFS=$'\t' read -r type pid kind rest; do
         case "$type" in
@@ -252,6 +257,7 @@ agents_collect() {
             stale) set -- "$@" "$pid"; runs=1 ;;
             act) [[ "$kind" == tool ]] && { set -- "$@" "$pid"; runs=1; } ;;   # its origin
             watch) watch+="$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;  # kind: the path; rest: read|exists
+            where) where+="where"$'\t'"$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;
         esac
     done <<<"$recs"
     _agents_cwds_hinted pids 8 "$hint" ${feed:+--stdout} "$@"
@@ -260,5 +266,6 @@ agents_collect() {
     # Runs are tool commands and stale trees: with neither, nothing to feed.
     [[ -z "$feed" || -z "$runs" ]] || _agents_runs_feed "$enr" "$recs" "$pids"
     _agents_watch_info "$watch"     # "watched" rows: the evidence agents_assess reads
+    printf '%s' "$where"
     printf 'probe\tlisten\t%s\n' "$lprobe"
 }

@@ -1,7 +1,7 @@
 # lib/agents/awk/classify.awk — agents_classify's single pass over a
-# snapshot: agent, stale, cand, hog, top, total, act, watch and job records
-# (classify.sh documents the columns). Needs lib_proc, lib_activity and
-# lib_jobs.
+# snapshot: agent, stale, cand, hog, top, total, act, watch, where and job
+# records (classify.sh documents the columns). Needs lib_proc, lib_activity,
+# lib_jobs and lib_where.
 
 function addports(q, list,   n, a, i) {
     n = split(list, a, ",")
@@ -77,6 +77,7 @@ END {
         p = ord[k]
         if (root[p] == p) {
             rec("agent", p, kind[p], tcpu[p], trss[p], kids[p], tp[p])
+            printf "where\t%d\t%s\n", p, where_of(p)
         } else if (pp[p] == 1 && uid[p] == me && kind[p] == "" && !(p in keep) && !mine[p] && !anc[p] && !shelter[p]) {
             hit = 0
             for (i = 1; i <= np; i++) if (pat[i] != "" && av[p] ~ pat[i]) { hit = 1; break }

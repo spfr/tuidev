@@ -21,6 +21,18 @@ LOOK
   agents hogs                  top $AGENTS_HOG_TOP CPU hogs, any owner: lifetime average
                                >= ${AGENTS_HOG_PCT}% after ${AGENTS_HOG_MIN}m, or >= ${AGENTS_HOG_NOW}% now outside agent trees
   agents thermal               thermal pressure and energy mode (display only)
+  agents show [--json] [--watch] PID[@START]
+                               one process in detail: what and whose it is, its
+                               verdict, session (id, model, what it is doing now),
+                               where it lives (tmux, Herdr, terminal), CPU, memory,
+                               threads, ports, files, children; --watch redraws
+  agents pick                  browse it all in fzf: the preview is agents show;
+                               enter jumps, ctrl-p peeks, ctrl-d details, ctrl-k kills
+  agents jump [--notify] PID[@START]
+                               go to where it runs: its Herdr or tmux pane, then the
+                               terminal tab that shows it (Ghostty, iTerm, Terminal)
+  agents peek PID[@START] [LINES]
+                               the last LINES (40) lines of its tmux or Herdr pane
   agents mcp [DIR]             the MCP servers Claude Code and Codex are configured
                                with (all, or those a session in DIR loads): name,
                                scope, what starts it, where; processes go by these
