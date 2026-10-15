@@ -201,10 +201,10 @@ shipped="$(AGENTS_PRICES="" rep --view tokens 2>"$tmp/err")"
 [[ "$shipped" == *"TOKENS 2.6M in 8 model calls · 91% cache hits · \$1.46 API-equivalent"$'\n'* ]] || fail "shipped prices: the total:"$'\n'"$shipped"
 [[ "$shipped" == *"   HIT     API \$"$'\n'"  claude-opus-5-5 "*" 96%     \$1.42"$'\n'"  gpt-6-luna "*" 80%     \$0.02"$'\n'"  claude-haiku-5 "*" 50%  unpriced"$'\n'"  claude-sonnet-5 "*"  0%     \$0.02"$'\n'* ]] \
     || fail "shipped prices: per model (opus 1h writes at 8, 5m at 5):"$'\n'"$shipped"
-[[ "$shipped" == *$'\n\n'"API \$: what these tokens would cost at API list prices (as of 2026-09-29), not what a subscription charges; 1 model unpriced, left out" ]] \
+[[ "$shipped" == *$'\n\n'"API \$: what these tokens would cost at API list prices (as of 2026-10-15), not what a subscription charges; 1 model unpriced, left out" ]] \
     || fail "shipped prices: the note:"$'\n'"$shipped"
 json="$(AGENTS_PRICES="" rep --view tokens --json)"
-jqt "$json" '.priced and .prices == {"basis":"api_list","as_of":"2026-09-29"} and .totals.est_usd == 1.46 and .totals.unpriced_tokens == 105000 and ([.models[] | .est_usd] == [1.42, 0.02, null, 0.02])' \
+jqt "$json" '.priced and .prices == {"basis":"api_list","as_of":"2026-10-15"} and .totals.est_usd == 1.46 and .totals.unpriced_tokens == 105000 and ([.models[] | .est_usd] == [1.42, 0.02, null, 0.02])' \
     "shipped prices json" '[.prices, .totals, [.models[] | .est_usd]]'
 jqt "$json" '(.projects[] | select(.project == "app") | .est_usd) == 1.31 and (.sessions[] | select(.session == "S1") | .est_usd) == 1.31 and ([.origins[] | .est_usd] == [1.33, 0.09, null, 0.04])' \
     "shipped prices json: projects, sessions and origins" '[.projects, .sessions, .origins]'
@@ -241,7 +241,9 @@ claude-opus-4-6[1m]%claude-opus-4-6 5 6.25 10 0.5 25
 us.anthropic.claude-sonnet-4-5-20250929-v1:0%claude-sonnet-4-5 3 3.75 6 0.3 15
 anthropic.claude-3-5-haiku-20241022-v1:0%claude-3-5-haiku 0.8 1 1.6 0.08 4
 claude-haiku-4-5-20251001%claude-haiku-4-5 1 1.25 2 0.1 5
-claude-haiku-5-5%-
+claude-haiku-5-5%claude-haiku-5-5 0.1 0.125 0.2 0.01 0.5
+claude-haiku-5%-
+claude-sonnet-5-5%claude-sonnet-5-5 2 2.5 4 0.1 10
 claude-fable-5-1%claude-fable-5-1 10 12.5 20 0.25 50
 claude-fable-5%claude-fable-5 10 12.5 20 1 50
 gpt-5%gpt-5 1.25 1.25 1.25 0.125 10

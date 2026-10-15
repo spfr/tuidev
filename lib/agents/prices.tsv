@@ -1,5 +1,5 @@
 # prices.tsv — API list prices for `agents report`'s API-equivalent cost.
-# as of 2026-09-29
+# as of 2026-10-15
 #
 # US dollars per million tokens, from the vendors' own pages:
 #   Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
@@ -21,6 +21,11 @@
 # one-hour cache tier: its CACHE_WRITE_1H repeats its 5-minute price. A
 # model without a line shows as unpriced, never $0.
 #
+# Claude Haiku 5.5 has two tiers by prompt length (a request whose prompt,
+# cache reads and writes included, is over 100,000 tokens pays 5x). Costs
+# are summed per model, not per request, so its line is the lower tier: a
+# floor for Haiku 5.5's cost.
+#
 # Only prices checked on those pages are here: a model whose list price was
 # not (such as gpt-5-codex, gpt-5.1-codex, gpt-5.2-codex) is left out on
 # purpose. To price one, add its line to your own AGENTS_PRICES file.
@@ -38,11 +43,12 @@ claude-opus-4-6                5      6.25   10     0.50   25
 claude-opus-4-5                5      6.25   10     0.50   25
 claude-opus-4-1                15     18.75  30     1.50   75
 claude-opus-4                  15     18.75  30     1.50   75
-claude-sonnet-5-5              2      2.50   4      0.20   10
+claude-sonnet-5-5              2      2.50   4      0.10   10
 claude-sonnet-5                2      2.50   4      0.20   10
 claude-sonnet-4-6              3      3.75   6      0.30   15
 claude-sonnet-4-5              3      3.75   6      0.30   15
 claude-sonnet-4                3      3.75   6      0.30   15
+claude-haiku-5-5               0.10   0.125  0.20   0.01   0.50
 claude-haiku-4-5               1      1.25   2      0.10   5
 claude-3-5-haiku               0.80   1      1.60   0.08   4
 
