@@ -1,24 +1,18 @@
 # lib/agents/awk/enrich.awk — agents_enrich: cwds, Herdr status, projects,
 # dev-server confirmation, the order of agent rows and the activity flags
-# (classify.sh documents the columns). Needs lib_proc and lib_activity.
+# (classify.sh documents the columns). Needs lib_proc (projname) and
+# lib_activity.
 
 function project(c,   i) {
     if (c == "" || index(c, home "/Library/") == 1) return 0
     for (i = 1; i <= nr; i++) if (roots[i] != "" && index(c, roots[i]) == 1) return 1
     return 0
 }
-function projname(c,   i, r, w, n, a) {
-    if (c == "" || c == "-") return "-"
-    if (c == home) return "~"
-    i = index(c, "/.claude/worktrees/")
-    if (i > 0) { r = substr(c, 1, i - 1); sub(/.*\//, "", r); w = substr(c, i + 19); sub(/\/.*/, "", w); return r "/" w }
-    sub(/\/$/, "", c); n = split(c, a, "/"); return a[n]
-}
 function origin(c,   i, w) {
     if (c == "" || c == "-") return "-"
     i = index(c, "/.claude/worktrees/")
     if (i == 0) return "main"
-    w = substr(c, i + 19); sub(/\/.*/, "", w); return w
+    w = substr(c, i + 19); sub(/\/.*/, "", w); w = printable(w); return w == "" ? "-" : w
 }
 function rank(kind, status) {
     if (kind == "daemon") return 4

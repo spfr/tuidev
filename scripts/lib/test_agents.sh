@@ -699,6 +699,14 @@ for c in "$HOME/work/app" "$HOME/code/shop/.claude/worktrees/fix-cart" "$HOME/co
 done
 [[ "$(agents_project "$HOME/code/shop/.claude/worktrees/fix-cart/sub")" == shop/fix-cart ]] || fail "worktree project name"
 [[ "$(agents_project "$HOME")" == "~" && "$(agents_project /opt/x/)" == x ]] || fail "home and trailing-slash project names"
+# Control characters (ESC, BEL, a tab, ^A) never reach a project or origin name.
+c=$'/Users/NAME/code/ev\033[2Jil\007' w=$'/Users/NAME/re\033po/.claude/worktrees/agent-\tab1'
+[[ "$(agents_project "$c")" == "ev[2Jil" && "$(agents_project "$w")" == repo/agent-ab1 && "$(agents_project $'/x/\033')" == - ]] \
+    || fail "control characters in project names: $(agents_project "$c" | od -c | head -2)"
+got="$(printf 'agent\t1\tclaude\t0\t0\t0\t0\t0\ts\t-\tme\t-\t%s\targs\n' "$c" | agents_enrich "" "" | cut -f15)"
+[[ "$got" == "ev[2Jil" ]] || fail "control characters in enrich's project name: $(printf '%s' "$got" | od -c | head -2)"
+got="$(printf 'act\t5\ttool\t1\t0\t0\t0\t0\ts\t-\t1\t-\t%s/x\tmake\n' "${w//$'\t'/$'\001'}" | agents_enrich "" "" | cut -f15)"
+[[ "$got" == agent-ab1 ]] || fail "control characters in an origin: $(printf '%s' "$got" | od -c | head -2)"
 order="$(printf '%s\n' \
     $'agent\t1\tdaemon\t0\t0\t0\t0\t0\ts\t-\tme\t-\t-\ta' \
     $'agent\t2\tclaude\t0\t0\t0\t0\t0\ts\t-\tme\tidle\t/p/a\ta' \

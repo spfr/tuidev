@@ -43,18 +43,11 @@ _agents_cwd_roots() {
 }
 
 # agents_project CWD — the short name a session goes by: the directory's name,
-# or REPO/NAME for a worktree under REPO/.claude/worktrees/NAME; "~" for $HOME.
-# (agents_enrich applies the same rule in awk; the tests keep them in step.)
+# or REPO/NAME for a worktree under REPO/.claude/worktrees/NAME; "~" for $HOME;
+# never a control character. The one rule, awk/lib_proc.awk's projname, which
+# agents_enrich applies to every record.
 agents_project() {
-    local c="$1" repo wt
-    case "$c" in
-        ""|-) echo - ;;
-        "$HOME") echo "~" ;;
-        */.claude/worktrees/*)
-            repo="${c%%/.claude/worktrees/*}"; wt="${c#*/.claude/worktrees/}"
-            echo "${repo##*/}/${wt%%/*}" ;;
-        *) c="${c%/}"; echo "${c##*/}" ;;
-    esac
+    _AGENTS_CWD="$1" HOME="$HOME" _agents_awk_eval lib_proc 'BEGIN { print projname(ENVIRON["_AGENTS_CWD"]) }'
 }
 
 # agents_enrich CWDS HERDR < RECORDS — fill in cwd ("pid<TAB>cwd" lines, or

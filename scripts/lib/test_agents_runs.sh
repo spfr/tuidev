@@ -348,6 +348,30 @@ pass "the feed is bounded (64 refreshes); an idle refresh feeds nothing; AGENTS_
 )
 pass "a failing run ledger leaves the history committed: two samples never count an interval twice"
 
+# 4c. A project directory named with ESC and BEL: no control character reaches
+# history, the ledger, agents runs, agents report or the menu's insight.
+(
+    AGENTS_DATA_DIR="$tmp/ctl" AGENTS_RUN_DIR="$tmp/ctlrun"
+    evil=$'/Users/NAME/code/ev\033[2J\033]0;x\007il'
+    FIX_CWD="$(printf '%s\n' "300 $evil" "301 $evil")"
+    at 0
+    { base 0; pl 301 300 1 300 3000 08:55:00 "$(cc 'go test ./...')"
+      pl 302 301 20 290 180000 08:55:10 "/tmp/go-build1/b001/app.test -test.v"; } > "$tmp/snap"
+    agents_sample || fail "control characters: S0"
+    at 60; { base 60; } > "$tmp/snap"
+    agents_sample || fail "control characters: S1"
+    [[ "$(cut -f4 "$AGENTS_DATA_DIR/runs.tsv")" == "ev[2J]0;xil" ]] || fail "control characters: runs.tsv project $(cut -f4 "$AGENTS_DATA_DIR/runs.tsv" | od -c | head -2)"
+    {
+        cat "$AGENTS_DATA_DIR/history.tsv" "$AGENTS_DATA_DIR/runs.tsv" "$AGENTS_DATA_DIR/insight.txt"
+        agents_runs --since 1h; agents_runs --since 1h --json
+        for v in summary runs waste trends agents; do agents_report --view "$v" --since 24h; agents_report --view "$v" --since 24h --json; done
+    } > "$tmp/ctl.out" 2>&1
+    grep -q 'ev\[2J\]0;xil' "$tmp/ctl.out" || fail "control characters: the project is missing from the output"
+    ! LC_ALL=C tr -d '\t\n' < "$tmp/ctl.out" | LC_ALL=C grep -q '[[:cntrl:]]' \
+        || fail "control characters reached the output: $(LC_ALL=C grep -n '[[:cntrl:]]' "$tmp/ctl.out" | head -3 | od -c | head -4)"
+)
+pass "a project named with ESC and BEL: history, runs.tsv, agents runs, agents report and insight.txt hold no control character"
+
 # 5. Prune: runs.tsv with history, by end_epoch.
 pd="$tmp/prune"; mkdir -p "$pd"
 old=$((T0 - 31 * 86400)) new=$((T0 - 86400))

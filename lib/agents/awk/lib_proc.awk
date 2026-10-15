@@ -2,9 +2,9 @@
 # program that reads an agents_snapshot record (pid ppid uid user %cpu rss
 # time etime lstart(5 words) args):
 #   secs, base, pname, critical, agent_kind, interactive_shell, supervisor,
-#   hosts, argv, lstart, ancestors.
+#   hosts, argv, lstart, ancestors; and, from a cwd, projname and printable.
 # Reads ENVIRON: AGENTS_NAMES, AGENTS_SUPERVISOR_NAMES, AGENTS_SHELL_NAMES,
-# AGENTS_DAEMON_PATTERN, AGENTS_CRITICAL_NAMES, AGENTS_CRITICAL_PATH.
+# AGENTS_DAEMON_PATTERN, AGENTS_CRITICAL_NAMES, AGENTS_CRITICAL_PATH, HOME.
 
 # secs: ps `time`/`etime` ([DD-][HH:]MM:SS[.cc]) to seconds.
 # pname: a readable name for argv (the executable inside an .app bundle).
@@ -77,4 +77,20 @@ function lstart() { return $9 "_" $10 "_" $11 "_" $12 "_" $13 }
 function ancestors(p,   d) {
     p += 0; d = 0
     while (p > 0 && (p in pp) && d++ < 64) { anc[p] = 1; p = pp[p] }
+}
+# printable(s): s without control characters (a terminal escape, a tab in a
+# directory's name), so a name never moves the cursor or breaks a TSV row.
+function printable(s) { gsub(/[[:cntrl:]]/, "", s); return s }
+# projname(c): the short name a session goes by, from its cwd c: the
+# directory's name, REPO/NAME for a worktree under REPO/.claude/worktrees/NAME,
+# "~" for $HOME, "-" for none; printable. The one rule: agents_project
+# (classify.sh) runs it too.
+function projname(c,   i, r, w, n, a) {
+    if (c == "" || c == "-") return "-"
+    if (c == ENVIRON["HOME"]) return "~"
+    i = index(c, "/.claude/worktrees/")
+    if (i > 0) { r = substr(c, 1, i - 1); sub(/.*\//, "", r); w = substr(c, i + 19); sub(/\/.*/, "", w); c = r "/" w }
+    else { sub(/\/$/, "", c); n = split(c, a, "/"); c = a[n] }
+    c = printable(c)
+    return c == "" ? "-" : c
 }
