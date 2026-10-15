@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.1] - 2026-10-15
+
+Numbers you can quote: token costs that match the official price list, a
+menu whose report shows the same day as its lines, and insights that say
+where to look.
+
+### Fixed
+
+- **API-equivalent costs.** Claude Haiku 5.5 is priced (it showed as
+  "unpriced", so Explore and other Haiku subagents were left out of the
+  total), and Claude Sonnet 5.5's cache reads cost $0.10 per million tokens,
+  not $0.20 (its cache-read multiplier is 0.05x). Prices checked against the
+  official page on 2026-10-15. Haiku 5.5's long-prompt tier (prompts over
+  100,000 tokens cost 5x) is not modeled, because costs are summed per model:
+  its cost is a floor.
+- **"Sessions of unknown type" is now "Commands with no known agent"**, and
+  says where they ran: `Commands with no known agent spent 1.4 h in 18
+  polling loops today (12 in agentic-vms)`. These are foreground commands:
+  only a background task's output or a subagent's worktree names the agent
+  that ran one. The agents view calls them `(no agent)` and says why, and
+  the insight points to `agents runs`.
+- **The menu's Open report, and a click on its insight, show today**, like
+  the menu lines above them.
+  `agents report` alone covers the last 24 hours, which is why its totals
+  (4.5B tokens) did not match the menu's (2.9B today).
+
 ## [3.10.0] - 2026-10-15
 
 MCP servers that start when a session first uses them. Every Claude Code and
