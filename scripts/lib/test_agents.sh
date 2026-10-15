@@ -1376,18 +1376,20 @@ _agents_lock "$lk/old" || fail "lock: a leftover lock (older than a minute) not 
 # The holder: taken over when it is gone, never by age alone while it runs (a
 # slow sample); unlock removes only a lock still ours. ps is stubbed: T1 is the
 # start time of every live pid.
-# shellcheck disable=SC2154,SC2329  # _agents_mypid sets me and sub; the stub is called by _agents_lock
+# shellcheck disable=SC2154,SC2317,SC2329  # _agents_mypid sets me and sub; the stub is called by _agents_lock
 (
     _agents_start() { kill -0 "$1" 2>/dev/null && echo T1; return 0; }
     sleep 0 & dead=$!; wait "$dead"
     hold() { mkdir "$lk/$1"; printf '%s\n' "$2" > "$lk/$1/holder"; touch -t 202001010000 "$lk/$1"; }
-    _agents_lock "$lk/mine" && [[ "$(cat "$lk/mine/holder")" =~ ^[0-9]+\ T1$ ]] || fail "lock: holder not recorded: $(cat "$lk/mine/holder")"
+    _agents_lock "$lk/mine" || fail "lock: a free lock not taken"
+    [[ "$(cat "$lk/mine/holder")" =~ ^[0-9]+\ T1$ ]] || fail "lock: holder not recorded: $(cat "$lk/mine/holder")"
     _agents_mypid me; [[ "$(cat "$lk/mine/holder")" == "$me T1" ]] || fail "lock: the holder is not this shell ($me)"
     _agents_unlock "$lk/mine"; [[ ! -e "$lk/mine" ]] || fail "unlock left a lock it holds"
     hold live "$$ T1"
     ! _agents_lock "$lk/live" || fail "lock: a live holder's lock, older than a minute, taken over"
     hold dead "$dead T1"
-    _agents_lock "$lk/dead" && [[ "$(cat "$lk/dead/holder")" == "$me T1" ]] || fail "lock: a dead holder's lock not taken over"
+    _agents_lock "$lk/dead" || fail "lock: a dead holder's lock not taken over"
+    [[ "$(cat "$lk/dead/holder")" == "$me T1" ]] || fail "lock: a taken-over lock does not name its new holder"
     hold reused "$$ T0"
     _agents_lock "$lk/reused" || fail "lock: a holder whose pid names another process now not taken over"
     hold unknown "$$ -"

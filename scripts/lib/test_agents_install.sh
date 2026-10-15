@@ -148,7 +148,8 @@ bash "$REPO_DIR/uninstall.sh" --all </dev/null > "$tmp/u.log" 2>&1 || fail "unin
 grep -q "kept the agents history" "$tmp/u.log" || fail "no 'kept' note: $(tail -5 "$tmp/u.log")"
 # No answer (EOF on stdin, set -e) is no: the run is cancelled cleanly, not aborted.
 bash "$REPO_DIR/uninstall.sh" </dev/null > "$tmp/u.log" 2>&1 || fail "uninstall.sh aborted on EOF: $(tail -5 "$tmp/u.log")"
-grep -q "^cancelled" "$tmp/u.log" && [[ -f "$hist/history.tsv" ]] || fail "uninstall.sh on EOF: $(tail -5 "$tmp/u.log")"
+grep -q "^cancelled" "$tmp/u.log" || fail "uninstall.sh on EOF: $(tail -5 "$tmp/u.log")"
+[[ -f "$hist/history.tsv" ]] || fail "uninstall.sh on EOF deleted the history"
 # --all never asks about the history, even in a terminal with a "y" waiting.
 # on_tty CMD... — CMD with a pseudo-terminal on stdin (script(1)): util-linux
 # and BusyBox take -c, BSD the command after the file; 99 where no pty can be had.
