@@ -18,7 +18,7 @@
 # Uses: config.sh; jq.
 # Public: _agents_session_of, _agents_activity.
 
-_AGENTS_TX_TAIL=262144   # bytes of a transcript read for its activity
+_AGENTS_ACTIVITY_TAIL=262144   # bytes of a transcript read for its activity
 
 # _agents_session_of PID KIND AGE [FILES] — "key<TAB>value" lines: session,
 # name, status, version, transcript; nothing that is unknown. KIND: claude or
@@ -101,9 +101,9 @@ reduce (inputs | fromjson? // empty | objects) as $l ({};
   (if .at then "at\t" + (.at | floor | tostring) else empty end)'
 
 # _agents_activity TRANSCRIPT — "key<TAB>value" lines: tool, aim, said,
-# model, at (epoch), from the transcript's last _AGENTS_TX_TAIL bytes.
+# model, at (epoch), from the transcript's last _AGENTS_ACTIVITY_TAIL bytes.
 _agents_activity() {
     [[ -f "$1" && -r "$1" ]] && command -v jq >/dev/null 2>&1 || return 0
-    tail -c "$_AGENTS_TX_TAIL" "$1" 2>/dev/null | jq -Rnr "$_AGENTS_ACTIVITY_JQ" 2>/dev/null
+    tail -c "$_AGENTS_ACTIVITY_TAIL" "$1" 2>/dev/null | jq -Rnr "$_AGENTS_ACTIVITY_JQ" 2>/dev/null
     return 0
 }

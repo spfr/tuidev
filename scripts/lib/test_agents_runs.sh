@@ -127,6 +127,13 @@ pass "transcripts: a task's owner is main, a subagent's type (customAgentType fi
     got="$(_agents_runs_owners "$since" "$tasks/bnew.output" "$tasks/bold.output" "$tasks/bgo1.output")"
     [[ "$got" == "$tasks/bnew.output"$'\t'"Explore" ]] || fail "bounded search: $got"
     [[ "$(_agents_runs_owners 1 "$tasks/bold.output")" == "$tasks/bold.output"$'\t'"-" ]] || fail "an unbounded search: $(_agents_runs_owners 1 "$tasks/bold.output")"
+    # The bounded search reads the last 8 MiB of a transcript (activity.sh's
+    # own, smaller tail is another constant): a task named 1 MiB from the end
+    # is found.
+    [[ "$_AGENTS_TX_TAIL" == $((8 * 1048576)) ]] || fail "the task-owner search reads $_AGENTS_TX_TAIL bytes, want 8 MiB"
+    { tl bfar; head -c 1048576 /dev/zero | tr '\0' 'y'; echo; } > "$subs/agent-new.jsonl"; touch -t 209901010000 "$subs/agent-new.jsonl"
+    got="$(_agents_runs_owners "$since" "$tasks/bfar.output")"
+    [[ "$got" == "$tasks/bfar.output"$'\t'"Explore" ]] || fail "bounded search: a task 1 MiB from the end: $got"
     rm -f "$subs"/agent-new.* "$subs"/agent-old.*
 )
 pass "task owners come from the scan's index (no search), else a search of the transcripts changed since the run started"

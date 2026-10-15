@@ -198,7 +198,7 @@ pass "show: what it is, its session (id, name, model, version; origin, tokens an
 # _agents_activity reads only the end of a transcript.
 big="$tmp/big.jsonl"
 { jq -nc '{type: "assistant", message: {content: [{type: "tool_use", name: "Early", input: {}}]}}'; head -c 400000 /dev/zero | tr '\0' 'y'; echo; } > "$big"
-[[ "$(_agents_activity "$big")" != *Early* ]] || fail "activity read past the last $_AGENTS_TX_TAIL bytes"
+[[ "$(_agents_activity "$big")" != *Early* ]] || fail "activity read past the last $_AGENTS_ACTIVITY_TAIL bytes"
 pass "activity: only the transcript's last bytes are read"
 
 # Git branches without git.
