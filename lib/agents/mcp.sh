@@ -125,6 +125,10 @@ _agents_mcp_plugins() {
     return 0
 }
 
+# The cache's format: a cache of another (an older agents', whose needles
+# were picked by other rules) is never read, only rebuilt.
+_AGENTS_MCP_CACHE_V=v2
+
 # _agents_mcp_refresh [VAR] — rebuild mcp.tsv (private; one rebuild at a
 # time), and with VAR set it to the srv rows built (also when the cache
 # could not be written).
@@ -135,7 +139,7 @@ _agents_mcp_refresh() {
     _agents_now _now
     _out="$(_agents_mcp_build)"
     if [[ -n "$_locked" ]]; then
-        ( umask 077; _agents_replace "$AGENTS_RUN_DIR/mcp.tsv" "v1"$'\t'"$_now"$'\n'"$_out" ) || true
+        ( umask 077; _agents_replace "$AGENTS_RUN_DIR/mcp.tsv" "$_AGENTS_MCP_CACHE_V"$'\t'"$_now"$'\n'"$_out" ) || true
         _agents_unlock "$_lock"
     fi
     [[ -n "${1:-}" ]] || return 0
@@ -145,10 +149,11 @@ _agents_mcp_refresh() {
 
 # _agents_mcp_load [sync] — set _AGENTS_MCP_ROWS to the inventory's srv rows,
 # from mcp.tsv while the files it came from are unchanged. A stale cache is
-# rebuilt now with sync (or when there is none yet), else in the background
-# (at most every 30 s) while the rows it has are used. Reads with bash alone.
+# rebuilt now with sync (or when there is none yet, or it is another
+# format's), else in the background (at most every 30 s) while the rows it
+# has are used. Reads with bash alone.
 _agents_mcp_load() {
-    local cache="$AGENTS_RUN_DIR/mcp.tsv" line flag path built=0 stale="" now rows=""
+    local cache="$AGENTS_RUN_DIR/mcp.tsv" line flag path built="" stale="" now rows=""
     # shellcheck disable=SC2094  # -nt only compares mtimes
     if [[ -f "$cache" ]]; then
         while IFS= read -r line; do
@@ -160,15 +165,15 @@ _agents_mcp_load() {
                            else
                                [[ ! -e "$path" ]] || stale=1
                            fi ;;
-                v1$'\t'*)  built="${line#v1$'\t'}" ;;
+                "$_AGENTS_MCP_CACHE_V"$'\t'*) built="${line#*$'\t'}" ;;
             esac
         done < "$cache"
-        [[ "$built" =~ ^[0-9]+$ ]] || { built=0; stale=1; }
-    else
-        stale=1
+    fi
+    if [[ ! "$built" =~ ^[0-9]+$ ]]; then
+        stale=1 rows=""; [[ "${1:-}" == sync ]] || set -- sync
     fi
     if [[ -n "$stale" ]]; then
-        if [[ "${1:-}" == sync || ! -f "$cache" ]]; then
+        if [[ "${1:-}" == sync ]]; then
             _agents_mcp_refresh rows
         else
             _agents_now now

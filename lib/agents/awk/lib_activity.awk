@@ -23,16 +23,32 @@ function mcpinit(   n, t, i, f) {
     for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 3 && f[1] != "") { mcpn++; mcpnd[mcpn] = f[1]; mcpnm[mcpn] = f[2]; mcpcli[mcpn] = f[3] }
 }
 # mcp_known(a, cli): the configured name of the server whose needle a's
-# command line holds, "" for none; with cli (claude, codex), that CLI's
-# server first when two configs start the same program.
+# command line holds (mcp_at), "" for none; with cli (claude, codex), that
+# CLI's server first when two configs start the same program.
 function mcp_known(a, cli,   i, hit) {
     mcpinit(); hit = ""
     for (i = 1; i <= mcpn; i++) {
-        if (!index(a, mcpnd[i])) continue
+        if (!index(a, mcpnd[i]) || !mcp_at(a, mcpnd[i])) continue
         if (cli == "" || mcpcli[i] == cli) return mcpnm[i]
         if (hit == "") hit = mcpnm[i]
     }
     return hit
+}
+# mcp_at(a, nd): whether needle nd is in a as a word, never inside one: it
+# starts a word, or follows a "/" (an absolute path's tail, as a
+# ${CLAUDE_PROJECT_DIR}/x needle is; a name or @scope/name: a package under
+# node_modules/, a program run by its path), and it ends one, or a version's
+# "@" follows it (or, a package, a "/" into it).
+function mcp_at(a, nd,   p, o, c, e, pk, ab) {
+    ab = substr(nd, 1, 1) == "/"
+    pk = !ab && (nd !~ /\// || nd ~ /^@[^\/]+\/[^\/]+$/)
+    o = 0
+    while ((p = index(substr(a, o + 1), nd)) > 0) {
+        p += o; c = p > 1 ? substr(a, p - 1, 1) : " "; e = substr(a, p + length(nd), 1)
+        if ((c == " " || ab || (c == "/" && pk)) && (e == "" || e == " " || e == "@" || (e == "/" && pk))) return 1
+        o = p
+    }
+    return 0
 }
 # mcp_word: the package or program an MCP server's command line names, without
 # version or extension: "npm exec X"'s or "npx X"'s package, the package a

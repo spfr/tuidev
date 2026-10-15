@@ -30,7 +30,7 @@ pass() { echo "PASS: $1"; }
 # shellcheck source=../../bin/agents disable=SC1091
 . "$REPO_DIR/bin/agents"
 
-SECRETS="sk-live-SECRET1 ghp_SECRET2 SECRET3-header SECRET4-env SECRET5-url SECRET6-codex SECRET7-from"
+SECRETS="sk-live-SECRET1 ghp_SECRET2 SECRET3-header SECRET4-env SECRET5-url SECRET6-codex SECRET7-from sk-abc123 SECRET8-flag"
 
 # --- awk/mcp.awk: the needle of a command line, from raw records ----------------------
 needle_of() {   # COMMAND ARG... — the needle awk/mcp.awk picks
@@ -51,6 +51,22 @@ needle_of() {   # COMMAND ARG... — the needle awk/mcp.awk picks
 [[ "$(needle_of node)" == - && "$(needle_of npx -y)" == - ]]                                 || fail "an interpreter alone names nothing"
 [[ "$(needle_of node index.js)" == - ]]                                                      || fail "a generic script name names nothing"
 [[ "$(needle_of npx "--api-key=sk-live-SECRET1")" == - ]]                                    || fail "a flag is never a needle"
+# A flag's value is never one: an unknown flag takes the next word with it;
+# only a word shaped like a package, a path or a plain name is kept.
+[[ "$(needle_of node --token sk-abc123 server.js)" == - ]]                                   || fail "an unknown flag's value is a needle"
+[[ "$(needle_of node --token sk-abc123 /srv/x/server.js)" == /srv/x/server.js ]]             || fail "the script after an unknown flag's value"
+[[ "$(needle_of npx --api-key SECRET8-flag -y mcp-x)" == mcp-x ]]                            || fail "npx past an unknown flag's value"
+[[ "$(needle_of uvx -p 3.12 --quiet mcp-y)" == mcp-y ]]                                      || fail "uvx -p is the Python, not the package"
+[[ "$(needle_of node --inspect --no-warnings /srv/a.js)" == /srv/a.js ]]                     || fail "node's flags that take no value"
+[[ "$(needle_of deno run -A --allow-net /srv/a.ts)" == /srv/a.ts ]]                          || fail "deno's flags that take no value"
+[[ "$(needle_of node sk-abc123)" == - && "$(needle_of npx ghp_x1y2z3)" == - ]]              || fail "a word shaped like a credential is a needle"
+[[ "$(needle_of npx a1b2c3d4e5f6)" == - ]]                                                   || fail "a word of many digits is a needle"
+# Too common to name a server: a tool, a short word, a build path.
+for c in "ssh devbox mcp-proxy" "cargo run --release" "node dist/index.js" 'node ${CLAUDE_PROJECT_DIR:-.}/build/server.js' "mcpx --stdio" "go run ."; do
+    # shellcheck disable=SC2086  # the words on purpose
+    [[ "$(needle_of $c)" == - ]] || fail "a weak needle for $c: $(needle_of $c)"
+done
+[[ "$(needle_of node /opt/srv/dist/index.js)" == /opt/srv/dist/index.js ]]                   || fail "a build path under its own directory"
 printf 'claude\tplugin\tp\tp@m\t-\t/plug/root\tstdio\tnode\t${CLAUDE_PLUGIN_ROOT}/server.js\n' | _agents_awk mcp | grep -q $'\t/plug/root/server.js\t1$' \
     || fail "\${CLAUDE_PLUGIN_ROOT} is the plugin's install path"
 pass "needles: npx/uvx/npm exec packages without versions, scripts, python -m, docker images, programs; flags, URLs and interpreters never"
@@ -62,6 +78,7 @@ jq -n --arg proj "$proj" --arg other "$other" '{
   numStartups: 3,
   mcpServers: {
     "chrome-devtools": {type: "stdio", command: "npx", args: ["-y", "chrome-devtools-mcp@latest", "--token", "sk-live-SECRET1"], env: {API_KEY: "SECRET4-env"}},
+    "tok": {command: "node", args: ["--token", "sk-abc123", "server.js"]},
     "remote": {type: "http", url: "https://mcp.example.com/mcp?key=SECRET5-url", headers: {Authorization: "Bearer SECRET3-header"}}
   },
   projects: {
@@ -116,12 +133,13 @@ want="$(printf '%s\n' \
     "claude	project	files	$proj/.mcp.json	1" \
     "claude	plugin	playwright	pw@m	1" \
     "claude	user	remote	$HOME/.claude.json	1" \
+    "claude	user	tok	$HOME/.claude.json	1" \
     "codex	user	docs	$HOME/.codex/config.toml	0" \
     "codex	user	node repl	$HOME/.codex/config.toml	1" \
     "codex	user	playwright	$HOME/.codex/config.toml	1" | LC_ALL=C sort)"
 got="$(agents_mcp_configured | LC_ALL=C sort)"
 [[ "$got" == "$want" ]] || fail "configured servers:"$'\n'"$got"$'\n'"want:"$'\n'"$want"
-[[ "$(agents_mcp_configured "$other" | cut -f3 | LC_ALL=C sort | tr '\n' ' ')" == "chrome-devtools docs node repl playwright playwright remote " ]] \
+[[ "$(agents_mcp_configured "$other" | cut -f3 | LC_ALL=C sort | tr '\n' ' ')" == "chrome-devtools docs node repl playwright playwright remote tok " ]] \
     || fail "a session in another project loads only user and plugin servers: $(agents_mcp_configured "$other" | cut -f3 | tr '\n' ' ')"
 [[ "$(agents_mcp_configured "$proj" | cut -f3 | grep -c -e app-db -e files)" == 2 ]] || fail "a session in the project loads its local and project servers"
 [[ "$(agents_mcp_configured | awk -F '\t' '$5 == 0 { printf "%s ", $3 }')" == "docs " ]] || fail "only Codex's docs (enabled = false) is off; a sub-table's enabled is not its server's"
@@ -171,7 +189,11 @@ printf '%s' "$_AGENTS_MCP_ROWS" | grep -q $'\tlate\t' || fail "the stale rows we
 unset -f _agents_detach; . "$REPO_DIR/lib/agents/util.sh"
 rm -f "$cache"
 _agents_mcp_load; builds; [[ $build_count == 3 ]] || fail "the first build is not waited for"
-pass "cache: rebuilt when a config changes or appears; classify uses a stale one and rebuilds it in the background, at most every 30 s"
+# A cache an older agents wrote (another format) is never read.
+printf 'v1\t%s\nsrv\tclaude\tuser\tlegacy\tx\t-\tstdio\tsk-old-SECRET\t1\n' "$(date +%s)" > "$cache"
+_agents_mcp_load
+[[ "$_AGENTS_MCP_ROWS" != *legacy* && "$_AGENTS_MCP_ROWS" == *playwright* ]] || fail "an older cache's rows were used: $_AGENTS_MCP_ROWS"
+pass "cache: rebuilt when a config changes or appears; classify uses a stale one and rebuilds it in the background, at most every 30 s; an older format is rebuilt, never read"
 
 # --- Without jq: Codex's servers only ----------------------------------------------------
 mkdir -p "$tmp/nojq"
@@ -219,6 +241,21 @@ for pair in "npm exec @playwright/mcp@latest=playwright" "npm exec chrome-devtoo
     [[ "$(AGENTS_MCP="" A="${pair%=*}" tidy)" == "${pair##*=}" ]] || fail "fallback name of ${pair%=*}: $(AGENTS_MCP="" A="${pair%=*}" tidy)"
 done
 pass "fallback names: @scope/mcp → scope, -mcp and mcp-server- trimmed, node_modules paths by package"
+
+# A needle matches a whole word of the command line (or a path's tail, a
+# package under node_modules/), never part of one.
+known() { _agents_awk_eval "lib_proc lib_activity" 'BEGIN { print mcp_known(ENVIRON["A"], "") }'; }
+needles="/srv/app-db/index.js	app-db	claude
+mcp-server-fetch	fetch	claude
+@scope/srv	srv	claude
+my_server	mine	codex"
+for pair in "node /srv/app-db/index.js=app-db" "node /backup/srv/app-db/index.js=app-db" "node /srv/app-db/index.js.bak=" \
+            "/u/.npm/_npx/x/node_modules/.bin/mcp-server-fetch=fetch" "mcp-server-fetcher --x=" "uvx mcp-server-fetch@1.0=fetch" \
+            "npm exec @scope/srv@2=srv" "node /u/_npx/a/node_modules/@scope/srv/dist/cli.js=srv" "npm exec @scope/srv-extra=" \
+            "python3 -m my_server=mine" "python3 -m not_my_server=" "python3 -m my_server_two="; do
+    [[ "$(AGENTS_MCP="$needles" A="${pair%=*}" known)" == "${pair##*=}" ]] || fail "needle match of ${pair%=*}: $(AGENTS_MCP="$needles" A="${pair%=*}" known)"
+done
+pass "a needle matches a whole word of the command line, never part of one"
 
 out="$(agents_main mcp 2>&1)"
 [[ "$out" == *"$(printf '%-22s %-6s %-8s %-6s %-34s %s' playwright claude plugin stdio @playwright/mcp pw@m)"* ]] || fail "agents mcp: $out"

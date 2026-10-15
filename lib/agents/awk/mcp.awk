@@ -20,20 +20,48 @@ function pkg(s) {
 # a flag, at most 200 characters.
 function safe(s) { return s != "" && length(s) <= 200 && s !~ /:\/\/|=|[[:cntrl:]]/ && substr(s, 1, 1) != "-" }
 # generic: a word that names nothing in particular (an interpreter, a runner,
-# a script's usual name).
+# a tool, a script's usual name).
 function generic(s) {
-    return length(s) < 3 || s ~ /^(node|nodejs|python[0-9.]*|ruby|php|java|npx|npm|pnpm|pnpx|yarn|bun|bunx|deno|uv|uvx|pipx|sh|bash|zsh|docker|podman|mcp|server|run|exec|dlx|index\.[cm]?[jt]s|main\.py|server\.[cm]?[jt]s|server\.py|cli\.[cm]?js)$/
+    return length(s) < 3 || s ~ /^(node|nodejs|python[0-9.]*|ruby|php|perl|java|npx|npm|pnpm|pnpx|yarn|bun|bunx|deno|tsx|ts-node|uv|uvx|pip[0-9]*|pipx|poetry|sh|bash|zsh|env|sudo|nohup|ssh|socat|curl|wget|make|cargo|rustc|go|dotnet|swift|gradle|mvn|kubectl|gcloud|aws|docker|podman|mcp|server|run|exec|dlx|index\.[cm]?[jt]s|main\.py|server\.[cm]?[jt]s|server\.py|cli\.[cm]?js)$/
 }
-# first(i): the first word from a[i] on that is not a flag, skipping the
-# value of a flag that takes one; "" when none. pkgflag: those whose value
-# is the package itself (npx -p, uvx --from).
-function first(i,   w) {
+# weak(s): a needle too common to name one server, which a process would
+# match by chance: a word of under 5 letters or a generic one; a path that,
+# past a generic file name, has only build directories left (dist/index.js,
+# ${CLAUDE_PROJECT_DIR}/build/server.js).
+function weak(s,   d) {
+    if (s !~ /\//) return generic(s) || (s !~ /[.@]/ && length(s) < 5)
+    if (substr(s, 1, 1) == "@") return 0
+    d = s; sub(/\/[^\/]*$/, "", d)
+    if (!generic(fname(s))) return 0
+    while (match(d, /(^|\/)(dist|build|out|lib|src|bin|app|server|\.|\.\.)$/)) d = substr(d, 1, RSTART - 1)
+    return d !~ /[^\/~]/
+}
+# noval(w): a flag that takes no value (the launchers' and interpreters'
+# common ones: npx -y, uvx -q, node --inspect, deno -A, python -u…): any
+# other flag without "=" is taken to take the next word as its value.
+function noval(w) {
+    if (w == "--" || w ~ /^-[yqsvnuABEIOPSUbdx]+$/) return 1
+    return w ~ /^--(yes|no|quiet|silent|verbose|offline|prefer-offline|prefer-online|ignore-existing|isolated|refresh|native-tls|preview|upgrade|watch|hot|smol|bun|inspect|inspect-brk|inspect-wait|no-[a-z0-9-]+|allow-[a-z0-9-]+|unstable[a-z0-9-]*|experimental-[a-z0-9-]+|enable-[a-z0-9-]+|trace-[a-z0-9-]+)$/
+}
+# shaped(w): a word that looks like what names a server: a path or a
+# package (it holds "/", "." or "@"), or a plain name (a letter first, then
+# letters, digits, "_" and "-", at most 4 digits); never one that starts
+# like a credential (sk-, ghp_, xoxb-, AKIA, eyJ…).
+function shaped(w,   t) {
+    if (w ~ /^(sk[-_]|(ghp|gho|ghs|ghu|ghr|github_pat|glpat|xox[abprs])[-_]|AKIA|ASIA|AIza|ya29\.|eyJ)/) return 0
+    if (w ~ /[\/.@]/) return 1
+    t = w
+    return w ~ /^[A-Za-z][A-Za-z0-9_-]*$/ && gsub(/[0-9]/, "", t) <= 4
+}
+# first(i, pf): the first word from a[i] on that is not a flag or a flag's
+# value, when it is shaped (else "": the next one could be a secret too);
+# a flag matching pf (npx -p, uvx --from) has the package as its value.
+function first(i, pf,   w) {
     for (; i <= n; i++) {
         w = a[i]
-        if (w ~ /^(-p|--package|--from)$/) { if (i < n && safe(a[i + 1])) return a[i + 1]; i++; continue }
-        if (w ~ /^(--registry|--cache|--python|-w|--with|--index-url|--directory|-e|--env|-v|--volume|--name|--network|--entrypoint|-c|--config)$/) { i++; continue }
-        if (substr(w, 1, 1) == "-") continue
-        return w
+        if (pf != "" && w ~ pf) { if (i < n && safe(a[i + 1]) && shaped(a[i + 1])) return a[i + 1]; i++; continue }
+        if (substr(w, 1, 1) == "-") { if (!index(w, "=") && !noval(w)) i++; continue }
+        return shaped(w) ? w : ""
     }
     return ""
 }
@@ -44,10 +72,10 @@ function needle(cmd, args, root,   b, i, s, w) {
     if (b ~ /^(npm|pnpm|yarn|bun|pipx)$/ && a[1] ~ /^(exec|dlx|x|run)$/) { b = "npx"; s = 2 }
     else if (b == "uv" && a[1] == "tool" && a[2] == "run") { b = "uvx"; s = 3 }
     else if ((b == "uv" || b == "deno") && a[1] == "run") { b = "node"; s = 2 }
-    if (b ~ /^(npx|bunx|pnpx|uvx)$/) { w = pkg(first(s)); return safe(w) ? w : "" }
+    if (b ~ /^(npx|bunx|pnpx|uvx)$/) { w = pkg(first(s, b == "uvx" ? "^--from$" : "^(-p|--package)$")); return safe(w) ? w : "" }
     if (b ~ /^(node|nodejs|python[0-9.]*|ruby|php|bun|deno|uv|sh|bash)$/) {
-        for (i = s; i < n; i++) if (a[i] == "-m") return safe(a[i + 1]) ? a[i + 1] : ""
-        w = first(s)
+        for (i = s; i < n; i++) if (a[i] == "-m") return safe(a[i + 1]) && shaped(a[i + 1]) ? a[i + 1] : ""
+        w = first(s, "")
         sub(/^.*\}/, "", w); sub(/^~/, "", w)    # ${CLAUDE_PROJECT_DIR:-.}/x, ~/x: the part ps shows as written
         return safe(w) ? w : ""
     }
@@ -61,7 +89,7 @@ function needle(cmd, args, root,   b, i, s, w) {
 BEGIN { FS = "\t"; m = 0 }
 NF >= 8 {
     nd = needle($8, (NF >= 9 ? $9 : ""), $6)
-    if (generic(fname(nd)) && nd !~ /\//) nd = ""
+    if (weak(nd)) nd = ""
     nm = $3; gsub(/[[:cntrl:]]/, "", nm)
     if (nm == "") next
     row[++m] = "srv\t" $1 "\t" $2 "\t" nm "\t" $4 "\t" $5 "\t" $7 "\t" (nd == "" ? "-" : nd) "\t" ($10 == "0" ? 0 : 1)

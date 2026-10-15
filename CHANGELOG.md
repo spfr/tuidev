@@ -38,8 +38,11 @@ minute-by-minute sample stays cheap on a heavy machine.
   `json`, `tsv` and the menu (`playwright · api · 0% · 211M` under MCP
   servers), else by its package (`@playwright/mcp` → `playwright`). Only names,
   scopes, sources and the word that starts each server are kept: never args,
-  env, headers or URLs. A configured server whose command line does not say
-  `mcp` now counts as an MCP server.
+  env, headers or URLs, and never a flag's value (`node --token VALUE x.js`
+  keeps `x.js`). A configured server whose command line does not say `mcp`
+  now counts as an MCP server; it is matched by a whole word of the command
+  line, never part of one, and a word too common to name one (`ssh`,
+  `cargo`, `dist/index.js`) is not used.
 - **Menu:** every session and Needs-you submenu starts with **Jump to
   session**, and sessions, Needs-you items, stale processes and every row under
   Where the CPU goes get a summary (status, where it lives, busiest command)
