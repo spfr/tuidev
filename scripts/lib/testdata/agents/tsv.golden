@@ -256,6 +256,13 @@ watched	5040	@TMP@/w/missing.out	-	-	exists
 watched	5050	@TMP@/w/live.log	4070908800	compiling...	read
 watched	5080	@TMP@/w/fail.out	1577861400	--- FAIL: TestX (0.01s)	read
 watched	5090	@TMP@/w/build.log	1577863800	-	exists
+where	90419	tmux	main:2.1
+where	61904	-	-
+where	84091	app	Ghostty
+where	1000	tmux	work:1.0
+where	2000	tmux	work:1.0
+where	5000	-	-
+where	100	tmux	work:1.0
 probe	listen	ok
 sys	84	1.50	8	42	normal	87	discharging
 awake	timed	8800	1577872800

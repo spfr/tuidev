@@ -205,19 +205,62 @@ activity_submenu() {   # PID
     done <<<"$DUPS"
 }
 
-# The submenu under a session: where it is, what it is, and what you can do.
-# Sets SUB.
-session_submenu() {   # PID START KIND AGE KIDS PORTS CWD
-    local pid="$1" start="$2" kind="$3" age_s="$4" kids="$5" ports="$6" cwd="$7" t pl=""
+# --- Going to a session ---------------------------------------------------------------
+# Where each session lives comes with the snapshot (where rows: W_how_<pid>,
+# W_place_<pid>) for its summary only: Jump to session, Peek and Details run
+# `agents jump|peek|show`, which find it again when you click (a Herdr pane,
+# a tmux pane, the terminal tab that shows it), never on a refresh.
+
+# where_text PID — REPLY: where session PID lives, for people ("" unknown).
+where_text() {
+    local v="W_how_$1" h p
+    h="${!v-}"; v="W_place_$1"; p="${!v-}"
+    REPLY=""
+    case "$h" in
+        tmux)  cl "$p"; REPLY="in tmux pane $REPLY" ;;
+        herdr) REPLY="in Herdr"; [[ -z "$p" || "$p" == - ]] || { cl "$p"; REPLY="in Herdr (in $REPLY)"; } ;;
+        app)   cl "$p"; REPLY="in $REPLY" ;;
+        ssh)   REPLY="over ssh" ;;
+    esac
+}
+# jump_item TOKEN — REPLY: the Jump to session line (the first of a submenu).
+jump_item() { REPLY="--Jump to session | $NOREF param1=jump param2=--notify param3=$1 sfimage=arrow.up.forward.app"; }
+# look_items TOKEN SESSION — Peek (when SESSION lives in a tmux or Herdr
+# pane) and Details (agents show, live). Appends to SUB.
+look_items() {
+    local v h=""
+    if num "$2"; then v="W_how_$2"; h="${!v-}"; fi
+    case "$h" in
+        tmux|herdr) SUB+="--Peek | $TERM_OPEN param2=--hold param3=peek param4=$1 param5=60 sfimage=eye"$'\n' ;;
+    esac
+    SUB+="--Details | $TERM_OPEN param2=show param3=--watch param4=$1 sfimage=info.circle"$'\n'
+}
+
+# The submenu under a session: Jump to session first, then where it is, what
+# it is and does, and what you can do. Sets SUB.
+session_submenu() {   # PID START KIND AGE KIDS PORTS CWD [STATUS]
+    local pid="$1" start="$2" kind="$3" age_s="$4" kids="$5" ports="$6" cwd="$7" status="${8:--}" t="" pl="" s v
     SUB=""
+    [[ "$pid" =~ ^[0-9]+$ && "$start" =~ ^[A-Za-z0-9_:]+$ ]] && t="$pid@$start"
+    if [[ -n "$t" && "$kind" != daemon ]]; then jump_item "$t"; SUB+="$REPLY"$'\n'; fi
     if [[ "$cwd" != - ]]; then cl "$cwd"; SUB+="--$REPLY | symbolize=false"$'\n'; fi
     if [[ "$ports" != - ]]; then cl "$ports"; pl=" · ports $REPLY"; fi
-    agev "$age_s"; t="$REPLY"; cl "$kind"
-    SUB+="--$REPLY · pid $pid · up $t · $kids children$pl | symbolize=false"$'\n'
-    [[ "$pid" =~ ^[0-9]+$ && "$start" =~ ^[A-Za-z0-9_:]+$ ]] || return 0
-    t="$pid@$start"
+    agev "$age_s"; s="$REPLY"; cl "$kind"
+    SUB+="--$REPLY · pid $pid · up $s · $kids children$pl | symbolize=false"$'\n'
+    # Its state, where it lives, and the busiest command it runs.
+    s=""
+    case "$status" in
+        blocked) s="blocked: waiting for you" ;;
+        -|"")    ;;
+        *)       cl "$status"; s="$REPLY" ;;
+    esac
+    where_text "$pid"; [[ -z "$REPLY" ]] || s+="${s:+ · }$REPLY"
+    [[ -z "$s" ]] || SUB+="--$s | symbolize=false"$'\n'
+    v="A_bcpu_$pid"; if [[ "${!v:-0}" -ge 1 ]]; then v="A_busy_$pid"; SUB+="--busiest: ${!v} | symbolize=false"$'\n'; fi
+    [[ -n "$t" ]] || return 0
     activity_submenu "$pid"
     SUB+="-----"$'\n'
+    look_items "$t" "$pid"
     local what=session; [[ "$kind" == daemon ]] && what=daemon
     SUB+="--Kill ${what}… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
     if [[ "$cwd" != - ]]; then
@@ -232,13 +275,16 @@ session_submenu() {   # PID START KIND AGE KIDS PORTS CWD
 # from agents_assess) and its evidence (evid rows), kept here in N_<what>_<pid>
 # and A_ev_<pid>. An item without one (an older agents) keeps the plain menu.
 
-# need_submenu PID TOKEN STOP_LINE — under an item: the verdict, the evidence,
-# then Stop (STOP_LINE), Copy details (`agents why --copy`) and, while its
-# session runs, Show session (`agents ps` of that session in your terminal).
-# Sets SUB.
+# need_submenu PID TOKEN STOP_LINE — under an item: while its session runs,
+# Jump to session first (to where it runs: you can answer it there); then the
+# verdict, the evidence, Stop (STOP_LINE), Copy details (`agents why
+# --copy`), Show session (`agents ps` of that session in your terminal),
+# Peek and Details. Sets SUB.
 need_submenu() {
     local p="$1" v o look=info.circle
     SUB=""
+    v="N_owner_$p"; o="${!v-}"
+    if num "$o"; then jump_item "$2"; SUB+="$REPLY"$'\n'; fi
     v="N_act_$p"
     case "${!v-}" in
         stop)  look=checkmark.circle ;;
@@ -250,8 +296,8 @@ need_submenu() {
     v="A_ev_$p"; SUB+="${!v-}"
     SUB+="-----"$'\n'"$3"$'\n'
     SUB+="--Copy details | $NOREF param1=why param2=--copy param3=$2 sfimage=doc.on.doc"$'\n'
-    v="N_owner_$p"; o="${!v-}"
     if num "$o"; then SUB+="--Show session | $TERM_OPEN param2=--hold param3=ps param4=$o sfimage=terminal"$'\n'; fi
+    look_items "$2" "${o:--}"
 }
 
 # need_item SYMBOL TEXT TOKEN — one command in Needs you: its verdict at a
@@ -289,7 +335,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             ;;
         agent) agent_rows+=("$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$start"$'\t'"$ports"$'\t'"$herdr"$'\t'"$cwd"$'\t'"$project") ;;
         act)   # act PID CLASS AGE CPU AVG RSS KIDS START PORTS ROOT LABEL CWD CMD ORIGIN FLAGS DUPS
-            r="$user"; num "$r" || continue
+            r="$user"; { num "$r" && num "$pid"; } || continue
+            printf -v "U_start_$pid" '%s' "$start"      # an MCP server's token (Where the CPU goes)
             case "$kind" in
                 tool)
                     [[ "$pid" =~ ^[0-9]+$ && "$start" =~ ^[A-Za-z0-9_:]+$ ]] || continue
@@ -305,6 +352,10 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                     sh60 "$args"; c="$REPLY"; agev "$age_s"; a="$REPLY"; cl "$project"
                     aadd tools "$r" "--$c · $a · ${pcpu%%.*}% · $REPLY$fl | $ROW$look symbolize=false"$'\n'"----Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
                     anum ntools "$r" 1; anum tcpu "$r" "${pcpu%%.*}"
+                    v="A_bcpu_$r"   # the busiest command, for the session's summary
+                    if [[ -z "${!v-}" || ${pcpu%%.*} -gt ${!v} ]]; then
+                        printf -v "$v" '%d' "${pcpu%%.*}"; printf -v "A_busy_$r" '%s' "$c · $a · ${pcpu%%.*}%"
+                    fi
                     # Duplicates are the same command in the same directory.
                     [[ ",$aflags," == *,dup,* ]] && aadd dups "$r" "$cwd"$'\037'"$args"$'\t'"$age_s"$'\t'"$t"$'\n'
                     [[ ",$aflags," == *,long,* ]] && aadd longs "$r" "$args"$'\t'"$age_s"$'\t'"$t"$'\n'
@@ -317,6 +368,9 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                     ;;
             esac
             ;;
+        where)  # where PID tmux|herdr|ssh|app|- PLACE
+            num "$pid" || continue
+            printf -v "W_how_$pid" '%s' "$kind"; printf -v "W_place_$pid" '%s' "$age_s" ;;
         stale)
             n_stale=$((n_stale + 1))
             v="N_short_$pid"; vs=""; [[ -n "${!v-}" ]] && { cl "${!v}"; vs=" · $REPLY"; }
@@ -330,7 +384,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             if tok "$pid" "$start"; then
                 t="$REPLY"
                 kl="--Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"
-                if [[ -n "$vs" ]]; then need_submenu "$pid" "$t" "$kl"; stale_menu+="$SUB"; else stale_menu+="$kl"$'\n'; fi
+                if [[ -n "$vs" ]]; then need_submenu "$pid" "$t" "$kl"; stale_menu+="$SUB"
+                else stale_menu+="$kl"$'\n'"--Details | $TERM_OPEN param2=show param3=--watch param4=$t sfimage=info.circle"$'\n'; fi
                 stale_tokens+=" $t"
             fi
             ;;
@@ -415,7 +470,7 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     # PID@START); everything else is in its submenu.
     click="$ROW"
     tok "$pid" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
-    session_submenu "$pid" "$start" "$kind" "$age_s" "$kids" "$ports" "$cwd"; sub="$SUB"
+    session_submenu "$pid" "$start" "$kind" "$age_s" "$kids" "$ports" "$cwd" "$herdr"; sub="$SUB"
     memv "$rss"
     agents_menu+="$name · $ckind$status · ${pcpu}%$hint · $REPLY | $look $click symbolize=false"$'\n'"$sub"
     if [[ "$herdr" == blocked ]]; then
@@ -549,11 +604,41 @@ job_lines() {
             }
         }'
 }
+# job_submenu JOB PROCS KIND ROOT START NAME UNIT — under a session's share of
+# a job (or one MCP server): Jump to session, what it is and where, Peek and
+# Details (of the MCP server itself, else of the session), and Kill tree for
+# a stale one. Sets SUB, one level deeper ("----").
+job_submenu() {
+    local job="$1" n="$2" kind="$3" root="$4" start="$5" name="$6" unit="$7" t="" d v s es=es
+    SUB=""
+    tok "$root" "$start" && t="$REPLY"
+    [[ -n "$t" ]] || return 0
+    d="$t"
+    if [[ "$name" != - && "$unit" != "$root" ]] && num "$unit"; then
+        v="U_start_$unit"; d="$unit"; tok "$unit" "${!v-}" && d="$REPLY"
+    fi
+    if [[ "$kind" != - && "$kind" != daemon ]]; then jump_item "$t"; SUB+="--$REPLY"$'\n'; fi
+    job_label "$job"; s="$REPLY"
+    [[ "$name" == - ]] || { cl "$name"; s="MCP server $REPLY"; }
+    [[ "$n" == 1 ]] && es=""
+    s+=" · $n process$es"
+    case "$kind" in
+        -)      s+=" · stale: its session ended" ;;
+        daemon) s+=" · the codex daemon" ;;
+        *)      cl "$kind"; s+=" · $REPLY $root"; where_text "$root"; [[ -z "$REPLY" ]] || s+=" · $REPLY" ;;
+    esac
+    SUB+="----$s | symbolize=false"$'\n'
+    local keep="$SUB"
+    SUB=""; look_items "$d" "$root"
+    SUB="$keep--${SUB//$'\n'--/$'\n'----}"
+    SUB="${SUB%----}"
+    [[ "$kind" != - ]] || SUB+="----Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
+}
 section_jobs() {
-    local tag job cpu rss n proj kind root start cwd name line t sym click tip q="'"
+    local tag job cpu rss n proj kind root start cwd name unit line t sym click tip q="'"
     [[ -n "$job_rows" || "$hist_state" == ok || "$hist_state" == due ]] || return 0
     put "Where the CPU goes | size=12"
-    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd name _; do
+    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd name unit; do
         case "$tag" in
             J)  job_symbol "$job"; sym="$REPLY"; job_label "$job"; line="$REPLY · ${cpu}%"; memv "${rss:-0}"
                 put "$line · $REPLY | sfimage=$sym $ROW symbolize=false" ;;
@@ -569,7 +654,9 @@ section_jobs() {
                 memv "${rss:-0}"; line+=" · ${cpu}% · $REPLY"
                 click="$ROW"
                 tok "$root" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
-                put "--$line | $click symbolize=false" ;;
+                put "--$line | $click symbolize=false"
+                job_submenu "$job" "$n" "$kind" "$root" "$start" "$name" "${unit:--}"
+                OUT+="$SUB" ;;
         esac
     done < <([[ -z "$job_rows" ]] || job_lines)
     [[ "$hist_state" == ok || "$hist_state" == due ]] || return 0

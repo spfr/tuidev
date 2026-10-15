@@ -425,9 +425,9 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$tmp/sampled" ]] && break; sleep 0.2; d
 pass "menu: Where the CPU goes lists jobs busiest first with their sessions, today's CPU-h and Open report"
 pass "menu: a due sample starts agents sample in the background"
 # Params carry only fixed words and PID@START tokens.
-bad="$(printf '%s\n' "$section" | grep 'param' | grep -vE 'param1=(reveal|open-term) ' || true)"
+bad="$(printf '%s\n' "$section" | grep 'param' | grep -vE 'param1=(reveal|open-term|jump|kill) ' || true)"
 [[ -z "$bad" ]] || fail "unexpected actions: $bad"
-bad="$(printf '%s\n' "$section" | grep -oE 'param2=[^ ]+' | grep -vE '^param2=([0-9]+@[A-Za-z0-9_:]+|--hold)$' || true)"
+bad="$(printf '%s\n' "$section" | grep -oE 'param2=[^ ]+' | grep -vE '^param2=([0-9]+@[A-Za-z0-9_:]+|--hold|--notify|show|-y)$' || true)"
 [[ -z "$bad" ]] || fail "a param that is not a token: $bad"
 pass "menu: job actions are reveal PID@START and open-term report only"
 

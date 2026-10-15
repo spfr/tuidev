@@ -415,17 +415,17 @@ menu="$(plugin "$enr" $'conf\tAGENTS_AUTO_REAP\t0')"
 [[ "$menu" == *$'\n'"myapp: until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; done · stuck 5h10m · safe to stop | sfimage=hourglass $ORANGE_DOT refresh=true symbolize=false"$'\n'* ]] \
     || fail "stuck item line: $(printf '%s\n' "$menu" | grep 'stuck 5h10m')"
 sub="$(printf '%s\n' "$menu" | awk '/stuck 5h10m · safe to stop/ { on = 1; next } on && /^--/ { print; next } on { exit }')"
-[[ "$sub" == "--safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago) | refresh=true sfimage=checkmark.circle symbolize=false"$'\n'* ]] \
-    || fail "verdict first in the submenu: $sub"
+[[ "$sub" == "--Jump to session | bash=\""*"\" terminal=false param1=jump param2=--notify param3=$T5010 sfimage=arrow.up.forward.app"$'\n'"--safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago) | refresh=true sfimage=checkmark.circle symbolize=false"$'\n'* ]] \
+    || fail "Jump to session, then the verdict, first in the submenu: $sub"
 [[ "$sub" == *$'\n'"--owner: claude 5000 in myapp (working) | symbolize=false"$'\n'* && "$sub" == *$'\n'"--last line: [exited with code 0] (a completion marker) | symbolize=false"$'\n'* ]] \
     || fail "evidence in the submenu: $sub"
 [[ "$sub" == *$'\n'"--auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own | symbolize=false"$'\n'"-----"$'\n'* ]] || fail "auto note, then a separator: $sub"
 [[ "$sub" == *$'\n'"--Stop command… | bash=\""*"\" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=$T5010 sfimage=xmark.octagon"$'\n'* ]] \
     || fail "Stop command… still asks first: $sub"
 [[ "$sub" == *$'\n'"--Copy details | bash=\""*"\" terminal=false param1=why param2=--copy param3=$T5010 sfimage=doc.on.doc"$'\n'* ]] || fail "Copy details: $sub"
-[[ "$sub" == *$'\n'"--Show session | bash=\""*"\" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal" ]] || fail "Show session: $sub"
+[[ "$sub" == *$'\n'"--Show session | bash=\""*"\" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal"$'\n'"--Details | "*"param2=show param3=--watch param4=$T5010 sfimage=info.circle" ]] || fail "Show session, Details: $sub"
 [[ "$sub" != *"look at it"* && "$sub" != *"stop it:"* ]] || fail "next steps (why only) leaked into the menu: $sub"
-[[ "$menu" == *$'\n'"myapp: node dist/server.js · running 5h0m · check first | sfimage=clock $ORANGE_DOT refresh=true symbolize=false"$'\n'"--check first — dev server on :3000, its session is still active | refresh=true sfimage=questionmark.circle"* ]] \
+[[ "$menu" == *$'\n'"myapp: node dist/server.js · running 5h0m · check first | sfimage=clock $ORANGE_DOT refresh=true symbolize=false"$'\n'"--Jump to session | "*$'\n'"--check first — dev server on :3000, its session is still active | refresh=true sfimage=questionmark.circle"* ]] \
     || fail "long server: $(printf '%s\n' "$menu" | grep -A1 'server.js · running')"
 [[ "$menu" == *$'\n'"myapp: make test · running 25m · informational | sfimage=clock $GRAY_DOT refresh=true symbolize=false"$'\n'* ]] || fail "informational long is gray: $(printf '%s\n' "$menu" | grep 'make test · running')"
 [[ "$menu" == *$'\n'"myapp: while kill -0 4242 2>/dev/null; do sleep 5; done · stuck 3h0m · check first | "* ]] || fail "age-only stuck: $(printf '%s\n' "$menu" | grep 'kill -0')"
@@ -449,7 +449,7 @@ check_params() {   # MENU
             if (p !~ /^( +[a-z0-9]+=[A-Za-z0-9.#,_:@+-]+)+ *$/) print "unsafe params: " $0
             if (p ~ /bash=AGENTS/) {
                 q = p; sub(/.*param1=/, "", q); sub(/ .*/, "", q)
-                if (q !~ /^(kill|term|reap|why|open-term|copy-path|reveal|awake|config)$/) print "unknown subcommand: " $0
+                if (q !~ /^(kill|term|reap|why|open-term|copy-path|reveal|awake|config|jump)$/) print "unknown subcommand: " $0
                 if (q == "why" && p !~ / param2=--copy param3=[0-9]+@[A-Za-z0-9_:]+( |$)/) print "bad why: " $0
                 if (q == "open-term" && p ~ /param3=ps/ && p !~ / param4=[0-9]+( |$)/) print "bad Show session: " $0
             }
