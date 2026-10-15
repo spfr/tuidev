@@ -5,13 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.9.0] - 2026-10-15
 
-A notification that an agent needs you now takes you to it: click the banner
-and you land in that session's Herdr pane, tmux pane or Ghostty tab. And the
-MCP servers in the menu and `agents mcp` explain themselves: what each is,
-who configured it, how many copies run (one per session) and how much
-memory they hold.
+A fully linked loop. When an agent needs you, the banner is a door: click it
+and you land in that session's Herdr pane, tmux pane or Ghostty tab, in the
+Ghostty you already run. And the menu now says what the memory behind your
+MCP servers is: which server, who configured it, how many copies run (one
+per session) and what to do about it. This release also carries 3.8.1's CI
+fix, which was never tagged on its own.
 
 ### Added
 
@@ -21,7 +22,6 @@ memory they hold.
   Code server at user scope running in several sessions gets a hint
   (`chrome-devtools: 5 copies · 851M — user scope starts one per session;
   scope it to the projects that use it`), and so do stale copies.
-
 - **Click a notification to jump to its session.** On a Mac, `notify.sh`
   posts its banner through terminal-notifier, which the `monitoring` pack now
   installs (macOS only: `pkg_install` skips it on Linux). When the hook runs
@@ -83,29 +83,20 @@ memory they hold.
   itself: a process it had started kept a `$( )` waiting past the timeout,
   and the timer's own `sleep` was left behind when the command finished
   first. The command and the timer now run in process groups of their own.
-
 - **`agents open-term` no longer starts a second Ghostty.** With Ghostty
   1.3 or later it opens a new window of the instance you run, through
   Ghostty's AppleScript, and brings it forward; the menu's Show session,
   Peek, Details, reports and Open agents watch go there too, and Ghostty
   keeps each such window until a key is pressed once its command ends. A
   second instance (`open -na Ghostty`) answered AppleScript in place of
-  yours while it lived, so `agents jump` could miss your tab and a notification's click
-  could raise the wrong Ghostty. `open -na` is still what starts Ghostty when
-  none runs, and the fallback for Ghostty 1.2 or when AppleScript fails
+  yours while it lived, so `agents jump` could miss your tab and a
+  notification's click could raise the wrong Ghostty. `open -na` is still
+  what starts Ghostty when none runs, and the fallback for Ghostty 1.2 or when AppleScript fails
   (scripting off, Automation permission refused). The command reaches
   Ghostty as an argument of the script, quoted word by word for `/bin/sh`,
   never inside AppleScript source.
-
-## [3.8.1] - 2026-10-15
-
-CI is green again for 3.8: the new tests pass where fzf is installed and
-under shellcheck 0.9. No change to what `agents` does.
-
-### Fixed
-
-- **Tests:** `agents pick`'s "without fzf" test no longer finds the Alpine
-  image's fzf (a test names a missing one through `AGENTS_FZF`, read only
+- **Tests (3.8.1, untagged):** `agents pick`'s "without fzf" test no
+  longer finds the Alpine image's fzf (a test names a missing one through `AGENTS_FZF`, read only
   under `AGENTS_TESTING`), and the MCP and show tests are clean under
   shellcheck 0.9 (stubs marked, no `A && B || C`).
 
