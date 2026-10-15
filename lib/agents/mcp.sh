@@ -22,15 +22,17 @@
 # it in the background, at most every 30 s. Only the first build, with no
 # cache yet, is waited for.
 #
-# Owns: the inventory and mcp.tsv; `agents mcp`.
+# Owns: the inventory (the one place MCP servers are read from config; the
+#   context view builds on it) and mcp.tsv; `agents mcp`.
 # Uses: config.sh (AGENTS_RUN_DIR), util.sh (_agents_awk, _agents_now,
 #   _agents_detach, _agents_lock, _agents_replace); awk/mcp.awk,
 #   awk/mcp_toml.awk. awk/lib_activity.awk names the processes
 #   (mcp_known, mcp_name) from _agents_mcp_needles.
-# Public: agents_mcp_configured [DIR] — "cli<TAB>scope<TAB>name<TAB>source"
-#   for each configured server (cli: claude, codex; scope: user, local,
-#   project, plugin; source: the file it is in, ".claude.json:DIR" for local
-#   scope, NAME@MARKETPLACE for a plugin's); with DIR, only those a session
+# Public: agents_mcp_configured [DIR] — "cli<TAB>scope<TAB>name<TAB>source<TAB>
+#   enabled" for each configured server (cli: claude, codex; scope: user,
+#   local, project, plugin; source: the file it is in, ".claude.json:DIR" for
+#   local scope, NAME@MARKETPLACE for a plugin's; enabled: 0 for a Codex
+#   server set `enabled = false`, else 1); with DIR, only those a session
 #   started in DIR loads (user, plugin, and DIR's local and project ones);
 #   agents_mcp (`agents mcp`); _agents_mcp_needles VAR; _agents_mcp_lookup.
 
@@ -180,9 +182,9 @@ _agents_mcp_load() {
 # awk/lib_activity.awk reads: "needle<TAB>name<TAB>cli" lines, longest
 # needle first (servers without a needle, such as http ones, left out).
 _agents_mcp_needles() {
-    local _l _out="" cli scope name src proj type nd
+    local _l _out="" cli scope name src proj type nd en
     _agents_mcp_load
-    while IFS=$'\t' read -r _l cli scope name src proj type nd; do
+    while IFS=$'\t' read -r _l cli scope name src proj type nd en; do
         [[ "$_l" == srv && -n "$nd" && "$nd" != - ]] && _out+="$nd"$'\t'"$name"$'\t'"$cli"$'\n'
     done <<<"$_AGENTS_MCP_ROWS"
     printf -v "$1" '%s' "$_out"
@@ -190,21 +192,21 @@ _agents_mcp_needles() {
 
 # agents_mcp_configured [DIR] — see the header.
 agents_mcp_configured() {
-    local dir="${1:-}" l cli scope name src proj type nd
+    local dir="${1:-}" l cli scope name src proj type nd en
     _agents_mcp_load sync
-    while IFS=$'\t' read -r l cli scope name src proj type nd; do
+    while IFS=$'\t' read -r l cli scope name src proj type nd en; do
         [[ "$l" == srv ]] || continue
         case "$scope" in local|project) [[ -z "$dir" || "$proj" == "$dir" ]] || continue ;; esac
-        printf '%s\t%s\t%s\t%s\n' "$cli" "$scope" "$name" "$src"
+        printf '%s\t%s\t%s\t%s\t%s\n' "$cli" "$scope" "$name" "$src" "${en:-1}"
     done <<<"$_AGENTS_MCP_ROWS"
 }
 
 # _agents_mcp_lookup NAME [CLI] — "cli<TAB>scope<TAB>source<TAB>type<TAB>
 # needle" for each configured server called NAME (those of CLI first).
 _agents_mcp_lookup() {
-    local l cli scope name src proj type nd mine="" rest=""
+    local l cli scope name src proj type nd en mine="" rest=""
     _agents_mcp_load
-    while IFS=$'\t' read -r l cli scope name src proj type nd; do
+    while IFS=$'\t' read -r l cli scope name src proj type nd en; do
         [[ "$l" == srv && "$name" == "$1" ]] || continue
         if [[ "$cli" == "${2:-}" ]]; then mine+="$cli"$'\t'"$scope"$'\t'"$src"$'\t'"$type"$'\t'"$nd"$'\n'
         else rest+="$cli"$'\t'"$scope"$'\t'"$src"$'\t'"$type"$'\t'"$nd"$'\n'; fi
@@ -215,14 +217,14 @@ _agents_mcp_lookup() {
 # agents_mcp [DIR] — `agents mcp`: the configured servers (with DIR, those a
 # session started in DIR loads), what starts each and where it is configured.
 agents_mcp() {
-    local dir="" l cli scope name src proj type nd t='~' n=0
+    local dir="" l cli scope name src proj type nd en t='~' n=0
     case "${1:-}" in
         -*) echo "usage: agents mcp [DIR]" >&2; return 2 ;;
         ?*) dir="$(cd "$1" 2>/dev/null && pwd -P)" || { echo "agents: no such directory: $1" >&2; return 2; } ;;
     esac
     _agents_mcp_load sync
     printf '%s%-22s %-6s %-8s %-6s %-34s %s%s\n' "$C_DIM" NAME CLI SCOPE TYPE "STARTS WITH" SOURCE "$C_0"
-    while IFS=$'\t' read -r l cli scope name src proj type nd; do
+    while IFS=$'\t' read -r l cli scope name src proj type nd en; do
         [[ "$l" == srv ]] || continue
         case "$scope" in local|project) [[ -z "$dir" || "$proj" == "$dir" ]] || continue ;; esac
         [[ "$nd" == - && "$type" == http ]] && nd="(a URL)"

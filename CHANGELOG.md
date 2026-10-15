@@ -63,8 +63,10 @@ minute-by-minute sample stays cheap on a heavy machine.
   servers sessions call and the ones their deferred tool lists load (with
   how many tools each lists, a proxy for the context it takes), skills and
   subagent types used, the enabled Claude Code plugins with what each brings
-  (skills, agents, commands, MCP servers, hook events), Codex's MCP servers,
-  and cleanup candidates: what is loaded or enabled but unused. Names and
+  (skills, agents, commands, MCP servers, hook events), every configured MCP
+  server (Claude Code's user, local, project and plugin ones, Codex's, all
+  from `mcp.sh`'s inventory) with its calls, and cleanup candidates: what is
+  loaded or enabled but unused, with where to remove it. Names and
   counts only; no config value is ever printed or stored. The scan records
   what it needs in `uses.tsv`.
 - `agents_session_tokens` (`lib/agents/report.sh`): one session's origin,

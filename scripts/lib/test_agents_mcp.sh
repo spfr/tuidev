@@ -51,7 +51,7 @@ needle_of() {   # COMMAND ARG... — the needle awk/mcp.awk picks
 [[ "$(needle_of node)" == - && "$(needle_of npx -y)" == - ]]                                 || fail "an interpreter alone names nothing"
 [[ "$(needle_of node index.js)" == - ]]                                                      || fail "a generic script name names nothing"
 [[ "$(needle_of npx "--api-key=sk-live-SECRET1")" == - ]]                                    || fail "a flag is never a needle"
-printf 'claude\tplugin\tp\tp@m\t-\t/plug/root\tstdio\tnode\t${CLAUDE_PLUGIN_ROOT}/server.js\n' | _agents_awk mcp | grep -q $'\t/plug/root/server.js$' \
+printf 'claude\tplugin\tp\tp@m\t-\t/plug/root\tstdio\tnode\t${CLAUDE_PLUGIN_ROOT}/server.js\n' | _agents_awk mcp | grep -q $'\t/plug/root/server.js\t1$' \
     || fail "\${CLAUDE_PLUGIN_ROOT} is the plugin's install path"
 pass "needles: npx/uvx/npm exec packages without versions, scripts, python -m, docker images, programs; flags, URLs and interpreters never"
 
@@ -93,9 +93,11 @@ args = [
 
 [mcp_servers.node_repl.env]
 TOKEN = "SECRET6-codex"
+enabled = false   # a sub-table key: not the server's
 
 [mcp_servers.docs]
 url = "https://docs.example.com/mcp?k=SECRET5-url"
+enabled = false   # off, but still configured
 
 [profiles.fast]
 command = "not-a-server"
@@ -109,20 +111,21 @@ fi
 
 # --- The inventory --------------------------------------------------------------------
 want="$(printf '%s\n' \
-    "claude	local	app-db	$HOME/.claude.json:$proj" \
-    "claude	user	chrome-devtools	$HOME/.claude.json" \
-    "claude	project	files	$proj/.mcp.json" \
-    "claude	plugin	playwright	pw@m" \
-    "claude	user	remote	$HOME/.claude.json" \
-    "codex	user	docs	$HOME/.codex/config.toml" \
-    "codex	user	node repl	$HOME/.codex/config.toml" \
-    "codex	user	playwright	$HOME/.codex/config.toml" | LC_ALL=C sort)"
+    "claude	local	app-db	$HOME/.claude.json:$proj	1" \
+    "claude	user	chrome-devtools	$HOME/.claude.json	1" \
+    "claude	project	files	$proj/.mcp.json	1" \
+    "claude	plugin	playwright	pw@m	1" \
+    "claude	user	remote	$HOME/.claude.json	1" \
+    "codex	user	docs	$HOME/.codex/config.toml	0" \
+    "codex	user	node repl	$HOME/.codex/config.toml	1" \
+    "codex	user	playwright	$HOME/.codex/config.toml	1" | LC_ALL=C sort)"
 got="$(agents_mcp_configured | LC_ALL=C sort)"
 [[ "$got" == "$want" ]] || fail "configured servers:"$'\n'"$got"$'\n'"want:"$'\n'"$want"
 [[ "$(agents_mcp_configured "$other" | cut -f3 | LC_ALL=C sort | tr '\n' ' ')" == "chrome-devtools docs node repl playwright playwright remote " ]] \
     || fail "a session in another project loads only user and plugin servers: $(agents_mcp_configured "$other" | cut -f3 | tr '\n' ' ')"
 [[ "$(agents_mcp_configured "$proj" | cut -f3 | grep -c -e app-db -e files)" == 2 ]] || fail "a session in the project loads its local and project servers"
-pass "inventory: user, local, project and enabled-plugin servers from Claude Code, Codex's [mcp_servers.NAME] tables; a disabled plugin left out"
+[[ "$(agents_mcp_configured | awk -F '\t' '$5 == 0 { printf "%s ", $3 }')" == "docs " ]] || fail "only Codex's docs (enabled = false) is off; a sub-table's enabled is not its server's"
+pass "inventory: user, local, project and enabled-plugin servers from Claude Code, Codex's [mcp_servers.NAME] tables with their enabled flag; a disabled plugin left out"
 
 cache="$AGENTS_RUN_DIR/mcp.tsv"
 [[ -f "$cache" ]] || fail "no cache written"

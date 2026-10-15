@@ -1,11 +1,12 @@
 # lib/agents/awk/mcp.awk — the MCP inventory's rows, from raw server records
 # (mcp.sh's jq and awk/mcp_toml.awk), tab-separated:
-#   cli scope name source project root type command args(\037-joined)
+#   cli scope name source project root type command args(\037-joined) [enabled]
 # root: what ${CLAUDE_PLUGIN_ROOT} stands for in a plugin's command ("-").
 # For each, the needle: the one word of its command line that names it in
 # ps (needle()). The args are read for that alone and never printed: the rest
 # of a command line can hold tokens. Prints, longest needle first:
-#   srv CLI SCOPE NAME SOURCE PROJECT TYPE NEEDLE   ("-" when it has none)
+#   srv CLI SCOPE NAME SOURCE PROJECT TYPE NEEDLE ENABLED   ("-" when it has no
+#   needle; ENABLED 1, or 0 for a Codex server set `enabled = false`)
 
 function fname(p) { sub(/.*\//, "", p); return p }
 # pkg: a package without its version (@scope/name@1.2 → @scope/name,
@@ -63,7 +64,7 @@ NF >= 8 {
     if (generic(fname(nd)) && nd !~ /\//) nd = ""
     nm = $3; gsub(/[[:cntrl:]]/, "", nm)
     if (nm == "") next
-    row[++m] = "srv\t" $1 "\t" $2 "\t" nm "\t" $4 "\t" $5 "\t" $7 "\t" (nd == "" ? "-" : nd)
+    row[++m] = "srv\t" $1 "\t" $2 "\t" nm "\t" $4 "\t" $5 "\t" $7 "\t" (nd == "" ? "-" : nd) "\t" ($10 == "0" ? 0 : 1)
     len[m] = length(nd)
 }
 END {

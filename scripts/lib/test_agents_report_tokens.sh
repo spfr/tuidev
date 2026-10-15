@@ -572,6 +572,10 @@ enabled = false
 [mcp_servers.used]
 command = "sk-toml-333"
 EOF
+# Claude Code's own servers: user, local and project scope (mcp.sh reads them).
+cproj="$tmp/ctx/proj"; mkdir -p "$cproj"
+printf '{"mcpServers":{"github":{"command":"npx","args":["-y","gh-mcp","--token","sk-user-1"],"env":{"T":"sk-user-2"}},"figma":{"type":"http","url":"https://figma.example.invalid/mcp?k=sk-user-3","headers":{"Authorization":"sk-user-4"}}},"projects":{"%s":{"mcpServers":{"localdb":{"command":"sk-local-1","args":["sk-local-2"]}}}}}' "$cproj" > "$cc/.claude.json"
+printf '{"mcpServers":{"filesys":{"command":"npx","args":["sk-proj-1"]}}}' > "$cproj/.mcp.json"
 c="$tmp/ctxd"; mkdir -p "$c"; cp "$d/tokens.tsv" "$c/"
 rows "$c" uses.tsv <<EOF
 600${T}claude${T}app${T}S1${T}main${T}mcp${T}claude-in-chrome${T}5
@@ -589,7 +593,7 @@ rows "$c" uses.tsv <<EOF
 200${T}claude${T}app${T}S1${T}main${T}agent${T}implementor-complex${T}1
 100${T}codex${T}web${T}C1${T}main${T}mcp${T}used${T}4
 EOF
-ctx() { CLAUDE_CONFIG_DIR="$cc" CODEX_HOME="$cx" AGENTS_DATA_DIR="$c" agents_report --view context "$@"; }
+ctx() { CLAUDE_CONFIG_DIR="$cc" CODEX_HOME="$cx" AGENTS_DATA_DIR="$c" AGENTS_RUN_DIR="$tmp/ctx/run" agents_report --view context "$@"; }
 out="$(ctx)"
 want="agents report · context · last 7d
 
@@ -598,7 +602,12 @@ MCP SERVERS
   claude-in-chrome       claude      5        1         2    21  -
   used                   codex       4        1         0     -  config
   alphadb                claude      3        1         1     7  plugin alpha
-  github                 claude      0        0         2    40  -
+  github                 claude      0        0         2    40  user
+  figma                  claude      0        0         0     -  user
+  filesys                claude      0        0         0     -  project
+  localdb                claude      0        0         0     -  local
+  docs.server            codex       0        0         0     -  config (off)
+  playwright             codex       0        0         0     -  config
 
 SKILLS
   SKILL                           CALLS SESSIONS
@@ -613,22 +622,24 @@ SUBAGENTS
 PLUGINS  2 of 4 enabled (Claude Code)
   alpha                  2 skills, 1 agent, 1 command, 1 MCP server, 2 hook events · 3 calls
   beta                   1 skill, 0 agents, 0 commands, 0 MCP servers, 0 hook events · 0 calls
-CODEX MCP  playwright 0 · docs.server (off) 0 · used 4 (calls)
 
 CLEANUP CANDIDATES  loaded or enabled, unused in 7d
-  github: 40 tools listed in 2 sessions, never called — remove it from the MCP config, or scope it to the projects that use it
-  beta (plugin): 1 skill, 0 agents, 0 commands, 0 MCP servers, 0 hook events, none used — disable it (/plugin) to load less into every session
-  playwright (Codex MCP server): never called — remove it from ~/.codex/config.toml, or set enabled = false"
+  github: 40 tools listed in 2 sessions, never called — remove it with \`claude mcp remove github -s user\`
+  figma: never called — remove it with \`claude mcp remove figma -s user\`
+  filesys: never called — remove it with \`claude mcp remove filesys -s project\`
+  localdb: never called — remove it with \`claude mcp remove localdb -s local\`
+  playwright (Codex MCP server): never called — remove it from ~/.codex/config.toml, or set enabled = false
+  beta (plugin): 1 skill, 0 agents, 0 commands, 0 MCP servers, 0 hook events, none used — disable it (/plugin) to load less into every session"
 printf '%s\n' "$out" > "$tmp/ctx.got"; printf '%s\n' "$want" > "$tmp/ctx.want"
 [[ "$out" == "$want" ]] || fail "context view:"$'\n'"$(diff "$tmp/ctx.want" "$tmp/ctx.got")"
 json="$(ctx --json)"
-jqt "$json" '.view == "context" and .window == "7d" and ([.mcp_servers[] | [.server, .cli, .source, .plugin, .calls, .sessions_used, .sessions_listed, .tools_listed]] == [["claude-in-chrome","claude",null,null,5,1,2,21],["used","codex","config",null,4,1,0,null],["alphadb","claude","plugin","alpha",3,1,1,7],["github","claude",null,null,0,0,2,40]])' "context json: servers" '.mcp_servers'
+jqt "$json" '.view == "context" and .window == "7d" and ([.mcp_servers[] | [.server, .cli, .source, .plugin, .calls, .sessions_used, .sessions_listed, .tools_listed]] == [["claude-in-chrome","claude",null,null,5,1,2,21],["used","codex","config",null,4,1,0,null],["alphadb","claude","plugin","alpha",3,1,1,7],["github","claude","user",null,0,0,2,40],["figma","claude","user",null,0,0,0,null],["filesys","claude","project",null,0,0,0,null],["localdb","claude","local",null,0,0,0,null],["docs.server","codex","config",null,0,0,0,null],["playwright","codex","config",null,0,0,0,null]]) and ([.mcp_servers[] | [.server, .configured, .enabled]] | map(select(.[0] == "docs.server" or .[0] == "claude-in-chrome" or .[0] == "alphadb")) == [["claude-in-chrome",false,null],["alphadb",true,true],["docs.server",true,false]]) and (has("codex_mcp_servers") | not)' "context json: servers" '.mcp_servers'
 jqt "$json" '[.plugins[] | [.plugin, .enabled, .installed, .skills, .agents, .commands, .mcp_servers, .hooks, .calls]] == [["alpha",true,true,2,1,1,1,2,3],["beta",true,true,1,0,0,0,0,0],["gamma",false,false,null,null,null,null,null,0],["delta",false,true,null,null,null,null,null,0]]' "context json: plugins" '.plugins'
-jqt "$json" '[.codex_mcp_servers[] | [.server, .enabled, .calls]] == [["playwright",true,0],["docs.server",false,0],["used",true,4]] and [.cleanup[] | [.kind, .name]] == [["mcp","github"],["plugin","beta"],["codex_mcp","playwright"]]' "context json: Codex, cleanup" '[.codex_mcp_servers, .cleanup]'
+jqt "$json" '[.cleanup[] | [.kind, .name]] == [["mcp","github"],["mcp","figma"],["mcp","filesys"],["mcp","localdb"],["codex_mcp","playwright"],["plugin","beta"]]' "context json: cleanup" '.cleanup'
 jqt "$json" '.skills == [{"skill":"update-config","plugin":null,"calls":3,"sessions":2}] and ([.subagents[] | [.agent, .started]] == [["Explore",3],[null,0],["implementor-complex",1]])' "context json: skills, subagents" '[.skills, .subagents]'
-[[ "$out$json" != *sk-* && "$out$json" != *npx* && "$out$json" != *example.invalid* && "$out$json" != *"bad name"* ]] || fail "context: a config value reached the report"
-[[ "$(CLAUDE_CONFIG_DIR="$tmp/none" CODEX_HOME="$tmp/none" AGENTS_DATA_DIR="$tmp/none" agents_report --view context)" == *"  none called or listed in this window"*"PLUGINS  none in Claude Code's settings"*"CLEANUP CANDIDATES  none: everything loaded was used in 7d" ]] \
-    || fail "context without data: $(CLAUDE_CONFIG_DIR="$tmp/none" CODEX_HOME="$tmp/none" AGENTS_DATA_DIR="$tmp/none" agents_report --view context)"
-pass "context: MCP servers called and listed (tools per session), skills, subagent types, plugins and what each brings, Codex servers, cleanup candidates; never a config value"
+[[ "$out$json" != *sk-* && "$out$json" != *npx* && "$out$json" != *example.invalid* && "$out$json" != *gh-mcp* && "$out$json" != *"bad name"* ]] || fail "context: a config value reached the report"
+[[ "$(CLAUDE_CONFIG_DIR="$tmp/none" CODEX_HOME="$tmp/none" AGENTS_DATA_DIR="$tmp/none" AGENTS_RUN_DIR="$tmp/none-run" agents_report --view context)" == *"  none configured, called or listed in this window"*"PLUGINS  none in Claude Code's settings"*"CLEANUP CANDIDATES  none: everything loaded was used in 7d" ]] \
+    || fail "context without data: $(CLAUDE_CONFIG_DIR="$tmp/none" CODEX_HOME="$tmp/none" AGENTS_DATA_DIR="$tmp/none" AGENTS_RUN_DIR="$tmp/none-run" agents_report --view context)"
+pass "context: every configured MCP server (Claude user/local/project/plugin, Codex) with its calls, listed tools, skills, subagent types, plugins, cleanup candidates; never a config value"
 
 echo "All agents report tokens tests passed."
