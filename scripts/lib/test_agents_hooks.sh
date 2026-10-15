@@ -24,6 +24,7 @@ cleanup() {
 }
 trap cleanup EXIT
 export HOME="$tmp/home" NO_COLOR=1
+export TUIDEV_TERMINAL_NOTIFIER=""   # never this machine's: a notification is osascript's (a stub)
 mkdir -p "$HOME"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
@@ -156,7 +157,7 @@ _agents_hook_stdouts() {
 _agents_signal() { echo "$1 $2" >> "$tmp/signals"; }
 _agents_alive() { :; }
 _agents_cwds() { :; }
-_agents_notify() { [[ "${AGENTS_NOTIFY:-false}" != true ]] || echo "$1" >> "$tmp/notified"; }
+_agents_notify() { [[ "${AGENTS_NOTIFY:-false}" != true ]] || { echo "$1" >> "$tmp/notified"; echo "${2:-} ${3:-}" >> "$tmp/notified.target"; }; }
 
 hook_json() {   # EVENT AGENT_ID [REASON]
     jq -nc --arg ev "$1" --arg a "$2" --arg main "$main" --arg sub "$subs/agent-$2.jsonl" --arg r "${3:-}" \
@@ -167,7 +168,7 @@ hook_json() {   # EVENT AGENT_ID [REASON]
 }
 run_hook() {    # EVENT_ARG HOOK_JSON [ARGS...]: rc in $tmp/rc, stdout in $tmp/out
     local ev="$1" json="$2"; shift 2
-    rm -f "$tmp/signals" "$tmp/notified"
+    rm -f "$tmp/signals" "$tmp/notified" "$tmp/notified.target"
     set +e
     printf '%s\n' "$json" | agents_main hook "$ev" "$@" > "$tmp/out" 2> "$tmp/err"
     echo $? > "$tmp/rc"
@@ -230,7 +231,9 @@ ev="$(cut -f2- "$AGENTS_DATA_DIR/events.tsv" | sort)"
     || fail "events: $ev"
 [[ "$(cat "$tmp/notified")" == "Stopped 2 background commands a subagent (general-purpose) left running in myapp" ]] \
     || fail "notification: $(cat "$tmp/notified" 2>/dev/null)"
-pass "subagent-stop: SIGTERMs those trees, quietly; one event per task (hook subagent-end, session claude:PID), one notification"
+[[ "$(cat "$tmp/notified.target")" =~ ^5000@[A-Za-z]{3}_[A-Za-z]{3}_[0-9]+_[0-9:]{8}_[0-9]{4}\ -$ ]] \
+    || fail "the notification does not jump to the session: $(cat "$tmp/notified.target" 2>/dev/null)"
+pass "subagent-stop: SIGTERMs those trees, quietly; one event per task (hook subagent-end, session claude:PID), one notification that jumps to the session"
 
 rm -rf "$AGENTS_DATA_DIR"
 AGENTS_HISTORY=0 run_hook subagent-stop "$(hook_json SubagentStop aaa)"

@@ -25,7 +25,8 @@
 # Uses: config.sh (AGENTS_HOOK_REAP, AGENTS_HOOK_LOG, _AGENTS_HOOK_DRY),
 #   util.sh, snapshot.sh, classify.sh (agents_project), kill.sh
 #   (agents_kill_tokens), events.sh (agents_event, _agents_data_dir),
-#   notify.sh, transcript.sh (the transcript reads);
+#   notify.sh, where.sh (agents_root_of: the session a click goes to),
+#   transcript.sh (the transcript reads);
 #   awk/hook_claude.awk, awk/hook_children.awk, awk/hook_match.awk.
 # Public: agents_hook.
 
@@ -264,14 +265,16 @@ _agents_hook_run() {
     _AGENTS_HL_MATCHED="$(printf '%s\n' "$matches" | grep -c .)"
     # The session as every other event names it (kind:pid), so a report
     # groups hook cleanups with the rest.
-    _agents_hook_reap "$event" "$matches" "claude:$claude" "$(agents_project "$cwd")" "$atype"
+    _agents_hook_reap "$event" "$matches" "claude:$claude" "$(agents_project "$cwd")" "$atype" \
+        "$(agents_root_of "$claude" "$snap")"
     return 0
 }
 
-# _agents_hook_reap EVENT MATCHES SESSION PROJECT AGENT_TYPE — stop the
-# matched trees, log one event per stopped task, notify once.
+# _agents_hook_reap EVENT MATCHES SESSION PROJECT AGENT_TYPE [TARGET] — stop
+# the matched trees, log one event per stopped task, notify once (a click
+# jumps to TARGET, agents_root_of's "PID@START<TAB>APP<TAB>BUNDLE").
 _agents_hook_reap() {
-    local event="$1" matches="$2" session="$3" proj="$4" atype="$5" tokens out planned token id how name _w n=0 who reason
+    local event="$1" matches="$2" session="$3" proj="$4" atype="$5" target="${6:-}" tokens out planned token id how name _w n=0 who reason jtok _app bundle
     tokens="$(printf '%s\n' "$matches" | cut -f1)"
     if [[ "$event" == subagent-stop ]]; then
         reason=subagent-end; who="a subagent"
@@ -297,5 +300,6 @@ _agents_hook_reap() {
         agents_event hook "$reason" "${token%@*}" "$name" "$proj" "$session"
     done <<<"$matches"
     [[ $n -gt 0 ]] || return 0
-    AGENTS_NOTIFY=true _agents_notify "Stopped $n background command$([[ $n -gt 1 ]] && echo s) $who left running$([[ "$proj" != - ]] && echo " in $proj")"
+    IFS=$'\t' read -r jtok _app bundle <<<"$target"
+    AGENTS_NOTIFY=true _agents_notify "Stopped $n background command$([[ $n -gt 1 ]] && echo s) $who left running$([[ "$proj" != - ]] && echo " in $proj")" "$jtok" "$bundle"
 }

@@ -6,7 +6,7 @@
 # `ps` / listener text: nothing is signalled and no real process is read.
 
 # Tests change PATH inside ( … ) on purpose, to stub tools for one call.
-# shellcheck disable=SC2030,SC2031
+# shellcheck disable=SC2016,SC2030,SC2031  # literal $(…) and backticks in the notification tests
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,6 +15,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home" NO_COLOR=1
+export TUIDEV_TERMINAL_NOTIFIER=""   # never this machine's: notifications go to the osascript stubs
 mkdir -p "$HOME"
 
 # shellcheck source=../../bin/agents disable=SC1091
@@ -1304,11 +1305,39 @@ grep -q 'Killed node (pid 1)' "$tmp/osa.log" || fail "notification text"
 : > "$tmp/osa.log"
 ( PATH="$tmp/osa:$PATH"; AGENTS_NOTIFY=false _agents_notify "quiet" )
 [[ ! -s "$tmp/osa.log" ]] || fail "notification sent without --notify"
+# terminal-notifier (a stub that logs one argument per line): a notification
+# about a session jumps there when clicked; nothing else reaches the shell.
+mkdir -p "$tmp/tn" "$tmp/odd'dir \$(touch $tmp/pwned)"
+printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s"\n[[ -z "$TN_FAIL" ]]\n' "$tmp/tn.argv" > "$tmp/tn/terminal-notifier"
+printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s"\n' "$tmp/jump.argv" > "$tmp/odd'dir \$(touch $tmp/pwned)/agents"
+chmod +x "$tmp/tn/terminal-notifier" "$tmp/odd'dir \$(touch $tmp/pwned)/agents"
+tn() { ( PATH="$tmp/osa:$PATH"; TUIDEV_TERMINAL_NOTIFIER="$tmp/tn/terminal-notifier" AGENTS_NOTIFY=true _agents_notify "$@" ); }
+: > "$tmp/osa.log"
+tn "Nothing to reap"
+[[ "$(cat "$tmp/tn.argv")" == $'-title\nagents\n-message\nNothing to reap' && ! -s "$tmp/osa.log" ]] \
+    || fail "terminal-notifier, no session: $(cat "$tmp/tn.argv")"
+tok="4242@Wed_Oct_14_08:00:00_2026"
+( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn 'Stopped 1 in "x" $(touch '"$tmp"'/pwned) `id`' "$tok" com.mitchellh.ghostty )
+argv="$(cat "$tmp/tn.argv")"
+[[ "$(sed -n 1,4p "$tmp/tn.argv")" == $'-title\nagents\n-message\nStopped 1 in "x" $(touch '"$tmp"'/pwned) `id`' ]] || fail "the message is not one argument: $argv"
+[[ "$argv" == *$'\n-group\nagents-'"$tok"$'\n'* && "$argv" == *$'\n-activate\ncom.mitchellh.ghostty' ]] || fail "group or activate: $argv"
+cmd="$(sed -n '/^-execute$/{n;p;}' "$tmp/tn.argv")"
+[[ "$cmd" == "PATH='"*"' '$tmp/odd'\''dir \$(touch $tmp/pwned)/agents' jump --notify $tok" ]] || fail "execute: $cmd"
+[[ "$cmd" != *Stopped* && "$cmd" != *'`id`'* ]] || fail "the message reached the execute string: $cmd"
+/bin/sh -c "$cmd"
+[[ "$(cat "$tmp/jump.argv")" == $'jump\n--notify\n'"$tok" && ! -e "$tmp/pwned" ]] || fail "the click: $(cat "$tmp/jump.argv")"
+( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn "x" '4242@x; touch y' 'com.x;touch' )
+[[ "$(cat "$tmp/tn.argv")" != *-execute* && "$(cat "$tmp/tn.argv")" != *-activate* ]] || fail "an unchecked token or bundle id: $(cat "$tmp/tn.argv")"
+( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn "x" "$tok" 'a b' )
+[[ "$(cat "$tmp/tn.argv")" == *-execute* && "$(cat "$tmp/tn.argv")" != *-activate* ]] || fail "a bad bundle id: $(cat "$tmp/tn.argv")"
+: > "$tmp/osa.log"
+TN_FAIL=1 tn "fell back"
+grep -q 'fell back' "$tmp/osa.log" || fail "no osascript when terminal-notifier fails"
 [[ "$(_agents_kill_message $'60712\tclaude\t26\tmyapp')" == "Kill claude in myapp (pid 60712, 26 child processes)?" ]] \
     || fail "dialog text: $(_agents_kill_message $'60712\tclaude\t26\tmyapp')"
 [[ "$(_agents_kill_message $'29046\tnode\t0\t-')" == "Kill node (pid 29046)?" ]] || fail "dialog text without project or children"
 [[ "$(_agents_kill_message $'1\ta\t1\tp\n2\tb\t0\tq')" == "Kill 2 process trees?"* ]] || fail "dialog text for two trees"
-pass "kill dialog: Cancel is the default and no GUI means no; notifications only with --notify"
+pass "kill dialog: Cancel is the default and no GUI means no; notifications only with --notify, clickable to the session with terminal-notifier"
 
 # Live: --confirm-gui with Cancel leaves the process alone (needs ps).
 if ps -o lstart= -p $$ >/dev/null 2>&1; then
