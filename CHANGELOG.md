@@ -61,6 +61,19 @@ and you land in that session's Herdr pane, tmux pane or Ghostty tab.
   and the timer's own `sleep` was left behind when the command finished
   first. The command and the timer now run in process groups of their own.
 
+- **`agents open-term` no longer starts a second Ghostty.** With Ghostty
+  1.3 or later it opens a new window of the instance you run, through
+  Ghostty's AppleScript, and brings it forward; the menu's Show session,
+  Peek, Details, reports and Open agents watch go there too, and Ghostty
+  keeps each such window until a key is pressed once its command ends. A
+  second instance (`open -na Ghostty`) answered AppleScript in place of
+  yours while it lived, so `agents jump` could miss your tab and a notification's click
+  could raise the wrong Ghostty. `open -na` is still what starts Ghostty when
+  none runs, and the fallback for Ghostty 1.2 or when AppleScript fails
+  (scripting off, Automation permission refused). The command reaches
+  Ghostty as an argument of the script, quoted word by word for `/bin/sh`,
+  never inside AppleScript source.
+
 ## [3.8.1] - 2026-10-15
 
 CI is green again for 3.8: the new tests pass where fzf is installed and

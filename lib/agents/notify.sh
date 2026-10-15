@@ -5,7 +5,7 @@
 #   kills), and macOS notifications (--notify; clickable through
 #   terminal-notifier, a click jumping to the session one is about).
 # Uses: config.sh (AGENTS_YES, AGENTS_NOTIFY), bin/agents (AGENTS_PATH),
-#   util.sh (_agents_timeout, _agents_token).
+#   util.sh (_agents_timeout, _agents_token, _agents_quote).
 # Public: _agents_confirm, _agents_gui_confirm, _agents_notifier,
 #   _agents_tn_text, _agents_jump_command, _agents_notify.
 
@@ -62,9 +62,6 @@ _agents_tn_text() {
         *)  printf '%s' "$1" ;;
     esac
 }
-
-# _agents_quote WORD — WORD as one single-quoted /bin/sh word.
-_agents_quote() { local sq="'" r="'\\''"; printf "'%s'" "${1//$sq/$r}"; }
 
 # _agents_jump_command TOKEN — the /bin/sh command a click runs to go to the
 # session PID@START TOKEN names: this agents by its absolute path, with this

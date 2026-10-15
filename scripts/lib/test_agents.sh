@@ -1270,6 +1270,54 @@ _agents_conf_valid AGENTS_TERMINAL ghostty || fail "AGENTS_TERMINAL=ghostty reje
 ! _agents_conf_valid AGENTS_TERMINAL xterm || fail "AGENTS_TERMINAL=xterm accepted"
 pass "open-term: auto picks Ghostty > iTerm > WezTerm > kitty > Terminal; per-terminal commands carry agents' path and PATH"
 
+# Ghostty 1.3+ (it ships Ghostty.sdef): a window of the running instance
+# through AppleScript, and `open -na` (a second instance) only when that
+# opened no window. Stubs log what osascript and open were given.
+mkdir -p "$apps/C/Ghostty.app/Contents/Resources"
+cp -R "$apps/B/Ghostty.app/Contents/MacOS" "$apps/C/Ghostty.app/Contents/"
+gbin="$tmp/ghostbin"; mkdir -p "$gbin"
+printf '#!/bin/bash\nd=%q\nprintf "%%s\\0" "$@" > "$d/osa.args"\ncase "$(cat "$d/osa.mode")" in\n  ok) echo ok ;; down) echo down ;;\n  fail) echo "execution error: Not authorized to send Apple events to Ghostty. (-1743)" >&2; exit 1 ;;\n  killed) kill -TERM $$ ;;\nesac\n' "$tmp" > "$gbin/osascript"
+printf '#!/bin/bash\nprintf "%%s\\n" "$@" > %q/open.args\n' "$tmp" > "$gbin/open"
+printf '#!/bin/bash\nprintf "%%s\\0" "$@" > %q/stub.args\n' "$tmp" > "$gbin/agents-argstub"
+chmod +x "$gbin/osascript" "$gbin/open" "$gbin/agents-argstub"
+ot() {   # MODE ARGS... — open-term with osascript answering MODE
+    rm -f "$tmp/osa.args" "$tmp/open.args"; echo "$1" > "$tmp/osa.mode"; shift
+    ( PATH="$gbin:$PATH" AGENTS_TESTING=1 AGENTS_APP_DIRS="$apps/C" AGENTS_TERMINAL=auto agents_open_term "$@" )
+}
+! AGENTS_TESTING=1 AGENTS_APP_DIRS="$apps/C" _agents_ghostty_scriptable || fail "Ghostty without a dictionary counted as scriptable"
+: > "$apps/C/Ghostty.app/Contents/Resources/Ghostty.sdef"
+AGENTS_TESTING=1 AGENTS_APP_DIRS="$apps/C" _agents_ghostty_scriptable || fail "Ghostty 1.3's dictionary not found"
+ot ok watch || fail "open-term: Ghostty window failed"
+[[ -f "$tmp/osa.args" && ! -e "$tmp/open.args" ]] || fail "open-term: AppleScript window, then no second instance"
+osa="$(tr '\0' '\n' < "$tmp/osa.args")"
+[[ "$osa" == *$'\nif application "Ghostty" is not running then return "down"\n'*$'\nnew window with configuration cfg\n'* ]] \
+    || fail "ghostty-window script: $osa"
+[[ "$osa" == *"set command of cfg to (item 1 of argv)"* ]] || fail "the command travels only as an argument: $osa"
+ot down watch || fail "open-term: Ghostty not running"
+[[ "$(head -2 "$tmp/open.args" | tr '\n' ' ')" == "-na Ghostty " ]] || fail "no Ghostty running: open -na starts the one instance"
+ot fail watch || fail "open-term: AppleScript refused"
+[[ -f "$tmp/open.args" ]] || fail "AppleScript refused: open -na is the fallback"
+! ot killed watch || fail "open-term: a timed-out AppleScript reported success"
+[[ ! -e "$tmp/open.args" ]] || fail "a timed-out AppleScript (a window may still come) fell back to a second instance"
+# Hostile words reach agents exactly, through /bin/sh and bash -c: no quote,
+# $(…), backtick or newline escapes either layer, or the AppleScript source.
+hostile=("it's" "\$(touch $tmp/pwned)" "\`touch $tmp/pwned\`" "\"; touch $tmp/pwned; \"" "'; touch $tmp/pwned; '" $'line\nbreak' 'a\b' '*' '')
+AGENTS_PATH="$gbin/agents-argstub" ot ok "${hostile[@]}" || fail "open-term with hostile words"
+script=""; last=""
+while IFS= read -r -d '' w; do [[ "$w" == -e ]] || { [[ -z "$last" ]] || script+="$last"$'\n'; last="$w"; }; done < "$tmp/osa.args"
+[[ "$script" != *"$tmp"* && "$script" != *touch* ]] || fail "command text inside the AppleScript source: $script"
+[[ "$last" != *$'\n'* ]] || fail "a raw newline in the Ghostty command"
+( cd "$tmp" && /bin/sh -c "$last" ) </dev/null || fail "Ghostty's command did not run: $last"
+[[ ! -e "$tmp/pwned" ]] || fail "hostile text ran in the Ghostty command"
+cmp -s "$tmp/stub.args" <(printf '%s\0' "${hostile[@]}") || fail "hostile words changed on the way: $(tr '\0' '|' < "$tmp/stub.args")"
+AGENTS_PATH="$gbin/agents-argstub" ot ok --hold awake status || fail "open-term --hold"
+last=""; while IFS= read -r -d '' w; do last="$w"; done < "$tmp/osa.args"
+[[ "$last" == *"awake status '" && "$(tr '\0' '\n' < "$tmp/osa.args")" == *$'\nset wait after command of cfg to true\n'* ]] \
+    || fail "Ghostty itself keeps its window for a key (no second prompt of ours): $last"
+dry="$(PATH="$gbin:$PATH" AGENTS_TESTING=1 AGENTS_APP_DIRS="$apps/C" AGENTS_TERMINAL=ghostty bash "$REPO_DIR/bin/agents" open-term -n watch)"
+[[ "$dry" == "osascript -e on\\ run\\ argv "*$'\n'"open -na Ghostty --args -e /usr/bin/env "* ]] || fail "open-term -n with Ghostty 1.3: $dry"
+pass "open-term: Ghostty 1.3+ opens a window of the running instance; open -na only when none runs or AppleScript fails; hostile words arrive intact"
+
 # agents cwd/copy-path/reveal take only PID@START and check the start time.
 for bad in 123 '123@x y' '123@a"b' 'abc@Wed' ''; do
     rc=0; agents_token_cwd "$bad" >/dev/null 2>&1 || rc=$?

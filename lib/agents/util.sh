@@ -2,14 +2,15 @@
 # lib/agents/util.sh — small helpers the other modules share.
 #
 # Owns: running the awk programs in awk/, durations, --since windows and
-#   clock times, a word of a line, the PID@START token, a command with a
-#   timeout or in the background, and the state files in the run and data directories: lock
-#   directories, epoch stamps, replacing or removing a file safely.
+#   clock times, a word of a line, a word quoted for /bin/sh, the PID@START
+#   token, a command with a timeout or in the background, and the state
+#   files in the run and data directories: lock directories, epoch stamps,
+#   replacing or removing a file safely.
 # Uses: _AGENTS_AWK_DIR (set by bin/agents); snapshot.sh (_agents_start) for
 #   a lock's or a state file's holder.
 # Public: _AGENTS_TOKEN_RE, _agents_token, _agents_awk, _agents_awk_eval,
 #   agents_parse_duration, _agents_window, _agents_now, _agents_clock,
-#   _agents_field, _agents_timeout, _agents_bg, _agents_bg_wait,
+#   _agents_field, _agents_quote, _agents_timeout, _agents_bg, _agents_bg_wait,
 #   _agents_detach, _agents_lock, _agents_unlock, _agents_holder_check,
 #   _agents_mypid, _agents_stamp_age, _agents_replace, _agents_rm_if_same.
 
@@ -281,6 +282,9 @@ _agents_now() {
     [[ -n "$t" || -z "${AGENTS_TESTING:-}" ]] || t="${AGENTS_NOW:-}"
     printf -v "$1" '%s' "${t:-$(date +%s)}"
 }
+
+# _agents_quote WORD — WORD as one single-quoted /bin/sh word.
+_agents_quote() { local sq="'" r="'\\''"; printf "'%s'" "${1//$sq/$r}"; }
 
 _agents_field() { local a; read -r -a a <<<"$2"; echo "${a[$1 - 1]}"; }   # N WORDS
 _agents_clock() { date -r "$1" +%H:%M 2>/dev/null || date -d "@$1" +%H:%M 2>/dev/null; }

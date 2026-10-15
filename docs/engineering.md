@@ -77,7 +77,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `render.sh` | the human views: the table, its status lines, `agents watch` |
 | `json.sh` | `agents json`, a versioned contract |
 | `tsv.sh` | `agents tsv`, what the SwiftBar plugin reads |
-| `terminal.sh` | `agents open-term`: a window of your terminal |
+| `terminal.sh` | `agents open-term`: a window of your terminal (Ghostty 1.3+: of the running instance, through AppleScript) |
 | `activity.sh` | which session a process is (Claude Code's `sessions/PID.json`, Codex's open rollout file) and what it is doing, from the last 256 KiB of its transcript |
 | `show.sh` | `agents show`: one process in detail, and its JSON |
 | `pick.sh` | `agents pick`: the fzf browser, its list and its command line |
