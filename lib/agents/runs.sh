@@ -38,7 +38,8 @@
 #                sample that reads it.
 #
 # Uses: config.sh, util.sh, watched.sh (_agents_last_line, _agents_mtimes),
-#   transcript.sh (whose task it was); awk/runs_obs.awk, awk/runs.awk,
+#   transcript.sh and tokens.sh (whose task it was: the scan's tasks.idx,
+#   else a bounded search); awk/runs_obs.awk, awk/runs.awk,
 #   awk/runs_view.awk.
 # Public: agents_runs, _agents_runs_feed, _agents_runs_observe,
 #   _agents_runs_take, _agents_runs_update.
@@ -110,13 +111,15 @@ _agents_runs_update() {
 # worktree (agent-ID) is that subagent's even without an output file.
 _agents_runs_finish() {
     local start job proj sess cmd last gone cpu peak dup orig out cleaned stop
-    local outs=() stats="" owners="" end code agent l e p main
+    local outs=() stats="" owners="" end code agent l e p main since=0
     while IFS=$'\t' read -r _ start job proj sess cmd last gone cpu peak dup orig out cleaned stop; do
-        [[ "$out" == /* && -f "$out" && ! -L "$out" ]] && outs+=("$out")
+        [[ "$out" == /* && -f "$out" && ! -L "$out" ]] || continue
+        outs+=("$out")
+        [[ ! "$start" =~ ^[0-9]+$ ]] || [[ $since -gt 0 && $since -le $start ]] || since=$start
     done <<<"$1"
     if [[ ${#outs[@]} -gt 0 ]]; then
         stats="$(_agents_mtimes "${outs[@]}")"
-        owners="$(_agents_runs_owners "${outs[@]}")"
+        owners="$(_agents_runs_owners "$((since > 60 ? since - 60 : 1))" "${outs[@]}")"
     fi
     while IFS=$'\t' read -r _ start job proj sess cmd last gone cpu peak dup orig out cleaned stop; do
         [[ "$start" =~ ^[0-9]+$ && "$last" =~ ^[0-9]+$ ]] || continue
@@ -139,11 +142,17 @@ _agents_runs_finish() {
     done <<<"$1"
 }
 
-# _agents_runs_owners OUTPUT... — "output<TAB>agent" for each task output file
-# whose task id a transcript of its session names (_agents_tx_task_owners):
-# one search per session, however many of its tasks ended.
+# _agents_runs_owners SINCE OUTPUT... — "output<TAB>agent" for each task
+# output file whose task id a transcript of its session names: from the
+# token scan's index (_agents_tokens_task_sources; the scan runs just
+# before the ledger), and for an id not indexed yet from a search bounded to
+# the transcripts changed since SINCE, near their end
+# (_agents_tx_task_sources), both resolved alike (_agents_tx_task_resolve).
+# One index read and at most one search per session, however many of its
+# tasks ended.
 _agents_runs_owners() {
-    local o m id mm out list="" mains="" ids owners i a
+    local since="$1" o m id mm out list="" mains="" ids miss srcs owners i a
+    shift
     for o in "$@"; do
         m="$(_agents_tx_main_of "$o")" || continue
         id="${o##*/}"; id="${id%.output}"
@@ -152,9 +161,12 @@ _agents_runs_owners() {
     done
     while IFS= read -r m; do
         [[ -n "$m" ]] || continue
-        ids=()
+        ids=() miss=()
         while IFS=$'\t' read -r mm id out; do [[ "$mm" == "$m" ]] && ids+=("$id"); done <<<"$list"
-        owners="$(_agents_tx_task_owners "$m" "${ids[@]}")"
+        srcs="$(_agents_tokens_task_sources "$m" "${ids[@]}")"
+        for id in "${ids[@]}"; do [[ $'\n'"$srcs" == *$'\n'"$id"$'\t'* ]] || miss+=("$id"); done
+        [[ ${#miss[@]} -eq 0 ]] || srcs+=$'\n'"$(_agents_tx_task_sources "$m" "$since" "${miss[@]}")"
+        owners="$(printf '%s\n' "$srcs" | _agents_tx_task_resolve)"
         while IFS=$'\t' read -r mm id out; do
             [[ "$mm" == "$m" ]] || continue
             while IFS=$'\t' read -r i a; do [[ "$i" == "$id" ]] && printf '%s\t%s\n' "$out" "$a"; done <<<"$owners"

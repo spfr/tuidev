@@ -1,17 +1,21 @@
 # lib/agents/awk/tokens.awk — _agents_tokens_scan: the token rows, from
 # _agents_tokens_feed's headers and grep -b lines (tokens.sh documents the
 # files). Needs lib_proc (projname) and lib_activity (waits).
-# Writes, in the data directory d: tokens.state.new, only when the state
-# changed; tokens.add.tokens, .compacts and .denials (rows to append);
-# tokens.add.limits only when Codex logged a newer rate limit than
-# limits.tsv holds. Prints tokens.today's line: today's sums (the old ones
-# when tokens.today is today's, else those in tokens.tsv from mid, local
-# midnight, on; plus this scan's). tyf: _agents_tx_agent_types lines; frf:
-# _agents_tokens_forks lines. Rows older than cut are not written.
+# Writes, in the data directory d: tokens.hot.new, only when the hot state
+# changed (every transcript the plan handed it: tokens.state, the cold
+# rest, is never written here); tokens.add.tokens, .compacts, .denials,
+# .tasks and .uses (rows to append); tokens.add.limits only when Codex
+# logged a newer rate limit than limits.tsv holds. Prints two lines:
+# tokens.today's (today's sums: the old ones when tokens.today is today's,
+# else those in tokens.tsv from mid, local midnight, on; plus this scan's),
+# then "hot<TAB>LINES<TAB>COLD": the hot state's lines, and how many of them
+# have had no row for hotsecs (the next compaction moves them to
+# tokens.state). tyf: _agents_tx_agent_types lines; frf: _agents_tokens_forks
+# lines. Rows older than cut are not written.
 # JSON is read by its keys' spelling, never parsed whole: Claude Code's
-# top-level keys follow the message, so a line's own type, timestamp and cwd
-# are the first after '"type":"assistant","uuid"' (or the line's type);
-# its message's model, id and usage come before.
+# top-level keys follow the message, so a line's own type, timestamp, cwd
+# and entrypoint are the first after '"type":"assistant","uuid"' (or the
+# line's type); its message's model, id and usage come before.
 
 function max(a, b) { return a > b ? a : b }
 function dash(s) { return s == "" ? "-" : s }
@@ -252,7 +256,8 @@ function pollcmd(c,   t, n, seg, i, s, any) {
 }
 # tooluses(s, lim): the tool calls in an assistant line, before position
 # lim: into tun[id] (name) and tus[id] (subject); counts the group's calls
-# (gtools) and those that only wait (gpolls); adds their ids to gtids.
+# (gtools) and those that only wait (gpolls); adds their ids to gtids, and
+# what they use to gu[] (useof).
 function tooluses(s, lim,   pat, p, b, e, id, nm, cmd, url, nx) {
     pat = "{\"type\":\"tool_use\",\"id\":\""; b = 1
     while ((p = index(substr(s, b), pat)) > 0) {
@@ -274,8 +279,26 @@ function tooluses(s, lim,   pat, p, b, e, id, nm, cmd, url, nx) {
         }
         gtools++
         if (nm ~ /^(BashOutput|TaskOutput|AgentOutputTool|Monitor)$/ || (nm == "Bash" && pollcmd(cmd))) gpolls++
+        useof(s, p, e, str(s, "name", p, 256))
         b = p + length(pat)
     }
+}
+# useof(s, p, e, name): what the tool call at p (its input ends before e)
+# uses, by name only, into the group's gu[kind SUBSEP name]: an MCP server
+# (mcp__SERVER__TOOL; a plugin's or claude.ai's server as the name says it:
+# plugin_PLUGIN_SERVER, claude_ai_NAME), a skill (Skill: its skill, as
+# PLUGIN:SKILL for a plugin's), a subagent type (Agent, Task:
+# subagent_type, general-purpose when none is named).
+function useof(s, p, e, nm,   k, v, i) {
+    if (substr(nm, 1, 5) == "mcp__") {
+        k = "mcp"; v = substr(nm, 6); if ((i = index(v, "__")) > 0) v = substr(v, 1, i - 1)
+    } else if (nm == "Skill") {
+        k = "skill"; i = at(s, "skill", p); v = (i && i < e) ? str(s, "skill", p, 128) : ""
+    } else if (nm == "Agent" || nm == "Task") {
+        k = "agent"; i = at(s, "subagent_type", p); v = (i && i < e) ? str(s, "subagent_type", p, 128) : "general-purpose"
+    } else return
+    v = clean(v, 64, "[^A-Za-z0-9_.:@-]")
+    if (v != "") gu[k SUBSEP v]++
 }
 
 # --- Rows -------------------------------------------------------------------
@@ -288,21 +311,41 @@ function keep(ts, id) { return ts >= cut && !(floor > 0 && (ts < floor || (ts ==
 function today(ts, i, w, r, o) {
     if (ts >= mid && ts < mid + 86400) { si += i; sw += w; sr += r; so += o }
 }
-function trow(ts, id, proj, model, i, w, r, o, poll) {
+# trow(...): one token row (w: all cache writes, h: those of them cached
+# for an hour); true when it counts.
+function trow(ts, id, proj, model, i, w, r, o, poll, h) {
     if (ts > lastep) lastep = ts
-    if (!keep(ts, id)) return
-    printf "%d\t%s\t%s\t%s\t%s\t%s\t%.0f\t%.0f\t%.0f\t%.0f\t%d\n", ts, cli, proj, sess, agent, model, i, w, r, o, poll > tf
+    if (!keep(ts, id)) return 0
+    printf "%d\t%s\t%s\t%s\t%s\t%s\t%.0f\t%.0f\t%.0f\t%.0f\t%d\t%.0f\t%s\n", ts, cli, proj, sess, agent, model, i, w, r, o, poll, h, origin > tf
     today(ts, i, w, r, o)
+    return 1
 }
-# flush(): count the message the assistant lines read so far belong to.
-function flush() {
+# flush(): count the message the assistant lines read so far belong to,
+# and, when it counts, what its tool calls used.
+function flush(   k, w, h) {
     if (!gpend) return
     gpend = 0
-    if (!gskip && gmodel != "" && gmodel != "<synthetic>")
-        trow(gts, gid, gproj, clean(gmodel, 64, "[^A-Za-z0-9._:/@+-]"), gi, gw, gr, go, gtools > 0 && gpolls == gtools)
+    # Cache writes: the 5-minute and 1-hour ones (usage.cache_creation),
+    # else all of them as 5-minute ones.
+    h = gh; w = max(gw, g5 + gh); if (h > w) h = w
+    if (!gskip && gmodel != "" && gmodel != "<synthetic>" \
+        && trow(gts, gid, gproj, clean(gmodel, 64, "[^A-Za-z0-9._:/@+-]"), gi, w, gr, go, gtools > 0 && gpolls == gtools, h))
+        for (k in gu) tally(gts, gproj, k, gu[k], 0)
     lastid = gid; lasttids = gtids
 }
-function assistant(s, o,   a, mp, id, up, ts, cwd) {
+# tally(ts, proj, kind SUBSEP name, n, most): add n uses (most: the largest
+# n seen, not their sum) to this transcript's tallies, by hour, written
+# when it is done (finish).
+function tally(ts, proj, kn, n, most,   k) {
+    k = int(ts / 3600) SUBSEP proj SUBSEP kn
+    if (!(k in ut)) { uo[++un] = k; ut[k] = 0 }
+    if (most) { if (n > uc[k]) uc[k] = n } else uc[k] += n
+    if (ts > ut[k]) ut[k] = ts
+}
+# origin_of(entrypoint): who drove a Claude Code session: you (the CLI, the
+# desktop app, an IDE), or a script (the SDK, claude -p: sdk-*).
+function origin_of(ep) { return ep == "" ? "" : ep ~ /^sdk/ ? "headless" : "you" }
+function assistant(s, o,   a, mp, id, up, ts, cwd, ep, cc, it) {
     a = index(s, "\"type\":\"assistant\",\"uuid\":\"")
     if (!a) a = index(s, "\"type\":\"assistant\"")
     mp = at(s, "model", 1)
@@ -310,7 +353,7 @@ function assistant(s, o,   a, mp, id, up, ts, cwd) {
     if (id == "") return
     if (id != gid || !gpend) {
         flush()
-        gid = id; gpend = 1; gstart = o; gtools = 0; gpolls = 0; gtids = ""
+        gid = id; gpend = 1; gstart = o; gtools = 0; gpolls = 0; gtids = ""; split("", gu)
         gmodel = str(s, "model", 1, 128); gts = iso(str(s, "timestamp", a, 64))
         # Not counted: the message counted last; a fork's copy of its
         # parent's last message (its first line), or of its parent
@@ -321,15 +364,56 @@ function assistant(s, o,   a, mp, id, up, ts, cwd) {
         gskip = (id == lastid) || (fsub && index(s, "{\"parentUuid\":null,") == 1) || fork != "-" \
             || (gts > 0 && gts < lastep - 60)
         cwd = unesc(str(s, "cwd", a, 4096)); if (cwd != "") proj = projname(cwd)
-        gproj = proj; gi = gw = gr = go = 0
+        if (!fsub && (ep = origin_of(clean(str(s, "entrypoint", a, 64), 32, "[^a-z-]"))) != "") origin = ep
+        gproj = proj; gi = gw = gr = go = g5 = gh = 0
     }
     gend = o + length(s) + 1
     up = lastat(s, "\"usage\":{", a)
     if (up) {
         gi = max(gi, num(s, "input_tokens", up)); gw = max(gw, num(s, "cache_creation_input_tokens", up))
         gr = max(gr, num(s, "cache_read_input_tokens", up)); go = max(go, num(s, "output_tokens", up))
+        # The message's own cache_creation, never an iteration's.
+        cc = at(s, "cache_creation", up); it = at(s, "iterations", up)
+        if (cc && (!it || cc < it)) {
+            g5 = max(g5, num(s, "ephemeral_5m_input_tokens", cc)); gh = max(gh, num(s, "ephemeral_1h_input_tokens", cc))
+        }
     }
     tooluses(s, up ? up : a)
+}
+# tasks(s): the background tasks a line names ("backgroundTaskId", never in
+# a string: a quote there is escaped), each once a scan, for the run
+# ledger's tasks.idx: epoch session id source type.
+function tasks(s,   a, ts, k, pat, b, p, id, key) {
+    a = index(s, "\"type\":\"user\""); ts = iso(str(s, "timestamp", a, 64)); if (!ts) ts = now
+    for (k = 1; k <= 2; k++) {
+        pat = k == 1 ? "\"backgroundTaskId\":\"" : "\"backgroundTaskId\": \""; b = 1
+        while ((p = index(substr(s, b), pat)) > 0) {
+            p += b - 1; b = p + length(pat)
+            id = substr(s, b, 80)
+            if (!match(id, /^[A-Za-z0-9_-]+"/)) continue
+            id = substr(id, 1, RLENGTH - 1); key = sess SUBSEP id SUBSEP src
+            if (key in tseen) continue
+            tseen[key] = 1
+            printf "%d\t%s\t%s\t%s\t%s\n", ts, sess, id, src, agent > kf
+        }
+    }
+}
+# deferred(s): a session's deferred tool list (an attachment naming the
+# tools it may load): how many tools each MCP server lists, a "listed"
+# tally (the most a list named).
+function deferred(s,   a, ts, i, j, t, n, nm, v, c, k) {
+    a = index(s, "\"type\":\"attachment\""); ts = iso(str(s, "timestamp", a, 64))
+    if (!ts || fork != "-" || !keep(ts, "")) return
+    if (!(i = index(s, "\"addedNames\":["))) return
+    t = substr(s, i + 14); if ((j = index(t, "]"))) t = substr(t, 1, j - 1)
+    n = split(t, nm, ","); split("", c)
+    for (i = 1; i <= n; i++) {
+        v = nm[i]; gsub(/"/, "", v)
+        if (substr(v, 1, 5) != "mcp__") continue
+        v = substr(v, 6); if ((j = index(v, "__")) > 0) v = substr(v, 1, j - 1)
+        v = clean(v, 64, "[^A-Za-z0-9_.:@-]"); if (v != "") c[v]++
+    }
+    for (k in c) tally(ts, proj, "listed" SUBSEP k, c[k], 1)
 }
 function compact(s,   a, ts, cwd, m, trig) {
     a = index(s, "\"type\":\"system\""); ts = iso(str(s, "timestamp", a, 64))
@@ -378,6 +462,22 @@ function codex(s,   ts, p, cwd, t, i, c, o) {
         p = at(s, "payload", 1)
         t = clean(str(s, "id", p, 128), 64, "[^A-Za-z0-9_-]"); if (t != "") sess = t
         cwd = unesc(str(s, "cwd", p, 4096)); if (cwd != "") proj = projname(cwd)
+        # Who drove it: codex exec (headless), a subagent another session
+        # started, or you (the TUI, an IDE).
+        t = str(s, "source", p, 32)
+        if (index(s, "\"source\":{\"subagent\"")) origin = "subagent"
+        else if (t == "exec" || str(s, "originator", p, 64) == "codex_exec") origin = "headless"
+        else if (t != "" || str(s, "originator", p, 64) != "") origin = "you"
+        return
+    }
+    # A call of an MCP server's tool: a function call named mcp__SERVER__TOOL
+    # (older Codex: SERVER__TOOL; its own tools never hold "__").
+    if (index(s, "\"type\":\"function_call\"")) {
+        t = str(s, "name", at(s, "payload", 1), 256)
+        if (substr(t, 1, 5) == "mcp__") t = substr(t, 6)
+        if ((i = index(t, "__")) < 2) return
+        t = clean(substr(t, 1, i - 1), 64, "[^A-Za-z0-9_.:@-]")
+        if (t != "" && ts && keep(ts, "")) tally(ts, proj, "mcp" SUBSEP t, 1, 0)
         return
     }
     if (index(s, "\"type\":\"turn_context\"")) {
@@ -398,24 +498,28 @@ function codex(s,   ts, p, cwd, t, i, c, o) {
     if (!(p = at(s, "last_token_usage", 1))) return
     i = num(s, "input_tokens", p); c = num(s, "cached_input_tokens", p); o = num(s, "output_tokens", p)
     if (c > i) c = i
-    trow(ts, t, proj, model, i - c, 0, c, o, 0)
+    trow(ts, t, proj, model, i - c, 0, c, o, 0, 0)
 }
 
 # --- One transcript at a time -------------------------------------------------
 
 # begin(): a header: "F|K END work cli path inode size mtime offset last_epoch
-# last_id session project agent model pending fork". fork: while a fork of a
-# subagent is still in the history it copied, that subagent's id, else "-".
+# last_id session project agent model pending fork origin". fork: while a
+# fork of a subagent is still in the history it copied, that subagent's id,
+# else "-". origin: who drove the session (you, headless; a subagent's
+# transcript is subagent's, or fork's), "-" until a line says.
 function begin(   h, n, i, a, b, pa, pb) {
     split($0, h, "\t")
     mode = h[1]; fend = h[2] + 0; cli = h[4]; path = h[5]; ino = h[6]; fsize = h[7] + 0; mtime = h[8] + 0
     foff = h[9] + 0; lastep = h[10] + 0; lastid = h[11]; sess = h[12]; proj = h[13]; agent = h[14]; model = h[15]
-    pending = h[16]; fork = h[17] == "" ? "-" : h[17]
+    pending = h[16]; fork = h[17] == "" ? "-" : h[17]; origin = h[18] == "" ? "-" : h[18]
     floor = foff == 0 ? lastep : 0; flid = lastid
     flen = fend - foff
     fsub = (cli == "claude" && path ~ /\/subagents\/agent-[^\/]*\.jsonl$/)
     if (cli != "claude" || !fsub) agent = "main"
     else if (agent == "-" && (path in ty)) agent = ty[path]
+    src = "main"
+    if (fsub) { src = path; sub(/^.*\/agent-/, "", src); sub(/\.jsonl$/, "", src); origin = agent == "fork" ? "fork" : "subagent" }
     if (fsub && fork == "-" && foff == 0 && (path in fpar)) fork = fpar[path]
     a = path; sub(/\/[^\/]*$/, "", a); fpp = a "/agent-" fork ".jsonl"
     if (cli == "codex" && sess == "-") {
@@ -423,12 +527,13 @@ function begin(   h, n, i, a, b, pa, pb) {
         if (length(b) == 36 && b ~ /^[0-9a-f-]+$/) sess = b
     }
     gpend = 0; gid = ""; gtids = ""; lasttids = ""; split("", tun); split("", tus); split("", dseen)
+    un = 0; split("", uo); split("", ut); split("", uc)
     if (pending != "-") {
         n = split(pending, pa, ";")
         for (i = 1; i <= n; i++) if (split(pa[i], pb, "=") == 3) { tun[pb[1]] = pb[2]; tus[pb[1]] = pb[3]; lasttids = lasttids (lasttids == "" ? "" : " ") pb[1] }
     }
 }
-function finish(   off, n, i, ids, pend, line) {
+function finish(   off, n, i, ids, pend, line, q) {
     if (mode == "") return
     off = foff
     if (mode == "F") {
@@ -440,21 +545,28 @@ function finish(   off, n, i, ids, pend, line) {
             { off = foff + gstart; gpend = 0 }
         else flush()
     }
+    # This transcript's uses, one row per hour, project, kind and name.
+    for (i = 1; i <= un; i++) {
+        split(uo[i], q, SUBSEP)
+        printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n", ut[uo[i]], cli, q[2], sess, agent, q[3], q[4], uc[uo[i]] > uf
+    }
     pend = ""; n = split(lasttids, ids, " ")
     for (i = 1; i <= n && i <= 32; i++) if (ids[i] in tun) pend = pend (pend == "" ? "" : ";") ids[i] "=" tun[ids[i]] "=" tus[ids[i]]
     # Joined, not sprintf'd: mawk's sprintf stops at 8 KiB.
     line = path "\t" cli "\t" ino "\t" sprintf("%.0f", off) "\t" sprintf("%.0f", lastep) "\t" dash(lastid) "\t" dash(sess) \
-        "\t" dash(proj) "\t" dash(agent) "\t" dash(model) "\t" dash(pend) "\t" dash(fork)
+        "\t" dash(proj) "\t" dash(agent) "\t" dash(model) "\t" dash(pend) "\t" dash(fork) "\t" dash(origin)
     if (!(path in olds) || olds[path] != line) dirty = 1
     news[++nnew] = line
+    if (lastep < now - hotsecs) ncold++
     mode = ""
 }
 
 BEGIN {
     tf = d "/tokens.add.tokens"; cf = d "/tokens.add.compacts"; df = d "/tokens.add.denials"
-    # The state is rewritten only when it changed (most minutes it does not).
-    while ((getline line < (d "/tokens.state")) > 0) { nold++; split(line, f, "\t"); olds[f[1]] = line }
-    close(d "/tokens.state")
+    kf = d "/tokens.add.tasks"; uf = d "/tokens.add.uses"
+    # The hot state is rewritten only when it changed.
+    while ((getline line < (d "/tokens.hot")) > 0) { nold++; split(line, f, "\t"); olds[f[1]] = line }
+    close(d "/tokens.hot")
     HEX = "0123456789abcdef"
     ASCII = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
     dpre[1] = "Permission for this action was denied by the Claude Code auto mode classifier"
@@ -490,6 +602,11 @@ mode == "F" {
         !(index(s, "\"type\":\"user\"") || index(s, "\"type\":\"progress\"") || index(s, "\"type\":\"system\"")))) {
         assistant(s, o); next
     }
+    # A line read only for a task id or a deferred tool list never ends the
+    # message before it: a tool's result can come between two of its lines.
+    if (index(s, "\"backgroundTaskId\"")) tasks(s)
+    if (index(s, "\"type\":\"deferred_tools_delta\"")) deferred(s)
+    if (!index(s, "\"type\":\"assistant\"") && !index(s, "\"subtype\":\"compact_boundary\"") && !index(s, "\"is_error\":true")) next
     flush()
     if (index(s, "\"subtype\":\"compact_boundary\"") && index(s, "\"type\":\"system\"")) compact(s)
     else if (index(s, "\"is_error\":true") && index(s, "\"type\":\"user\"")) denials(s)
@@ -497,9 +614,10 @@ mode == "F" {
 END {
     finish()
     if (dirty || nnew != nold) {
-        printf "" > (d "/tokens.state.new")
-        for (i = 1; i <= nnew; i++) print news[i] > (d "/tokens.state.new")
+        printf "" > (d "/tokens.hot.new")
+        for (i = 1; i <= nnew; i++) print news[i] > (d "/tokens.hot.new")
     }
     printf "%s\t%.0f\t%.0f\t%.0f\t%.0f\t%.0f\n", day, si + sw + sr + so, si, sw, sr, so
+    printf "hot\t%d\t%d\n", nnew, ncold
     if (lim_row != "" && lim_ep > lim_old) print lim_row > (d "/tokens.add.limits")
 }

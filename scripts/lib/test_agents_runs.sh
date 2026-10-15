@@ -98,6 +98,39 @@ rm -f "$subs/agent-evl.jsonl" "$subs/agent-evl.meta.json"
 ! _agents_tx_main_of /tmp/x.log >/dev/null || fail "a non-task path has a transcript"
 pass "transcripts: a task's owner is main, a subagent's type (customAgentType first), fork, or - when ambiguous or not a plain name"
 
+# 1b. The ledger asks the token scan's index (tasks.idx) first: the same
+# answers as a search, without one; an id not indexed yet is searched for,
+# only in the transcripts changed since the run started.
+(
+    AGENTS_DATA_DIR="$tmp/idx"; mkdir -p "$AGENTS_DATA_DIR"
+    outs=("$tasks/bdev1.output" "$tasks/bgo1.output" "$tasks/bfk1.output" "$tasks/btwo.output")
+    want="$(for o in "${outs[@]}"; do i="${o##*/}"; i="${i%.output}"; printf '%s\t%s\n' "$o" "$(_agents_tx_task_owners "$main" "$i" | cut -f2)"; done | sort)"
+    # Indexed as the scan writes it (types it knew; bbb's not yet), plus an id
+    # the transcripts do not name: only the index can answer it.
+    printf '%s\n' "1	$S	bdev1	main	main" "1	$S	bdev1	fff	fork" "1	$S	bfk1	fff	fork" "1	$S	bgo1	aaa	implementor-complex" \
+        "1	$S	btwo	aaa	implementor-complex" "1	$S	btwo	bbb	-" "1	$S	bidx	aaa	implementor-complex" \
+        "1	other-session	bnone	main	main" > "$AGENTS_DATA_DIR/tasks.idx"
+    got="$(_agents_runs_owners 1 "${outs[@]}" | sort)"
+    [[ "$got" == "$want" ]] || fail "index: owners:"$'\n'"$got"$'\n'"want:"$'\n'"$want"
+    _agents_tx_task_sources() { echo "searched $*" >&2; }
+    [[ "$(_agents_runs_owners 1 "$tasks/bidx.output" 2>&1)" == "$tasks/bidx.output"$'\t'"implementor-complex" ]] \
+        || fail "index: an indexed id was searched for: $(_agents_runs_owners 1 "$tasks/bidx.output" 2>&1)"
+    [[ "$(_agents_runs_owners 1 "$tasks/bnone.output" 2>&1)" == "searched $main 1 bnone" ]] \
+        || fail "index: another session's id answered, or no search: $(_agents_runs_owners 1 "$tasks/bnone.output" 2>&1)"
+)
+(
+    AGENTS_DATA_DIR="$tmp/noidx"; mkdir -p "$AGENTS_DATA_DIR"
+    tl bnew > "$subs/agent-new.jsonl"; printf '{"agentType":"Explore"}' > "$subs/agent-new.meta.json"
+    tl bold > "$subs/agent-old.jsonl"; touch -t 202001010000 "$subs/agent-old.jsonl"
+    touch -t 209901010000 "$subs/agent-new.jsonl"   # the only one changed since
+    since="$(_agents_mtimes "$subs/agent-new.jsonl" | cut -f1)"
+    got="$(_agents_runs_owners "$since" "$tasks/bnew.output" "$tasks/bold.output" "$tasks/bgo1.output")"
+    [[ "$got" == "$tasks/bnew.output"$'\t'"Explore" ]] || fail "bounded search: $got"
+    [[ "$(_agents_runs_owners 1 "$tasks/bold.output")" == "$tasks/bold.output"$'\t'"-" ]] || fail "an unbounded search: $(_agents_runs_owners 1 "$tasks/bold.output")"
+    rm -f "$subs"/agent-new.* "$subs"/agent-old.*
+)
+pass "task owners come from the scan's index (no search), else a search of the transcripts changed since the run started"
+
 # --- The process table ----------------------------------------------------------
 # claude 300 in ~/code/app runs: go test (301, a background task of subagent
 # aaa, with a test binary), two identical pnpm test (310, 311: dup), npm run dev

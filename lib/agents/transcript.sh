@@ -17,13 +17,15 @@
 # lines it finds.
 #
 # Owns: those paths, the task-id lines, a subagent's meta fields and type,
-#   which agent started a task, and which transcripts changed lately and
-#   whose session each is (tokens.sh).
-# Uses: nothing.
+#   which agent started a task (searched for, or resolved from the token
+#   scan's index: runs.sh), and which transcripts changed lately and whose
+#   session each is (tokens.sh).
+# Uses: watched.sh (_agents_mtimes, for a bounded search).
 # Public: _AGENTS_TX_TASK_KEY, _agents_tx_path, _agents_tx_started,
 #   _agents_tx_ids, _agents_tx_meta, _agents_tx_type_ok, _agents_tx_agent_type,
 #   _agents_tx_agent_types, _agents_tx_fork_parents, _agents_tx_main_of,
-#   _agents_tx_task_owners, _agents_tx_find, _agents_tx_session_of.
+#   _agents_tx_task_owners, _agents_tx_task_sources, _agents_tx_task_resolve,
+#   _agents_tx_find, _agents_tx_session_of.
 
 # The key on every transcript line that names a background task.
 _AGENTS_TX_TASK_KEY='"backgroundTaskId"'
@@ -162,13 +164,26 @@ _agents_tx_main_of() {
 # _agents_tx_task_owners MAIN ID... — "id<TAB>agent" for each ID a transcript
 # of MAIN's session names as a background task: "main" when the main
 # conversation started it, else the subagent's type (_agents_tx_agent_type).
-# One fixed-string grep over the main transcript and all its subagents'. A
-# fork inherits its parent's task lines, so an id a fork shares with another
-# transcript is the other's; one only forks name is "fork"; one several
-# other subagents name is "-".
+# One fixed-string grep over the main transcript and all its subagents'
+# (_agents_tx_task_sources), resolved by _agents_tx_task_resolve.
 _agents_tx_task_owners() {
-    local main="$1" f id files=() pats=() pairs
+    local main="$1"
     shift
+    _agents_tx_task_sources "$main" 0 "$@" | _agents_tx_task_resolve
+}
+
+# The most of a transcript a bounded search reads, from its end.
+_AGENTS_TX_TAIL=$((8 * 1048576))
+
+# _agents_tx_task_sources MAIN SINCE ID... — "id<TAB>transcript" for each ID
+# a transcript of MAIN's session names as a background task, one fixed-string
+# grep over the main transcript and all its subagents'. With SINCE (an epoch;
+# 0: none) the search is bounded: only the transcripts changed since then,
+# each in its last _AGENTS_TX_TAIL bytes (a task started since then is named
+# near the end of the transcript that started it).
+_agents_tx_task_sources() {
+    local main="$1" since="$2" id m p files=() pats=()
+    shift 2
     [[ -f "$main" ]] && files+=("$main")
     _agents_tx_subagents "$main"
     files+=(${_AGENTS_TX_SUBS[@]+"${_AGENTS_TX_SUBS[@]}"})
@@ -178,14 +193,35 @@ _agents_tx_task_owners() {
     done
     [[ ${#pats[@]} -gt 0 ]] || return 0
     # grep -Ho: "FILE:MATCH" lines; awk turns each into "id<TAB>file".
-    pairs="$(LC_ALL=C grep -HoF "${pats[@]}" "${files[@]}" 2>/dev/null | LC_ALL=C awk -v k="$_AGENTS_TX_TASK_KEY" '
+    if [[ "$since" -gt 0 ]]; then
+        while IFS=$'\t' read -r m p; do
+            [[ "$m" =~ ^[0-9]+$ && $m -ge $since ]] || continue
+            tail -c "$_AGENTS_TX_TAIL" -- "$p" 2>/dev/null | LC_ALL=C grep -aoF "${pats[@]}" | LC_ALL=C awk -v f="$p" '{ print f ":" $0 }'
+        done < <(_agents_mtimes "${files[@]}")
+    else
+        LC_ALL=C grep -HoF "${pats[@]}" "${files[@]}" 2>/dev/null
+    fi | LC_ALL=C awk -v k="$_AGENTS_TX_TASK_KEY" '
         { i = index($0, ":" k); if (i == 0) next
           id = substr($0, i + 1 + length(k)); sub(/^: ?"/, "", id); sub(/"$/, "", id)
-          print id "\t" substr($0, 1, i - 1) }' | LC_ALL=C sort -u)"
-    [[ -n "$pairs" ]] || return 0
-    while IFS=$'\t' read -r id f; do
-        if [[ "$f" == "$main" ]]; then printf '%s\tmain\n' "$id"; else printf '%s\t%s\n' "$id" "$(_agents_tx_agent_type "$f")"; fi
-    done <<<"$pairs" | LC_ALL=C awk -F '\t' '
+          print id "\t" substr($0, 1, i - 1) }' | LC_ALL=C sort -u
+}
+
+# _agents_tx_task_resolve < "id<TAB>transcript[<TAB>type]" — "id<TAB>agent"
+# for each id: "main" when a main transcript (one not under subagents/)
+# names it, else the type of the subagents that do (the line's type, or
+# _agents_tx_agent_type when it has none or "-"). A fork inherits its
+# parent's task lines, so an id a fork shares with another transcript is
+# the other's; one only forks name is "fork"; one subagents of several
+# types name is "-".
+_agents_tx_task_resolve() {
+    local id f t
+    while IFS=$'\t' read -r id f t; do
+        [[ -n "$id" ]] || continue
+        if [[ "$f" != */subagents/agent-*.jsonl ]]; then t=main
+        elif ! _agents_tx_type_ok "$t" || [[ "$t" == main ]]; then t="$(_agents_tx_agent_type "$f")"
+        fi
+        printf '%s\t%s\n' "$id" "$t"
+    done | LC_ALL=C awk -F '\t' '
         !($1 in seen) { seen[$1] = 1; ids[++n] = $1 }
         $2 == "main" { m[$1] = 1 }
         $2 != "main" && $2 != "fork" { if (!(($1, $2) in got)) { got[$1, $2] = 1; c[$1]++; t[$1] = $2 } }
