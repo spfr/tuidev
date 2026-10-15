@@ -1,0 +1,181 @@
+# shellcheck shell=bash
+# lib/agents/tokens.sh — where agent tokens go: the token scanner.
+#
+# Each `agents sample` reads what Claude Code and Codex appended to their
+# transcripts since the last one (transcript.sh has Claude Code's layout;
+# Codex writes ${CODEX_HOME:-~/.codex}/sessions/YYYY/MM/DD/rollout-*.jsonl)
+# and appends what they say about tokens to files `agents report` reads.
+# Claude Code writes one API message as several lines, one per content
+# block, each repeating its usage: a message counts once, by its id, and a
+# subagent's copy of its parent's last message (a fork's first line) not at
+# all. Model "<synthetic>" made no API call. Codex logs a token_count event
+# per turn, sometimes twice: a turn counts once, by its running total.
+#
+# Transcripts run to tens of megabytes and gigabytes in all, so a scan reads
+# only new bytes (tail -c), whole lines only, at most _AGENTS_TOKENS_BUDGET
+# bytes and _AGENTS_TOKENS_FILES files per sample, newest files first; the
+# rest waits for the next sample. One grep under LC_ALL=C picks the lines
+# that matter (an ERE whose branches share their first byte: BSD grep makes
+# one pass per -F pattern), and only those reach awk/tokens.awk. The first
+# scan reads the files changed within AGENTS_HISTORY_DAYS; a row older than
+# that is never written.
+#
+# Files, private like the rest of $AGENTS_DATA_DIR, none with AGENTS_HISTORY=0;
+# one writer (agents sample, under sample.lock); tab-separated, no header,
+# values never hold a tab or a newline; the .tsv files are pruned with
+# history.tsv:
+#   tokens.tsv    one row per API message (Claude Code) or turn (Codex):
+#                   epoch cli project session agent model in cache_write cache_read out poll
+#                 project: as runs.tsv names it (agents_project of the line's
+#                 cwd); session: the session id (a subagent's main session);
+#                 agent: main, the subagent type, or "-"; in excludes cached
+#                 input (Codex's input_tokens counts it: it becomes
+#                 cache_read); poll: 1 when every tool call in the message
+#                 only waits (sleep, a sleep loop, reading a task's output
+#                 file, BashOutput, TaskOutput, Monitor).
+#   compacts.tsv  epoch cli project session agent trigger pre_tokens post_tokens
+#   denials.tsv   epoch cli project session agent tool by reason subject
+#                 by: classifier, safety or user; reason: the classifier's
+#                 [tag], else "-"; subject: never arguments: a Bash command's
+#                 program and, for a multi-command tool, its subcommand (git
+#                 push, gh pr, rm), WebFetch's host, else the tool name.
+#   limits.tsv    epoch cli used_percent window_minutes resets_at: Codex's
+#                 latest primary rate limit (one line, replaced).
+#   tokens.today  day total in cache_write cache_read out: today's sums (local
+#                 day), rewritten after each scan, for the menu.
+#   tokens.state  one line per transcript changed within the window:
+#                   path cli inode offset last_epoch last_id session project agent model pending
+#                 offset: the bytes read (whole lines; the last message of an
+#                 active file is read again next time, until it is complete);
+#                 a new inode or a shorter file is read again from 0, and only
+#                 rows after last_epoch count. last_id: the last message id
+#                 (Codex: running total) counted; pending: the last message's
+#                 tool calls, "id=tool=subject;…", for a denial that follows.
+#
+# Uses: config.sh, util.sh (_agents_awk, _agents_window, _agents_replace),
+#   transcript.sh (_agents_tx_find, _agents_tx_session_of,
+#   _agents_tx_agent_types); awk/tokens_plan.awk, awk/tokens.awk.
+# Public: _agents_tokens_scan.
+
+# The most a sample reads (bytes, files), and how long a transcript must be
+# quiet before its last message counts without the line that ends it.
+_AGENTS_TOKENS_BUDGET=$((64 * 1048576))
+_AGENTS_TOKENS_FILES=512
+_AGENTS_TOKENS_QUIET=120
+_AGENTS_TOKENS_CLAUDE_RE='"(type":"assistant"|subtype":"compact_boundary"|is_error":true)'
+_AGENTS_TOKENS_CODEX_RE='"type":"(session_meta|turn_context|token_count)"'
+
+# _agents_tokens_scan NOW DAY — scan the transcripts (a no-op with
+# AGENTS_HISTORY=0). Runs inside agents_sample (sample.lock, umask 077); the
+# state is replaced before the rows are appended, so a failure loses rows
+# rather than counting them twice. False, with tokens.state as it was, when
+# the scan could not be made.
+_agents_tokens_scan() {
+    [[ "$AGENTS_HISTORY" == 1 ]] || return 0
+    # shellcheck disable=SC2034  # _agents_window sets off and period too
+    local dir="$AGENTS_DATA_DIR" now="$1" day="$2" start off period plan types f ag today subs=()
+    _agents_window today || return 1
+    now="$1"
+    plan="$(_agents_tokens_list | _agents_awk tokens_plan -F '\t' -v OFS='\t' -v sf="$dir/tokens.state" \
+        | LC_ALL=C sort -t "$(printf '\t')" -k6,6nr -k3,3)" || return 1
+    # The types of the subagents this scan may read, in one grep.
+    while IFS=$'\t' read -r _ _ f _ _ _ _ _ _ _ _ ag _; do
+        [[ "$f" == */subagents/agent-*.jsonl && "$ag" == - ]] && subs+=("$f")
+    done < <(LC_ALL=C awk -F '\t' '$1 == 1' <<<"$plan" | head -n "$_AGENTS_TOKENS_FILES")
+    types="$(_agents_tx_agent_types ${subs[@]+"${subs[@]}"})"
+    rm -f "$dir"/tokens.add.* "$dir/tokens.state.new" 2>/dev/null
+    if ! today="$(_agents_tokens_feed "$now" <<<"$plan" \
+            | _agents_awk "lib_proc lib_activity tokens" -v now="$now" -v cut="$((now - AGENTS_HISTORY_DAYS * 86400))" \
+                -v mid="$start" -v day="$day" -v quiet="$_AGENTS_TOKENS_QUIET" -v d="$dir" -v tyf=/dev/fd/3 3<<<"$types")" \
+        || [[ "$today" != "$day"$'\t'* ]] \
+        || { [[ -f "$dir/tokens.state.new" ]] && ! mv -f "$dir/tokens.state.new" "$dir/tokens.state"; }; then
+        rm -f "$dir"/tokens.add.* "$dir/tokens.state.new" 2>/dev/null
+        return 1
+    fi
+    for f in tokens compacts denials; do
+        [[ ! -s "$dir/tokens.add.$f" ]] || cat "$dir/tokens.add.$f" >> "$dir/$f.tsv"
+    done
+    [[ ! -f "$dir/tokens.add.limits" ]] || mv -f "$dir/tokens.add.limits" "$dir/limits.tsv"
+    rm -f "$dir"/tokens.add.* 2>/dev/null
+    _agents_replace "$dir/tokens.today" "$today"
+}
+
+# _agents_tokens_list — "@claude" then Claude Code's transcripts, "@codex"
+# then Codex's, changed within AGENTS_HISTORY_DAYS: "inode<TAB>size<TAB>
+# mtime<TAB>path", one stat per batch of files (no device: BSD stat's %d
+# looks each one up by name, a thousand times slower).
+_agents_tokens_list() {
+    local c="${CODEX_HOME:-$HOME/.codex}/sessions" st
+    if [[ "${OSTYPE:-}" == darwin* ]]; then st=(/usr/bin/stat -f '%i%t%z%t%m%t%N'); else st=(stat -c $'%i\t%s\t%Y\t%n'); fi
+    echo "@claude"
+    _agents_tx_find "$AGENTS_HISTORY_DAYS" -exec "${st[@]}" {} +
+    echo "@codex"
+    [[ ! -d "$c" ]] || find "$c" -mindepth 4 -maxdepth 4 -type f -name 'rollout-*.jsonl' \
+        -mtime "-$AGENTS_HISTORY_DAYS" -exec "${st[@]}" {} + 2>/dev/null
+    return 0
+}
+
+# _agents_tokens_feed NOW < PLAN — awk/tokens.awk's input: for each planned
+# transcript a header, "F<TAB>END<TAB>PLAN_LINE" followed by the lines it
+# reads (grep -b: "OFFSET:LINE", OFFSET from the old offset), or
+# "K<TAB>-<TAB>PLAN_LINE" for one it leaves as it was. PLAN_LINE:
+#   work cli path inode size mtime offset last_epoch last_id session project agent model pending
+_agents_tokens_feed() {
+    local now="$1" budget="$_AGENTS_TOKENS_BUDGET" n=0 work cli path ino size mtime off le lid sess rest end
+    while IFS=$'\t' read -r work cli path ino size mtime off le lid sess rest; do
+        end=""
+        if [[ "$work" == 1 && $budget -gt 0 && $n -lt $_AGENTS_TOKENS_FILES && -f "$path" && ! -L "$path" ]]; then
+            end=$size
+            [[ $((size - off)) -le $budget ]] || end=$((off + budget))
+            end="$(_agents_tokens_end "$path" "$off" "$end" "$size" "$((now - mtime))")"
+        fi
+        [[ "$cli" != claude || "$sess" != - ]] || _agents_tx_session_of sess "$path"
+        if [[ -n "$end" && $end -gt $off ]]; then
+            printf 'F\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$end" "$work" "$cli" "$path" "$ino" "$size" "$mtime" "$off" "$le" "$lid" "$sess" "$rest"
+            _agents_tokens_read "$cli" "$path" "$off" "$end" "$size"
+            budget=$((budget - (end - off))); n=$((n + 1))
+        else
+            printf 'K\t-\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$work" "$cli" "$path" "$ino" "$size" "$mtime" "$off" "$le" "$lid" "$sess" "$rest"
+        fi
+    done
+}
+
+# _agents_tokens_end FILE OFFSET END SIZE AGE — where a read from OFFSET up to
+# END stops: END when the byte before it ends a line (or END is the end of a
+# file quiet for AGE seconds, whose writer is done), else just after the last
+# newline before END; nothing when there is none (a line still being written,
+# or one longer than the budget: a budget-cut read then takes the rest of
+# the file).
+_agents_tokens_end() {
+    local f="$1" off="$2" end="$3" size="$4" age="$5" w=1048576 c r nr l
+    if [[ $end -eq $size && $age -ge $_AGENTS_TOKENS_QUIET ]]; then echo "$end"; return 0; fi
+    c="$(dd if="$f" bs=1 skip=$((end - 1)) count=1 2>/dev/null; echo x)"
+    if [[ "$c" == $'\nx' ]]; then echo "$end"; return 0; fi
+    while :; do
+        [[ $w -lt $((end - off)) ]] || w=$((end - off))
+        r="$(tail -c "+$((end - w + 1))" -- "$f" 2>/dev/null | head -c "$w" | LC_ALL=C awk '{ l = length($0) } END { print NR + 0, l + 0 }')"
+        read -r nr l <<<"$r"
+        if [[ "$nr" =~ ^[0-9]+$ && $nr -ge 2 ]]; then echo "$((end - l))"; return 0; fi
+        if [[ $w -ge $((end - off)) ]]; then
+            [[ $end -lt $size ]] && _agents_tokens_end "$f" "$off" "$size" "$size" "$age"
+            return 0
+        fi
+        w=$((w * 4))
+    done
+}
+
+# _agents_tokens_read CLI FILE OFFSET END SIZE — the lines between OFFSET and
+# END that matter to tokens.awk, with their offsets from OFFSET (grep -b).
+# Lines past END (the file grew) are dropped by tokens.awk.
+_agents_tokens_read() {
+    local re="$_AGENTS_TOKENS_CLAUDE_RE"
+    [[ "$1" != codex ]] || re="$_AGENTS_TOKENS_CODEX_RE"
+    if [[ $3 -eq 0 && $4 -eq $5 ]]; then
+        LC_ALL=C grep -bE "$re" -- "$2" 2>/dev/null
+    elif [[ $4 -eq $5 ]]; then
+        tail -c "+$(($3 + 1))" -- "$2" 2>/dev/null | LC_ALL=C grep -bE "$re"
+    else
+        tail -c "+$(($3 + 1))" -- "$2" 2>/dev/null | head -c "$(($4 - $3))" | LC_ALL=C grep -bE "$re"
+    fi
+    return 0
+}

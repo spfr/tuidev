@@ -19,12 +19,13 @@
 # it lives, so an orphan keeps it): the provenance auto-reap needs before it
 # stops a stale tree. Once those files are in place (and the feed it counted
 # removed), each sample also updates the run ledger (runs.sh; a failure there
-# never makes the next sample count history twice) and then the menu's top
-# insight (report.sh: insight.txt).
+# never makes the next sample count history twice), scans the transcripts
+# for tokens (tokens.sh; a failure there never stops the sample) and then
+# the menu's top insight (report.sh: insight.txt).
 #
 # Uses: config.sh, util.sh, snapshot.sh, classify.sh, events.sh (the data
-#   directory and the events lock), runs.sh (the run ledger), report.sh
-#   (agents_insight_write); awk/sample.awk.
+#   directory and the events lock), runs.sh (the run ledger), tokens.sh
+#   (_agents_tokens_scan), report.sh (agents_insight_write); awk/sample.awk.
 # Public: agents_sample, _agents_sample_kick, _agents_hist_line.
 
 # agents_sample — take one sample (a no-op with AGENTS_HISTORY=0). One at a
@@ -71,6 +72,9 @@ _agents_sample_locked() {
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || rm -f "${_AGENTS_RUNS_FED[@]}"
     _agents_runs_update "$now" "$feed" "$( { printf '%s\n' "$enr"; printf '%s\n' "$recs"; } | _agents_runs_observe "$now" "$paths")" \
         || echo "agents: the run ledger was not updated (runs.state kept)" >&2
+    # Where the tokens went (tokens.sh), in a subshell: nothing it does can
+    # stop the sample.
+    ( _agents_tokens_scan "$now" "$day" ) || echo "agents: the token scan failed (tokens.state kept)" >&2
     _agents_history_prune "$now" "$day"
     # The menu's top insight, from the ledger this sample just updated.
     agents_insight_write || true
@@ -84,18 +88,19 @@ _agents_sample_rows() {
     _agents_awk "lib_sort sample" -F '\t' -v now="$1" -v day="$2" -v sf="$3/sample.state" -v tf="$3/today.tsv"
 }
 
-# _agents_history_prune NOW DAY — drop history, runs and events older than
-# AGENTS_HISTORY_DAYS, at most once a day. history.tsv and runs.tsv have one
-# writer (the sample this runs in, under sample.lock); events.tsv is
+# _agents_history_prune NOW DAY — drop history, runs, token rows (tokens.sh)
+# and events older than AGENTS_HISTORY_DAYS, at most once a day. history.tsv,
+# runs.tsv and the token files have one writer (the sample this runs in, under sample.lock); events.tsv is
 # rewritten under the events lock, or left for tomorrow when that can't be
 # had.
 _agents_history_prune() {
-    local stamp="" cut=$(( $1 - AGENTS_HISTORY_DAYS * 86400 ))
+    local f stamp="" cut=$(( $1 - AGENTS_HISTORY_DAYS * 86400 ))
     [[ -r "$AGENTS_DATA_DIR/prune.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/prune.stamp"
     [[ "$stamp" != "$2" ]] || return 0
     _agents_prune_file "$AGENTS_DATA_DIR/history.tsv" "$cut"
     _agents_prune_file "$AGENTS_DATA_DIR/hooks.log" "$cut"
     _agents_prune_file "$AGENTS_DATA_DIR/runs.tsv" "$cut"
+    for f in tokens compacts denials limits; do _agents_prune_file "$AGENTS_DATA_DIR/$f.tsv" "$cut"; done
     if _agents_events_lock; then
         _agents_prune_file "$AGENTS_DATA_DIR/events.tsv" "$cut"
         _agents_events_unlock
