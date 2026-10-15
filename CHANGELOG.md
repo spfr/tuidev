@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-10-15
+
+MCP servers that start when a session first uses them. Every Claude Code and
+Codex session starts every server you configured, so five sessions with a
+browser MCP hold five copies of it whether or not one opens a page.
+
+### Added
+
+- **`mcp-lazy` and `agents mcp lazy NAME`.** The `monitoring` pack installs
+  `mcp-lazy` beside `agents`: a stand-in for a stdio MCP server, about
+  10 MB of Perl (macOS's own `/usr/bin/perl`, core modules only) where an idle
+  chrome-devtools server holds 60 MB, or about 120 MB through npx. It answers
+  what a session asks first (`server/discover`, `initialize`, `tools/list`,
+  the prompts and resources lists, `ping`) from a cache of the server's own
+  answers, and starts the server on the first request it cannot answer,
+  usually a tool call, replaying the session's `initialize` to it; then every
+  message passes through unchanged. The cache follows the server: a new
+  version, another working directory (for relative args) or other values of
+  its own env variables start a new one; it keeps each kind of client's
+  answers (protocol version and capabilities: Claude Code and Codex differ,
+  so both stay lazy); and once the server starts, a changed tool list
+  updates it and tells the session (`notifications/tools/list_changed`), a
+  changed `initialize` answer replaces the cached one. A session that closes
+  stdin still gets its answers. A server that crashes fails
+  only its pending requests and starts again on the next; when the session
+  ends, its process group is stopped. `agents mcp lazy NAME|--all` rewrites
+  the server's command in `~/.claude.json` (user and local scope) and Codex's
+  `config.toml`, never a project's `.mcp.json` or a plugin's, with a backup
+  of each file first; `agents mcp eager` puts it back, and `uninstall.sh`
+  does that for all of them. Verified on a Mac with Claude Code 2.1.300,
+  Codex and chrome-devtools-mcp 1.11.0: an idle session of either holds
+  mcp-lazy alone (4 to 11 MB) and starts no server, and a `list_pages` call
+  from either starts it and gets its answer.
+- **`agents mcp` and the menu show lazy servers.** `(lazy)` after the
+  command, a hint with the copies not started yet, and `via mcp-lazy: not
+  started, starts on its first tool call` in the menu. The hint for a server
+  running in many sessions now names `agents mcp lazy` too.
+
+### Fixed
+
+- **Codex `args` over several lines with a comment on one.** The inventory
+  read nothing after the comment, so a server could lose the word that names
+  its process; each line is now read on its own.
+
 ## [3.9.1] - 2026-10-15
 
 Verified end to end on a Mac: a click on an agent's banner lands in its
