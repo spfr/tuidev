@@ -210,7 +210,10 @@ AGENTS_CRITICAL_NAMES="loginwindow Finder Dock WindowServer SystemUIServer Contr
 AGENTS_CRITICAL_PATH='^/(System/Library|System/Volumes|usr/libexec|usr/sbin|sbin)/'
 export AGENTS_CRITICAL_NAMES AGENTS_CRITICAL_PATH   # read by the awk programs
 
-# This process and your uid. Overridable only by the test harness.
+# This process and your uid, and the clock (AGENTS_NOW, read by _agents_now).
+# Overridable only by the test harness; the clock of an `agents tsv` refresh
+# (_AGENTS_CLOCK) is never taken from the environment.
+unset _AGENTS_CLOCK
 if [[ -n "${AGENTS_TESTING:-}" ]]; then
     AGENTS_SELF="${AGENTS_SELF:-$$}" AGENTS_UID="${AGENTS_UID:-$UID}"
 else

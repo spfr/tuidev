@@ -17,7 +17,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home" NO_COLOR=1 AGENTS_CONF="$tmp/none"
-export AGENTS_RUN_DIR="$tmp/run" AGENTS_DATA_DIR="$tmp/data"
+export AGENTS_RUN_DIR="$tmp/run" AGENTS_DATA_DIR="$tmp/data" AGENTS_TESTING=1   # AGENTS_NOW (below) is honored only so
 mkdir -p "$HOME/.local/bin"
 
 # shellcheck source=../../bin/agents disable=SC1091

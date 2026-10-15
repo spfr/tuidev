@@ -26,7 +26,9 @@
 # QUIET: seconds since the watched file changed. MARKER: 1 when its last line
 # says the work it waits for has finished.
 agents_assess() {
-    AGENTS_TARGET="${1:-}" NOW="${AGENTS_NOW:-$(date +%s)}" HOME="$HOME" AGENTS_WAIT_STUCK="$AGENTS_WAIT_STUCK" \
+    local now
+    _agents_now now
+    AGENTS_TARGET="${1:-}" NOW="$now" HOME="$HOME" AGENTS_WAIT_STUCK="$AGENTS_WAIT_STUCK" \
     AGENTS_AUTO_REAP="$AGENTS_AUTO_REAP" AGENTS_HISTORY="$AGENTS_HISTORY" AGENTS_SEEN="$AGENTS_DATA_DIR/sample.state" \
     _agents_awk assess -F '\t' -v OFS='\t'
 }

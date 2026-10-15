@@ -674,7 +674,14 @@ out="$(AGENTS_TESTING=1 AGENTS_EUID=0 bash "$REPO_DIR/bin/agents" kill -n 123 2>
 AGENTS_SELF=123 bash -c '. "$1"; [[ "$AGENTS_SELF" == "$$" ]]' _ "$REPO_DIR/bin/agents" || fail "AGENTS_SELF honored outside tests"
 # shellcheck disable=SC2016
 AGENTS_TESTING=1 AGENTS_SELF=123 bash -c '. "$1"; [[ "$AGENTS_SELF" == 123 ]]' _ "$REPO_DIR/bin/agents" || fail "AGENTS_SELF ignored in tests"
-pass "destructive commands refuse root; AGENTS_SELF/AGENTS_UID only under AGENTS_TESTING"
+# The clock: AGENTS_NOW only under AGENTS_TESTING; _AGENTS_CLOCK never from the environment.
+# shellcheck disable=SC2016  # expanded by the inner bash
+clk() { env "$@" bash -c '. "$1"; _agents_now n; printf "%s\n" "$n"' _ "$REPO_DIR/bin/agents"; }
+[[ "$(clk -u AGENTS_TESTING AGENTS_NOW=1000)" =~ ^[0-9]{10}$ ]] || fail "AGENTS_NOW honored without AGENTS_TESTING"
+[[ "$(clk -u AGENTS_TESTING _AGENTS_CLOCK=1000)" != 1000 && "$(clk AGENTS_TESTING=1 _AGENTS_CLOCK=1000)" != 1000 ]] \
+    || fail "_AGENTS_CLOCK taken from the environment"
+[[ "$(clk AGENTS_TESTING=1 AGENTS_NOW=1000)" == 1000 ]] || fail "AGENTS_NOW ignored in tests"
+pass "destructive commands refuse root; AGENTS_SELF/AGENTS_UID/AGENTS_NOW only under AGENTS_TESTING"
 
 # 5. The table (colors off: stdout is not a terminal here).
 _agents_colors

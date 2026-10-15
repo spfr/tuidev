@@ -131,9 +131,15 @@ _agents_rm_if_same() {
     return 0
 }
 
-# _agents_now VAR — set VAR to the epoch: AGENTS_NOW when it is set (the one
-# clock of an `agents tsv` refresh, or a test's fixed one), else date's.
-_agents_now() { printf -v "$1" '%s' "${AGENTS_NOW:-$(date +%s)}"; }
+# _agents_now VAR — set VAR to the epoch: the one clock of the `agents tsv`
+# refresh this runs in (_AGENTS_CLOCK, a local of agents_tsv: never exported,
+# never read from the environment), else a test's fixed AGENTS_NOW (only with
+# AGENTS_TESTING), else date's.
+_agents_now() {
+    local t="${_AGENTS_CLOCK:-}"
+    [[ -n "$t" || -z "${AGENTS_TESTING:-}" ]] || t="${AGENTS_NOW:-}"
+    printf -v "$1" '%s' "${t:-$(date +%s)}"
+}
 
 _agents_field() { local a; read -r -a a <<<"$2"; echo "${a[$1 - 1]}"; }   # N WORDS
 _agents_clock() { date -r "$1" +%H:%M 2>/dev/null || date -d "@$1" +%H:%M 2>/dev/null; }
