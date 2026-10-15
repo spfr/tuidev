@@ -16,14 +16,15 @@
 # it (by tty, through the app's AppleScript: Ghostty 1.3 and later, iTerm2,
 # Terminal; any other app is only brought forward).
 #
-# Owns: the tmux pane map, a process's place, `agents jump` and `agents peek`.
+# Owns: the tmux pane map, a process's place, the session a notification
+#   jumps to (`agents root-of`), `agents jump` and `agents peek`.
 # Uses: config.sh, util.sh (_agents_awk, _agents_timeout), snapshot.sh
 #   (agents_snapshot, _agents_start, agents_secs), activity.sh
 #   (_agents_session_of), terminal.sh (agents_terminal: the app to bring
 #   forward when none is found), notify.sh (_agents_notify);
-#   awk/lib_where.awk, awk/where.awk.
-# Public: _agents_tmux_up, _agents_panes, agents_where, _agents_pid_token,
-#   agents_jump, agents_peek.
+#   awk/lib_where.awk, awk/where.awk, awk/root.awk.
+# Public: _agents_tmux_up, _agents_panes, agents_where, agents_root_of,
+#   _agents_app_bundle, _agents_pid_token, agents_jump, agents_peek.
 
 # _agents_tmux_up — true when a tmux server runs: the socket of the one this
 # shell is in ($TMUX), or the default one, exists (no fork), and tmux is here.
@@ -80,6 +81,30 @@ _agents_app_name() {
         ghostty) echo Ghostty ;; iterm) echo iTerm ;; wezterm) echo WezTerm ;;
         kitty) echo kitty ;; *) echo Terminal ;;
     esac
+}
+
+# _agents_app_bundle APP — the bundle id of a terminal app agents jump can
+# focus by tty (what a notification activates on a click); "-" for any other.
+_agents_app_bundle() {
+    case "$1" in
+        Ghostty) echo com.mitchellh.ghostty ;; iTerm|iTerm2) echo com.googlecode.iterm2 ;;
+        Terminal) echo com.apple.Terminal ;; *) echo - ;;
+    esac
+}
+
+# agents_root_of PID [SNAPSHOT] — the agent session PID runs under, for a
+# notification to jump to when clicked: "PID@START<TAB>APP<TAB>BUNDLE" (the
+# outermost claude or codex process from PID up, the terminal app that shows
+# it, and that app's bundle id; "-" for either when unknown: awk/root.awk).
+# One ps, no tmux or Herdr call: a hook runs it every time it notifies.
+# Nothing, and false, when PID runs under no agent.
+agents_root_of() {
+    local snap="${2-}" tok app
+    [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "usage: agents root-of PID" >&2; return 2; }
+    [[ -n "$snap" ]] || snap="$(agents_snapshot)"
+    IFS=$'\t' read -r tok app <<<"$(printf '%s\n' "$snap" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc lib_where root" -v t="$1")"
+    [[ "$tok" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || return 1
+    printf '%s\t%s\t%s\n' "$tok" "${app:--}" "$(_agents_app_bundle "${app:--}")"
 }
 
 # _agents_tty PID — the terminal PID runs on (/dev/ttys004), nothing when none.

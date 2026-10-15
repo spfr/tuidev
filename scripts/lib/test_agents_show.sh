@@ -116,6 +116,30 @@ recs="$(printf '%s\n' "$SNAP" | agents_classify "" "" "$(_agents_panes)" | awk -
     || fail "classify's where records:"$'\n'"$recs"
 pass "where: tmux pane, Herdr, ssh, or the terminal app, from each process's ancestry; a where record per session"
 
+# --- agents root-of: the session a notification jumps to --------------------------------
+ro() { agents_root_of "$1" "${2:-$SNAP}"; }
+T=Wed_Oct_14_08:00:00_2026
+[[ "$(ro 600)" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "root-of a session in Ghostty: $(ro 600)"
+[[ "$(ro 602)" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "root-of through its tool shells: $(ro 602)"
+[[ "$(ro 820)" == "820@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "root-of in Herdr: the app its client runs in: $(ro 820)"
+[[ "$(ro 960)" == "960@$T"$'\tiTerm\tcom.googlecode.iterm2' ]]   || fail "root-of in iTerm: $(ro 960)"
+[[ "$(ro 920)" == "920@$T"$'\t-\t-' ]]                            || fail "root-of over ssh: $(ro 920)"
+# tmux: its server is no app's; the clients' app, when they all run in one.
+[[ "$(ro 721)" == "720@$T"$'\t-\t-' ]]                            || fail "root-of in tmux with no client: $(ro 721)"
+SNAP_T="$SNAP"$'\n'"$(psl 520 510 0.0 3000 09:00:00 "tmux attach -t work")"
+[[ "$(ro 721 "$SNAP_T")" == "720@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "root-of in tmux, its client in Ghostty: $(ro 721 "$SNAP_T")"
+SNAP_T="$SNAP_T"$'\n'"$(psl 956 955 0.0 3000 09:00:00 "tmux: client")"
+[[ "$(ro 721 "$SNAP_T")" == "720@$T"$'\t-\t-' ]]                  || fail "root-of in tmux, clients in two apps: $(ro 721 "$SNAP_T")"
+# The outermost agent is the session: a codex a claude runs is part of it.
+SNAP_T="$SNAP"$'\n'"$(psl 603 601 0.0 3000 00:10 "codex exec x")"$'\n'"$(psl 604 603 0.0 3000 00:10 "/bin/sh -c notify.sh")"
+[[ "$(ro 604 "$SNAP_T")" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "root-of a nested agent: $(ro 604 "$SNAP_T")"
+if out="$(ro 510)" || [[ -n "$out" ]]; then fail "root-of a shell no agent runs under: $out"; fi
+if out="$(ro 830)" || [[ -n "$out" ]]; then fail "root-of the Herdr client: $out"; fi
+if out="$(ro 4242)" || [[ -n "$out" ]]; then fail "root-of a pid that is gone: $out"; fi
+[[ "$(agents_root_of x 2>&1)" == "usage: agents root-of PID" ]] || fail "root-of usage"
+[[ "$(agents_main root-of 602)" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "agents root-of: $(agents_main root-of 602)"
+pass "root-of: the outermost agent above a pid as PID@START, its terminal app (tmux and Herdr: their clients') and bundle id; nothing for no agent"
+
 # --- agents jump ------------------------------------------------------------------------
 clear_logs
 out="$(agents_jump 721)" || fail "jump to a tmux pane failed: $out"

@@ -93,6 +93,7 @@ agents_main() {
         mcp)      agents_mcp "$@" ;;
         show)     agents_show "$@" ;;
         jump)     agents_jump "$@" ;;
+        root-of)  agents_root_of "$@" ;;
         peek)     agents_peek "$@" ;;
         pick)     agents_pick "$@" ;;
         tsv)      agents_tsv ;;
