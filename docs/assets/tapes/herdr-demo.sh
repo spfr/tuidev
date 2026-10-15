@@ -175,14 +175,17 @@ populate() {
 }
 
 down() {
-    local m
+    local m tmpd=/nonexistent
+    # Only a directory inside the temp dirs, compared as real paths (macOS's
+    # TMPDIR ends in a slash and lives under a symlink).
+    [[ -z "${TMPDIR:-}" ]] || tmpd="$(cd "$TMPDIR" 2>/dev/null && pwd -P)" || tmpd=/nonexistent
     # The machines' servers end with their containers; their profiles live in HOME.
     [[ -S "$home/.config/herdr/herdr.sock" ]] && { herdr_demo server stop >/dev/null 2>&1 || true; }
     for m in "${MACHINES[@]}"; do
         container rm -f "$PREFIX$m" >/dev/null 2>&1 || true
     done
     case "$home" in
-        /tmp/*|/private/tmp/*|"${TMPDIR:-/nonexistent}"*) rm -rf "$home" ;;
+        /tmp/?*|/private/tmp/?*|"${tmpd:-/nonexistent}"/?*) rm -rf "$home" ;;
         *) echo "herdr-demo: left $home in place (not under /tmp)" >&2 ;;
     esac
 }

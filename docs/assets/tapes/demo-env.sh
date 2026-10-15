@@ -14,6 +14,13 @@ if [[ $_demo_off -ge 0 ]]; then TZ="Etc/GMT-$_demo_off"; else TZ="Etc/GMT+${_dem
 export TZ
 unset _demo_off
 
+# Nothing of the renderer's own shell: its XDG directories, zsh's ZDOTDIR, a
+# history file, atuin's and zoxide's settings (cli.tape's `exec zsh -i` would
+# read them). With HISTFILE unset, this bash saves no history either.
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME ZDOTDIR HISTFILE
+for _demo_v in $(compgen -v ATUIN_) $(compgen -v _ZO_); do unset "$_demo_v"; done
+unset _demo_v
+
 if [[ -z "${DEMO_HOME:-}" ]]; then
     DEMO_HOME="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-demo.XXXXXX")/NAME"
 fi
@@ -22,7 +29,6 @@ bash "$_demo_tapes/demo-setup.sh" "$DEMO_HOME"
 DEMO_HOME="$(cd "$DEMO_HOME" && pwd -P)"
 export DEMO_HOME HOME="$DEMO_HOME"
 export PATH="$_demo_tapes/bin:$_demo_repo/bin:$PATH"
-export HISTFILE=/dev/null
 unset PROMPT_COMMAND _demo_repo _demo_tapes
 
 # The shape of the shipped Starship prompt, without reading this machine
