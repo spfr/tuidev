@@ -212,8 +212,9 @@ export AGENTS_CRITICAL_NAMES AGENTS_CRITICAL_PATH   # read by the awk programs
 
 # This process and your uid, and the clock (AGENTS_NOW, read by _agents_now).
 # Overridable only by the test harness; the clock of an `agents tsv` refresh
-# (_AGENTS_CLOCK) is never taken from the environment.
-unset _AGENTS_CLOCK
+# (_AGENTS_CLOCK) and the locks this run holds (_AGENTS_LOCKS, util.sh) are
+# never taken from the environment.
+unset _AGENTS_CLOCK _AGENTS_LOCKS
 if [[ -n "${AGENTS_TESTING:-}" ]]; then
     AGENTS_SELF="${AGENTS_SELF:-$$}" AGENTS_UID="${AGENTS_UID:-$UID}"
 else
