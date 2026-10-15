@@ -40,15 +40,17 @@ _monitoring_plugin_dir() {
 MONITORING_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/agents.conf"
 
 # The agents command is bin/agents plus its modules, lib/agents/, which go to
-# $TUIDEV_LIB_DIR/agents: ~/.local/bin/agents finds them there, beside it.
-# The modules go first, so an interrupted install never leaves a new
-# agents without them (the old one needs none).
+# $TUIDEV_LIB_DIR/agents: ~/.local/bin/agents finds them there, beside it,
+# with the API list prices its reports cost tokens at (prices.tsv; yours go
+# in AGENTS_PRICES, never in this file). The modules go first, so an
+# interrupted install never leaves a new agents without them (the old one
+# needs none).
 _monitoring_agents() {
     local dest="$HOME/.local/bin/agents" lib="$TUIDEV_LIB_DIR/agents" src
     print_step "installing the agents modules -> $lib"
     while IFS= read -r src; do
         install_config "$lib/${src#"$MONITORING_REPO/lib/agents/"}" "$src" --overwrite
-    done < <(find "$MONITORING_REPO/lib/agents" -type f \( -name '*.sh' -o -name '*.awk' \) | LC_ALL=C sort)
+    done < <(find "$MONITORING_REPO/lib/agents" -type f \( -name '*.sh' -o -name '*.awk' -o -name '*.tsv' \) | LC_ALL=C sort)
     print_step "installing the agents command -> $dest"
     install_config "$dest" "$MONITORING_REPO/bin/agents" --overwrite
     [[ "$DRY_RUN" == true ]] || chmod 0755 "$dest"

@@ -1,26 +1,33 @@
 # shellcheck shell=bash
 # lib/agents/report.sh — `agents report`: where the CPU and the tokens went,
-# what was denied or cleaned up, and what is worth changing.
+# what was denied or cleaned up, what the sessions load and use, and what is
+# worth changing.
 #
 # Owns: the report's views, insight.txt (the menu's top
 #   insight: "EPOCH<TAB>UNTIL<TAB>VIEW<TAB>TEXT", or just "EPOCH<TAB>UNTIL"
-#   when nothing stands out) and the menu's tokens row (from tokens.today,
-#   which the scanner writes; the report only reads the token files).
+#   when nothing stands out), the menu's tokens row (from tokens.today,
+#   which the scanner writes; the report only reads the token files), the
+#   price files a report reads (prices.tsv beside the modules, then
+#   AGENTS_PRICES; AGENTS_PRICES=off: none), and one session's tokens for
+#   another view (agents_session_tokens).
 # Uses: config.sh, util.sh (_agents_window, _agents_replace),
-#   events.sh (_agents_data_dir), render.sh (colors); awk/report.awk and its
-#   parts (report_fmt, report_runs, report_tokens, report_denials,
-#   report_insights, report_views).
-# Public: agents_report, agents_insight_write, _agents_insight_line,
-#   _agents_tokens_line.
+#   events.sh (_agents_data_dir), render.sh (colors), tokens.sh
+#   (_agents_tokens_raw_since), context.sh (the context view's inventory);
+#   awk/report.awk and its parts (report_fmt, report_runs, report_tokens,
+#   report_denials, report_context, report_insights, report_views),
+#   awk/lib_price.awk, awk/tokens_session.awk.
+# Public: agents_report, agents_insight_write, agents_session_tokens,
+#   _agents_insight_line, _agents_tokens_line, _agents_prices_files.
 
-_AGENTS_REPORT_VIEWS="summary runs waste trends agents tokens denials"
+_AGENTS_REPORT_VIEWS="summary runs waste trends agents tokens context denials"
 
 # agents_report [--view VIEW] [--since 24h|7d|30d|today] [--json] — the
 # summary (default): where the CPU went (by job, project, session and hour of
 # day, from history.tsv), the tokens and denials, what was cleaned up
 # (events.tsv), and the top insights; or one of the ledger's views: runs,
 # waste, trends (default --since 7d), agents; or tokens (tokens.tsv,
-# compacts.tsv, limits.tsv, AGENTS_PRICES), denials (denials.tsv).
+# compacts.tsv, limits.tsv, the price files), context (uses.tsv and what is
+# configured; default --since 7d), denials (denials.tsv).
 agents_report() {
     local view=summary since="" json="" start now off period
     while [[ $# -gt 0 ]]; do
@@ -40,32 +47,56 @@ agents_report() {
         *" $view "*) ;;
         *) echo "agents: bad --view '$view' (${_AGENTS_REPORT_VIEWS// /, })" >&2; return 2 ;;
     esac
-    if [[ -z "$since" ]]; then since=24h; [[ "$view" != trends ]] || since=7d; fi
+    if [[ -z "$since" ]]; then since=24h; [[ "$view" != trends && "$view" != context ]] || since=7d; fi
     _agents_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
     _agents_report_awk "$view" "$since" "$json"
 }
-_agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents|tokens|denials] [--since 24h|7d|30d|today] [--json]" >&2; }
+_agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents|tokens|context|denials] [--since 24h|7d|30d|today] [--json]" >&2; }
 
 # _agents_report_awk VIEW LABEL JSON — report.awk over the data directory,
-# for the window the caller's _agents_window set.
+# for the window the caller's _agents_window set; the context view also
+# gets the configured inventory (_agents_context_inventory) on fd 3.
 _agents_report_awk() {
-    local d="$AGENTS_DATA_DIR" pf
-    pf="$(_agents_prices_file)"
+    local d="$AGENTS_DATA_DIR" inv=""
+    [[ "$1" != context ]] || inv="$(_agents_context_inventory)"
     B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" \
-    _agents_awk "lib_json lib_sort lib_fmt report_fmt report_runs report_tokens report_denials report_insights report_views report" -F '\t' \
+    _agents_awk "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_context report_insights report_views report" -F '\t' \
         -v view="$1" -v label="$2" -v json="$3" -v start="$start" -v now="$now" -v off="$off" \
         -v pstart="$((start - period))" -v pend="$((now - period))" -v hist="$AGENTS_HISTORY" \
+        -v rawb="$(_agents_tokens_raw_since "$now" "$off")" \
         -v hf="$d/history.tsv" -v ef="$d/events.tsv" -v rf="$d/runs.tsv" \
-        -v tf="$d/tokens.tsv" -v cf="$d/compacts.tsv" -v df="$d/denials.tsv" -v lf="$d/limits.tsv" -v pf="$pf"
+        -v tf="$d/tokens.tsv" -v cf="$d/compacts.tsv" -v df="$d/denials.tsv" -v lf="$d/limits.tsv" -v uf="$d/uses.tsv" \
+        -v pfs="$(_agents_prices_files)" -v invf=/dev/fd/3 3<<<"$inv"
 }
 
-# _agents_prices_file — AGENTS_PRICES (~/ expanded) when it is a readable
-# file; nothing otherwise, and the report then shows no $ at all.
-_agents_prices_file() {
-    local f="$AGENTS_PRICES" t='~'
+# _agents_prices_files — the price files a report reads, "|"-separated, in
+# order: the list prices that ship (prices.tsv beside the modules), then
+# AGENTS_PRICES (~/ expanded) when it is a readable file, whose lines win.
+# Nothing with AGENTS_PRICES=off: the reports then show no cost at all.
+_agents_prices_files() {
+    local f="$AGENTS_PRICES" t='~' o=""
+    [[ "$f" != off ]] || return 0
+    [[ ! -r "$_AGENTS_LIB/prices.tsv" ]] || o="$_AGENTS_LIB/prices.tsv"
     [[ "${f%%/*}" != "$t" ]] || f="$HOME/${f#*/}"
-    [[ -f "$f" && -r "$f" ]] && printf '%s' "$f"
-    return 0
+    [[ -z "$f" || ! -f "$f" || ! -r "$f" ]] || o="${o:+$o|}$f"
+    printf '%s' "$o"
+}
+
+# agents_session_tokens SESSION... — what each session cost so far, for a
+# view of one session (agents show): one line per session that has tokens,
+#   session origin cli project model calls tokens usd
+# origin: you, headless (tokens.sh), "-" when unknown; project: as the token
+# report folds it; model: its main conversation's latest (any agent's when
+# it has none); tokens: every token of the session and its subagents; usd:
+# their API-equivalent cost ("-" when unpriced, or AGENTS_PRICES=off). One
+# grep and one awk over tokens.tsv, however many sessions; a session id is
+# matched whole.
+agents_session_tokens() {
+    local f="$AGENTS_DATA_DIR/tokens.tsv" s pats=()
+    for s in "$@"; do [[ "$s" =~ ^[A-Za-z0-9_-]+$ ]] && pats+=(-e $'\t'"$s"$'\t'); done
+    [[ ${#pats[@]} -gt 0 && -r "$f" ]] || return 0
+    LC_ALL=C grep -F "${pats[@]}" "$f" 2>/dev/null \
+        | _agents_awk "lib_json lib_fmt lib_price report_fmt tokens_session" -F '\t' -v ids="$*" -v pfs="$(_agents_prices_files)"
 }
 
 # agents_insight_write — refresh insight.txt with today's top insight (the

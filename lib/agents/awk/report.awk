@@ -1,22 +1,28 @@
 # lib/agents/awk/report.awk — `agents report`, as text or JSON, from
 # history.tsv (hf), events.tsv (ef), the run ledger runs.tsv (rf), and the
 # token files: tokens.tsv (tf), compacts.tsv (cf), denials.tsv (df),
-# limits.tsv (lf) and the price file (pf, "" without one). Runs in BEGIN: it
-# reads no input. Needs lib_json, lib_sort, report_fmt, report_runs,
-# report_tokens, report_denials, report_insights and report_views.
+# limits.tsv (lf), uses.tsv (uf), the price files (pfs, "|"-separated, ""
+# for none) and, for the context view, the configured inventory (invf);
+# rawb: where tokens.tsv's rows stop being kept by day. Runs in BEGIN: it
+# reads no input. Needs lib_json, lib_sort, lib_fmt, lib_price, report_fmt,
+# report_runs, report_tokens, report_denials, report_context,
+# report_insights and report_views.
 #
 # view: summary (history, events, tokens, denials and the top insights), runs,
 # waste, trends, agents (the ledger: report_views.awk), tokens
-# (report_tokens.awk), denials (report_denials.awk), or insight (one line for
-# the menu: VIEW<TAB>TEXT, or nothing). Without a ledger, a ledger view falls
-# back to the summary, with a note; its JSON keeps its own shape, with
-# "ledger":false. The tokens and denials views say when they have no data.
+# (report_tokens.awk), context (report_context.awk), denials
+# (report_denials.awk), or insight (one line for the menu: VIEW<TAB>TEXT, or
+# nothing). Without a ledger, a ledger view falls back to the summary, with
+# a note; its JSON keeps its own shape, with "ledger":false. The tokens and
+# denials views say when they have no data.
 
 BEGIN {
     b = ENVIRON["B"]; dim = ENVIRON["DIM"]; e = ENVIRON["N"]
     when = (label == "today" ? "today" : "last " label)
     runs_load(rf, start, pstart, pend)
-    if (view == "summary" || view == "insight" || view == "tokens") tokens_load(tf, cf, lf, pf, start)
+    # The token dimensions each view shows: the insights need the CLIs only.
+    if (view == "summary" || view == "insight" || view == "tokens" || view == "context")
+        tokens_load(tf, cf, lf, pfs, start, view == "tokens" ? "model cli agent project session origin" : view == "context" ? "cli agent" : "cli")
     if (view == "summary" || view == "insight" || view == "denials") denials_load(df, start)
     if (view == "insight") {
         insights()
@@ -24,6 +30,7 @@ BEGIN {
         exit
     }
     if (view == "tokens") { view_tokens(); exit }
+    if (view == "context") { view_context(); exit }
     if (view == "denials") { view_denials(); exit }
     if (view != "summary" && (RL || json)) {
         if (view == "runs") view_runs()

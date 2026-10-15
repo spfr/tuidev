@@ -61,10 +61,10 @@ _agents_find_lib() {
 }
 
 # config first: it reads agents.conf. The others only define functions.
-_AGENTS_MODULES="config util snapshot classify watched system awake lid kill notify events reap assess transcript history runs tokens report render json tsv terminal hooks usage cli"
+_AGENTS_MODULES="config util snapshot classify watched system awake lid kill notify events reap assess transcript history runs tokens context report render json tsv terminal hooks usage cli"
 # The awk programs the modules run (awk/NAME.awk; test_agents_install.sh keeps
 # this list and the directory in step).
-_AGENTS_AWK_FILES="assess classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_proc lib_sort new_members refusal render report report_denials report_fmt report_insights report_runs report_tokens report_views runs runs_obs runs_view sample tokens tokens_plan tokens_state tree"
+_AGENTS_AWK_FILES="assess classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_price lib_proc lib_sort new_members refusal render report report_context report_denials report_fmt report_insights report_runs report_tokens report_views runs runs_obs runs_view sample tokens tokens_plan tokens_rollup tokens_session tokens_state tree"
 
 # Every module and awk program is checked before any is sourced: never half a
 # program.

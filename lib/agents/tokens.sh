@@ -53,6 +53,13 @@
 #                 Codex subagent), "-" when unknown. A row an older agents
 #                 wrote has 11 columns: its cache writes all 5-minute ones,
 #                 its origin unknown.
+#                 Rows older than local midnight yesterday are rolled up, at
+#                 the daily prune, into one row per local day and cli project
+#                 session agent model poll origin, at the top of the file:
+#                   day_epoch ... origin calls
+#                 (14 columns: the day's local midnight, the sums, and how
+#                 many rows they sum). One file, so the rollup replaces it in
+#                 one rename: no row ever counts twice or not at all.
 #   compacts.tsv  epoch cli project session agent trigger pre_tokens post_tokens
 #   denials.tsv   epoch cli project session agent tool by reason subject
 #                 by: classifier, safety or user; reason: the classifier's
@@ -109,8 +116,10 @@
 # Uses: config.sh, util.sh (_agents_awk, _agents_window, _agents_replace),
 #   history.sh (_agents_prune_file), transcript.sh (_agents_tx_find,
 #   _agents_tx_session_of, _agents_tx_agent_types, _agents_tx_fork_parents);
-#   awk/tokens_plan.awk, awk/tokens.awk, awk/tokens_state.awk.
-# Public: _agents_tokens_scan, _agents_tokens_prune, _agents_tokens_task_sources.
+#   awk/tokens_plan.awk, awk/tokens.awk, awk/tokens_state.awk,
+#   awk/tokens_rollup.awk.
+# Public: _agents_tokens_scan, _agents_tokens_prune, _agents_tokens_raw_since,
+#   _agents_tokens_task_sources.
 
 # The most a sample reads (bytes, files), and how long a transcript must be
 # quiet before its last message counts without the line that ends it.
@@ -210,11 +219,34 @@ _agents_tokens_compact() {
     fi
 }
 
+# _agents_tokens_raw_since NOW OFF — the epoch from which tokens.tsv holds
+# every row as written: local midnight yesterday (OFF: the UTC offset). A
+# report window that starts before it counts whole local days there.
+_agents_tokens_raw_since() {
+    printf '%s\n' "$(( $1 - ($1 + $2) % 86400 - 86400 ))"
+}
+
 # _agents_tokens_prune NOW CUT — the token files' daily prune (history.sh,
-# under sample.lock): their rows before CUT dropped, the state compacted.
+# under sample.lock): tokens.tsv rolled up (awk/tokens_rollup.awk: the rows
+# before _agents_tokens_raw_since become day rows; a day that ended before
+# CUT goes), the other files' rows before CUT dropped, the state compacted.
 _agents_tokens_prune() {
-    local f
-    for f in tokens.tsv compacts.tsv denials.tsv limits.tsv uses.tsv tasks.idx; do _agents_prune_file "$AGENTS_DATA_DIR/$f" "$2"; done
+    # shellcheck disable=SC2034  # _agents_window sets start and period too
+    local dir="$AGENTS_DATA_DIR" f start now off period tmp seen
+    _agents_window today "$1" || return 1
+    for f in compacts.tsv denials.tsv limits.tsv uses.tsv tasks.idx; do _agents_prune_file "$dir/$f" "$2"; done
+    if [[ -f "$dir/tokens.tsv" ]]; then
+        tmp="$dir/tokens.tsv.prune.$$"
+        seen="$(_agents_awk "lib_sort tokens_rollup" -F '\t' -v OFS='\t' -v raw="$(_agents_tokens_raw_since "$1" "$off")" -v cut="$2" \
+            -v off="$off" -v out="$tmp" < "$dir/tokens.tsv")"
+        if [[ "$seen" =~ ^[0-9]+$ && -f "$tmp" ]]; then
+            # Rows appended meanwhile (none: the scan runs under the same lock).
+            tail -n "+$((seen + 1))" "$dir/tokens.tsv" >> "$tmp" 2>/dev/null
+            mv -f "$tmp" "$dir/tokens.tsv"
+        else
+            rm -f "$tmp"
+        fi
+    fi
     _agents_tokens_compact "$1" "$2"
 }
 

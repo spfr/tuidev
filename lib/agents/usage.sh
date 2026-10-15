@@ -37,10 +37,13 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
                                (repeated and slowest commands), waste (duplicates,
                                leaks, polling, failed re-runs), trends (against the
                                window before; default 7d), agents (by agent type),
-                               tokens (by model, CLI, agent type and project; cache
-                               hits, polling, compactions, Codex plan headroom, and
-                               an estimate in $ with AGENTS_PRICES), denials (tool
-                               calls denied, by command, with what to try)
+                               tokens (by model, CLI, agent type, project, session
+                               and origin; cache hits, polling, compactions, Codex
+                               plan headroom, and what they would cost at API list
+                               prices), context (MCP servers, skills and subagents
+                               used and loaded, plugins, what is unused; default
+                               7d), denials (tool calls denied, by command, with
+                               what to try)
   agents runs [--since 24h|7d|30d|today] [--json]
                                finished commands, newest first: when, how long, CPU,
                                peak memory, exit code, project, session, the agent

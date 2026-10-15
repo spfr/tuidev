@@ -7,15 +7,16 @@
 # Everything runs against fixture files written here (the formats the scanner
 # writes, docs/agent-workflows.md), a fixed clock (15:00 UTC, Tue 2025-10-14)
 # and temp dirs. In the 24h before now:
-#   app   S1 main     claude-opus-5-5  2 calls  in 1k cw 40k cr 900k out 9k each
-#   app   S1 Explore  claude-haiku-5   in 20k cw 30k cr 50k out 5k
-#   shop  S2 main     claude-opus-5-5  in 2k cr 100k out 3k, a call that only waited
-#   web   C1 main     gpt-6-luna       in 100k cr 400k out 20k (codex)
+#   app   S1 main     claude-opus-5-5  2 calls  in 1k cw 40k (1h 30k) cr 900k out 9k each, you
+#   app   S1 Explore  claude-haiku-5   in 20k cw 30k cr 50k out 5k, a subagent
+#   shop  S2 main     claude-opus-5-5  in 2k cr 100k out 3k, a call that only waited, headless
+#   web   C1 main     gpt-6-luna       in 100k cr 400k out 20k (codex), you
 #   shop  S2 -        claude-sonnet-5  in 5k out 1k, 16h ago (not today)
 #   alpha, zeta       claude-opus-5-5  out 500 each (a tie: by name)
 # and 30h ago (in 7d, not 24h) 1M tokens of `old`; a header, a short row and a
-# row with a word for a number. app's session S1 compacted 3 times today (2
-# of them auto: below the insight's 3).
+# row with a word for a number. The last four are rows as written before 1h
+# cache writes and origins were recorded (11 columns). app's session S1
+# compacted 3 times today (2 of them auto: below the insight's 3).
 # Denials: git push ×4 by the classifier [Git Destructive], npm install ×3 by
 # you, Edit ×2 by you, example.com (WebFetch) by you, rm by a safety check.
 
@@ -33,6 +34,7 @@ trap 'rm -rf "$tmp"' EXIT
 for v in XDG_CONFIG_HOME XDG_STATE_HOME TUIDEV_STATE_DIR AGENTS_PRICES AGENTS_HISTORY; do unset "$v"; done
 export HOME="$tmp/home" NO_COLOR=1 AGENTS_CONF="$tmp/none.conf" AGENTS_DATA_DIR="$tmp/data" AGENTS_RUN_DIR="$tmp/run"
 export AGENTS_TESTING=1 AGENTS_NO_HERDR=1 LC_ALL=C TZ=UTC
+export AGENTS_PRICES=off   # no cost unless a test asks for one (3.)
 mkdir -p "$HOME"
 
 # shellcheck source=../../bin/agents disable=SC1091
@@ -64,11 +66,11 @@ T=$'\t'
 fixture() {   # DIR
     rows "$1" tokens.tsv <<EOF
 epoch${T}cli${T}project${T}session${T}agent${T}model${T}in${T}cache_write${T}cache_read${T}out${T}poll
-3600${T}claude${T}app${T}S1${T}main${T}claude-opus-5-5${T}1000${T}40000${T}900000${T}9000${T}0
-3500${T}claude${T}app${T}S1${T}main${T}claude-opus-5-5${T}1000${T}40000${T}900000${T}9000${T}0
-3400${T}claude${T}app${T}S1${T}Explore${T}claude-haiku-5${T}20000${T}30000${T}50000${T}5000${T}0
-3300${T}claude${T}shop${T}S2${T}main${T}claude-opus-5-5${T}2000${T}0${T}100000${T}3000${T}1
-3200${T}codex${T}web${T}C1${T}main${T}gpt-6-luna${T}100000${T}0${T}400000${T}20000${T}0
+3600${T}claude${T}app${T}S1${T}main${T}claude-opus-5-5${T}1000${T}40000${T}900000${T}9000${T}0${T}30000${T}you
+3500${T}claude${T}app${T}S1${T}main${T}claude-opus-5-5${T}1000${T}40000${T}900000${T}9000${T}0${T}30000${T}you
+3400${T}claude${T}app${T}S1${T}Explore${T}claude-haiku-5${T}20000${T}30000${T}50000${T}5000${T}0${T}0${T}subagent
+3300${T}claude${T}shop${T}S2${T}main${T}claude-opus-5-5${T}2000${T}0${T}100000${T}3000${T}1${T}0${T}headless
+3200${T}codex${T}web${T}C1${T}main${T}gpt-6-luna${T}100000${T}0${T}400000${T}20000${T}0${T}0${T}you
 57600${T}claude${T}shop${T}S2${T}-${T}claude-sonnet-5${T}5000${T}0${T}0${T}1000${T}0
 3000${T}claude${T}zeta${T}S3${T}main${T}claude-opus-5-5${T}0${T}0${T}0${T}500${T}0
 2900${T}claude${T}alpha${T}S4${T}main${T}claude-opus-5-5${T}0${T}0${T}0${T}500${T}0
@@ -101,19 +103,20 @@ d="$tmp/d"; fixture "$d"
 rep() { AGENTS_DATA_DIR="$d" agents_report "$@"; }
 prices="$tmp/agents-prices.tsv"
 cat > "$prices" <<'EOF'
-# USD per million tokens
-claude-         2      2      2     2
-claude-opus-5   10     12.5   1     50
-claude-opus-5	15	18.75	1.5	75   # the later line wins
+# Yours: USD per million tokens, some lines as written before 1h cache writes (5 columns)
+claude-          2      2      2     2           # a family: any claude- model no closer line names
+claude-opus-5    10     12.5   1     50          # claude-opus-5 and its dated forms, never claude-opus-5-5
+claude-sonnet-5  1      1      1     1     1
+claude-sonnet-5	3	3.75	6	0.3	15   # the later line wins
 not enough fields
-gpt-6           free   1      1     1   1
+gpt-6-luna       free   1      1     1     1
 EOF
 
 # 1. The tokens view: totals, cache hits, every breakdown, ties by name.
 want="agents report · tokens · last 24h
 
 TOKENS 2.6M in 8 model calls · 91% cache hits
-  in 129k · cache write 110k · cache read 2.4M · out 48k
+  in 129k · cache write 110k (1h 60k) · cache read 2.4M · out 48k
 
   MODEL                   TOKENS     %      IN  C.WRITE  C.READ     OUT   HIT
   claude-opus-5-5             2M   76%      4k      80k    1.9M     22k   96%
@@ -137,6 +140,19 @@ TOKENS 2.6M in 8 model calls · 91% cache hits
   alpha                      500    0%       0        0       0     500     -
   zeta                       500    0%       0        0       0     500     -
 
+  SESSION                 TOKENS     %      IN  C.WRITE  C.READ     OUT   HIT
+  app S1                      2M   76%     22k     110k    1.9M     23k   93%
+  web C1                    520k   20%    100k        0    400k     20k   80%
+  shop S2                   111k    4%      7k        0    100k      4k   93%
+  zeta S3                    500    0%       0        0       0     500     -
+  alpha S4                   500    0%       0        0       0     500     -
+
+  ORIGIN                 SESSIONS  TOKENS     %
+  you                           2    2.4M   92%
+  headless                      1    105k    4%
+  subagent                      1    105k    4%
+  (unknown)                     3      7k    0%
+
 POLLING  105k tokens (4%) in 1 model call that only waited
   by agent    main 105k
 COMPACTIONS  3 · 2 auto, 1 manual · 150k tokens before, on average
@@ -144,11 +160,13 @@ COMPACTIONS  3 · 2 auto, 1 manual · 150k tokens before, on average
 CODEX PLAN  43% of the 5h window used · resets 16:20 (as of 14:50)"
 out="$(rep --view tokens)"
 [[ "$out" == "$want" ]] || fail "tokens view:"$'\n'"$out"$'\n'"--- want:"$'\n'"$want"
-pass "tokens: totals, cache hit rate, by model, CLI, agent and project (ties by name), polling, compactions, Codex plan"
+pass "tokens: totals (1h cache writes apart), cache hit rate, by model, CLI, agent, project and session (ties by name), by origin, polling, compactions, Codex plan"
 
 json="$(rep --view tokens --json)"
-jqt "$json" '.schema_version == 1 and .view == "tokens" and .window == "24h" and .data and (.priced | not)' "tokens json header"
-jqt "$json" '.totals == {"calls":8,"in":129000,"cache_write":110000,"cache_read":2350000,"out":48000,"total":2637000,"cache_hit_pct":90.8,"est_usd":null,"unpriced_tokens":null}' "tokens json totals" '.totals'
+jqt "$json" '.schema_version == 1 and .view == "tokens" and .window == "24h" and .data and (.priced | not) and .prices == null' "tokens json header"
+jqt "$json" '.totals == {"calls":8,"in":129000,"cache_write":110000,"cache_write_1h":60000,"cache_read":2350000,"out":48000,"total":2637000,"cache_hit_pct":90.8,"est_usd":null,"unpriced_tokens":null}' "tokens json totals" '.totals'
+jqt "$json" '[.sessions[] | [.session, .project, .cli, .origin, .total]] == [["S1","app","claude","you",2005000],["C1","web","codex","you",520000],["S2","shop","claude","headless",111000],["S3","zeta","claude",null,500],["S4","alpha","claude",null,500]]' "tokens json sessions" '.sessions'
+jqt "$json" '[.origins[] | [.origin, .sessions, .total]] == [["you",2,2420000],["headless",1,105000],["subagent",1,105000],[null,3,7000]]' "tokens json origins" '.origins'
 jqt "$json" '[.models[].model] == ["claude-opus-5-5","gpt-6-luna","claude-haiku-5","claude-sonnet-5"] and .models[0].total == 2006000 and .models[0].calls == 5' "tokens json models" '.models'
 jqt "$json" '[.projects[].project] == ["app","web","shop","alpha","zeta"] and [.agents[].agent] == ["main","Explore",null] and [.clis[].cli] == ["claude","codex"]' "tokens json names" '[.projects, .agents]'
 jqt "$json" '.polling == {"calls":1,"tokens":105000,"pct":4.0,"agents":[{"agent":"main","tokens":105000}]}' "tokens json polling" '.polling'
@@ -172,38 +190,81 @@ jqt "$(rep --view tokens --since 1h --json)" '.totals.calls == 7 and .compaction
 [[ "$(rep --view tokens --since 30m)" == *$'\n\n'"no tokens in this window"$'\n'"COMPACTIONS  1 · 0 auto, 1 manual · 140k tokens before, on average"* ]] || fail "tokens: nothing in the window:"$'\n'"$(rep --view tokens --since 30m)"
 pass "tokens: --since 24h (default), 7d, today, 1h; an empty window says so"
 
-# 3. The price file: longest prefix wins, a later line wins a tie, bad lines
-# reported, models without a price show "-", no file means no $ at all.
+# 3. Costs: API list prices ship (lib/agents/prices.tsv), your file changes
+# or adds prices (a later line wins a tie), the longest prefix that names a
+# model wins (up to a version boundary: never a shorter version's), bad
+# lines are reported, a model without a price is unpriced (never $0), and
+# AGENTS_PRICES=off shows no cost at all. 1h cache writes cost their own
+# price; a 5-column line prices them as its one cache-write price.
+shipped="$(AGENTS_PRICES="" rep --view tokens 2>"$tmp/err")"
+[[ ! -s "$tmp/err" ]] || fail "the shipped prices: $(cat "$tmp/err")"
+[[ "$shipped" == *"TOKENS 2.6M in 8 model calls · 91% cache hits · \$1.46 API-equivalent"$'\n'* ]] || fail "shipped prices: the total:"$'\n'"$shipped"
+[[ "$shipped" == *"   HIT     API \$"$'\n'"  claude-opus-5-5 "*" 96%     \$1.42"$'\n'"  gpt-6-luna "*" 80%     \$0.02"$'\n'"  claude-haiku-5 "*" 50%  unpriced"$'\n'"  claude-sonnet-5 "*"  0%     \$0.02"$'\n'* ]] \
+    || fail "shipped prices: per model (opus 1h writes at 8, 5m at 5):"$'\n'"$shipped"
+[[ "$shipped" == *$'\n\n'"API \$: what these tokens would cost at API list prices (as of 2026-09-29), not what a subscription charges; 1 model unpriced, left out" ]] \
+    || fail "shipped prices: the note:"$'\n'"$shipped"
+json="$(AGENTS_PRICES="" rep --view tokens --json)"
+jqt "$json" '.priced and .prices == {"basis":"api_list","as_of":"2026-09-29"} and .totals.est_usd == 1.46 and .totals.unpriced_tokens == 105000 and ([.models[] | .est_usd] == [1.42, 0.02, null, 0.02])' \
+    "shipped prices json" '[.prices, .totals, [.models[] | .est_usd]]'
+jqt "$json" '(.projects[] | select(.project == "app") | .est_usd) == 1.31 and (.sessions[] | select(.session == "S1") | .est_usd) == 1.31 and ([.origins[] | .est_usd] == [1.33, 0.09, null, 0.04])' \
+    "shipped prices json: projects, sessions and origins" '[.projects, .sessions, .origins]'
 out="$(AGENTS_PRICES="$prices" rep --view tokens 2>"$tmp/err")"
-[[ "$out" == *"TOKENS 2.6M in 8 model calls · 91% cache hits · est. \$6.28"$'\n'* ]] || fail "prices: the total:"$'\n'"$out"
-[[ "$out" == *"   HIT     EST \$"$'\n'"  claude-opus-5-5 "*" 96%     \$6.06"$'\n'"  gpt-6-luna "*" 80%         -"$'\n'"  claude-haiku-5 "*" 50%     \$0.21"$'\n'"  claude-sonnet-5 "*"  0%     \$0.01"$'\n'* ]] \
-    || fail "prices: per model (opus at its own price, not claude-'s):"$'\n'"$out"
-[[ "$out" == *$'\n\n'"est. \$: an estimate from agents-prices.tsv (USD per million tokens); 1 model without a price (-) left out" ]] || fail "prices: the note:"$'\n'"$out"
+[[ "$out" == *"· \$1.68 API-equivalent"$'\n'* && "$out" == *"  claude-opus-5-5 "*" 96%     \$1.42"$'\n'"  gpt-6-luna "*" 80%     \$0.02"$'\n'"  claude-haiku-5 "*" 50%     \$0.21"$'\n'"  claude-sonnet-5 "*"  0%     \$0.03"$'\n'* ]] \
+    || fail "your prices: opus-5-5 not at claude-opus-5's, haiku-5 at the claude- family's, sonnet-5 at your later line's:"$'\n'"$out"
 err="$(sed 's|.*/||' "$tmp/err")"
-[[ "$err" == "agents-prices.tsv:5: not MODEL_PREFIX IN CACHE_WRITE CACHE_READ OUT (USD per million tokens), ignored"$'\n'"agents-prices.tsv:6: not MODEL_PREFIX"* \
+[[ "$err" == "agents-prices.tsv:6: not MODEL_PREFIX IN CACHE_WRITE_5M CACHE_WRITE_1H CACHE_READ OUT (USD per million tokens), ignored"$'\n'"agents-prices.tsv:7: not MODEL_PREFIX"* \
    && "$(wc -l < "$tmp/err")" -eq 2 ]] || fail "prices: bad lines: $(cat "$tmp/err")"
-json="$(AGENTS_PRICES="$prices" rep --view tokens --json 2>/dev/null)"
-jqt "$json" '.priced and .totals.est_usd == 6.28 and .totals.unpriced_tokens == 520000 and ([.models[] | .est_usd] == [6.06, null, 0.21, 0.01])' "prices json" '[.totals, [.models[] | .est_usd]]'
-jqt "$json" '(.projects[] | select(.project == "web") | .est_usd) == null and (.projects[] | select(.project == "app") | .est_usd) == 5.79' "prices json: projects" '.projects'
 ( HOME="$tmp/ph"; mkdir -p "$HOME"; cp "$prices" "$HOME/p.tsv"; AGENTS_PRICES="~/p.tsv"
-  [[ "$(rep --view tokens 2>/dev/null)" == *"est. \$6.28"* ]] ) || fail "prices: a ~/ path"
-out="$(rep --view tokens)"
-[[ "$out" != *'$'* && "$out" != *"EST"* && "$out" != *estimate* ]] || fail "no price file, still a \$:"$'\n'"$out"
-[[ "$(AGENTS_PRICES="$tmp/nonexistent.tsv" rep --view tokens)" == "$out" ]] || fail "a missing price file changes the report"
+  [[ "$(rep --view tokens 2>/dev/null)" == *"\$1.68 API-equivalent"* ]] ) || fail "prices: a ~/ path"
+[[ "$(AGENTS_PRICES="$tmp/nonexistent.tsv" rep --view tokens)" == "$shipped" ]] || fail "a missing price file of yours changes the report"
 printf '# only comments\n' > "$tmp/empty-prices.tsv"
-[[ "$(AGENTS_PRICES="$tmp/empty-prices.tsv" rep --view tokens)" == "$out" ]] || fail "a price file without prices shows \$"
-jqt "$(rep --json)" '.tokens.est_usd == null' "summary json without prices"
-jqt "$(AGENTS_PRICES="$prices" rep --json 2>/dev/null)" '.tokens.est_usd == 6.28' "summary json with prices"
-pass "prices: longest prefix, later line on a tie, bad lines reported, '-' without a price, nothing without the file"
+[[ "$(AGENTS_PRICES="$tmp/empty-prices.tsv" rep --view tokens)" == "$shipped" ]] || fail "a price file of yours without prices changes the report"
+out="$(AGENTS_PRICES=off rep --view tokens)"
+[[ "$out" != *'$'* && "$out" != *"API"* && "$out" != *unpriced* ]] || fail "AGENTS_PRICES=off, still a cost:"$'\n'"$out"
+jqt "$(AGENTS_PRICES=off rep --view tokens --json)" '(.priced | not) and .prices == null and .totals.est_usd == null and ([.models[] | .est_usd] | unique) == [null]' "off json" '.totals'
+jqt "$(AGENTS_PRICES=off rep --json)" '.tokens.est_usd == null' "summary json without prices"
+jqt "$(AGENTS_PRICES="$prices" rep --json 2>/dev/null)" '.tokens.est_usd == 1.68' "summary json with prices"
+# Which line names a model: price MODEL — the prefix of the line that prices it, or "-".
+price() {
+    _agents_awk_eval "lib_price" 'BEGIN { prices_load(pfs); p = price_of(m); print (p ? PP[p] " " Pin[p] " " P5[p] " " P1[p] " " Pcr[p] " " Pout[p] : "-") }' \
+        -v pfs="$(AGENTS_PRICES="" _agents_prices_files)" -v m="$1" < /dev/null
+}
+while IFS='%' read -r m want; do
+    [[ "$(price "$m")" == "$want" ]] || fail "price of $m: '$(price "$m")', want '$want'"
+done <<'CASES'
+claude-opus-4-8%claude-opus-4-8 5 6.25 10 0.5 25
+claude-opus-4-9%-
+claude-opus-4%claude-opus-4 15 18.75 30 1.5 75
+claude-opus-4-1-20250805%claude-opus-4-1 15 18.75 30 1.5 75
+claude-opus-4-1@20250805%claude-opus-4-1 15 18.75 30 1.5 75
+claude-opus-4-6[1m]%claude-opus-4-6 5 6.25 10 0.5 25
+us.anthropic.claude-sonnet-4-5-20250929-v1:0%claude-sonnet-4-5 3 3.75 6 0.3 15
+anthropic.claude-3-5-haiku-20241022-v1:0%claude-3-5-haiku 0.8 1 1.6 0.08 4
+claude-haiku-4-5-20251001%claude-haiku-4-5 1 1.25 2 0.1 5
+claude-haiku-5-5%-
+claude-fable-5-1%claude-fable-5-1 10 12.5 20 0.25 50
+claude-fable-5%claude-fable-5 10 12.5 20 1 50
+gpt-5%gpt-5 1.25 1.25 1.25 0.125 10
+gpt-5-2025-08-07%gpt-5 1.25 1.25 1.25 0.125 10
+gpt-5.7%-
+gpt-5-codex%-
+gpt-5.4-mini%gpt-5.4-mini 0.75 0.75 0.75 0.075 4.5
+openai/gpt-5.4-mini%gpt-5.4-mini 0.75 0.75 0.75 0.075 4.5
+gpt-6-luna%gpt-6-luna 0.1 0.125 0.125 0.01 0.5
+<synthetic>%-
+CASES
+[[ "$(_agents_awk_eval "lib_price" 'BEGIN { prices_load(pfs); printf "%.4f", usd_of(price_of("claude-opus-5-5"), 1000000, 1000000, 600000, 1000000, 1000000) }' \
+    -v pfs="$(AGENTS_PRICES="" _agents_prices_files)" < /dev/null)" == 31.0000 ]] || fail "a million of each: 4 + 0.4 x 5 + 0.6 x 8 + 0.2 + 20 = 31"
+pass "costs: API list prices ship; yours change or add them; the longest prefix up to a version boundary (opus-4-8 never at opus-4's, gpt-5.7 never at gpt-5's); 1h writes at their price; unpriced, never \$0; off: no cost"
 
-# AGENTS_PRICES is a setting: a path (absolute or ~/), checked like the others.
-for good in /x/p.tsv '~/p.tsv' ''; do _agents_conf_valid AGENTS_PRICES "$good" || fail "AGENTS_PRICES '$good' refused"; done
-for bad in relative.tsv '~user/p.tsv' $'/a\tb'; do ! _agents_conf_valid AGENTS_PRICES "$bad" || fail "AGENTS_PRICES '$bad' accepted"; done
+# AGENTS_PRICES is a setting: a path (absolute or ~/) or off, checked like the others.
+for good in /x/p.tsv '~/p.tsv' '' off; do _agents_conf_valid AGENTS_PRICES "$good" || fail "AGENTS_PRICES '$good' refused"; done
+for bad in relative.tsv '~user/p.tsv' $'/a\tb' OFF; do ! _agents_conf_valid AGENTS_PRICES "$bad" || fail "AGENTS_PRICES '$bad' accepted"; done
 [[ "$(AGENTS_PRICES=relative bash "$REPO_DIR/bin/agents" config 2>&1 | grep -c 'AGENTS_PRICES')" -ge 1 ]] || fail "agents config without AGENTS_PRICES"
 ( out="$(AGENTS_PRICES=relative bash "$REPO_DIR/bin/agents" config 2>&1)"
   [[ "$out" == *"bad AGENTS_PRICES ('relative') in the environment"* && "$out" == *"AGENTS_PRICES=$HOME/.config/tuidev/agents-prices.tsv"* ]] ) \
     || fail "a bad AGENTS_PRICES falls back to the default"
-pass "AGENTS_PRICES: an absolute or ~/ path, else the default with a warning"
+pass "AGENTS_PRICES: an absolute or ~/ path, or off; else the default with a warning"
 
 # 4. The denials view: by who, reason, subject, agent and project, and hints.
 want="agents report · denials · last 24h
@@ -250,12 +311,12 @@ pass "no data: one line saying so (JSON: data false, empty lists, nulls)"
 
 # 6. The summary: a Tokens and a Denials line; nothing without their data.
 out="$(rep)"
-[[ "$out" == *$'\n'"TOKENS  2.6M · 91% cache hits · 4% polling · 3 compactions"$'\n'"  by model, agent and project: agents report --view tokens"$'\n\n'"DENIALS  11 · 4 by the classifier · 6 by you · 1 by a safety check"$'\n'"  by command and what to try: agents report --view denials"$'\n\n'"CLEANUPS (0)"* ]] \
+[[ "$out" == *$'\n'"TOKENS  2.6M · 91% cache hits · 4% polling · 3 compactions"$'\n'"  by model, agent, session and origin: agents report --view tokens"$'\n\n'"DENIALS  11 · 4 by the classifier · 6 by you · 1 by a safety check"$'\n'"  by command and what to try: agents report --view denials"$'\n\n'"CLEANUPS (0)"* ]] \
     || fail "summary: tokens and denials:"$'\n'"$out"
-[[ "$(AGENTS_PRICES="$prices" rep 2>/dev/null)" == *"TOKENS  2.6M · 91% cache hits · 4% polling · est. \$6.28 · 3 compactions"$'\n'* ]] || fail "summary: est. \$"
+[[ "$(AGENTS_PRICES="$prices" rep 2>/dev/null)" == *"TOKENS  2.6M · 91% cache hits · 4% polling · \$1.68 API-equivalent · 3 compactions"$'\n'* ]] || fail "summary: API-equivalent \$"
 [[ "$(AGENTS_DATA_DIR="$e" agents_report)" != *TOKENS* ]] || fail "summary: a Tokens line without token data"
-jqt "$(rep --json)" '.tokens == {"calls":8,"total":2637000,"in":129000,"cache_write":110000,"cache_read":2350000,"out":48000,"cache_hit_pct":90.8,"poll_tokens":105000,"poll_pct":4.0,"est_usd":null,"compactions":3} and .denials == {"count":11,"classifier":4,"user":6,"safety":1}' "summary json tokens" '[.tokens, .denials]'
-pass "summary: Tokens (total, cache hits, polling, est. \$ when priced, compactions) and Denials lines"
+jqt "$(rep --json)" '.tokens == {"calls":8,"total":2637000,"in":129000,"cache_write":110000,"cache_write_1h":60000,"cache_read":2350000,"out":48000,"cache_hit_pct":90.8,"poll_tokens":105000,"poll_pct":4.0,"est_usd":null,"compactions":3} and .denials == {"count":11,"classifier":4,"user":6,"safety":1}' "summary json tokens" '[.tokens, .denials]'
+pass "summary: Tokens (total, cache hits, polling, API-equivalent \$ when priced, compactions) and Denials lines"
 
 # 7. The insights: past their thresholds, each naming its view; not below.
 ins="$(printf '%s\n' "$out" | sed -n '/^TOP INSIGHTS$/,/^$/p')"
@@ -401,11 +462,173 @@ for n in 0 950:950 64249:64.2k 99949:99.9k 99950:100k 640000:640k 999499:999k 99
     line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'tokens today' || true)"
     if [[ "$n" == 0 ]]; then [[ -z "$line" ]] || fail "a tokens row for 0 tokens"; continue; fi
     [[ "$line" == "${n#*:} tokens today · 90% cached | "* ]] || fail "menu: ${n%%:*} tokens as '${n#*:}': $line"
-    [[ "$(_agents_awk_eval "lib_json lib_sort lib_fmt report_fmt report_runs report_tokens report_denials report_insights report_views" 'BEGIN { print tk(x) }' -v x="${n%%:*}")" == "${n#*:}" ]] \
+    [[ "$(_agents_awk_eval "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_insights report_views" 'BEGIN { print tk(x) }' -v x="${n%%:*}")" == "${n#*:}" ]] \
         || fail "report and menu disagree on ${n%%:*}"
 done
 printf 'hist\toff\t0\t-\t0\n' > "$tmp/tsv"
 [[ "$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")" != *"tokens today"* ]] || fail "a tokens row without the tsv line"
 pass "menu: '2.6M tokens today · 91% cached' under Today (k/M/B as the report writes them), opening today's tokens view"
+
+# 11. The daily rollup (the prune, once a day): tokens.tsv's rows before
+# local midnight yesterday become one row per day and name, and every
+# report reads the same before and after it. A window that reaches before
+# yesterday counts whole days there, so it is the same either way; one
+# within the last two days counts each row by its time.
+r="$tmp/roll"; mkdir -p "$r"
+# A month of rows (from 29d 23h ago to now): messages of 4 models, 2 CLIs, 2
+# projects, 3 sessions, 2 agent types, polls, 1h writes and origins, some in
+# the 11 columns of rows written before those were recorded.
+awk -v n="$FAKE_NOW" 'BEGIN {
+    OFS = "\t"; split("claude-opus-5-5 claude-sonnet-4-5-20250929 gpt-5.4 model-unpriced", m, " "); split("you headless subagent fork", o, " ")
+    for (i = 0; i < 12000; i++) {
+        t = n - (i * 7919) % (29 * 86400 + 82800); a = (i % 5 == 0) ? "Explore" : "main"
+        w = 100 + i % 900
+        row = t OFS (i % 4 ? "claude" : "codex") OFS "proj-" (i % 2) OFS "s" (i % 3) OFS a OFS m[i % 4 + 1] OFS (10 + i % 50) OFS w OFS (1000 + i % 5000) OFS (50 + i % 300) OFS (i % 17 == 0)
+        print (i % 3 ? row OFS int(w * (i % 4) / 4) OFS o[i % 4 + 1] : row)
+    }
+}' > "$r/tokens.tsv"
+cp "$d/compacts.tsv" "$d/denials.tsv" "$d/limits.tsv" "$r/"
+views() {   # every report that reads tokens.tsv, with costs
+    local s
+    for s in 30d 7d 48h 24h today 2h; do
+        AGENTS_PRICES="" AGENTS_DATA_DIR="$r" agents_report --view tokens --since "$s" --json
+        AGENTS_PRICES="" AGENTS_DATA_DIR="$r" agents_report --since "$s" --json
+    done
+    AGENTS_PRICES="" AGENTS_DATA_DIR="$r" agents_report --view tokens --since 30d
+    AGENTS_PRICES="" AGENTS_DATA_DIR="$r" agents_report
+    AGENTS_PRICES="" AGENTS_DATA_DIR="$r" agents_session_tokens s0 s1 s9
+}
+before="$(views)"
+# The old way of counting a window, every row by its time: the same total
+# for 30d (every row is in it) and 24h (all within the last two days).
+for s in 30 1; do
+    sum="$(awk -F '\t' -v c="$((FAKE_NOW - s * 86400))" '$1 >= c { t += $7 + $8 + $9 + $10; n++ } END { printf "%d %d", n, t }' "$r/tokens.tsv")"
+    jqt "$(AGENTS_DATA_DIR="$r" agents_report --view tokens --since "${s}d" --json)" ".totals.calls == ${sum% *} and .totals.total == ${sum#* }" "rollup: ${s}d against every row by its time" '.totals'
+done
+lines="$(wc -l < "$r/tokens.tsv")"
+( AGENTS_DATA_DIR="$r"; _agents_tokens_prune "$FAKE_NOW" "$((FAKE_NOW - 30 * 86400))" )
+raw="$(_agents_tokens_raw_since "$FAKE_NOW" 0)"
+[[ "$(awk -F '\t' 'NF >= 14' "$r/tokens.tsv" | wc -l)" -gt 0 && "$(wc -l < "$r/tokens.tsv")" -lt $((lines / 2)) ]] \
+    || fail "rollup: $lines rows became $(wc -l < "$r/tokens.tsv")"
+awk -F '\t' -v r="$raw" 'NF >= 14 && ($1 + 0 >= r || ($1 + 0) % 86400) { exit 1 } NF < 14 && $1 + 0 < r { exit 1 }' "$r/tokens.tsv" \
+    || fail "rollup: a day row at or after midnight yesterday, or not at a midnight; or a message row before it"
+[[ "$(awk -F '\t' 'NF >= 14 { c += $14 } NF < 14 { c++ } END { print c }' "$r/tokens.tsv")" == 12000 ]] || fail "rollup: the calls do not add up"
+after="$(views)"
+printf '%s\n' "$before" > "$tmp/roll.before"; printf '%s\n' "$after" > "$tmp/roll.after"
+[[ "$after" == "$before" ]] || fail "rollup: the reports changed:"$'\n'"$(tr ',' '\n' < "$tmp/roll.before" > "$tmp/rb"; tr ',' '\n' < "$tmp/roll.after" > "$tmp/ra"; diff "$tmp/rb" "$tmp/ra" | head -20)"
+cp "$r/tokens.tsv" "$tmp/roll.once"
+( AGENTS_DATA_DIR="$r"; _agents_tokens_prune "$FAKE_NOW" "$((FAKE_NOW - 30 * 86400))" )
+cmp -s "$r/tokens.tsv" "$tmp/roll.once" || fail "rollup: a second run changed tokens.tsv"
+# A late row (a catch-up scan writes 10-day-old messages) joins its day.
+printf '%s\tclaude\tproj-1\ts1\tmain\tclaude-opus-5-5\t1\t2\t3\t4\t0\t1\tyou\n' $((FAKE_NOW - 10 * 86400)) >> "$r/tokens.tsv"
+before="$(views)"
+( AGENTS_DATA_DIR="$r"; _agents_tokens_prune "$FAKE_NOW" "$((FAKE_NOW - 30 * 86400))" )
+[[ "$(views)" == "$before" && -z "$(awk -F '\t' -v t=$((FAKE_NOW - 10 * 86400)) '$1 == t' "$r/tokens.tsv")" ]] || fail "rollup: a late row did not join its day"
+# A day that ended a retention ago goes, whole; a malformed line in reach stays.
+printf '%s\tclaude\tp\ts\tmain\tm\t1\t1\t1\t1\t0\t0\t-\t9\n' $((raw - 40 * 86400)) >> "$r/tokens.tsv"
+printf '%s\tnot a row\n' "$FAKE_NOW" >> "$r/tokens.tsv"
+( AGENTS_DATA_DIR="$r"; _agents_tokens_prune "$FAKE_NOW" "$((FAKE_NOW - 30 * 86400))" )
+[[ "$(awk -F '\t' -v c="$((raw - 40 * 86400))" '$1 == c' "$r/tokens.tsv")" == "" && "$(tail -1 "$r/tokens.tsv")" == "$FAKE_NOW	not a row" ]] \
+    || fail "rollup: retention: $(tail -2 "$r/tokens.tsv")"
+jqt "$(AGENTS_DATA_DIR="$r" agents_report --view tokens --since 7d --json)" ".tokens_since == $(( FAKE_NOW - 7 * 86400 - (FAKE_NOW - 7 * 86400) % 86400 ))" "rollup: 7d counts from midnight" '.tokens_since'
+[[ "$(AGENTS_DATA_DIR="$r" agents_report --view tokens --since 7d)" == *$'\n'"tokens before yesterday are kept by day: this window counts them from Oct  7 00:00" ]] \
+    || fail "rollup: the note on whole days: $(AGENTS_DATA_DIR="$r" agents_report --view tokens --since 7d | tail -2)"
+[[ "$(rep --view tokens)" != *"kept by day"* ]] || fail "rollup: a 24h window says it counts whole days"
+pass "the daily rollup: a month of rows to a day each (calls kept), the same reports before and after (30d, 7d, 48h, 24h, today, 2h, the summary, a session), idempotent, late rows join their day, retention by whole day"
+
+# 12. One session's tokens for another view (agents show): origin, CLI,
+# project, its main conversation's latest model, calls, tokens, cost.
+want="S1	you	claude	app	claude-opus-5-5	3	2005000	1.31
+C1	you	codex	web	gpt-6-luna	1	520000	0.02
+S2	headless	claude	shop	claude-opus-5-5	2	111000	0.11"
+[[ "$(AGENTS_PRICES="" AGENTS_DATA_DIR="$d" agents_session_tokens S1 C1 nope S2 S1 'bad;id')" == "$want" ]] \
+    || fail "session tokens:"$'\n'"$(AGENTS_PRICES="" AGENTS_DATA_DIR="$d" agents_session_tokens S1 C1 nope S2 S1 'bad;id')"
+[[ "$(AGENTS_DATA_DIR="$d" agents_session_tokens S2)" == "S2	headless	claude	shop	claude-opus-5-5	2	111000	-" ]] || fail "session tokens with AGENTS_PRICES=off"
+[[ -z "$(AGENTS_DATA_DIR="$tmp/none" agents_session_tokens S1)" && -z "$(AGENTS_DATA_DIR="$d" agents_session_tokens)" ]] || fail "session tokens without data"
+pass "agents_session_tokens: a session's origin, CLI, project, model, calls, tokens and API-equivalent cost; nothing for one without tokens"
+
+# 13. The context view: the MCP servers sessions call and list, skills,
+# subagent types, the plugins enabled and what each brings, Codex's MCP
+# servers, and what is loaded or enabled but unused. Names and counts only:
+# no value from a config reaches it.
+cc="$tmp/ctx/claude"; cx="$tmp/ctx/codex"; pl="$cc/plugins/cache/mkt"
+mkdir -p "$pl/alpha/1.0/skills/a1" "$pl/alpha/1.0/skills/a2" "$pl/alpha/1.0/agents" "$pl/alpha/1.0/commands" "$pl/alpha/1.0/hooks" "$pl/beta/1.0/skills/b1" "$pl/delta/1.0/skills/d1" "$cx"
+touch "$pl/alpha/1.0/skills/a1/SKILL.md" "$pl/alpha/1.0/skills/a2/SKILL.md" "$pl/alpha/1.0/agents/x.md" "$pl/alpha/1.0/commands/c.md" "$pl/beta/1.0/skills/b1/SKILL.md"
+printf '{"mcpServers":{"alphadb":{"command":"npx","args":["--token","sk-arg-456"],"env":{"API_KEY":"sk-env-789"}}}}' > "$pl/alpha/1.0/.mcp.json"
+printf '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"sk-hook-1"}]}],"SessionStart":[]}}' > "$pl/alpha/1.0/hooks/hooks.json"
+printf '{"env":{"SECRET":"sk-live-123"},"enabledPlugins":{"alpha@mkt":true,"beta@mkt":true,"gamma@mkt":false,"delta@mkt":false,"bad name@x":true}}' > "$cc/settings.json"
+printf '{"version":2,"plugins":{"alpha@mkt":[{"installPath":"%s"}],"beta@mkt":[{"installPath":"%s"}],"gamma@mkt":[{"installPath":"/etc"}],"delta@mkt":[{"installPath":"%s"}]}}' \
+    "$pl/alpha/1.0" "$pl/beta/1.0" "$pl/delta/1.0" > "$cc/plugins/installed_plugins.json"
+cat > "$cx/config.toml" <<'EOF'
+model = "gpt-5.4"
+[mcp_servers.playwright]
+command = "npx"
+args = ["@playwright/mcp", "--secret", "sk-toml-111"]
+[mcp_servers.playwright.env]
+TOKEN = "sk-toml-222"
+[mcp_servers."docs.server"]
+url = "https://example.invalid/mcp"
+enabled = false
+[mcp_servers.used]
+command = "sk-toml-333"
+EOF
+c="$tmp/ctxd"; mkdir -p "$c"; cp "$d/tokens.tsv" "$c/"
+rows "$c" uses.tsv <<EOF
+600${T}claude${T}app${T}S1${T}main${T}mcp${T}claude-in-chrome${T}5
+600${T}claude${T}app${T}S1${T}main${T}listed${T}claude-in-chrome${T}20
+500${T}claude${T}shop${T}S2${T}main${T}listed${T}claude-in-chrome${T}18
+400${T}claude${T}shop${T}S2${T}main${T}listed${T}claude-in-chrome${T}22
+600${T}claude${T}app${T}S1${T}main${T}listed${T}github${T}40
+500${T}claude${T}shop${T}S2${T}main${T}listed${T}github${T}40
+691200${T}claude${T}app${T}S1${T}main${T}mcp${T}github${T}9
+300${T}claude${T}app${T}S1${T}main${T}mcp${T}plugin_alpha_alphadb${T}3
+300${T}claude${T}app${T}S1${T}main${T}listed${T}plugin_alpha_alphadb${T}7
+200${T}claude${T}app${T}S1${T}main${T}skill${T}update-config${T}2
+200${T}claude${T}shop${T}S2${T}main${T}skill${T}update-config${T}1
+200${T}claude${T}app${T}S1${T}main${T}agent${T}Explore${T}3
+200${T}claude${T}app${T}S1${T}main${T}agent${T}implementor-complex${T}1
+100${T}codex${T}web${T}C1${T}main${T}mcp${T}used${T}4
+EOF
+ctx() { CLAUDE_CONFIG_DIR="$cc" CODEX_HOME="$cx" AGENTS_DATA_DIR="$c" agents_report --view context "$@"; }
+out="$(ctx)"
+want="agents report · context · last 7d
+
+MCP SERVERS
+  SERVER                 CLI     CALLS  USED IN LISTED IN TOOLS  FROM
+  claude-in-chrome       claude      5        1         2    21  -
+  used                   codex       4        1         0     -  config
+  alphadb                claude      3        1         1     7  plugin alpha
+  github                 claude      0        0         2    40  -
+
+SKILLS
+  SKILL                           CALLS SESSIONS
+  update-config                       3        2
+
+SUBAGENTS
+  TYPE                           STARTED  TOKENS     %
+  Explore                              3    105k    3%
+  (unknown)                            0      6k    0%
+  implementor-complex                  1       0    0%
+
+PLUGINS  2 of 4 enabled (Claude Code)
+  alpha                  2 skills, 1 agent, 1 command, 1 MCP server, 2 hook events · 3 calls
+  beta                   1 skill, 0 agents, 0 commands, 0 MCP servers, 0 hook events · 0 calls
+CODEX MCP  playwright 0 · docs.server (off) 0 · used 4 (calls)
+
+CLEANUP CANDIDATES  loaded or enabled, unused in 7d
+  github: 40 tools listed in 2 sessions, never called — remove it from the MCP config, or scope it to the projects that use it
+  beta (plugin): 1 skill, 0 agents, 0 commands, 0 MCP servers, 0 hook events, none used — disable it (/plugin) to load less into every session
+  playwright (Codex MCP server): never called — remove it from ~/.codex/config.toml, or set enabled = false"
+printf '%s\n' "$out" > "$tmp/ctx.got"; printf '%s\n' "$want" > "$tmp/ctx.want"
+[[ "$out" == "$want" ]] || fail "context view:"$'\n'"$(diff "$tmp/ctx.want" "$tmp/ctx.got")"
+json="$(ctx --json)"
+jqt "$json" '.view == "context" and .window == "7d" and ([.mcp_servers[] | [.server, .cli, .source, .plugin, .calls, .sessions_used, .sessions_listed, .tools_listed]] == [["claude-in-chrome","claude",null,null,5,1,2,21],["used","codex","config",null,4,1,0,null],["alphadb","claude","plugin","alpha",3,1,1,7],["github","claude",null,null,0,0,2,40]])' "context json: servers" '.mcp_servers'
+jqt "$json" '[.plugins[] | [.plugin, .enabled, .installed, .skills, .agents, .commands, .mcp_servers, .hooks, .calls]] == [["alpha",true,true,2,1,1,1,2,3],["beta",true,true,1,0,0,0,0,0],["gamma",false,false,null,null,null,null,null,0],["delta",false,true,null,null,null,null,null,0]]' "context json: plugins" '.plugins'
+jqt "$json" '[.codex_mcp_servers[] | [.server, .enabled, .calls]] == [["playwright",true,0],["docs.server",false,0],["used",true,4]] and [.cleanup[] | [.kind, .name]] == [["mcp","github"],["plugin","beta"],["codex_mcp","playwright"]]' "context json: Codex, cleanup" '[.codex_mcp_servers, .cleanup]'
+jqt "$json" '.skills == [{"skill":"update-config","plugin":null,"calls":3,"sessions":2}] and ([.subagents[] | [.agent, .started]] == [["Explore",3],[null,0],["implementor-complex",1]])' "context json: skills, subagents" '[.skills, .subagents]'
+[[ "$out$json" != *sk-* && "$out$json" != *npx* && "$out$json" != *example.invalid* && "$out$json" != *"bad name"* ]] || fail "context: a config value reached the report"
+[[ "$(CLAUDE_CONFIG_DIR="$tmp/none" CODEX_HOME="$tmp/none" AGENTS_DATA_DIR="$tmp/none" agents_report --view context)" == *"  none called or listed in this window"*"PLUGINS  none in Claude Code's settings"*"CLEANUP CANDIDATES  none: everything loaded was used in 7d" ]] \
+    || fail "context without data: $(CLAUDE_CONFIG_DIR="$tmp/none" CODEX_HOME="$tmp/none" AGENTS_DATA_DIR="$tmp/none" agents_report --view context)"
+pass "context: MCP servers called and listed (tools per session), skills, subagent types, plugins and what each brings, Codex servers, cleanup candidates; never a config value"
 
 echo "All agents report tokens tests passed."

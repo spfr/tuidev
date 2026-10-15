@@ -1,94 +1,112 @@
 # lib/agents/awk/report_tokens.awk — where agent tokens went, for `agents
-# report` (--view tokens, the summary's Tokens line and the token insights):
-# tokens.tsv, compacts.tsv, limits.tsv and, when you keep one, a price file.
-# Part of report.awk's program; needs lib_json, lib_sort and report_fmt.
+# report` (--view tokens, the summary's Tokens line, the token insights and
+# the context view's subagents): tokens.tsv, compacts.tsv, limits.tsv and
+# the price files. Part of report.awk's program; needs lib_json, lib_sort,
+# lib_price and report_fmt.
 #
-# tokens.tsv, one row per API message (Claude Code; the scanner counts each
-# message id once) or per Codex turn:
-#   epoch cli project session agent model in cache_write cache_read out poll
+# tokens.tsv (tokens.sh documents it): one row per API message (Claude
+# Code; the scanner counts each message id once) or per Codex turn,
+#   epoch cli project session agent model in cache_write cache_read out poll cache_write_1h origin
+# (11 columns in rows written before 1h cache writes and origins were
+# recorded), and before them, for the days before yesterday, one row per
+# day and name: the same, then calls (14 columns, epoch the local midnight).
 # compacts.tsv: epoch cli project session agent trigger pre_tokens post_tokens
 # limits.tsv, the latest Codex reading: epoch cli used_percent window_minutes
 #   resets_at
-# The price file (AGENTS_PRICES; yours, none ship), USD per million tokens:
-#   model_prefix in cache_write cache_read out
-# one model per line, # comments; the longest prefix of a model wins, and of
-# a prefix listed twice the later line.
 #
-# A row counts in the window it was written in (epoch >= start). A total
-# counts every token, cache reads included; the cache hit rate is cache_read
-# over the input side (in + cache_write + cache_read). A subagent's worktree
-# counts as its repository (pfold); the files keep the name as runs.tsv does.
+# A row counts in the window it was written in (epoch >= start); a window
+# that starts before rawb (local midnight yesterday: before it, rows are
+# kept per day) counts from the local midnight of its first day (TSTART),
+# whole days, so it says the same whether the day rows are rolled up yet or
+# not. A total counts every token, cache reads included; the cache hit rate
+# is cache_read over the input side (in + cache_write + cache_read). Costs
+# are API-equivalent: what the tokens would cost at the price files' list
+# prices (lib_price), never what a subscription charges; a model without a
+# price is unpriced, never $0. A subagent's worktree counts as its
+# repository (pfold); the files keep the name as runs.tsv does.
 
 # --- Reading ----------------------------------------------------------------------
 
-# prices_load FILE — PN prices: PP[i] the prefix, Pin Pcw Pcr Pout per million
-# tokens; PRICED when there is one. A malformed line is reported and ignored.
-function prices_load(pf,   ln, f, n, nr) {
-    PN = 0; PRICED = 0
-    if (pf == "") return
-    while ((getline ln < pf) > 0) {
-        nr++
-        sub(/[ \t]+#.*$/, "", ln); sub(/^[ \t]+/, "", ln); sub(/[ \t\r]+$/, "", ln)
-        if (ln == "" || ln ~ /^#/) continue
-        n = split(ln, f, /[ \t]+/)
-        if (n != 5 || f[1] !~ /^[A-Za-z0-9][A-Za-z0-9._:\/@+-]*$/ || !usdnum(f[2]) || !usdnum(f[3]) || !usdnum(f[4]) || !usdnum(f[5])) {
-            printf "agents: %s:%d: not MODEL_PREFIX IN CACHE_WRITE CACHE_READ OUT (USD per million tokens), ignored\n", pf, nr > "/dev/stderr"
-            continue
-        }
-        PN++; PP[PN] = f[1]; Pin[PN] = f[2] + 0; Pcw[PN] = f[3] + 0; Pcr[PN] = f[4] + 0; Pout[PN] = f[5] + 0
-    }
-    close(pf)
-    PRICED = PN > 0
-}
-function usdnum(s) { return s ~ /^[0-9]+([.][0-9]+)?$/ || s ~ /^[.][0-9]+$/ }
-# price_of MODEL — the index of its price (the longest prefix), 0 for none.
-function price_of(m,   i, best, bl) {
-    if (m in PMx) return PMx[m]
-    best = 0; bl = 0
-    for (i = 1; i <= PN; i++) if (length(PP[i]) >= bl && substr(m, 1, length(PP[i])) == PP[i]) { best = i; bl = length(PP[i]) }
-    PMx[m] = best
-    return best
-}
-
-# tokens_load TOKENS COMPACTS LIMITS PRICES START — read the three files:
-#   TL 1 when tokens.tsv has any row at all; this window's TN model calls,
-#     Tin Tcw Tcr Tout Ttot, Tusd (the priced ones' estimate), Tunp (tokens of
-#     models without a price), Tpoll/TpollN (calls that only waited);
-#   by dimension D (model, cli, agent, project), keyed D SUBSEP name: Dn Din
-#     Dcw Dcr Dout Dtot Dusd Dunp; DKN[D] names, DK[D, 1..DKN[D]] first seen
-#     first; polling by agent: PAt[agent], PAO[1..PAC];
+# tokens_load TOKENS COMPACTS LIMITS PRICE_FILES START DIMS — read the files:
+#   TL 1 when tokens.tsv has any row at all; TSTART where this window's
+#     tokens start; this window's TN model calls, Tin Tcw Tcw1 Tcr Tout Ttot,
+#     Tusd (the priced ones' cost), Tunp (tokens of models without a price),
+#     Tpoll/TpollN (calls that only waited);
+#   by each dimension D in DIMS (of model, cli, agent, project, session,
+#     origin: TDIMS[1..TDN]), keyed D SUBSEP name: Dn Din Dcw Dcw1 Dcr Dout
+#     Dtot Dusd Dunp, Dss (origin: its sessions); DKN[D] names, DK[D,
+#     1..DKN[D]]; with session, a session's project, CLI and origin: SPj SCl
+#     SOr; polling by agent: PAt[agent], PAO[1..PAC];
 #   compactions (compacts_load) and the Codex plan (limits_load).
-function tokens_load(tf, cf, lf, pf, start,   ln, f, d, k, i, t, u, p, nm, poll) {
-    prices_load(pf)
-    TL = 0; TN = 0; Tin = Tcw = Tcr = Tout = Ttot = Tusd = Tunp = Tpoll = TpollN = 0; PAC = 0
-    split("model cli agent project", TDIMS, " ")
-    while ((getline ln < tf) > 0) {
-        if (split(ln, f, "\t") < 11 || f[1] !~ /^[0-9]+$/) continue
-        if (f[7] !~ /^[0-9]+$/ || f[8] !~ /^[0-9]+$/ || f[9] !~ /^[0-9]+$/ || f[10] !~ /^[0-9]+$/) continue
-        TL = 1
-        if (f[1] + 0 < start) continue
-        for (i = 2; i <= 6; i++) if (f[i] == "") f[i] = "-"
-        t = f[7] + f[8] + f[9] + f[10]; poll = f[11] == "1"
-        TN++; Tin += f[7]; Tcw += f[8]; Tcr += f[9]; Tout += f[10]; Ttot += t
-        u = -1
-        if (PRICED && (p = price_of(f[6]))) u = (f[7] * Pin[p] + f[8] * Pcw[p] + f[9] * Pcr[p] + f[10] * Pout[p]) / 1e6
-        if (u >= 0) Tusd += u; else Tunp += t
-        if (poll) {
-            Tpoll += t; TpollN++
-            if (!(f[5] in PAt)) PAO[++PAC] = f[5]
-            PAt[f[5]] += t
-        }
-        TRow[2] = f[6]; TRow[3] = f[2]; TRow[4] = f[5]; TRow[5] = pfold(f[3])
-        for (d = 1; d <= 4; d++) {
-            nm = TRow[d + 1]; k = TDIMS[d] SUBSEP nm
-            if (!(k in Dn)) DK[TDIMS[d], ++DKN[TDIMS[d]]] = nm
-            Dn[k]++; Din[k] += f[7]; Dcw[k] += f[8]; Dcr[k] += f[9]; Dout[k] += f[10]; Dtot[k] += t
-            if (u >= 0) Dusd[k] += u; else Dunp[k] += t
-        }
+# The rows are summed by name first (one key per model, cli, agent,
+# project, session, poll and origin), then folded into the dimensions a
+# view needs: a month of rows costs one split each.
+function tokens_load(tf, cf, lf, pfs, start, dims,   t, w, k, i, kp, ks, ko) {
+    prices_load(pfs)
+    TL = 0; TN = 0; Tin = Tcw = Tcw1 = Tcr = Tout = Ttot = Tusd = Tunp = Tpoll = TpollN = 0; PAC = 0; KN = 0
+    TSTART = start + 0 < rawb + 0 ? start - (start + off) % 86400 : start + 0
+    TDN = split(dims, TDIMS, " "); split("", TDON)
+    for (i = 1; i <= TDN; i++) TDON[TDIMS[i]] = 1
+    ks = ("session" in TDON) || ("origin" in TDON); kp = ks || ("project" in TDON); ko = ("origin" in TDON)
+    # Into $0 (FS is a tab): fields split as they are read, the fastest way
+    # through a month of rows; the numbers checked in one match.
+    while ((getline < tf) > 0) {
+        if (NF < 11 || ($1 "," $7 "," $8 "," $9 "," $10 "," (NF >= 14 ? $14 : 0)) !~ /^[0-9]+,[0-9]+,[0-9]+,[0-9]+,[0-9]+,[0-9]+$/) continue
+        TL = 1; t = $1 + 0
+        if (NF >= 14) { if (t + 43200 < TSTART) continue; w = $14 + 0 }   # a day row: its day is in
+        else { if (t < TSTART) continue; w = 1 }
+        for (i = 2; i <= 6; i++) if ($i == "") $i = "-"
+        # The names no dimension of this view shows are left out of the key
+        # (the model prices, the agent tells the polling apart).
+        k = $6 SUBSEP $2 SUBSEP $5 SUBSEP (kp ? $3 : "-") SUBSEP (ks ? $4 : "-") SUBSEP ($11 == "1" ? 1 : 0) SUBSEP (ko && NF >= 13 && $13 != "" ? $13 : "-")
+        if (!(k in Kn)) KO[++KN] = k
+        Kn[k] += w; Ki[k] += $7; Kw[k] += $8; Kr[k] += $9; Ko[k] += $10
+        if (NF >= 12 && $12 ~ /^[0-9]+$/) Kh[k] += $12
     }
     close(tf)
+    for (i = 1; i <= KN; i++) tokens_fold(KO[i])
+    most(SPt, SPj); most(SCt, SCl); most(SOt, SOr)
     compacts_load(cf, start)
     limits_load(lf)
+}
+# most ARR OUT — OUT[session]: of ARR[session, name] (tokens), the name with
+# the most (ties: the first by name): a session's project, CLI and origin,
+# whatever order the rows came in ("-" for a session with none).
+function most(arr, out,   k, w, bv) {
+    for (k in SPj) out[k] = "-"
+    for (k in arr) {
+        split(k, w, SUBSEP)
+        if (!(w[1] in bv) || arr[k] > bv[w[1]] || (arr[k] == bv[w[1]] && w[2] < out[w[1]])) { out[w[1]] = w[2]; bv[w[1]] = arr[k] }
+    }
+}
+# tokens_fold KEY — one summed key into the totals and every dimension.
+function tokens_fold(k,   q, kn, ki, kw, kh, kr, ko, t, u, p, d, nm, dk, s, pj) {
+    split(k, q, SUBSEP)
+    kn = Kn[k]; ki = Ki[k]; kw = Kw[k]; kh = Kh[k] + 0; kr = Kr[k]; ko = Ko[k]; t = ki + kw + kr + ko
+    TN += kn; Tin += ki; Tcw += kw; Tcw1 += kh; Tcr += kr; Tout += ko; Ttot += t
+    u = -1
+    if (PRICED && (p = price_of(q[1]))) u = usd_of(p, ki, kw, kh, kr, ko)
+    if (u >= 0) Tusd += u; else Tunp += t
+    if (q[6]) {
+        Tpoll += t; TpollN += kn
+        if (!(q[3] in PAt)) PAO[++PAC] = q[3]
+        PAt[q[3]] += t
+    }
+    if (!(q[4] in PFc)) PFc[q[4]] = pfold(q[4])
+    s = q[5]; pj = PFc[q[4]]
+    TRow["model"] = q[1]; TRow["cli"] = q[2]; TRow["agent"] = q[3]; TRow["project"] = pj; TRow["session"] = s; TRow["origin"] = q[7]
+    for (d = 1; d <= TDN; d++) {
+        nm = TRow[TDIMS[d]]; dk = TDIMS[d] SUBSEP nm
+        if (!(dk in Dn)) DK[TDIMS[d], ++DKN[TDIMS[d]]] = nm
+        Dn[dk] += kn; Din[dk] += ki; Dcw[dk] += kw; Dcw1[dk] += kh; Dcr[dk] += kr; Dout[dk] += ko; Dtot[dk] += t
+        if (u >= 0) Dusd[dk] += u; else Dunp[dk] += t
+    }
+    if ("session" in TDON) {
+        SPj[s] = ""; SPt[s, pj] += t; SCt[s, q[2]] += t
+        if (q[3] == "main" && q[7] != "-") SOt[s, q[7]] += t
+    }
+    dk = q[7] SUBSEP s
+    if (("origin" in TDON) && !(dk in Dssn)) { Dssn[dk] = 1; Dss["origin" SUBSEP q[7]]++ }
 }
 
 # compacts_load FILE START — this window's CN compactions, CAUTO and CMAN of
@@ -163,19 +181,33 @@ function tsorted(d,   i, n) {
     sortk(TSV, TS, n)
     return n
 }
-# dusd K — a row's estimate: "-" when none of its tokens has a price.
-function dusd(k) { return Dtot[k] > Dunp[k] ? usd(Dusd[k]) : "-" }
-# tname D NAME — a name as the tables show it.
-function tname(d, s) { return d == "project" ? proj(s) : d == "agent" ? agentn(s) : s }
+# dusd K — a row's cost: "unpriced" when none of its tokens has a price.
+function dusd(k) { return Dtot[k] > Dunp[k] ? usd(Dusd[k]) : "unpriced" }
+# tname D NAME — a name as the tables show it: a session as its project
+# and the start of its id.
+function tname(d, s) {
+    if (d == "session") return (s in SPj ? proj(SPj[s]) " " : "") substr(s, 1, 8)
+    return d == "project" ? proj(s) : d == "agent" ? agentn(s) : d == "origin" ? (s == "-" ? "(unknown)" : s) : s
+}
+# unpriced_models — how many models have no price at all.
+function unpriced_models(   i, k, n) {
+    n = 0
+    for (i = 1; i <= DKN["model"]; i++) { k = "model" SUBSEP DK["model", i]; if (Dtot[k] == Dunp[k]) n++ }
+    return n
+}
+# costed — show costs: there are prices, and some of this window's tokens have one.
+function costed() { return PRICED && Ttot > Tunp }
 
 # --- The view -----------------------------------------------------------------------
 
-# view_tokens — totals, then by model, CLI, agent type and project; polling,
-# compactions and the Codex plan's headroom.
-function view_tokens(   o, d, i, n, k, s, a, w) {
+# view_tokens — totals, then by model, CLI, agent type, project, session and
+# origin; polling, compactions and the Codex plan's headroom.
+function view_tokens(   o, d, i, n, s, a, w) {
     if (json) {
-        o = jhead("tokens") ",\"data\":" jb(TL) ",\"priced\":" jb(PRICED) ",\"totals\":" jtrow(Ttot, TN, Tin, Tcw, Tcr, Tout, PRICED && Ttot > Tunp ? Tusd : -1, Tunp)
-        for (d = 1; d <= 4; d++) o = o ",\"" TDIMS[d] "s\":" jtdim(TDIMS[d])
+        o = jhead("tokens") ",\"data\":" jb(TL) ",\"priced\":" jb(PRICED) ",\"tokens_since\":" TSTART \
+            ",\"prices\":" (PRICED ? "{\"basis\":\"api_list\",\"as_of\":" opt(PASOF) "}" : "null") \
+            ",\"totals\":" jtrow(Ttot, TN, Tin, Tcw, Tcw1, Tcr, Tout, costed() ? Tusd : -1, Tunp)
+        for (d = 1; d <= TDN; d++) o = o ",\"" TDIMS[d] "s\":" jtdim(TDIMS[d])
         o = o ",\"polling\":{\"calls\":" TpollN ",\"tokens\":" jbig(Tpoll) ",\"pct\":" pc1(Tpoll, Ttot) ",\"agents\":["
         n = polling_sorted()
         for (i = 1; i <= n; i++) o = o (i > 1 ? "," : "") "{\"agent\":" opt(PS[i]) ",\"tokens\":" jbig(PAt[PS[i]]) "}"
@@ -201,12 +233,14 @@ function view_tokens(   o, d, i, n, k, s, a, w) {
     if (!TN) print "no tokens in this window"
     else {
         printf "%sTOKENS%s %s in %d model %s \302\267 %s cache hits%s\n", b, e, tk(Ttot), TN, nouns(TN, "call"), hitp(Tcr, Tin, Tcw), \
-            (PRICED && Ttot > Tunp ? " \302\267 est. " usd(Tusd) : "")
-        printf "  in %s \302\267 cache write %s \302\267 cache read %s \302\267 out %s\n\n", tk(Tin), tk(Tcw), tk(Tcr), tk(Tout)
+            (costed() ? " \302\267 " usd(Tusd) " API-equivalent" : "")
+        printf "  in %s \302\267 cache write %s%s \302\267 cache read %s \302\267 out %s\n\n", tk(Tin), tk(Tcw), (Tcw1 > 0 ? " (1h " tk(Tcw1) ")" : ""), tk(Tcr), tk(Tout)
         ttable_tokens("model", "MODEL", 10)
         ttable_tokens("cli", "CLI", 10)
         ttable_tokens("agent", "AGENT", 10)
         ttable_tokens("project", "PROJECT", 8)
+        ttable_tokens("session", "SESSION", 8)
+        ttable_origins()
         printf "%sPOLLING%s  %s\n", b, e, (TpollN ? tk(Tpoll) " tokens (" pct(Tpoll, Ttot) ") in " TpollN " model " nouns(TpollN, "call") " that only waited" : "none")
         n = polling_sorted()
         if (n) {
@@ -222,13 +256,14 @@ function view_tokens(   o, d, i, n, k, s, a, w) {
         print "  most        " s
     }
     if (LIM) codex_plan()
-    if (PRICED && TN) {
-        print ""
-        n = 0; for (i = 1; i <= DKN["model"]; i++) { k = "model" SUBSEP DK["model", i]; if (Dtot[k] == Dunp[k]) n++ }
-        th("est. $: an estimate from " pbase() " (USD per million tokens)" (n ? "; " n " " nouns(n, "model") " without a price (-) left out" : ""))
+    if (TN && (costed() || TSTART < start)) print ""
+    if (TN && costed()) {
+        n = unpriced_models()
+        th("API $: what these tokens would cost at API list prices" (PASOF != "" ? " (as of " PASOF ")" : "") \
+            ", not what a subscription charges" (n ? "; " n " " nouns(n, "model") " unpriced, left out" : ""))
     }
+    if (TN && TSTART < start) th("tokens before yesterday are kept by day: this window counts them from " dayhm(TSTART))
 }
-function pbase(   s) { s = pf; sub(/.*\//, "", s); return s }
 # codex_plan — the Codex plan's headroom, from its latest reading.
 function codex_plan() {
     if (Lreset > 0 && Lreset <= now)
@@ -239,13 +274,23 @@ function codex_plan() {
 # ttable_tokens D TITLE LIM — one breakdown, at most LIM rows.
 function ttable_tokens(d, title, lim,   n, i, k, nm) {
     n = tsorted(d)
-    th("  " lc(title, 22) " " rc("TOKENS", 7) " " rc("%", 5) " " rc("IN", 7) " " rc("C.WRITE", 8) " " rc("C.READ", 7) " " rc("OUT", 7) " " rc("HIT", 5) (PRICED ? " " rc("EST $", 9) : ""))
+    th("  " lc(title, 22) " " rc("TOKENS", 7) " " rc("%", 5) " " rc("IN", 7) " " rc("C.WRITE", 8) " " rc("C.READ", 7) " " rc("OUT", 7) " " rc("HIT", 5) (PRICED ? " " rc("API $", 9) : ""))
     for (i = 1; i <= n && i <= lim; i++) {
         nm = TS[i]; k = d SUBSEP nm
         print "  " lc(cut(tname(d, nm), 22), 22) " " rc(tk(Dtot[k]), 7) " " rc(pct(Dtot[k], Ttot), 5) " " rc(tk(Din[k]), 7) " " rc(tk(Dcw[k]), 8) \
             " " rc(tk(Dcr[k]), 7) " " rc(tk(Dout[k]), 7) " " rc(hitp(Dcr[k], Din[k], Dcw[k]), 5) (PRICED ? " " rc(dusd(k), 9) : "")
     }
     if (n > lim) th("  ... " (n - lim) " more (agents report --view tokens --json)")
+    print ""
+}
+# ttable_origins — who drove the tokens: you, headless, subagents, forks.
+function ttable_origins(   n, i, k) {
+    n = tsorted("origin")
+    th("  " lc("ORIGIN", 22) " " rc("SESSIONS", 8) " " rc("TOKENS", 7) " " rc("%", 5) (PRICED ? " " rc("API $", 9) : ""))
+    for (i = 1; i <= n; i++) {
+        k = "origin" SUBSEP TS[i]
+        print "  " lc(tname("origin", TS[i]), 22) " " rc(Dss[k] + 0, 8) " " rc(tk(Dtot[k]), 7) " " rc(pct(Dtot[k], Ttot), 5) (PRICED ? " " rc(dusd(k), 9) : "")
+    }
     print ""
 }
 # polling_sorted — PS[1..n], the agent types that polled, the most tokens first.
@@ -262,17 +307,20 @@ function compacts_sorted(   i, v) {
     sortk(v, CS, CSC)
     return CSC
 }
-function jtrow(t, n, i, cw, cr, o, u, unp) {
-    return "{\"calls\":" n ",\"in\":" jbig(i) ",\"cache_write\":" jbig(cw) ",\"cache_read\":" jbig(cr) ",\"out\":" jbig(o) ",\"total\":" jbig(t) \
+function jtrow(t, n, i, cw, cw1, cr, o, u, unp) {
+    return "{\"calls\":" n ",\"in\":" jbig(i) ",\"cache_write\":" jbig(cw) ",\"cache_write_1h\":" jbig(cw1) ",\"cache_read\":" jbig(cr) ",\"out\":" jbig(o) ",\"total\":" jbig(t) \
         ",\"cache_hit_pct\":" pc1(cr, i + cw + cr) ",\"est_usd\":" jusd(u) ",\"unpriced_tokens\":" (PRICED ? jbig(unp) : "null") "}"
 }
-# jtdim D — dimension D as a JSON array, every name, the most tokens first.
-function jtdim(d,   n, i, k, o, r) {
+# jtdim D — dimension D as a JSON array, every name, the most tokens first;
+# a session with its project, CLI and origin, an origin with its sessions.
+function jtdim(d,   n, i, k, o, r, x) {
     n = tsorted(d); o = ""
     for (i = 1; i <= n; i++) {
         k = d SUBSEP TS[i]
-        r = jtrow(Dtot[k], Dn[k], Din[k], Dcw[k], Dcr[k], Dout[k], PRICED ? (Dtot[k] > Dunp[k] ? Dusd[k] : -1) : -1, Dunp[k])
-        o = o (i > 1 ? "," : "") "{\"" d "\":" (d == "agent" || d == "project" ? opt(TS[i]) : js(TS[i])) ",\"pct\":" pc1(Dtot[k], Ttot) "," substr(r, 2)
+        r = jtrow(Dtot[k], Dn[k], Din[k], Dcw[k], Dcw1[k], Dcr[k], Dout[k], PRICED ? (Dtot[k] > Dunp[k] ? Dusd[k] : -1) : -1, Dunp[k])
+        x = d == "session" ? ",\"project\":" opt(SPj[TS[i]]) ",\"cli\":" js(SCl[TS[i]]) ",\"origin\":" opt(SOr[TS[i]]) \
+            : d == "origin" ? ",\"sessions\":" (Dss[k] + 0) : ""
+        o = o (i > 1 ? "," : "") "{\"" d "\":" (d == "cli" || d == "model" ? js(TS[i]) : opt(TS[i])) x ",\"pct\":" pc1(Dtot[k], Ttot) "," substr(r, 2)
     }
     return "[" o "]"
 }
@@ -283,13 +331,13 @@ function jtdim(d,   n, i, k, o, r) {
 function tokens_text() {
     if (!TL) return
     printf "%sTOKENS%s  %s", b, e, (TN ? tk(Ttot) " \302\267 " hitp(Tcr, Tin, Tcw) " cache hits \302\267 " pct(Tpoll, Ttot) " polling" : "none in this window")
-    if (TN && PRICED && Ttot > Tunp) printf " \302\267 est. %s", usd(Tusd)
+    if (TN && costed()) printf " \302\267 %s API-equivalent", usd(Tusd)
     if (CN) printf " \302\267 %d %s", CN, nouns(CN, "compaction")
-    printf "\n%s  by model, agent and project: agents report --view tokens%s\n\n", dim, e
+    printf "\n%s  by model, agent, session and origin: agents report --view tokens%s\n\n", dim, e
 }
 function tokens_json() {
     if (!TL) return "null"
-    return "{\"calls\":" TN ",\"total\":" jbig(Ttot) ",\"in\":" jbig(Tin) ",\"cache_write\":" jbig(Tcw) ",\"cache_read\":" jbig(Tcr) ",\"out\":" jbig(Tout) \
+    return "{\"calls\":" TN ",\"total\":" jbig(Ttot) ",\"in\":" jbig(Tin) ",\"cache_write\":" jbig(Tcw) ",\"cache_write_1h\":" jbig(Tcw1) ",\"cache_read\":" jbig(Tcr) ",\"out\":" jbig(Tout) \
         ",\"cache_hit_pct\":" pc1(Tcr, Tin + Tcw + Tcr) ",\"poll_tokens\":" jbig(Tpoll) ",\"poll_pct\":" pc1(Tpoll, Ttot) \
-        ",\"est_usd\":" (PRICED && Ttot > Tunp ? jusd(Tusd) : "null") ",\"compactions\":" CN "}"
+        ",\"est_usd\":" (costed() ? jusd(Tusd) : "null") ",\"compactions\":" CN "}"
 }

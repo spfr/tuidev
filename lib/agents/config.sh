@@ -56,7 +56,7 @@ _agents_conf_valid() {
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
         AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
-        AGENTS_PRICES)      [[ -z "$2" || "$2" =~ ^(/|~/)[^[:cntrl:]]+$ ]] ;;
+        AGENTS_PRICES)      [[ -z "$2" || "$2" == off || "$2" =~ ^(/|~/)[^[:cntrl:]]+$ ]] ;;
         AGENTS_HOOK_REAP|AGENTS_HOOK_LOG) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_JOB_TEST|AGENTS_JOB_BUILD|AGENTS_JOB_SERVER|AGENTS_JOB_BROWSER|AGENTS_JOB_MCP) _agents_ere_ok "$2" ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
@@ -137,9 +137,10 @@ AGENTS_AUTO_REAP="${AGENTS_AUTO_REAP:-0}"
 _agents_env_check AGENTS_HISTORY 1
 _agents_env_check AGENTS_HISTORY_DAYS 30
 _agents_env_check AGENTS_AUTO_REAP 0
-# The token report's cost estimate: a price file you write (USD per million
-# tokens; none ship, see configs/agents/agents-prices.example.tsv), an
-# absolute or ~/ path. Without the file the report shows tokens only.
+# The reports' API-equivalent cost: API list prices ship (lib/agents/
+# prices.tsv); this file of yours (an absolute or ~/ path; USD per million
+# tokens, see configs/agents/agents-prices.example.tsv) changes or adds
+# prices, read after them. off: no cost anywhere.
 _agents_env_check AGENTS_PRICES ""
 AGENTS_PRICES="${AGENTS_PRICES:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/agents-prices.tsv}"
 # Job types: where an agent tree's CPU goes. Each process in an agent tree (or
