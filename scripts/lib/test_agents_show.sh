@@ -74,7 +74,7 @@ _agents_cwds() {
 }
 _agents_start() { printf '%s\n' "$SNAP" | awk -v p="$1" '$1 == p { print $9 "_" $10 "_" $11 "_" $12 "_" $13; exit }'; }
 _agents_tmux_up() { return 0; }
-_agents_panes() { printf '710\twork:1.2\n'; }
+_agents_panes() { printf '710\twork:1.2\t%%15\n'; }
 _agents_tty() { case "$1" in 830) echo /dev/ttys003 ;; 600|601) echo /dev/ttys001 ;; 960) echo /dev/ttys006 ;; esac; }
 _agents_notify() { echo "notified: $1" >> "$tmp/log/notify"; }
 kill() { [[ "${1:-}" == -0 ]] && return 0; echo "kill $*" >> "$tmp/log/kill"; }
@@ -103,11 +103,12 @@ clear_logs() { rm -f "$tmp/log/"*; }
 
 # --- Where each process lives -----------------------------------------------------------
 w() { agents_where "$1" "$SNAP" "$(_agents_panes)" | head -1; }
-[[ "$(w 601)" == $'app\tGhostty\t600\tclaude' ]]        || fail "a command in a Ghostty tab: $(w 601)"
-[[ "$(w 721)" == $'tmux\twork:1.2\t720\tclaude' ]]      || fail "an MCP server in a tmux pane: $(w 721)"
-[[ "$(w 820)" == $'herdr\t-\t820\tclaude' ]]            || fail "a Herdr pane: $(w 820)"
-[[ "$(w 920)" == $'ssh\t-\t920\tclaude' ]]              || fail "over ssh: $(w 920)"
-[[ "$(w 960)" == $'app\tiTerm\t960\tcodex' ]]           || fail "iTerm: $(w 960)"
+[[ "$(w 601)" == $'app\tGhostty\t600\tclaude\t-' ]]     || fail "a command in a Ghostty tab: $(w 601)"
+[[ "$(w 721)" == $'tmux\twork:1.2\t720\tclaude\t%15' ]] || fail "an MCP server in a tmux pane: $(w 721)"
+[[ "$(w 820)" == $'herdr\t-\t820\tclaude\t-' ]]         || fail "a Herdr pane: $(w 820)"
+[[ "$(w 920)" == $'ssh\t-\t920\tclaude\t-' ]]           || fail "over ssh: $(w 920)"
+[[ "$(w 960)" == $'app\tiTerm\t960\tcodex\t-' ]]        || fail "iTerm: $(w 960)"
+[[ "$(agents_where 721 "$SNAP" $'710\twork:1.2' | head -1)" == $'tmux\twork:1.2\t720\tclaude\twork:1.2' ]] || fail "a pane map without ids: $(agents_where 721 "$SNAP" $'710\twork:1.2' | head -1)"
 [[ "$(agents_where 820 "$SNAP" "" | grep '^client')" == $'client\t830\tGhostty' ]] || fail "the Herdr client's app"
 [[ -z "$(agents_where 4242 "$SNAP" "")" ]]               || fail "a pid that is not running"
 recs="$(printf '%s\n' "$SNAP" | agents_classify "" "" "$(_agents_panes)" | awk -F '\t' '$1 == "where"' | LC_ALL=C sort)"
@@ -119,8 +120,8 @@ pass "where: tmux pane, Herdr, ssh, or the terminal app, from each process's anc
 clear_logs
 out="$(agents_jump 721)" || fail "jump to a tmux pane failed: $out"
 [[ "$out" == "pid 721: tmux pane work:1.2" ]] || fail "jump output: $out"
-[[ "$(log tmux)" == *"select-window -t work:1.2"*"select-pane -t work:1.2"*"switch-client -t work:1.2"* ]] || fail "tmux calls: $(log tmux)"
-pass "jump: a tmux pane is selected and the last client switched to it"
+[[ "$(log tmux)" == *"select-window -t %15"*"select-pane -t %15"*"switch-client -t %15"* ]] || fail "tmux calls: $(log tmux)"
+pass "jump: a tmux pane is selected by its id (shown by its place) and the last client switched to it"
 
 clear_logs
 out="$(agents_jump 820)" || fail "jump to Herdr failed: $out"
@@ -167,7 +168,7 @@ pass "jump: a terminal tab by tty (Ghostty, iTerm, Terminal); ssh and gone pids 
 
 # --- agents peek ------------------------------------------------------------------------
 clear_logs
-out="$(agents_peek 721 60)"; [[ "$out" == *"tmux work:1.2"*"pane text" && "$(log tmux)" == *"capture-pane -p -J -S -60 -t work:1.2"* ]] || fail "peek tmux: $out / $(log tmux)"
+out="$(agents_peek 721 60)"; [[ "$out" == *"tmux work:1.2"*"pane text" && "$(log tmux)" == *"capture-pane -p -J -S -60 -t %15"* ]] || fail "peek tmux: $out / $(log tmux)"
 out="$(agents_peek 820)"; [[ "$out" == *"Herdr w2:p1"*"herdr pane text" && "$(log herdr)" == *"pane read w2:p1 --lines 40 --format text"* ]] || fail "peek Herdr: $out / $(log herdr)"
 # Peek never guesses: a pane it cannot tell is not read, even with another
 # agent alone in the directory (and a session id it knows).

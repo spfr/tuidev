@@ -37,17 +37,20 @@ _agents_tmux_up() {
     [[ -S "$s" ]] && command -v tmux >/dev/null 2>&1
 }
 
-# _agents_panes — "pane_pid<TAB>session:window.pane" for every tmux pane;
+# _agents_panes — "pane_pid<TAB>session:window.pane<TAB>pane_id" for every
+# tmux pane: the place people read, and the id (%N) tmux commands target (a
+# place names another pane once windows are renumbered or a name repeats);
 # nothing when no server runs (or it does not answer within a second).
 _agents_panes() {
     _agents_tmux_up || return 0
-    _agents_timeout 1 tmux list-panes -a -F '#{pane_pid}	#{session_name}:#{window_index}.#{pane_index}' 2>/dev/null
+    _agents_timeout 1 tmux list-panes -a -F '#{pane_pid}	#{session_name}:#{window_index}.#{pane_index}	#{pane_id}' 2>/dev/null
     return 0
 }
 
 # agents_where PID [SNAPSHOT [PANES]] — awk/where.awk's answer: first
-# "HOW<TAB>PLACE<TAB>ROOT<TAB>KIND" (HOW: tmux, herdr, ssh, app or -; ROOT
-# the agent session PID is or runs under), then the Herdr clients' "client
+# "HOW<TAB>PLACE<TAB>ROOT<TAB>KIND<TAB>TARGET" (HOW: tmux, herdr, ssh, app or
+# -; ROOT the agent session PID is or runs under; TARGET the tmux pane's id),
+# then the Herdr clients' "client
 # PID APP" lines; nothing when PID is not running. The snapshot and the pane
 # map are read when not given.
 agents_where() {
@@ -200,13 +203,14 @@ _agents_herdr_target() {
 # _agents_jump_to PID SNAPSHOT — go to PID's place (agents_jump); its outcome
 # on stdout, false when there is nowhere to go.
 _agents_jump_to() {
-    local pid="$1" snap="$2" where how place root kind client app="" tty="" pane
+    local pid="$1" snap="$2" where how place root kind target client app="" tty="" pane
     where="$(agents_where "$pid" "$snap" "$(_agents_panes)")"
-    IFS=$'\t' read -r how place root kind <<<"${where%%$'\n'*}"
+    IFS=$'\t' read -r how place root kind target <<<"${where%%$'\n'*}"
     case "$how" in
         tmux)
-            tmux select-window -t "$place" 2>/dev/null; tmux select-pane -t "$place" 2>/dev/null
-            tmux switch-client -t "$place" 2>/dev/null
+            [[ -n "$target" && "$target" != - ]] || target="$place"
+            tmux select-window -t "$target" 2>/dev/null; tmux select-pane -t "$target" 2>/dev/null
+            tmux switch-client -t "$target" 2>/dev/null
             IFS=$'\t' read -r client tty <<<"$(_agents_tmux_client)"
             [[ -z "$client" ]] || app="$(agents_where "$client" "$snap" "" | awk -F '\t' 'NR == 1 && $1 == "app" { print $2 }')"
             echo "tmux pane $place" ;;
@@ -252,13 +256,14 @@ agents_jump() {
 # lines of the tmux pane PID runs in, or of its Herdr pane (herdr pane read),
 # as plain text.
 agents_peek() {
-    local pid lines="${2:-40}" how place root kind pane
+    local pid lines="${2:-40}" how place root kind target pane
     _agents_pid_token pid "${1:-}" "agents peek PID[@START] [LINES]" || return
     [[ "$lines" =~ ^[1-9][0-9]{0,3}$ && $lines -le 2000 ]] || { echo "usage: agents peek PID[@START] [LINES] (1 to 2000)" >&2; return 2; }
-    IFS=$'\t' read -r how place root kind <<<"$(agents_where "$pid" | head -1)"
+    IFS=$'\t' read -r how place root kind target <<<"$(agents_where "$pid" | head -1)"
     case "$how" in
-        tmux)  printf '%s── tmux %s · pid %s ──%s\n' "$C_DIM" "$place" "$pid" "$C_0"
-               tmux capture-pane -p -J -S "-$lines" -t "$place" ;;
+        tmux)  [[ -n "$target" && "$target" != - ]] || target="$place"
+               printf '%s── tmux %s · pid %s ──%s\n' "$C_DIM" "$place" "$pid" "$C_0"
+               tmux capture-pane -p -J -S "-$lines" -t "$target" ;;
         herdr) _agents_herdr_target pane "$pid" "$root" "$kind"   # never a guess: it prints what it reads
                [[ -n "$pane" ]] || { echo "agents: pid $pid runs in Herdr, but its pane was not found" >&2; return 1; }
                printf '%s── Herdr %s · pid %s ──%s\n' "$C_DIM" "$pane" "$pid" "$C_0"
