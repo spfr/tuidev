@@ -1312,32 +1312,50 @@ printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s"\n[[ -z "$TN_FAIL" ]]\n' "$tmp/t
 printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s"\n' "$tmp/jump.argv" > "$tmp/odd'dir \$(touch $tmp/pwned)/agents"
 chmod +x "$tmp/tn/terminal-notifier" "$tmp/odd'dir \$(touch $tmp/pwned)/agents"
 tn() { ( PATH="$tmp/osa:$PATH"; TUIDEV_TERMINAL_NOTIFIER="$tmp/tn/terminal-notifier" AGENTS_NOTIFY=true _agents_notify "$@" ); }
+# tg TOKEN BUNDLE — a TARGET as agents_root_of prints it.
+tg() { printf '%s\tGhostty\t%s\t-\n' "$1" "$2"; }
 : > "$tmp/osa.log"
 tn "Nothing to reap"
 [[ "$(cat "$tmp/tn.argv")" == $'-title\nagents\n-message\nNothing to reap' && ! -s "$tmp/osa.log" ]] \
     || fail "terminal-notifier, no session: $(cat "$tmp/tn.argv")"
 tok="4242@Wed_Oct_14_08:00:00_2026"
-( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn 'Stopped 1 in "x" $(touch '"$tmp"'/pwned) `id`' "$tok" com.mitchellh.ghostty )
+( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn 'Stopped 1 in "x" $(touch '"$tmp"'/pwned) `id`' "$(tg "$tok" com.mitchellh.ghostty)" agents-reap )
 argv="$(cat "$tmp/tn.argv")"
 [[ "$(sed -n 1,4p "$tmp/tn.argv")" == $'-title\nagents\n-message\nStopped 1 in "x" $(touch '"$tmp"'/pwned) `id`' ]] || fail "the message is not one argument: $argv"
-[[ "$argv" == *$'\n-group\nagents-'"$tok"$'\n'* && "$argv" == *$'\n-activate\ncom.mitchellh.ghostty' ]] || fail "group or activate: $argv"
+[[ "$argv" == *$'\n-group\nagents-reap-'"$tok"$'\n'* && "$argv" == *$'\n-activate\ncom.mitchellh.ghostty' ]] || fail "group or activate: $argv"
 cmd="$(sed -n '/^-execute$/{n;p;}' "$tmp/tn.argv")"
 [[ "$cmd" == "PATH='"*"' '$tmp/odd'\''dir \$(touch $tmp/pwned)/agents' jump --notify $tok" ]] || fail "execute: $cmd"
 [[ "$cmd" != *Stopped* && "$cmd" != *'`id`'* ]] || fail "the message reached the execute string: $cmd"
 /bin/sh -c "$cmd"
 [[ "$(cat "$tmp/jump.argv")" == $'jump\n--notify\n'"$tok" && ! -e "$tmp/pwned" ]] || fail "the click: $(cat "$tmp/jump.argv")"
-( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn "x" '4242@x; touch y' 'com.x;touch' )
-[[ "$(cat "$tmp/tn.argv")" != *-execute* && "$(cat "$tmp/tn.argv")" != *-activate* ]] || fail "an unchecked token or bundle id: $(cat "$tmp/tn.argv")"
-( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn "x" "$tok" 'a b' )
-[[ "$(cat "$tmp/tn.argv")" == *-execute* && "$(cat "$tmp/tn.argv")" != *-activate* ]] || fail "a bad bundle id: $(cat "$tmp/tn.argv")"
+( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn "x" "$(tg '4242@x; touch y' 'com.x;touch')" agents-reap )
+[[ "$(cat "$tmp/tn.argv")" != *-execute* && "$(cat "$tmp/tn.argv")" != *-activate* && "$(cat "$tmp/tn.argv")" != *-group* ]] \
+    || fail "an unchecked token or bundle id: $(cat "$tmp/tn.argv")"
+for b in 'a b' - '-x.y' 'com.x;touch'; do
+    ( AGENTS_PATH="$tmp/odd'dir \$(touch $tmp/pwned)/agents"; tn "x" "$(tg "$tok" "$b")" )
+    [[ "$(cat "$tmp/tn.argv")" == *-execute* && "$(cat "$tmp/tn.argv")" != *-activate* && "$(cat "$tmp/tn.argv")" != *-group* ]] \
+        || fail "bundle id '$b' (or a group without GROUP): $(cat "$tmp/tn.argv")"
+done
+# terminal-notifier reads a value starting with [ ( { < or a quote as a
+# property list and drops the notification; one starting with - as an option.
+for m in '[x] y' '(x' '{x' '<x' '"x"' "'x'" '-x'; do
+    tn "$m"
+    want="\\$m"; [[ "$m" != -* ]] || want=" $m"
+    [[ "$(sed -n 4p "$tmp/tn.argv")" == "$want" ]] || fail "not escaped for terminal-notifier: $m -> $(sed -n 4p "$tmp/tn.argv")"
+done
+tn 'x [y]'; [[ "$(sed -n 4p "$tmp/tn.argv")" == 'x [y]' ]] || fail "escaped past the first character"
 : > "$tmp/osa.log"
 TN_FAIL=1 tn "fell back"
 grep -q 'fell back' "$tmp/osa.log" || fail "no osascript when terminal-notifier fails"
+: > "$tmp/osa.log"
+# shellcheck disable=SC2317,SC2329  # called by _agents_notify (0.9 and 0.10 name it differently)
+( _agents_timeout() { shift; "$@"; return 124; }; tn "cut off" )
+[[ "$(sed -n 4p "$tmp/tn.argv")" == "cut off" && ! -s "$tmp/osa.log" ]] || fail "osascript after terminal-notifier timed out (a second banner)"
 [[ "$(_agents_kill_message $'60712\tclaude\t26\tmyapp')" == "Kill claude in myapp (pid 60712, 26 child processes)?" ]] \
     || fail "dialog text: $(_agents_kill_message $'60712\tclaude\t26\tmyapp')"
 [[ "$(_agents_kill_message $'29046\tnode\t0\t-')" == "Kill node (pid 29046)?" ]] || fail "dialog text without project or children"
 [[ "$(_agents_kill_message $'1\ta\t1\tp\n2\tb\t0\tq')" == "Kill 2 process trees?"* ]] || fail "dialog text for two trees"
-pass "kill dialog: Cancel is the default and no GUI means no; notifications only with --notify, clickable to the session with terminal-notifier"
+pass "kill dialog: Cancel is the default and no GUI means no; notifications only with --notify, clickable to the session with terminal-notifier (checked token and bundle id, escaped text, osascript only when it failed, not timed out)"
 
 # Live: --confirm-gui with Cancel leaves the process alone (needs ps).
 if ps -o lstart= -p $$ >/dev/null 2>&1; then

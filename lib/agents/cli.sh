@@ -11,10 +11,8 @@
 # passes only such tokens, never a path: paths are resolved here, at click time.
 agents_token_cwd() {
     local pid start now c
-    if [[ ! "${1:-}" =~ ^([0-9]+)@([A-Za-z0-9_:]+)$ ]]; then
-        echo "usage: agents cwd PID@START" >&2; return 2
-    fi
-    pid="${BASH_REMATCH[1]}" start="${BASH_REMATCH[2]}"
+    _agents_token "${1:-}" || { echo "usage: agents cwd PID@START" >&2; return 2; }
+    pid="${BASH_REMATCH[1]}" start="${BASH_REMATCH[3]}"
     now="$(_agents_start "$pid")"
     [[ -n "$now" && "$now" == "$start" ]] || { echo "agents: pid $pid is gone or now names another process" >&2; return 1; }
     c="$(_agents_cwds "$pid" | cut -f2)"

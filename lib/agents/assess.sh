@@ -88,7 +88,7 @@ agents_why() {
             *)      token="$a" ;;
         esac
     done
-    if [[ ! "$token" =~ ^([0-9]+)(@([A-Za-z0-9_:]+))?$ ]]; then
+    if [[ ! "$token" =~ $_AGENTS_TOKEN_RE ]]; then
         echo "usage: agents why [--copy] PID[@START]" >&2; return 2
     fi
     pid="${BASH_REMATCH[1]}" want="${BASH_REMATCH[3]}"

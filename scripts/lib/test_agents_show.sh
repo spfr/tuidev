@@ -117,7 +117,8 @@ recs="$(printf '%s\n' "$SNAP" | agents_classify "" "" "$(_agents_panes)" | awk -
 pass "where: tmux pane, Herdr, ssh, or the terminal app, from each process's ancestry; a where record per session"
 
 # --- agents root-of: the session a notification jumps to --------------------------------
-ro() { agents_root_of "$1" "${2:-$SNAP}"; }
+# ro PID [SNAPSHOT] — root-of's line without its last field, the click command.
+ro() { local o; o="$(agents_root_of "$1" "${2:-$SNAP}")" || return; printf '%s\n' "${o%$'\t'*}"; }
 T=Wed_Oct_14_08:00:00_2026
 [[ "$(ro 600)" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "root-of a session in Ghostty: $(ro 600)"
 [[ "$(ro 602)" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "root-of through its tool shells: $(ro 602)"
@@ -137,8 +138,14 @@ if out="$(ro 510)" || [[ -n "$out" ]]; then fail "root-of a shell no agent runs 
 if out="$(ro 830)" || [[ -n "$out" ]]; then fail "root-of the Herdr client: $out"; fi
 if out="$(ro 4242)" || [[ -n "$out" ]]; then fail "root-of a pid that is gone: $out"; fi
 [[ "$(agents_root_of x 2>&1)" == "usage: agents root-of PID" ]] || fail "root-of usage"
-[[ "$(agents_main root-of 602)" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty' ]] || fail "agents root-of: $(agents_main root-of 602)"
-pass "root-of: the outermost agent above a pid as PID@START, its terminal app (tmux and Herdr: their clients') and bundle id; nothing for no agent"
+[[ "$(agents_main root-of 602)" == "600@$T"$'\tGhostty\tcom.mitchellh.ghostty\t'* ]] || fail "agents root-of: $(agents_main root-of 602)"
+# The last field is what a click runs: agents jump to that PID@START, by this
+# agents' absolute path, with this PATH, each quoted (_agents_jump_command).
+click="$(agents_root_of 602 "$SNAP" | cut -f4)"
+[[ "$click" == "PATH='$PATH' '$AGENTS_PATH' jump --notify 600@$T" ]] || fail "root-of's click command: $click"
+[[ "$(AGENTS_PATH=agents agents_root_of 602 "$SNAP" | cut -f4)" == - ]] || fail "a click command without an absolute agents"
+[[ "$(PATH="$PATH"$'\n'"/x" agents_root_of 602 "$SNAP" | cut -f4)" == - ]] || fail "a click command split by a newline in PATH"
+pass "root-of: the outermost agent above a pid as PID@START, its terminal app (tmux and Herdr: their clients'), bundle id and the click's command; nothing for no agent"
 
 # --- agents jump ------------------------------------------------------------------------
 clear_logs

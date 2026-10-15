@@ -24,8 +24,8 @@ LOOK
                                go to where it runs: its Herdr or tmux pane, then the
                                terminal tab that shows it (Ghostty, iTerm, Terminal)
   agents root-of PID           the agent session PID runs under, as PID@START, with
-                               the terminal app that shows it and its bundle id
-                               (notify.sh: a click on a notification jumps there)
+                               the terminal app that shows it, its bundle id and the
+                               command that jumps there (notify.sh: a banner's click)
   agents peek PID[@START] [LINES]
                                the last LINES (40) lines of its tmux or Herdr pane
   agents mcp [DIR]             the MCP servers Claude Code and Codex are configured

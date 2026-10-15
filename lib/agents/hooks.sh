@@ -272,9 +272,11 @@ _agents_hook_run() {
 
 # _agents_hook_reap EVENT MATCHES SESSION PROJECT AGENT_TYPE [TARGET] — stop
 # the matched trees, log one event per stopped task, notify once (a click
-# jumps to TARGET, agents_root_of's "PID@START<TAB>APP<TAB>BUNDLE").
+# jumps to TARGET, agents_root_of's line for the session). The notification
+# has a group of its own (agents-reap), so it never replaces the session's
+# "Needs your approval" banner from notify.sh (group agents).
 _agents_hook_reap() {
-    local event="$1" matches="$2" session="$3" proj="$4" atype="$5" target="${6:-}" tokens out planned token id how name _w n=0 who reason jtok _app bundle
+    local event="$1" matches="$2" session="$3" proj="$4" atype="$5" target="${6:-}" tokens out planned token id how name _w n=0 who reason
     tokens="$(printf '%s\n' "$matches" | cut -f1)"
     if [[ "$event" == subagent-stop ]]; then
         reason=subagent-end; who="a subagent"
@@ -300,6 +302,5 @@ _agents_hook_reap() {
         agents_event hook "$reason" "${token%@*}" "$name" "$proj" "$session"
     done <<<"$matches"
     [[ $n -gt 0 ]] || return 0
-    IFS=$'\t' read -r jtok _app bundle <<<"$target"
-    AGENTS_NOTIFY=true _agents_notify "Stopped $n background command$([[ $n -gt 1 ]] && echo s) $who left running$([[ "$proj" != - ]] && echo " in $proj")" "$jtok" "$bundle"
+    AGENTS_NOTIFY=true _agents_notify "Stopped $n background command$([[ $n -gt 1 ]] && echo s) $who left running$([[ "$proj" != - ]] && echo " in $proj")" "$target" agents-reap
 }

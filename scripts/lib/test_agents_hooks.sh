@@ -157,7 +157,7 @@ _agents_hook_stdouts() {
 _agents_signal() { echo "$1 $2" >> "$tmp/signals"; }
 _agents_alive() { :; }
 _agents_cwds() { :; }
-_agents_notify() { [[ "${AGENTS_NOTIFY:-false}" != true ]] || { echo "$1" >> "$tmp/notified"; echo "${2:-} ${3:-}" >> "$tmp/notified.target"; }; }
+_agents_notify() { [[ "${AGENTS_NOTIFY:-false}" != true ]] || { echo "$1" >> "$tmp/notified"; printf '%s|%s\n' "${3:-}" "${2:-}" >> "$tmp/notified.target"; }; }
 
 hook_json() {   # EVENT AGENT_ID [REASON]
     jq -nc --arg ev "$1" --arg a "$2" --arg main "$main" --arg sub "$subs/agent-$2.jsonl" --arg r "${3:-}" \
@@ -231,8 +231,12 @@ ev="$(cut -f2- "$AGENTS_DATA_DIR/events.tsv" | sort)"
     || fail "events: $ev"
 [[ "$(cat "$tmp/notified")" == "Stopped 2 background commands a subagent (general-purpose) left running in myapp" ]] \
     || fail "notification: $(cat "$tmp/notified" 2>/dev/null)"
-[[ "$(cat "$tmp/notified.target")" =~ ^5000@[A-Za-z]{3}_[A-Za-z]{3}_[0-9]+_[0-9:]{8}_[0-9]{4}\ -$ ]] \
-    || fail "the notification does not jump to the session: $(cat "$tmp/notified.target" 2>/dev/null)"
+# Its target is root-of's line for the session (_agents_notify checks it: a
+# "-" bundle activates nothing), its group agents-reap: never the group of
+# notify.sh's "Needs your approval" banner, which it would replace.
+target="$(cat "$tmp/notified.target")" t=$'\t'
+[[ "$target" =~ ^agents-reap\|5000@[A-Za-z]{3}_[A-Za-z]{3}_[0-9]+_[0-9:]{8}_[0-9]{4}$t-$t-${t}PATH=.*\ jump\ --notify\ 5000@ ]] \
+    || fail "the notification does not jump to the session, in a group of its own: $target"
 pass "subagent-stop: SIGTERMs those trees, quietly; one event per task (hook subagent-end, session claude:PID), one notification that jumps to the session"
 
 rm -rf "$AGENTS_DATA_DIR"

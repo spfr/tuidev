@@ -18,10 +18,11 @@
 #
 # Owns: the tmux pane map, a process's place, the session a notification
 #   jumps to (`agents root-of`), `agents jump` and `agents peek`.
-# Uses: config.sh, util.sh (_agents_awk, _agents_timeout), snapshot.sh
-#   (agents_snapshot, _agents_start, agents_secs), activity.sh
-#   (_agents_session_of), terminal.sh (agents_terminal: the app to bring
-#   forward when none is found), notify.sh (_agents_notify);
+# Uses: config.sh, util.sh (_agents_awk, _agents_timeout, _agents_token,
+#   _AGENTS_TOKEN_RE), snapshot.sh (agents_snapshot, _agents_start,
+#   agents_secs), activity.sh (_agents_session_of), terminal.sh
+#   (agents_terminal: the app to bring forward when none is found), notify.sh
+#   (_agents_notify, _agents_jump_command);
 #   awk/lib_where.awk, awk/where.awk, awk/root.awk.
 # Public: _agents_tmux_up, _agents_panes, agents_where, agents_root_of,
 #   _agents_app_bundle, _agents_pid_token, agents_jump, agents_peek.
@@ -66,7 +67,7 @@ agents_where() {
 # the refusal) and fails otherwise.
 _agents_pid_token() {
     local _now
-    if [[ ! "${2:-}" =~ ^([0-9]+)(@([A-Za-z0-9_:]+))?$ ]]; then echo "usage: $3" >&2; return 2; fi
+    if [[ ! "${2:-}" =~ $_AGENTS_TOKEN_RE ]]; then echo "usage: $3" >&2; return 2; fi
     printf -v "$1" '%s' "${BASH_REMATCH[1]}"
     [[ -n "${BASH_REMATCH[3]}" ]] || return 0
     _now="$(_agents_start "${BASH_REMATCH[1]}")"
@@ -93,18 +94,22 @@ _agents_app_bundle() {
 }
 
 # agents_root_of PID [SNAPSHOT] — the agent session PID runs under, for a
-# notification to jump to when clicked: "PID@START<TAB>APP<TAB>BUNDLE" (the
-# outermost claude or codex process from PID up, the terminal app that shows
-# it, and that app's bundle id; "-" for either when unknown: awk/root.awk).
-# One ps, no tmux or Herdr call: a hook runs it every time it notifies.
-# Nothing, and false, when PID runs under no agent.
+# notification to jump to when clicked, as one line
+#   PID@START<TAB>APP<TAB>BUNDLE<TAB>CLICK
+# the outermost claude or codex process from PID up; the terminal app that
+# shows it (awk/root.awk) and that app's bundle id; and CLICK, the /bin/sh
+# command a click runs to jump there (_agents_jump_command, the one place it
+# is built: notify.sh posts it as is). "-" for any of the last three when
+# unknown. One ps, no tmux or Herdr call: a hook runs it every time it
+# notifies. Nothing, and false, when PID runs under no agent.
 agents_root_of() {
-    local snap="${2-}" tok app
+    local snap="${2-}" tok app click
     [[ "${1:-}" =~ ^[0-9]+$ ]] || { echo "usage: agents root-of PID" >&2; return 2; }
     [[ -n "$snap" ]] || snap="$(agents_snapshot)"
     IFS=$'\t' read -r tok app <<<"$(printf '%s\n' "$snap" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc lib_where root" -v t="$1")"
-    [[ "$tok" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || return 1
-    printf '%s\t%s\t%s\n' "$tok" "${app:--}" "$(_agents_app_bundle "${app:--}")"
+    _agents_token "$tok" || return 1
+    click="$(_agents_jump_command "$tok")"
+    printf '%s\t%s\t%s\t%s\n' "$tok" "${app:--}" "$(_agents_app_bundle "${app:--}")" "${click:--}"
 }
 
 # _agents_tty PID — the terminal PID runs on (/dev/ttys004), nothing when none.

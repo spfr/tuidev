@@ -5,8 +5,10 @@
 #
 # Stub uname, terminal-notifier, osascript, agents, herdr, tmux, notify-send
 # and curl on PATH record their arguments, one per line: nothing is shown.
-# The last test runs the real agents under a fake claude process; it is
-# skipped where ps can't report start times (a sandbox, BusyBox).
+# The timeout and escaping helpers notify.sh shares with lib/agents (it
+# stands alone, so it carries its own copies) are run side by side. The last
+# test runs the real agents under a fake claude process; it is skipped where
+# ps can't report start times (a sandbox, BusyBox).
 
 # Stubs are called indirectly; tests change settings inside ( … ).
 # shellcheck disable=SC2016,SC2030,SC2031,SC2317,SC2329
@@ -45,7 +47,10 @@ stub notify-send 'exit 0'
 stub curl 'exit 0'
 
 TOK="4242@Wed_Oct_14_08:00:00_2026"
-GHOSTTY="$TOK"$'\t'Ghostty$'\t'com.mitchellh.ghostty
+# What agents root-of prints: the session, its app, the app's bundle id and
+# the command a click runs (agents builds and quotes it: posted as is).
+CLICK="'$tmp/bin/agents' jump --notify $TOK"
+GHOSTTY="$TOK"$'\t'Ghostty$'\t'com.mitchellh.ghostty$'\t'"$CLICK"
 
 # run [ARGS...] — notify.sh in a clean environment (only the stubs and the
 # system's tools on PATH); its stdout and stderr go to $tmp/out, its exit
@@ -77,9 +82,9 @@ quiet "clickable banner"
     || fail "banner fields: $(log terminal-notifier)"
 [[ "$(arg -group)" == "agents-$TOK" ]] || fail "group: $(arg -group)"
 [[ "$(arg -activate)" == com.mitchellh.ghostty ]] || fail "activate: $(arg -activate)"
-[[ "$(arg -execute)" == "PATH='$tmp/bin:/usr/bin:/bin' '$tmp/bin/agents' jump --notify $TOK" ]] || fail "execute: $(arg -execute)"
+[[ "$(arg -execute)" == "$CLICK" ]] || fail "execute: $(arg -execute)"
 ! called osascript || fail "osascript as well as terminal-notifier"
-pass "a session's banner: clickable (agents jump PID@START, with this PATH), activates its terminal app, one per session (group)"
+pass "a session's banner: clickable (agents' own jump command), activates its terminal app, one per session (group)"
 
 # Titles and messages are argv, never shell: the click runs only the jump.
 AGENTS_OUT="$GHOSTTY" run "Claude 'x' \"y\" \$(touch $tmp/pwned) \`touch $tmp/pwned\`" "a; touch $tmp/pwned" "\$HOME"
@@ -93,14 +98,22 @@ rm -f "$tmp/log/agents"
 [[ "$(log agents)" == $'jump\n--notify\n'"$TOK" && ! -e "$tmp/pwned" ]] || fail "the click: $(log agents)"
 pass "titles, messages and subtitles with quotes, \$() and backticks reach terminal-notifier as argv, never the click's shell"
 
-# What agents says is checked: only a PID@START token and a bundle id pass.
-AGENTS_OUT=$'1; touch '"$tmp"$'/pwned\tGhostty\tcom.mitchellh.ghostty' run "T" "M"
-[[ "$(log terminal-notifier)" != *-execute* && "$(log terminal-notifier)" != *-group* ]] || fail "an unchecked token: $(log terminal-notifier)"
-AGENTS_OUT="$TOK"$'\tX\tcom.x;touch' run "T" "M"
-[[ "$(arg -execute)" == *"jump --notify $TOK" && "$(log terminal-notifier)" != *-activate* ]] || fail "an unchecked bundle id: $(log terminal-notifier)"
-AGENTS_OUT="$TOK"$'\t-\t-' run "T" "M"
-[[ -n "$(arg -execute)" && "$(log terminal-notifier)" != *-activate* ]] || fail "no app: $(log terminal-notifier)"
-pass "only a checked PID@START token reaches the click, and only a bundle id -activate"
+# What agents leaves unknown ("-") is left out.
+AGENTS_OUT="$TOK"$'\t-\t-\t'"$CLICK" run "T" "M"
+[[ "$(arg -execute)" == "$CLICK" && "$(log terminal-notifier)" != *-activate* ]] || fail "no app: $(log terminal-notifier)"
+AGENTS_OUT="$TOK"$'\tGhostty\tcom.mitchellh.ghostty\t-' run "T" "M"
+[[ "$(log terminal-notifier)" != *-execute* && "$(log terminal-notifier)" != *-group* ]] || fail "no click command: $(log terminal-notifier)"
+pass "no app: no -activate; no click command: a plain banner"
+
+# terminal-notifier reads a value starting with [ ( { < or a quote as a
+# property list (and drops the banner), one starting with - as an option.
+AGENTS_OUT="$GHOSTTY" run "[Claude] x" '"quoted" y' "-sub"
+[[ "$(arg -title)" == '\[Claude] x' && "$(arg -message)" == '\"quoted" y' && "$(arg -subtitle)" == ' -sub' ]] \
+    || fail "not escaped for terminal-notifier: $(log terminal-notifier)"
+[[ "$(log osascript)" == "" ]] || fail "osascript too"
+TN="" run "[Claude] x" "(m" "{s"
+[[ "$(log osascript)" == *$'end run\n[Claude] x\n(m\n{s\nGlass' ]] || fail "osascript's text escaped: $(log osascript)"
+pass "a title, message or subtitle starting with [ ( { < or a quote is escaped for terminal-notifier (not for osascript), one starting with - too"
 
 # No agent above this process: a plain banner.
 AGENTS_OUT="" run "T" "M"
@@ -116,7 +129,7 @@ quiet "no agents"
 mkdir -p "$tmp/home/.local/bin"
 printf '#!/bin/bash\nprintf "%%s" "$AGENTS_OUT"\n' > "$tmp/home/.local/bin/agents"; chmod +x "$tmp/home/.local/bin/agents"
 AGENTS_OUT="$GHOSTTY" run "T" "M"
-[[ "$(arg -execute)" == *"'$tmp/home/.local/bin/agents' jump --notify $TOK" ]] || fail "agents in HOME/.local/bin: $(arg -execute)"
+[[ "$(arg -execute)" == "$CLICK" ]] || fail "agents in HOME/.local/bin: $(log terminal-notifier)"
 rm "$tmp/home/.local/bin/agents"
 stub agents 'printf "%s" "${AGENTS_OUT-}"; [[ -n "${AGENTS_OUT-}" ]]'
 pass "no agent session, or no agents command: a plain banner; agents is found in ~/.local/bin too"
@@ -142,9 +155,18 @@ HERDR_ENV=1 AGENTS_OUT="$GHOSTTY" run "T" "M"
 called terminal-notifier || fail "no banner inside Herdr on a Mac"
 HERDR_ENV=1 SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" run "T" "M"
 if ! called herdr || called terminal-notifier || called osascript; then fail "a banner on the Mac for a session reached over ssh"; fi
+HERDR_ENV=1 SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" AGENTS_OUT="$TOK"$'\t-\t-\t'"$CLICK" run "T" "M"
+if called terminal-notifier || called osascript; then fail "a banner for an ssh session agents finds in no app here"; fi
 SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" run "T" "M"
 called terminal-notifier || fail "over ssh with no toast or status line, the Mac's banner is the only channel"
 pass "on a Mac, the banner fires inside Herdr and tmux too (not over ssh, where the toast or status line is enough)"
+
+# A tmux server started over ssh keeps SSH_CONNECTION in its panes after you
+# attach at the Mac: agents finding the session in a terminal app here wins.
+TMUX=/tmp/x,1,0 SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" AGENTS_OUT="$GHOSTTY" run "T" "M"
+if ! called tmux || [[ "$(arg -execute)" != "$CLICK" ]]; then fail "stale SSH_CONNECTION, attached locally: no banner: $(log terminal-notifier)"; fi
+[[ "$(log agents)" =~ ^root-of$'\n'[0-9]+$ ]] || fail "agents asked more than once: $(log agents)"
+pass "a session agents finds in a terminal app on this Mac is local, whatever SSH_CONNECTION says (asked once)"
 
 STUB_UNAME=Linux TMUX=/tmp/x,1,0 run "T" "M"
 if ! called tmux || called notify-send || called terminal-notifier; then fail "Linux in tmux: tmux only"; fi
@@ -173,8 +195,49 @@ start=$SECONDS
 TN_HANG=1 AGENTS_OUT="$GHOSTTY" run "T" "M"
 quiet "terminal-notifier hangs"
 [[ $((SECONDS - start)) -le 8 ]] || fail "a hung terminal-notifier held the hook $((SECONDS - start))s"
-called osascript || fail "no osascript after terminal-notifier hung"
-pass "prints nothing and exits 0 whatever fails; a hung notifier is cut off after 5 s"
+! called osascript || fail "osascript after terminal-notifier timed out: a second banner"
+pass "prints nothing and exits 0 whatever fails; a hung notifier is cut off after 5 s, with no second banner"
+
+# --- The helpers notify.sh shares with lib/agents -----------------------------------------
+# helper FILE NAME — define the function NAME as FILE has it.
+helper() {
+    local prog="/^$2() {/,/^}/p"   # a variable: bash 3.2 misparses the braces inside "$( )"
+    eval "$(sed -n "$prog" "$1")"
+    declare -F "$2" >/dev/null || fail "no $2 in $1"
+}
+helper "$NOTIFY" with_timeout
+helper "$NOTIFY" tn_text
+helper "$REPO_DIR/lib/agents/util.sh" _agents_timeout
+helper "$REPO_DIR/lib/agents/notify.sh" _agents_tn_text
+mkdir -p "$tmp/sleep"
+# shellcheck disable=SC2016  # the stub's own $$ and $@
+printf '#!/bin/bash\necho $$ >> "%s"\nexec /bin/sleep "$@"\n' "$tmp/sleep.pids" > "$tmp/sleep/sleep"
+chmod +x "$tmp/sleep/sleep"
+gone() { local _; for _ in $(seq 40); do kill -0 "$1" 2>/dev/null || return 0; /bin/sleep 0.05; done; return 1; }
+for to in with_timeout _agents_timeout; do
+    # A grandchild (here a sleep a shell started) holds the $( ) pipe open:
+    # it is killed with the rest, and the timeout says 124.
+    start=$SECONDS; rc=0
+    out="$("$to" 1 bash -c 'echo started; sleep 6 & wait')" || rc=$?
+    [[ $rc == 124 && "$out" == started && $((SECONDS - start)) -le 3 ]] \
+        || fail "$to: a grandchild outlived the timeout: rc $rc, '$out', $((SECONDS - start)) s"
+    # A command that ends first (once the watcher's sleep runs) takes that
+    # sleep with it.
+    : > "$tmp/sleep.pids"; rc=0
+    ( PATH="$tmp/sleep:$PATH"; "$to" 30 bash -c 'for _ in $(seq 100); do [ -s "$1" ] && break; /bin/sleep 0.05; done
+        echo out; echo err >&2; exit 7' _ "$tmp/sleep.pids" ) > "$tmp/to.out" 2>&1 || rc=$?
+    [[ $rc == 7 && "$(cat "$tmp/to.out")" == $'out\nerr' ]] || fail "$to: status or output: rc $rc, $(cat "$tmp/to.out")"
+    pid="$(head -1 "$tmp/sleep.pids")"
+    if [[ -z "$pid" ]] || ! gone "$pid"; then fail "$to: the watcher's sleep ($pid) outlived the command"; fi
+    # Killed: 124, with nothing from bash about it.
+    rc=0; out="$("$to" 1 sleep 5 2>&1)" || rc=$?
+    [[ $rc == 124 && -z "$out" ]] || fail "$to: a killed command: rc $rc, '$out'"
+done
+pass "the timeout (notify.sh's and lib/agents'): kills grandchildren, takes its watcher's sleep along, 124 when it fired"
+for m in '[x' '(x' '{x' '<x' '"x' "'x" '-x' 'x [y' '' 'plain'; do
+    [[ "$(tn_text "$m")" == "$(_agents_tn_text "$m")" ]] || fail "notify.sh and lib/agents escape '$m' differently"
+done
+pass "notify.sh and lib/agents escape terminal-notifier text the same way"
 
 # --- Live: the real agents under a fake claude -------------------------------------------
 if ps -o lstart= -p $$ >/dev/null 2>&1; then
@@ -194,7 +257,7 @@ if ps -o lstart= -p $$ >/dev/null 2>&1; then
     live_pid="$(cat "$tmp/live.pid" 2>/dev/null)"
     [[ -s "$tmp/live.done" ]] || fail "live: notify.sh did not finish"
     start="$(LC_ALL=C ps -o lstart= -p "$live_pid" | awk '{ print $1 "_" $2 "_" $3 "_" $4 "_" $5 }')"
-    [[ "$(arg -execute)" == *"/agents' jump --notify $live_pid@$start" && "$(arg -group)" == "agents-$live_pid@$start" ]] \
+    [[ "$(arg -execute)" == "PATH='$tmp/bin:/usr/bin:/bin' '"*"/agents' jump --notify $live_pid@$start" && "$(arg -group)" == "agents-$live_pid@$start" ]] \
         || fail "live: the banner does not jump to the fake claude $live_pid@$start: $(log terminal-notifier)"
     kill "$live_pid" 2>/dev/null || true; live_pid=""
     pass "live: under a fake claude, through the hook's shell, the banner jumps to that claude's PID@START"

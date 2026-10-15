@@ -2,16 +2,27 @@
 # lib/agents/util.sh — small helpers the other modules share.
 #
 # Owns: running the awk programs in awk/, durations, --since windows and
-#   clock times, a word of a line, a command with a timeout or in the
-#   background, and the state files in the run and data directories: lock
+#   clock times, a word of a line, the PID@START token, a command with a
+#   timeout or in the background, and the state files in the run and data directories: lock
 #   directories, epoch stamps, replacing or removing a file safely.
 # Uses: _AGENTS_AWK_DIR (set by bin/agents); snapshot.sh (_agents_start) for
 #   a lock's or a state file's holder.
-# Public: _agents_awk, _agents_awk_eval, agents_parse_duration,
-#   _agents_window, _agents_now, _agents_clock, _agents_field, _agents_timeout,
-#   _agents_bg, _agents_bg_wait, _agents_detach, _agents_lock, _agents_unlock,
-#   _agents_holder_check, _agents_mypid, _agents_stamp_age, _agents_replace,
-#   _agents_rm_if_same.
+# Public: _AGENTS_TOKEN_RE, _agents_token, _agents_awk, _agents_awk_eval,
+#   agents_parse_duration, _agents_window, _agents_now, _agents_clock,
+#   _agents_field, _agents_timeout, _agents_bg, _agents_bg_wait,
+#   _agents_detach, _agents_lock, _agents_unlock, _agents_holder_check,
+#   _agents_mypid, _agents_stamp_age, _agents_replace, _agents_rm_if_same.
+
+# A process named across time: PID@START, START being its start time as
+# snapshot.sh records it (ps's lstart, spaces as underscores), so a pid
+# that now names another process is told apart. The one pattern for it:
+# matched with [[ WORD =~ $_AGENTS_TOKEN_RE ]], BASH_REMATCH[1] is the pid
+# and [3] the start, empty for a bare PID.
+_AGENTS_TOKEN_RE='^([0-9]+)(@([A-Za-z0-9_:]+))?$'
+
+# _agents_token WORD — true when WORD is a PID@START (a bare PID is not),
+# with BASH_REMATCH set as above.
+_agents_token() { [[ "${1:-}" =~ $_AGENTS_TOKEN_RE && -n "${BASH_REMATCH[3]}" ]]; }
 
 # _agents_awk "FILE..." [AWK_OPTION...] — awk, under LC_ALL=C, running the
 # concatenation of awk/FILE.awk... (the shared lib_*.awk first, then the
@@ -77,16 +88,26 @@ _agents_window() {
     fi
 }
 
-# _agents_timeout SECS CMD... — run CMD, killing it after SECS.
+# _agents_timeout SECS CMD... — run CMD (stdin from /dev/null), killing it
+# after SECS with every process it started: 124 then, as coreutils' timeout
+# says (macOS has none). Job control (set -m, in a subshell) gives CMD and
+# the watcher a process group each, so a kill reaches grandchildren that
+# would otherwise hold a $( ) pipe open, and the watcher's sleep goes with
+# it when CMD finishes first (errexit off, so nothing skips that). `wait`
+# is silenced: bash 3.2 reports a killed job on stderr.
 _agents_timeout() {
-    local secs="$1" pid watcher rc; shift
-    "$@" &
-    pid=$!
-    ( sleep "$secs"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
-    watcher=$!
-    wait "$pid"; rc=$?
-    kill "$watcher" 2>/dev/null
-    return "$rc"
+    local secs="$1"; shift
+    (
+        set +e -m
+        "$@" </dev/null &
+        pid=$!
+        ( sleep "$secs"; kill -TERM -- "-$pid" ) >/dev/null 2>&1 &
+        watcher=$!
+        wait "$pid" 2>/dev/null; rc=$?
+        # The watcher gone means it fired: CMD was killed for taking too long.
+        kill -TERM -- "-$watcher" 2>/dev/null || [[ $rc -lt 128 ]] || rc=124
+        exit "$rc"
+    )
 }
 
 # _agents_bg FD CMD... — start CMD now, in the background, for

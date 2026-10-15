@@ -14,33 +14,52 @@ and you land in that session's Herdr pane, tmux pane or Ghostty tab.
 
 - **Click a notification to jump to its session.** On a Mac, `notify.sh`
   posts its banner through terminal-notifier, which the `monitoring` pack now
-  installs. When the hook runs under a `claude` or `codex` process,
-  `agents root-of` pins that session as `PID@START` when the hook runs, and a
-  click runs `agents jump PID@START`: the Herdr pane, the tmux pane, or the
-  Ghostty (1.3+), iTerm2 or Terminal tab, worked out at the click and refused
-  if the pid has been reused. The banner also brings the session's terminal app
-  forward (`-activate`, by its bundle id), and a newer notification from the
-  same session replaces the older one. What a click runs is only `agents` by
-  its absolute path, the hook's `PATH` and the checked token; titles and
-  messages reach terminal-notifier as arguments, never a shell. Without
-  terminal-notifier, the banner is `osascript`'s as before.
+  installs (macOS only: `pkg_install` skips it on Linux). When the hook runs
+  under a `claude` or `codex` process, `agents root-of` pins that session as
+  `PID@START` when the hook runs, and a click runs `agents jump PID@START`:
+  the Herdr pane, the tmux pane, or the Ghostty (1.3+), iTerm2 or Terminal
+  tab, worked out at the click and refused if the pid has been reused. The
+  banner also brings the session's terminal app forward (`-activate`, by its
+  bundle id), and a newer notification from the same session replaces the
+  older one. What a click runs is only `agents` by its absolute path, the
+  hook's `PATH` and the checked token, built and quoted in one place
+  (`agents`) and handed to `notify.sh`; titles and messages reach
+  terminal-notifier as arguments, never a shell, escaped where it would
+  misread them (a leading `[`, `(`, `{`, `<`, quote or `-`). The first click
+  asks to let terminal-notifier control the terminal app; declined, a click
+  still selects the pane but only brings the app forward. Without
+  terminal-notifier, the banner is `osascript`'s as before; when
+  terminal-notifier times out, it is not repeated through `osascript`.
 - **`agents root-of PID`**: the agent session a process runs under, as
-  `PID@START`, with its terminal app and that app's bundle id (for tmux and
-  Herdr, the app their clients run in). It takes one `ps` and calls neither
-  tmux nor Herdr.
+  `PID@START`, with its terminal app, that app's bundle id (for tmux and
+  Herdr, the app their clients run in) and the command a click on its
+  notification runs. It takes one `ps` and calls neither tmux nor Herdr.
 - **The menu's notifications** (`--notify`) use terminal-notifier too, and
   the cleanup hooks' "Stopped N background commands" notification jumps to
-  its session.
+  its session, in a group of its own, so it never replaces that session's
+  "Needs your approval" banner.
 
 ### Changed
 
 - **On a Mac, the banner also fires inside Herdr and tmux**, next to the
   toast or status line, which can't be seen from another app. Over ssh the
-  toast or status line is still the only channel. Linux is unchanged.
-- **`notify.sh` bounds every command it waits for** (the Herdr toast, tmux,
-  the banner, `notify-send`) with a timeout, so a hung notifier can't hold a
-  hook, and passes the `osascript` banner's text as arguments instead of
+  toast or status line is still the only channel, unless `agents root-of`
+  finds the session in a terminal app on the Mac (a tmux server started
+  over ssh and attached locally keeps a stale `SSH_CONNECTION`). Linux is
+  unchanged.
+- **`notify.sh` bounds the commands it waits on** (the Herdr toast, tmux,
+  `agents root-of`, terminal-notifier, `osascript`, `notify-send`; the ntfy
+  push has `curl --max-time`) with a timeout, so a hung notifier can't hold
+  a hook, and passes the `osascript` banner's text as arguments instead of
   escaping it into the script.
+
+### Fixed
+
+- **A timeout stops everything the command started.** `agents` (tmux,
+  Herdr, `lsof`, AppleScript) and `notify.sh` killed only the command
+  itself: a process it had started kept a `$( )` waiting past the timeout,
+  and the timer's own `sleep` was left behind when the command finished
+  first. The command and the timer now run in process groups of their own.
 
 ## [3.8.1] - 2026-10-15
 

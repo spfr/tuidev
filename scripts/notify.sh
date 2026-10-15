@@ -14,23 +14,24 @@
 #   6. nothing              silent no-op
 #
 # The first of 1 and 2 that works shows it in the terminal. On a Mac the
-# banner (3) shows it too, unless you are in over ssh: a toast or a status
-# line can't be seen from another app. Otherwise the first of 3 to 5 that
-# works does.
+# banner (3) shows it too, because a toast or a status line can't be seen
+# from another app, unless the session is one you reach over ssh
+# (is_remote). Otherwise the first of 3 to 5 that works does.
 #
 # Clicking the banner takes you to the session that asked. When this runs
 # under a claude or codex process and the `agents` command is installed
 # (the monitoring pack), `agents root-of` names that session as PID@START
-# now (the hook is long gone by the click), and the banner runs `agents jump
-# PID@START` when clicked: its Herdr pane, tmux pane, or Ghostty, iTerm or
-# Terminal tab, refused if the pid has since been reused. It also brings that
-# terminal app forward, and a newer notification from the same session
-# replaces the older one. Without terminal-notifier the banner is osascript's,
-# which a click can't take anywhere.
+# now (the hook is long gone by the click) and hands over the command a
+# click runs, `agents jump PID@START`, built and quoted by agents itself:
+# its Herdr pane, tmux pane, or Ghostty, iTerm or Terminal tab, refused if
+# the pid has since been reused. The banner also brings that terminal app
+# forward, and a newer notification from the same session replaces the
+# older one. Without terminal-notifier the banner is osascript's, which a
+# click can't take anywhere; without agents it is a plain banner.
 #
 # It never prints and always exits 0: hook stdout is parsed by the calling CLI,
 # and a failed notification must not surface as a hook error. Every outside
-# command it waits for is bounded by a timeout.
+# command it waits for is bounded by a timeout, with every process it starts.
 #
 # Usage:
 #   notify.sh <title> <message> [subtitle] [sound]
@@ -60,24 +61,24 @@ BODY="$MESSAGE"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# with_timeout SECS CMD... — CMD, killed after SECS seconds.
+# with_timeout SECS CMD... — CMD (stdin from /dev/null), killed after SECS
+# seconds with every process it started: 124 then. Job control gives CMD
+# and the watcher a process group each, so the kill reaches grandchildren
+# (which would hold a $( ) open) and the watcher's sleep goes when CMD ends
+# first. lib/agents/util.sh's _agents_timeout is the same; this script
+# stands alone (it runs without the monitoring pack).
 with_timeout() {
-    local secs="$1" pid watcher rc
-    shift
-    "$@" &
-    pid=$!
-    ( sleep "$secs"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
-    watcher=$!
-    wait "$pid"
-    rc=$?
-    kill "$watcher" 2>/dev/null
-    return "$rc"
-}
-
-# quote WORD — WORD as one single-quoted /bin/sh word.
-quote() {
-    local sq="'" r="'\\''"
-    printf "'%s'" "${1//$sq/$r}"
+    local secs="$1"; shift
+    (
+        set +e -m
+        "$@" </dev/null &
+        pid=$!
+        ( sleep "$secs"; kill -TERM -- "-$pid" ) >/dev/null 2>&1 &
+        watcher=$!
+        wait "$pid" 2>/dev/null; rc=$?
+        kill -TERM -- "-$watcher" 2>/dev/null || [[ $rc -lt 128 ]] || rc=124
+        exit "$rc"
+    )
 }
 
 notify_herdr() {
@@ -94,7 +95,6 @@ notify_tmux() {
 }
 
 is_macos() { [[ "$(uname -s 2>/dev/null)" == Darwin ]]; }
-is_remote() { [[ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]]; }
 
 # terminal-notifier's path: Homebrew's before PATH's (an older Ruby gem of
 # the same name can come first on PATH).
@@ -119,34 +119,63 @@ agents_cmd() {
     [[ -x "$a" ]] && printf '%s\n' "$a"
 }
 
-# session AGENTS — sets TOKEN (PID@START) and BUNDLE (its terminal app's id,
-# or nothing) for the agent session this script runs under; false when none.
+# session — true when this runs under an agent session `agents root-of`
+# knows (asked once): TOKEN is its PID@START, APP the terminal app that
+# shows it, BUNDLE that app's id, CLICK the /bin/sh command a click runs to
+# go there ("-" for any of the last three when unknown). agents builds and
+# quotes CLICK (lib/agents/notify.sh): it is posted as is.
+SESSION=""
 session() {
-    local out
-    TOKEN="" BUNDLE=""
-    out="$(with_timeout 3 "$1" root-of "$$" 2>/dev/null </dev/null)" || return 1
-    IFS=$'\t' read -r TOKEN _ BUNDLE <<<"$out"
-    [[ "$TOKEN" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || { TOKEN=""; return 1; }
-    [[ "$BUNDLE" =~ ^[A-Za-z0-9.-]+$ && "$BUNDLE" != - ]] || BUNDLE=""
-    return 0
+    local agents out
+    if [[ -z "$SESSION" ]]; then
+        SESSION=none TOKEN="" APP="-" BUNDLE="-" CLICK="-"
+        agents="$(agents_cmd)"
+        if [[ -n "$agents" ]] && out="$(with_timeout 3 "$agents" root-of "$$" 2>/dev/null)"; then
+            IFS=$'\t' read -r TOKEN APP BUNDLE CLICK <<<"$out"
+            [[ -z "$TOKEN" ]] || SESSION=found
+        fi
+    fi
+    [[ "$SESSION" == found ]]
 }
 
-# A banner a click can act on. The click runs a /bin/sh command with
-# a minimal PATH, so it carries this one, and agents by its absolute path:
-# only quoted words and the checked PID@START token, never a title or a
-# message (those reach terminal-notifier as argv).
+# is_remote — true for a session reached over ssh, where the Mac's screen
+# isn't the user's to look at. The environment says so first, but it can be
+# stale: a tmux server started over ssh keeps SSH_CONNECTION in every pane
+# after you attach to it at the Mac. So when agents finds the session in a
+# terminal app here (itself, or its tmux or Herdr clients'), that live
+# answer wins and the session is local.
+is_remote() {
+    [[ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]] || return 1
+    ! { session && [[ -n "$APP" && "$APP" != - ]]; }
+}
+
+# tn_text TEXT — TEXT as terminal-notifier shows it literally: it reads each
+# option's value as a property list first, so one starting with [ ( { < or
+# a quote gets a leading backslash (which it strips; its README, "Escaping"),
+# and one starting with - a leading space (else it is read as an option).
+# lib/agents/notify.sh's _agents_tn_text is the same.
+tn_text() {
+    case "$1" in
+        \[*|\(*|\{*|\<*|\"*|\'*) printf '\\%s' "$1" ;;
+        -*) printf ' %s' "$1" ;;
+        *)  printf '%s' "$1" ;;
+    esac
+}
+
+# A banner a click can act on, when agents knows the session: the click
+# runs agents' own CLICK command, never a title or a message (those reach
+# terminal-notifier as argv).
 notify_terminal_notifier() {
-    local tn agents args
+    local tn args
     tn="$(notifier)"
     [[ -n "$tn" ]] || return 1
-    args=(-title "$TITLE" -message "$MESSAGE" -sound "$SOUND")
-    [[ -z "$SUBTITLE" ]] || args+=(-subtitle "$SUBTITLE")
-    agents="$(agents_cmd)"
-    if [[ -n "$agents" ]] && session "$agents"; then
-        args+=(-group "agents-$TOKEN" -execute "PATH=$(quote "$PATH") $(quote "$agents") jump --notify $TOKEN")
-        [[ -z "$BUNDLE" ]] || args+=(-activate "$BUNDLE")
+    args=(-title "$(tn_text "$TITLE")" -message "$(tn_text "$MESSAGE")" -sound "$SOUND")
+    [[ -z "$SUBTITLE" ]] || args+=(-subtitle "$(tn_text "$SUBTITLE")")
+    if session && [[ -n "$CLICK" && "$CLICK" != - ]]; then
+        args+=(-group "agents-$TOKEN" -execute "$CLICK")
+        [[ -z "$BUNDLE" || "$BUNDLE" == - ]] || args+=(-activate "$BUNDLE")
     fi
-    with_timeout 5 "$tn" "${args[@]}" </dev/null
+    with_timeout 5 "$tn" "${args[@]}"
 }
 
 notify_osascript() {
@@ -156,9 +185,15 @@ notify_osascript() {
         -e 'end run' "$TITLE" "$MESSAGE" "$SUBTITLE" "$SOUND"
 }
 
+# terminal-notifier's banner, else osascript's: only when terminal-notifier
+# is missing or failed. Not when the timeout cut it off (124): it has most
+# likely posted, or sat on macOS's first "allow notifications?" prompt, and
+# osascript would show the same banner a second time.
 notify_macos() {
-    is_macos || return 1
-    notify_terminal_notifier || notify_osascript
+    local rc=0
+    notify_terminal_notifier || rc=$?
+    [[ $rc -ne 0 && $rc -ne 124 ]] || return 0
+    notify_osascript
 }
 
 notify_linux_desktop() {
@@ -174,7 +209,7 @@ notify_ntfy() {
 main() {
     local in_term=false
     if notify_herdr || notify_tmux; then in_term=true; fi
-    if [[ "$in_term" == false ]] || ! is_remote; then
+    if is_macos && { [[ "$in_term" == false ]] || ! is_remote; }; then
         notify_macos && return 0
     fi
     [[ "$in_term" == true ]] || notify_linux_desktop || notify_ntfy

@@ -21,9 +21,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../lib/config_write.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/config_write.sh"
 
-MONITORING_FORMULAE=(lazydocker bottom)
-# macOS: notify.sh's banners become clickable (a click jumps to the session).
-if [[ "${OSTYPE:-}" == darwin* ]]; then MONITORING_FORMULAE+=(terminal-notifier); fi
+# terminal-notifier makes notify.sh's banners clickable (a click jumps to the
+# session); it is macOS-only, so pkg_install skips it on Linux (pkg.sh).
+MONITORING_FORMULAE=(lazydocker bottom terminal-notifier)
 MONITORING_CASKS=(swiftbar)   # macOS only; casks are Homebrew-on-macOS
 
 MONITORING_REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -107,6 +107,7 @@ _monitoring_swiftbar() {
 
     print_info "Open SwiftBar once (open -a SwiftBar) and turn on Launch at login in its settings."
     print_info "terminal-notifier: allow its notifications when macOS asks (or in System Settings > Notifications), so a click on an agent's banner jumps to its session; 'terminal-notifier -diagnose' says why none appear."
+    print_info "The first click asks to let terminal-notifier control your terminal app: allow it, so a click lands on the session's tab (declined, it only brings the app forward)."
 }
 
 monitoring_install() {

@@ -19,7 +19,8 @@
 #   pkg_native_refresh MGR           refresh apt lists when root is available
 #   pkg_native_upgrade MGR NAME...   upgrade installed packages, or print how
 #
-# Names are Homebrew formula names; distro renames are mapped here. Order:
+# Names are Homebrew formula names; distro renames are mapped here, and
+# macOS-only formulae (_pkg_macos_only) are skipped on Linux. Order:
 # Homebrew (macOS, or Linux when the user has it) → apt-get → dnf → pacman.
 # System managers run as root or through `sudo -n` only — never a hidden
 # password prompt. Without either, the exact commands are printed instead.
@@ -83,6 +84,17 @@ _pkg_native_name() {
         apt:dust)      echo "du-dust" ;;   # binary is still dust
         apt:bottom)    echo "btm" ;;       # binary is still btm
         *)             echo "$2" ;;
+    esac
+}
+
+# Formulae Homebrew builds for macOS alone, which no distribution ships: a
+# pack declares them in its <PACK>_FORMULAE like any other (so update,
+# health check and uninstall see them), and pkg_install skips them on Linux,
+# quietly: nothing is missing there.
+_pkg_macos_only() {
+    case "$1" in
+        terminal-notifier) return 0 ;;   # monitoring: clickable notifications
+        *)                 return 1 ;;
     esac
 }
 
@@ -364,6 +376,11 @@ pkg_native_upgrade() {
 # provided (PKG_UNAVAILABLE lists it); never exits the caller.
 pkg_install() {
     PKG_UNAVAILABLE=()
+    if ! is_macos; then
+        local name kept=()
+        for name in "$@"; do _pkg_macos_only "$name" || kept+=("$name"); done
+        set -- ${kept[@]+"${kept[@]}"}
+    fi
     [[ $# -gt 0 ]] || return 0
 
     local mgr
