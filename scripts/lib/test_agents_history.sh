@@ -19,6 +19,7 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home" NO_COLOR=1 AGENTS_CONF="$tmp/none.conf" AGENTS_DATA_DIR="$tmp/data" AGENTS_RUN_DIR="$tmp/run"
 export AGENTS_TESTING=1 AGENTS_NO_HERDR=1
+unset CLAUDE_CONFIG_DIR CODEX_HOME   # the token scan reads only $HOME's transcripts (none)
 mkdir -p "$HOME"
 
 # shellcheck source=../../bin/agents disable=SC1091

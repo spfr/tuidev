@@ -36,6 +36,7 @@ done
 export HOME="$tmp/home" TMPDIR="$tmp/t" LC_ALL=C TZ=UTC NO_COLOR=1
 export AGENTS_TESTING=1 AGENTS_SELF=7000 AGENTS_UID=501 AGENTS_CONF="$tmp/none.conf"
 export AGENTS_DATA_DIR="$tmp/data" AGENTS_RUN_DIR="$tmp/run"
+unset CLAUDE_CONFIG_DIR CODEX_HOME   # the token scan reads only $HOME's transcripts (none)
 mkdir -p "$HOME" "$TMPDIR" "$AGENTS_DATA_DIR" "$AGENTS_RUN_DIR" "$tmp/out"
 
 # shellcheck source=../../bin/agents disable=SC1091

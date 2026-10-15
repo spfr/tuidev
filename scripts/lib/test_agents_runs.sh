@@ -19,7 +19,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home" NO_COLOR=1 TZ=UTC AGENTS_CONF="$tmp/none.conf" AGENTS_DATA_DIR="$tmp/data" AGENTS_RUN_DIR="$tmp/run"
-export AGENTS_TESTING=1 AGENTS_NO_HERDR=1 CLAUDE_CONFIG_DIR="$tmp/claude"
+export AGENTS_TESTING=1 AGENTS_NO_HERDR=1 CLAUDE_CONFIG_DIR="$tmp/claude" CODEX_HOME="$tmp/codex"
 unset AGENTS_HISTORY AGENTS_HISTORY_DAYS
 mkdir -p "$HOME"
 
