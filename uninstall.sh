@@ -156,9 +156,15 @@ each_line "$M_GIT" _unset_git_record
 
 print_header "removing tuidev helpers"
 
-# Release a keep-awake hold `agents` started before the helper goes away.
+# Release a keep-awake hold `agents` started before the helper goes away, and
+# put the MCP servers it made lazy back in front: their configs name
+# mcp-lazy, which goes too.
 if [[ -x "$HOME/.local/bin/agents" ]]; then
     run_cmd "$HOME/.local/bin/agents" awake off || true
+    if [[ -x "$HOME/.local/bin/mcp-lazy" ]]; then
+        run_cmd "$HOME/.local/bin/agents" mcp eager --all \
+            || print_warning "some MCP servers still name $HOME/.local/bin/mcp-lazy: agents mcp eager NAME, or edit their configs"
+    fi
 fi
 
 _remove_helper() {
@@ -192,7 +198,7 @@ if $MANIFEST_MODE; then
     each_line "$M_FILES" _remove_helper
 else
     # Without a record, remove a helper only if it is still exactly ours.
-    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents"; do
+    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents" "mcp-lazy:bin/mcp-lazy"; do
         _remove_if_ours "$HOME/.local/bin/${pair%%:*}" "$SCRIPT_DIR/${pair#*:}"
     done
     while IFS= read -r src; do

@@ -1,0 +1,602 @@
+#!/usr/bin/perl
+# mcp-lazy — start a stdio MCP server only when a session first needs it.
+#
+#   mcp-lazy [--name NAME] [--env VAR,...] -- COMMAND [ARG...]
+#
+# Claude Code and Codex start every configured MCP server with each session,
+# and ask each the same things first: server/discover (a newer client's
+# probe), initialize, then tools/list (prompts, resources). mcp-lazy stands where the server's command was and answers
+# those from a cache of what the server answered before, so a session that
+# never calls one of its tools never starts it: a few MB of Perl instead of
+# a server per session. The first request it cannot answer (a tools/call,
+# mostly) starts the server, replays the session's initialize to it, and
+# from then on every line passes through both ways unchanged.
+#
+# The cache: one JSON file per command line in
+# ${MCP_LAZY_CACHE:-${XDG_CACHE_HOME:-~/.cache}/tuidev/mcp-lazy}, named
+# after the server and a hash of its command line (never the line itself:
+# args can hold tokens), private. In the hash too: the program's (and any
+# file path among its args') size and mtime, so an upgraded server gets a
+# new cache; the working directory when an arg is a relative path; and the
+# values of the variables --env names (the server's own env, which its
+# config sets: they can change what it offers). It keeps the answers for each protocol
+# version a session asked for (Claude Code and Codex ask for different
+# ones). Without them (the first session of a client, or of a new server),
+# the server starts with the session and its answers fill the cache for the
+# next. Once started, the server's tool list is asked for again: a changed
+# one replaces the cache's and the session gets
+# notifications/tools/list_changed.
+#
+# A server that exits fails the requests it had, and the next request
+# starts it again. When the session closes stdin (or sends TERM, INT, HUP),
+# the server's stdin is closed; after MCP_LAZY_GRACE seconds (3) its
+# process group gets TERM, then KILL.
+#
+# MCP_LAZY=0 runs COMMAND directly. MCP_LAZY_DEBUG=1 logs to stderr, which
+# the client keeps in its MCP logs. /usr/bin/perl (5.10+) and its core
+# modules only: a server whose env sets its own PATH runs it all the same.
+
+use strict;
+use warnings;
+use JSON::PP ();
+use Digest::SHA qw(sha256_hex);
+use POSIX qw(WNOHANG);
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use Errno qw(EAGAIN EINTR EWOULDBLOCK);
+use Time::HiRes qw(time sleep);
+
+my $VERSION = '3';
+
+sub usage {
+    print { $_[0] ? *STDERR : *STDOUT } "usage: mcp-lazy [--name NAME] [--env VAR,...] -- COMMAND [ARG...]\n";
+    exit $_[0];
+}
+
+my ($name, @envkey, @cmd);
+while (@ARGV) {
+    my $a = shift @ARGV;
+    if    ($a eq '--')                     { @cmd = @ARGV; last }
+    elsif ($a eq '--name' && @ARGV)        { $name = shift @ARGV }
+    elsif ($a =~ /^--name=(.*)\z/s)        { $name = $1 }
+    elsif ($a eq '--env' && @ARGV)         { push @envkey, grep { $_ ne '' } split /,/, shift @ARGV }
+    elsif ($a eq '--version')              { print "mcp-lazy $VERSION\n"; exit 0 }
+    elsif ($a eq '-h' || $a eq '--help')   { usage(0) }
+    else                                   { usage(2) }
+}
+usage(2) unless @cmd;
+if (defined $ENV{MCP_LAZY} && $ENV{MCP_LAZY} eq '0') {
+    { no warnings q(exec); exec { $cmd[0] } @cmd }
+    die "mcp-lazy: cannot run $cmd[0]: $!\n";
+}
+($name = $name // $cmd[0]) =~ s{.*/}{};
+$name =~ s/[^A-Za-z0-9._-]+/_/g;
+$name = 'server' if $name eq '';
+
+my $DEBUG = $ENV{MCP_LAZY_DEBUG} ? 1 : 0;
+my $GRACE = ($ENV{MCP_LAZY_GRACE} // '') =~ /^\d+(?:\.\d+)?\z/ ? $ENV{MCP_LAZY_GRACE} : 3;
+my $START_TIMEOUT = ($ENV{MCP_LAZY_START_TIMEOUT} // '') =~ /^\d+\z/ ? $ENV{MCP_LAZY_START_TIMEOUT} : 60;
+my $BUF_MAX = 16 << 20;      # stop reading a side while 16 MiB wait to go to the other
+my $JSON = JSON::PP->new->utf8->canonical->allow_nonref;
+# The lists a session asks for at start, answered from the cache.
+my %LISTS = map { $_ => 1 } qw(tools/list prompts/list resources/list resources/templates/list);
+
+sub logm { print STDERR "mcp-lazy[$name]: @_\n" }
+sub logd { logm(@_) if $DEBUG }
+
+# --- the cache -------------------------------------------------------------
+
+# A command's program, found as the client's exec finds it.
+sub program {
+    my $c = shift;
+    return $c if index($c, '/') >= 0;
+    for my $d (split /:/, $ENV{PATH} // '') {
+        my $p = ($d eq '' ? '.' : $d) . "/$c";
+        return $p if -f $p && -x _;
+    }
+    return $c;
+}
+
+my $CACHE_FILE = do {
+    require Cwd;
+    my @id = ("v$VERSION", @cmd);
+    # By the file a path resolves to: fnm, for one, puts each shell's node
+    # and npx under a directory of its own. A relative path (./x, or a file
+    # here: node server.js) is the working directory's.
+    my @rel = grep { m{^\.\.?/} || (!m{^[-/]} && !m{://} && -e $_) } @cmd[1 .. $#cmd];
+    for my $p (program($cmd[0]), (grep { m{^/} } @cmd[1 .. $#cmd]), @rel) {
+        my $real = Cwd::abs_path($p) // $p;
+        my @st = stat $real;
+        push @id, "$real:$st[7]:$st[9]" if @st && -f _;
+    }
+    push @id, 'cwd:' . (Cwd::getcwd() // '') if @rel;
+    push @id, map { "env:$_=" . ($ENV{$_} // '') } sort @envkey;
+    my $home = $ENV{HOME} || (getpwuid $<)[7] || die "mcp-lazy: no home directory\n";
+    my $dir = $ENV{MCP_LAZY_CACHE} || (($ENV{XDG_CACHE_HOME} || "$home/.cache") . '/tuidev/mcp-lazy');
+    "$dir/$name-" . substr(sha256_hex(join "\0", @id), 0, 16) . '.json';
+};
+
+my $cache;                   # the cache file's content (load_cache)
+
+# {v, by: {CLIENT: {init, lists: {METHOD: result}}}, discover: {PROTOCOL:
+# answer}}: what the server answered sessions of each kind of client (the
+# protocol version it asked for and a hash of its capabilities: a server
+# may offer a client tools by what it supports), and server/discover probes
+# for each protocol version (their result or error).
+sub load_cache {
+    open my $fh, '<', $CACHE_FILE or return undef;
+    local $/;
+    my $c = eval { $JSON->decode(scalar <$fh>) };
+    return undef unless ref $c eq 'HASH' && ($c->{v} // '') eq $VERSION && ref $c->{by} eq 'HASH';
+    $c->{discover} = {} unless ref $c->{discover} eq 'HASH';
+    return $c;
+}
+
+# Change the cache with CODE, applied to the file as it is now (sessions of
+# other clients add their own protocol's answers), and keep the result.
+sub update_cache {
+    my $code = shift;
+    my $c = load_cache() // { v => $VERSION, by => {}, discover => {} };
+    $code->($c);
+    save_cache($c);
+    $cache = $c;
+}
+
+sub save_cache {
+    my $c = shift;
+    (my $dir = $CACHE_FILE) =~ s{/[^/]*\z}{};
+    my $old = umask 077;
+    my $ok = eval {
+        mkdir_p($dir);
+        my $tmp = "$CACHE_FILE.$$";
+        open my $fh, '>', $tmp or die "$tmp: $!\n";
+        print {$fh} $JSON->encode($c) or die "$tmp: $!\n";
+        close $fh or die "$tmp: $!\n";
+        rename $tmp, $CACHE_FILE or die "$CACHE_FILE: $!\n";
+        1;
+    };
+    umask $old;
+    logm("cache not saved: $@") unless $ok;
+}
+
+sub mkdir_p {
+    my $path = '';
+    for my $part (split m{/}, shift) {
+        $path .= $part eq '' ? '' : "/$part";
+        next if $path eq '' || -d $path;
+        mkdir $path, 0700 or -d $path or die "$path: $!\n";
+    }
+}
+
+$cache = load_cache();
+
+# --- state ----------------------------------------------------------------
+
+my $state = 'cold';          # cold: no server; starting: replaying initialize; warm: passing through
+my ($pid, $to_srv, $from_srv, $started_at);
+my ($cin, $cout, $kin, $kout) = ('', '', '', '');
+my ($cscan, $kscan) = (0, 0);
+my $stdin_eof = 0;
+my $stop = 0;                # TERM, INT or HUP came: the client is stopping us
+my $drain_until = 0;         # after stdin's end: how long answers are still passed back
+my $init;                    # the session's initialize params
+my $level;                   # its logging/setLevel params, replayed to a server started later
+my $served_tools = 0;        # tools/list answered from the cache this session
+my $probe;                   # the protocol version the session's server/discover asked for
+my @queue;                   # the session's lines held while the server starts
+my %inflight;                # id (as JSON) => 1: requests the server has not answered
+my %want;                    # id (as JSON) => method: answers that go to the cache
+
+sub id_key { $JSON->encode($_[0]) }
+sub to_client { $cout .= $_[0] . "\n" }
+sub to_server { $kin .= $_[0] . "\n" if $to_srv }
+sub reply { to_client($JSON->encode({ jsonrpc => '2.0', id => $_[0], result => $_[1] })) }
+sub reply_error {
+    to_client($JSON->encode({ jsonrpc => '2.0', id => $_[0],
+                              error => { code => -32603, message => "mcp-lazy: $_[1]" } }));
+}
+
+# The session's kind of client: the protocol version it asked for, and a
+# hash of its capabilities.
+sub client {
+    return '' unless ref $init eq 'HASH';
+    return ($init->{protocolVersion} // '') . ' ' . substr(sha256_hex($JSON->encode($init->{capabilities} // {})), 0, 12);
+}
+
+# The cache's answers for the session's kind of client, or undef.
+sub entry {
+    my $e = $init && $cache && $cache->{by}{ client() };
+    return ref $e eq 'HASH' && ref $e->{init} eq 'HASH' ? $e : undef;
+}
+
+# The cached initialize result for the session's protocol version; it
+# promises tools/list_changed, sent when the server's tools turn out to
+# differ from the cache's.
+sub cached_init {
+    my $e = entry() or return undef;
+    my %r = %{ $e->{init} };
+    if (ref $r{capabilities} eq 'HASH' && ref $r{capabilities}{tools} eq 'HASH') {
+        $r{capabilities} = { %{ $r{capabilities} } };
+        $r{capabilities}{tools} = { %{ $r{capabilities}{tools} }, listChanged => JSON::PP::true };
+    }
+    return \%r;
+}
+
+# Set O_NONBLOCK on FH; its flags before.
+sub nonblock {
+    my $fh = shift;
+    my $fl = fcntl($fh, F_GETFL, 0);
+    fcntl($fh, F_SETFL, $fl | O_NONBLOCK) if defined $fl;
+    return $fl;
+}
+
+# --- the server -------------------------------------------------------------
+
+sub start_server {
+    pipe(my $srv_in, my $w) or return 0;
+    pipe(my $r, my $srv_out) or return 0;
+    my $p = fork;
+    return 0 unless defined $p;
+    if ($p == 0) {
+        setpgrp(0, 0);       # its own group: stopped with everything it starts
+        open STDIN, '<&', $srv_in or POSIX::_exit(127);
+        open STDOUT, '>&', $srv_out or POSIX::_exit(127);
+        $SIG{$_} = 'DEFAULT' for qw(PIPE TERM INT HUP);
+        { no warnings q(exec); exec { $cmd[0] } @cmd }
+        print STDERR "mcp-lazy[$name]: cannot run $cmd[0]: $!\n";
+        POSIX::_exit(127);
+    }
+    close $srv_in;
+    close $srv_out;
+    nonblock($w);
+    nonblock($r);
+    ($pid, $to_srv, $from_srv, $started_at) = ($p, $w, $r, time);
+    ($kin, $kout, $kscan) = ('', '', 0);
+    logd("started the server, pid $p");
+    return 1;
+}
+
+# Stop the server: close its stdin, give it GRACE seconds (or WAIT) to
+# exit, then TERM and KILL its process group (what it started too).
+sub stop_server {
+    my $wait0 = shift // $GRACE;
+    return unless $pid;
+    close $to_srv if $to_srv;
+    undef $to_srv;
+    my $done = 0;
+    for my $step ([$wait0, undef], [2, 'TERM'], [1, 'KILL']) {
+        my ($wait, $sig) = @$step;
+        kill $sig, -$pid if $sig;
+        my $until = time + $wait;
+        while (1) {
+            $done = 1 if !$done && waitpid($pid, WNOHANG) != 0;
+            last if $done && !kill(0, -$pid);
+            last if $stop && !$sig;          # the client is stopping us: no more waiting
+            last if time >= $until;
+            drain();
+            sleep 0.05;
+        }
+        last if $done && !kill(0, -$pid);
+    }
+    waitpid($pid, 0) unless $done;
+    close $from_srv if $from_srv;
+    ($pid, $from_srv) = (undef, undef);
+}
+
+sub drain {
+    return unless $from_srv;
+    my $n = sysread($from_srv, my $junk, 1 << 20);
+    if (defined $n && $n == 0) { close $from_srv; undef $from_srv }
+}
+
+# The server is gone (exited, or its stdout closed): fail what it had, and
+# go cold; the next request starts it again.
+sub server_gone {
+    my $why = shift;
+    my $was = $state;
+    stop_server();
+    logm("the server stopped ($why); the next request starts it again") if $was ne 'cold';
+    fail_queue("the server stopped ($why) before answering");
+    reply_error($JSON->decode($_), "the server stopped ($why) before answering") for keys %inflight;
+    %inflight = (); %want = ();
+    $state = 'cold';
+}
+
+sub fail_queue {
+    my $msg = shift;
+    for my $line (splice @queue) {
+        my $m = eval { $JSON->decode($line) };
+        reply_error($m->{id}, $msg) if ref $m eq 'HASH' && defined $m->{method} && exists $m->{id};
+    }
+}
+
+# A request the cache cannot answer: start the server, replay the session's
+# initialize to it (or, before one, pass everything through), then the line.
+sub warm_up {
+    push @queue, shift;
+    unless (start_server()) {
+        logm("cannot start the server: $!");
+        fail_queue("cannot start the server: $!");
+        return;
+    }
+    if ($init) {
+        $state = 'starting';
+        to_server($JSON->encode({ jsonrpc => '2.0', id => 'mcp-lazy:init', method => 'initialize', params => $init }));
+    } else {
+        $state = 'warm';
+        flush_queue();
+    }
+}
+
+sub flush_queue {
+    for my $line (splice @queue) { to_server($line); note_request($line) }
+}
+
+# A request passed to the server: in flight until answered; the answers to
+# initialize, server/discover and the lists go to the cache.
+sub note_request {
+    my $m = eval { $JSON->decode($_[0]) };
+    return unless ref $m eq 'HASH' && defined $m->{method} && exists $m->{id};
+    $init = ref $m->{params} eq 'HASH' ? $m->{params} : {} if $m->{method} eq 'initialize';
+    $probe = probe_version($m) if $m->{method} eq 'server/discover';
+    my $k = id_key($m->{id});
+    $inflight{$k} = 1;
+    $want{$k} = $m->{method}
+        if $m->{method} eq 'initialize' || $m->{method} eq 'server/discover'
+        || $LISTS{ $m->{method} } && !(ref $m->{params} eq 'HASH' && defined $m->{params}{cursor});
+}
+
+# --- lines from the session -------------------------------------------------
+
+sub from_client {
+    my $line = shift;
+    return if $line !~ /\S/;
+    if ($state eq 'warm') { to_server($line); note_request($line); return }
+    my $m = eval { $JSON->decode($line) };
+    my $method = ref $m eq 'HASH' ? $m->{method} : undef;
+    my $request = defined $method && exists $m->{id};
+    if ($request && $method eq 'ping') { reply($m->{id}, {}); return }
+    if ($state eq 'starting') { push @queue, $line; return }
+    return warm_up($line) unless ref $m eq 'HASH';
+    return unless $request;                  # notifications and answers: nothing to tell a server not started
+    if ($method eq 'initialize') {
+        $init = ref $m->{params} eq 'HASH' ? $m->{params} : {};
+        my $r = cached_init();
+        return reply($m->{id}, $r) if $r;
+        logd('no cache for this session: the server starts now');
+        undef $init;                         # passed through, not replayed (note_request keeps it)
+        return warm_up($line);
+    }
+    if ($method eq 'server/discover') {
+        $probe = probe_version($m);
+        my $d = $cache && $cache->{discover}{$probe};
+        if (ref $d eq 'HASH') {
+            to_client($JSON->encode({ %$d, jsonrpc => '2.0', id => $m->{id} }));
+            return;
+        }
+    }
+    if ($method eq 'logging/setLevel') { $level = $m->{params}; reply($m->{id}, {}); return }
+    my $e = entry();
+    if ($LISTS{$method} && $e && ref $e->{lists}{$method} eq 'HASH'
+        && !(ref $m->{params} eq 'HASH' && defined $m->{params}{cursor})) {
+        $served_tools = 1 if $method eq 'tools/list';
+        reply($m->{id}, $e->{lists}{$method});
+        return;
+    }
+    logd("starting the server for $method");
+    warm_up($line);
+}
+
+# --- lines from the server --------------------------------------------------
+
+# The id of an answer, cheaply (an answer can be MBs: a screenshot), where
+# the JSON-RPC encoders put it: before the result or error (with jsonrpc on
+# either side of it), or last after a result or error that comes first
+# (after jsonrpc, maybe). Else, a line of
+# up to 1 MiB is decoded; undef for none.
+my $ID = qr/(-?\d+|"(?:[^"\\]|\\.)*")/;
+my $RPC = qr/"jsonrpc"\s*:\s*"2\.0"\s*,\s*/;
+sub answer_id {
+    my $l = $_[0];
+    return $1 if $l =~ /^\s*\{\s*(?:$RPC)?"id"\s*:\s*$ID\s*,\s*(?:$RPC)?"(?:result|error)"/;
+    return $1 if $l =~ /^\s*\{\s*(?:$RPC)?"(?:result|error)"/ && substr($l, -256) =~ /"id"\s*:\s*$ID\s*\}\s*\z/;
+    return undef if length $l > (1 << 20);
+    my $m = eval { $JSON->decode($l) };
+    return ref $m eq 'HASH' && !defined $m->{method} && defined $m->{id} && !ref $m->{id} ? id_key($m->{id}) : undef;
+}
+
+sub from_server {
+    my $line = shift;
+    return if $line !~ /\S/;
+    my $k = answer_id($line);
+    if (%want || index($line, '"mcp-lazy:') >= 0) {
+        my $m = eval { $JSON->decode($line) };
+        if (ref $m eq 'HASH' && !defined $m->{method} && defined $m->{id}) {
+            return internal($m) if !ref $m->{id} && $m->{id} =~ /^mcp-lazy:/;
+            $k = id_key($m->{id});
+            record($want{$k}, $m) if $want{$k};
+        }
+    }
+    if (defined $k) { delete $inflight{$k}; delete $want{$k} }
+    to_client($line);
+}
+
+# The protocol version a server/discover probe asks for.
+sub probe_version {
+    my $meta = ref $_[0]{params} eq 'HASH' ? $_[0]{params}{_meta} : undef;
+    return ref $meta eq 'HASH' ? $meta->{'io.modelcontextprotocol/protocolVersion'} // '' : '';
+}
+
+# An answer the cache keeps, for the session's kind of client:
+# initialize's result starts its answers anew, a list's goes with them;
+# server/discover's, a result or an error, for the version it probed.
+sub record {
+    my ($method, $m) = @_;
+    my ($result, $p) = ($m->{result}, client());
+    if ($method eq 'server/discover') {
+        my $answer = ref $result eq 'HASH' ? { result => $result } : ref $m->{error} eq 'HASH' ? { error => $m->{error} } : return;
+        my $q = $probe // '';
+        update_cache(sub { $_[0]{discover}{$q} = $answer });
+    } elsif (ref $result ne 'HASH' || !$init) {
+        return;
+    } elsif ($method eq 'initialize') {
+        update_cache(sub { $_[0]{by}{$p} = { init => $result, lists => {} } });
+    } elsif (!defined $result->{nextCursor}) {
+        update_cache(sub { $_[0]{by}{$p}{lists}{$method} = $result if ref $_[0]{by}{$p} eq 'HASH' });
+    }
+}
+
+# Answers to what mcp-lazy asked itself: the replayed initialize, and the
+# tool list it checks the cache's against.
+sub internal {
+    my $m = shift;
+    if ($m->{id} eq 'mcp-lazy:init') {
+        if (ref $m->{result} ne 'HASH') {
+            my $why = ref $m->{error} eq 'HASH' ? ($m->{error}{message} // 'an error') : 'no result';
+            logm("the server refused initialize: $why");
+            fail_queue("the server refused initialize: $why");
+            stop_server();
+            $state = 'cold';
+            return;
+        }
+        refresh_init($m->{result});
+        to_server('{"jsonrpc":"2.0","method":"notifications/initialized"}');
+        to_server($JSON->encode({ jsonrpc => '2.0', id => 'mcp-lazy:level', method => 'logging/setLevel', params => $level }))
+            if ref $level eq 'HASH';
+        to_server('{"jsonrpc":"2.0","id":"mcp-lazy:tools","method":"tools/list"}')
+            if ref $m->{result}{capabilities} eq 'HASH' && $m->{result}{capabilities}{tools};
+        $state = 'warm';
+        logd(sprintf 'the server is up in %.2fs', time - $started_at);
+        flush_queue();
+    } elsif ($m->{id} eq 'mcp-lazy:tools' && ref $m->{result} eq 'HASH' && !defined $m->{result}{nextCursor}) {
+        my ($e, $p, $tools) = (entry(), client(), $m->{result});
+        my $old = $e && $e->{lists}{'tools/list'};
+        return if $old && $JSON->encode($old) eq $JSON->encode($tools);
+        update_cache(sub {
+            my $c = shift;
+            $c->{by}{$p}{lists}{'tools/list'} = $tools if ref $c->{by}{$p} eq 'HASH';
+            # Changed: the other clients' lists are as old; their next
+            # session asks the server.
+            return unless $old;
+            for my $q (grep { $_ ne $p && ref $c->{by}{$_} eq 'HASH' } keys %{ $c->{by} }) {
+                delete $c->{by}{$q}{lists}{'tools/list'};
+            }
+        });
+        if ($served_tools) {
+            logm('its tools changed: the cache is updated, and the session told');
+            to_client('{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}');
+        }
+    }
+}
+
+# A server started for a session the cache answered: what it answers
+# initialize now replaces the cache's, and when its capabilities differ (a
+# new version that serves prompts, say), the lists cached with it go too:
+# the next session asks the server.
+sub refresh_init {
+    my ($r, $e, $p) = (shift, entry(), client());
+    return if !$e || $JSON->encode($e->{init}) eq $JSON->encode($r);
+    my $caps = $JSON->encode($e->{init}{capabilities} // {}) ne $JSON->encode($r->{capabilities} // {});
+    logm('its initialize answer changed: the cache is updated');
+    update_cache(sub {
+        my $x = $_[0]{by}{$p};
+        return unless ref $x eq 'HASH';
+        $x->{init} = $r;
+        $x->{lists} = {} if $caps;
+    });
+}
+
+# Whether the server is gone: exited (reaped here), or closed its stdout,
+# which its exit follows (waited for, a second at most). Why, or undef.
+sub gone_why {
+    my $until = time + 1;
+    while (1) {
+        my $w = waitpid($pid, WNOHANG);
+        if ($w != 0) {
+            my $st = $?;
+            return $w < 0 ? 'it exited' : $st & 127 ? 'signal ' . ($st & 127) : 'exit ' . ($st >> 8);
+        }
+        return undef if $from_srv;
+        return 'it closed its stdout' if time >= $until;
+        sleep 0.05;
+    }
+}
+
+# --- the loop ----------------------------------------------------------------
+
+# Split complete lines off a buffer; SCAN is how far it has been searched.
+sub lines {
+    my ($buf, $scan, $cb) = @_;
+    while ((my $i = index($$buf, "\n", $$scan)) >= 0) {
+        my $line = substr($$buf, 0, $i + 1, '');
+        chomp $line;
+        $line =~ s/\r\z//;
+        $$scan = 0;
+        $cb->($line);
+    }
+    $$scan = length $$buf;
+}
+
+sub flush_out {
+    my ($fh, $buf) = @_;
+    my $n = syswrite($fh, $$buf);
+    if (defined $n) { substr($$buf, 0, $n, ''); return 1 }
+    return $! == EAGAIN || $! == EWOULDBLOCK || $! == EINTR;
+}
+
+$SIG{PIPE} = 'IGNORE';
+$SIG{$_} = sub { $stop = 1 } for qw(TERM INT HUP);
+my $stdout_fl = nonblock(\*STDOUT);
+
+my $ok = eval {
+    until ($stop) {
+        if ($pid && $state ne 'cold' && defined(my $why = gone_why())) {
+            # Pass on what it wrote before it went.
+            while ($from_srv) {
+                my $n = sysread($from_srv, my $buf, 1 << 20);
+                last unless $n;
+                $kout .= $buf;
+            }
+            lines(\$kout, \$kscan, \&from_server);
+            if (length $kout) { from_server($kout); ($kout, $kscan) = ('', 0) }   # a last line without its newline
+            server_gone($why);
+        }
+        if ($state eq 'starting' && time - $started_at > $START_TIMEOUT) {
+            server_gone("no answer to initialize in ${START_TIMEOUT}s");
+        }
+        if ($stdin_eof) {
+            # The session closed stdin: what it sent reaches the server, whose
+            # stdin is then closed; its answers still go back, for GRACE
+            # seconds at most.
+            if ($to_srv && $state eq 'warm' && !length $kin && !@queue) { close $to_srv; undef $to_srv }
+            last if !length $cout && (!$pid || (!%inflight && !@queue) || time > $drain_until);
+            last if time > $drain_until + 2;
+        }
+        my ($rin, $win) = ('', '');
+        vec($rin, 0, 1) = 1 if !$stdin_eof && length $kin < $BUF_MAX;
+        vec($rin, fileno $from_srv, 1) = 1 if $from_srv && length $cout < $BUF_MAX;
+        vec($win, 1, 1) = 1 if length $cout;
+        vec($win, fileno $to_srv, 1) = 1 if $to_srv && length $kin;
+        my $n = select(my $rout = $rin, my $wout = $win, undef, 0.5);
+        if ($n < 0) { next if $! == EINTR; die "select: $!\n" }
+        next unless $n;
+        if (vec($rout, 0, 1)) {
+            my $r = sysread(STDIN, my $buf, 1 << 20);
+            if (defined $r && $r == 0) { $stdin_eof = 1; $drain_until = time + $GRACE }
+            if ($r) { $cin .= $buf; lines(\$cin, \$cscan, \&from_client) }
+        }
+        if ($from_srv && vec($rout, fileno $from_srv, 1)) {
+            my $r = sysread($from_srv, my $buf, 1 << 20);
+            if ($r) { $kout .= $buf; lines(\$kout, \$kscan, \&from_server) }
+            elsif (defined $r) { close $from_srv; undef $from_srv }    # EOF: reaped above once it exits
+        }
+        if (length $cout && vec($wout, 1, 1)) { flush_out(\*STDOUT, \$cout) or last }
+        if ($to_srv && length $kin && vec($wout, fileno $to_srv, 1)) {
+            flush_out($to_srv, \$kin) or do { close $to_srv; undef $to_srv; $kin = '' };
+        }
+    }
+    1;
+};
+logm("error: $@") unless $ok;
+stop_server($stop ? 0 : undef);    # a signal: the client is stopping it, maybe for good
+fcntl(STDOUT, F_SETFL, $stdout_fl) if defined $stdout_fl;    # a terminal's, left as it was
+exit($ok ? 0 : 1);

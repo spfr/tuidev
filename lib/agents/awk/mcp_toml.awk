@@ -27,6 +27,19 @@ function strs(s, arr,   n, i, c, q, v, L) {
     }
     return n
 }
+# closes(s): whether s has a "]" outside its strings and before its
+# comment: where an array over several lines ends.
+function closes(s,   i, c, q, L) {
+    q = ""; L = length(s)
+    for (i = 1; i <= L; i++) {
+        c = substr(s, i, 1)
+        if (q != "") { if (q == "\"" && c == "\\") i++; else if (c == q) q = ""; continue }
+        if (c == "#") return 0
+        if (c == "\"" || c == "'") q = c
+        else if (c == "]") return 1
+    }
+    return 0
+}
 function flush() {
     if (cur != "" && (cmd != "" || url != ""))
         printf "codex\tuser\t%s\t%s\t-\t-\t%s\t%s\t%s\t%d\n", cur, src, (cmd == "" ? "http" : "stdio"), (cmd == "" ? "-" : cmd), args, on
@@ -49,9 +62,14 @@ cur != "" && !insub && /^[ \t]*(command|args|url)[ \t]*=/ {
     k = $0; sub(/^[ \t]*/, "", k); sub(/[ \t]*=.*$/, "", k)
     v = $0; sub(/^[^=]*=/, "", v)
     if (k == "args") {
-        while (index(v, "]") == 0 && (getline more) > 0) v = v " " more     # an array over several lines
-        n = strs(v, a); args = ""
-        for (i = 1; i <= n; i++) { gsub(/\037/, " ", a[i]); args = args (i > 1 ? "\037" : "") a[i] }
+        # An array over several lines, read line by line: a comment ends
+        # only its own.
+        args = ""; na = 0
+        while (1) {
+            n = strs(v, a)
+            for (i = 1; i <= n; i++) { gsub(/\037/, " ", a[i]); args = args (na++ ? "\037" : "") a[i] }
+            if (closes(v) || (getline v) <= 0) break
+        }
     } else if (strs(v, a) > 0) {
         if (k == "command") cmd = a[1]; else url = a[1]
     }

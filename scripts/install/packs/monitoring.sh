@@ -4,7 +4,9 @@
 #
 # Installs container and system monitoring TUIs (lazydocker, bottom) and
 # `agents`, a command that shows and controls agentic-coding processes
-# (sessions, orphaned MCP servers, CPU hogs, keep-awake, thermal pressure).
+# (sessions, orphaned MCP servers, CPU hogs, keep-awake, thermal pressure),
+# with mcp-lazy, which `agents mcp lazy` puts in front of an MCP server so a
+# session starts it on its first tool call.
 # On macOS it adds SwiftBar and a menu-bar plugin built on `agents`, and
 # terminal-notifier, so a click on an agent's notification jumps to its session.
 #
@@ -57,6 +59,10 @@ _monitoring_agents() {
     print_step "installing the agents command -> $dest"
     install_config "$dest" "$MONITORING_REPO/bin/agents" --overwrite
     [[ "$DRY_RUN" == true ]] || chmod 0755 "$dest"
+    # Beside agents, which writes its path into the MCP configs it makes lazy.
+    print_step "installing mcp-lazy -> ${dest%/*}/mcp-lazy"
+    install_config "${dest%/*}/mcp-lazy" "$MONITORING_REPO/bin/mcp-lazy" --overwrite
+    [[ "$DRY_RUN" == true ]] || chmod 0755 "${dest%/*}/mcp-lazy"
     # Yours once placed: a commented example, never overwritten.
     install_config "$MONITORING_CONF" "$MONITORING_REPO/configs/agents/agents.conf" --adopt-existing
 }
@@ -122,6 +128,7 @@ monitoring_install() {
     print_info "bottom installs as 'btm' on your PATH."
     print_info "lazydocker requires a running Docker (or Podman) daemon."
     print_info "agents: run 'agents' (or 'agents watch'); 'agents --help' lists kill, reap and awake."
+    print_info "agents mcp lists your MCP servers; 'agents mcp lazy NAME' starts one on its first tool call instead of with every session."
 
     print_success "monitoring pack complete"
 }

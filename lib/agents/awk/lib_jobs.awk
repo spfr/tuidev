@@ -11,7 +11,8 @@
 # own: JOB is the unit process's own job (what `agents json` gives a tool or
 # an MCP server). KIND is the root's agent kind, "-" for a stale tree. NAME
 # and VIA: an MCP server's name (mcp_name) and launcher (mcp_via) on its own
-# mcp row, else "-". agents_enrich adds the root's cwd (13) and project
+# mcp row, else "-"; VIA lazy-idle for mcp-lazy alone, its server not
+# started yet. agents_enrich adds the root's cwd (13) and project
 # (15). With AGENTS_JOBS_PROC set (agents sample, the menu's run feed), also
 # one line per process:
 #   jp PID START ROOT JOB CPUTIME_S RSS AGE_S UNIT
@@ -46,7 +47,7 @@ function jobof(p,   j) {
     j = jobmatch(av[p])
     return jb[p] = (j == "" ? "other" : j)
 }
-function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc, m) {
+function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc, m, v) {
     proc = (ENVIRON["AGENTS_JOBS_PROC"] != "")
     for (k = 1; k <= n; k++) {
         p = ord[k]
@@ -69,6 +70,8 @@ function jobs_emit(   k, p, q, r, u, d, j, key, nk, i, proc, m) {
     for (i = 1; i <= nk; i++) {
         u = jku[i]; j = jkj[i]; key = u SUBSEP j; r = jroot[u]
         m = (j == "mcp" && j == jobof(u))
-        printf "job\t%d\t%s\t0\t%.1f\t0\t%d\t%d\t%s\t%s\t%d\t%s\t-\t%s\t-\t%s\n", r, j, jc[key], jm[key], jn[key], st[r], (j == jobof(u) ? "own" : "sub"), u, (kind[r] == "" ? "-" : kind[r]), (m ? mcp_name(av[u], kind[r]) : "-"), (m ? mcp_via(av[u]) : "-")
+        v = m ? mcp_via(av[u]) : "-"
+        if (v == "lazy" && jn[key] == 1) v = "lazy-idle"
+        printf "job\t%d\t%s\t0\t%.1f\t0\t%d\t%d\t%s\t%s\t%d\t%s\t-\t%s\t-\t%s\n", r, j, jc[key], jm[key], jn[key], st[r], (j == jobof(u) ? "own" : "sub"), u, (kind[r] == "" ? "-" : kind[r]), (m ? mcp_name(av[u], kind[r]) : "-"), v
     }
 }

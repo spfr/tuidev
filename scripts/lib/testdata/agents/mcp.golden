@@ -5,7 +5,7 @@ playwright             claude project  stdio  1 copy, 166M    @playwright/mcp   
 docs                   claude user     http   -               (a URL)                            ~/.claude.json
 RUNNING: copies now (each session starts its own) and their memory in use (RSS), not data sent
 example-agent: 1 stale copy · 54M — its session ended; agents stale lists it
-chrome-devtools: 2 copies · 454M — user scope starts one per session; scope it to the projects that use it
+chrome-devtools: 2 copies · 454M — user scope starts one per session; scope it to the projects that use it, or agents mcp lazy chrome-devtools starts it on first use
 chrome-devtools: 2 stale copies · 420M — their sessions ended; agents stale lists them
 playwright: 1 stale copy · 166M — its session ended; agents stale lists it
 [rc=0]

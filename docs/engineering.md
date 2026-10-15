@@ -29,7 +29,7 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `configs/themes/<name>/palette.toml` | `~/.config/tmux/theme.conf` + blocks in the Ghostty and Starship configs | `scripts/theme.sh` |
 | `configs/nvim/` | `~/.config/nvim/` | upgrade-shipped per file, only while tuidev owns the tree (`nvim` pack) |
 | `configs/tmux/tmux.conf` | `~/.config/tmux/tmux.conf` | managed block `tuidev-tmux` + TPM bootstrap (`tmux` pack) |
-| `bin/agents`, `lib/agents/`, `configs/swiftbar/agents.10s.sh` | `~/.local/bin/agents`, `~/.local/lib/tuidev/agents/` (`TUIDEV_LIB_DIR`), SwiftBar's plugin folder (default `~/.config/swiftbar/plugins/`, named after `AGENTS_BAR_REFRESH`) | overwrite, file by file (`monitoring` pack; the plugin on macOS only) |
+| `bin/agents`, `bin/mcp-lazy`, `lib/agents/`, `configs/swiftbar/agents.10s.sh` | `~/.local/bin/agents` and `mcp-lazy` beside it, `~/.local/lib/tuidev/agents/` (`TUIDEV_LIB_DIR`), SwiftBar's plugin folder (default `~/.config/swiftbar/plugins/`, named after `AGENTS_BAR_REFRESH`) | overwrite, file by file (`monitoring` pack; the plugin on macOS only) |
 | `configs/agents/agents.conf` | `~/.config/agents.conf` | adopt-existing (`monitoring` pack) |
 
 tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/tuidev`. It is defined once, in `scripts/lib/ui.sh`, and holds `profile`, `manifest`, `env`, `migrations`, `theme`, `backups/`, `sandbox/` and `shell.d/`. Derive every state path from it.
@@ -37,6 +37,7 @@ tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFI
 ```
 bin/sbx                 Seatbelt wrapper
 bin/agents              agent process monitor (monitoring pack): the entrypoint, sourceable for tests
+bin/mcp-lazy            stands in for a stdio MCP server until its first tool call (Perl, core modules only)
 lib/agents/             its modules and awk programs (map below); installed beside it, so it runs without the repo
 configs/                everything installed into $HOME (table above)
 scripts/lib/            shared libraries + test_*.sh unit harnesses
@@ -57,7 +58,8 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `config.sh` | every `AGENTS_*` setting (`agents.conf`, the environment, defaults), the process patterns, the run and data dirs, this process's pid and uid; `agents config` |
 | `util.sh` | `_agents_awk` (runs the `awk/` programs), the one `PID@START` pattern (`_AGENTS_TOKEN_RE`, `_agents_token`), durations, `--since` windows, clock times, timeouts (the command in a process group of its own, so the kill reaches everything it started), probes started in the background and read later (`_agents_bg`, `_agents_bg_wait`: a process substitution per probe, so a refresh's `lsof`, `launchctl` and `pmset` run while `ps` does), detached jobs, lock directories (each records its holder, `PID START`, and is taken over only once that holder is gone), a state file's holder check, epoch stamps, atomic replace |
 | `snapshot.sh` | the `ps` snapshot, start times, listeners, cwds (`/proc` or `lsof`, looked up early for the pids the last run asked about), pids never stale, Herdr's cached view, `agents_collect` |
-| `mcp.sh` | the MCP servers Claude Code and Codex are configured with (names, scopes, sources, the word that starts each; never args, env, headers or URLs), cached in `mcp.tsv`; `agents mcp`, with the copies of each running now; the menu's `mcpcfg` rows |
+| `mcp.sh` | the MCP servers Claude Code and Codex are configured with (names, scopes, sources, the word that starts each, whether it is behind `mcp-lazy`; never args, env, headers or URLs), cached in `mcp.tsv`; `agents mcp`, with the copies of each running now; the menu's `mcpcfg` rows |
+| `lazy.sh` | `agents mcp lazy\|eager`: puts servers behind `mcp-lazy` and back, in `.claude.json` (jq) and Codex's `config.toml` (`awk/mcp_toml_launch.awk`), never a project's `.mcp.json` or a plugin's; a backup of each file first, one rename, and only if nothing wrote to it meanwhile |
 | `where.sh` | where a process lives (tmux pane, Herdr pane, ssh, terminal app) and the one `tmux list-panes`; `agents jump`, `agents peek`, and `agents root-of` (the session a notification's click jumps to) |
 | `classify.sh` | `agents_classify` and `agents_enrich`: agents, stale, hogs, what each session runs, jobs, flags, project names |
 | `watched.sh` | the files polling loops watch: quiet or fresh, mtime, last line, and the credential files never read |
@@ -86,8 +88,10 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `usage.sh` | `agents --help` |
 | `cli.sh` | `agents_main`: options and the subcommand table; `agents cwd` |
 | `awk/lib_*.awk` | awk functions shared by several programs: process-table primitives (`lib_proc`), what a tool shell runs and the name it and an MCP server go by, and the launcher an MCP server starts through (`lib_activity`), jobs (`lib_jobs`), where a process lives (`lib_where`), JSON strings (`lib_json`), ordering, heapsorts (`lib_sort`), durations and sizes for people (`lib_fmt`), API list prices and which line prices a model (`lib_price`) |
-| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `tokens_plan`, `tokens`, `tokens_state` (the scan state's compaction), `tokens_rollup` (`tokens.tsv` by day), `tokens_session` (one session's tokens), `refusal`, `tree`, `new_members`, `hook_*`, `mcp` and `mcp_toml` (the inventory), `mcp_view` (`agents mcp`), `where`, `root` (`agents root-of`), `show_tree` and `show`, `pick`), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_tokens` (`tokens.tsv`, `compacts.tsv`, `limits.tsv`, the costs, and the tokens view), `report_context` (`uses.tsv`, the inventory, and the context view), `report_denials` (`denials.tsv` and the denials view), `report_insights`, `report_views` |
+| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `tokens_plan`, `tokens`, `tokens_state` (the scan state's compaction), `tokens_rollup` (`tokens.tsv` by day), `tokens_session` (one session's tokens), `refusal`, `tree`, `new_members`, `hook_*`, `mcp` and `mcp_toml` (the inventory), `mcp_toml_launch` (`agents mcp lazy\|eager` for Codex), `mcp_view` (`agents mcp`), `where`, `root` (`agents root-of`), `show_tree` and `show`, `pick`), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_tokens` (`tokens.tsv`, `compacts.tsv`, `limits.tsv`, the costs, and the tokens view), `report_context` (`uses.tsv`, the inventory, and the context view), `report_denials` (`denials.tsv` and the denials view), `report_insights`, `report_views` |
 | `prices.tsv` | API list prices, USD per million tokens, with the date they were checked and their sources: data, not code (`bin/agents` runs without it, unpriced) |
+
+`bin/mcp-lazy` is the one program that is not shell: a JSON-RPC relay has to parse JSON and juggle two pipes without blocking, which bash 3.2 can't do safely. It is Perl because `/usr/bin/perl` and its core modules (`JSON::PP`, `Digest::SHA`) come with macOS and every mainstream Linux, so it needs no install and nothing to build, and it idles at about 10 MB where a Node server holds 60 MB or more. `make validate-configs` runs `perl -c` on it, and `test_mcp_lazy.sh` drives it against a fake server.
 
 The monitoring pack installs each file with `install_config --overwrite`, so the manifest records it and `uninstall.sh` removes it. Adding a module needs no migration; renaming or removing one does, like any installed file. `scripts/lib/test_agents_golden.sh` compares every view and dry run with recorded output byte for byte, and `test_agents_install.sh` runs the installed command outside the repo.
 
@@ -189,7 +193,7 @@ Run these locally, in this order. `make ci-test` runs the first four.
 make lint              # shellcheck -x over every shell file (the list lives in the Makefile)
 make validate-configs  # JSON, TOML, Lua, zsh/sh syntax (CI adds --strict)
 make check-links       # every relative link in every tracked .md resolves
-make test-lib          # scripts/lib/test_*.sh: agents, agents_golden, agents_history, agents_hooks, agents_report, agents_report_tokens, agents_install, agents_mcp, agents_needs, agents_runs, agents_show, agents_tokens, config_write, container, contract, gitconfig, migrations, notify, orchestration, pkg, profile, theme, update_packages
+make test-lib          # scripts/lib/test_*.sh: agents, agents_golden, agents_history, agents_hooks, agents_report, agents_report_tokens, agents_install, agents_mcp, agents_needs, agents_runs, agents_show, agents_tokens, config_write, container, contract, gitconfig, mcp_lazy, migrations, notify, orchestration, pkg, profile, theme, update_packages
 make test-core         # core-tagged tests against this machine
 make container-test    # core-tagged tests in an Alpine container (tests scripts and configs, not the installer)
 ```

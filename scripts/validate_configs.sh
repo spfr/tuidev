@@ -76,6 +76,25 @@ done
 echo ""
 
 # ============================================================================
+# Perl (mcp-lazy and its test server: core modules only)
+# ============================================================================
+print_step "Perl (perl -c)"
+
+if command -v perl >/dev/null 2>&1 && perl -MJSON::PP -MDigest::SHA -e 1 2>/dev/null; then
+    for f in "$REPO_DIR"/bin/mcp-lazy "$REPO_DIR"/scripts/lib/testdata/*.pl; do
+        [[ -f "$f" ]] || continue
+        if err=$(perl -c "$f" 2>&1); then
+            pass "$(rel "$f")"
+        else
+            fail "$(rel "$f") - $err"
+        fi
+    done
+else
+    missing_tool "perl with JSON::PP and Digest::SHA not installed - mcp-lazy not checked"
+fi
+echo ""
+
+# ============================================================================
 # JSON
 # ============================================================================
 print_step "JSON (jq)"

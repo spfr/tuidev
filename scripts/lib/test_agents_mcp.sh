@@ -67,7 +67,7 @@ for c in "ssh devbox mcp-proxy" "cargo run --release" "node dist/index.js" 'node
     [[ "$(needle_of $c)" == - ]] || fail "a weak needle for $c: $(needle_of $c)"
 done
 [[ "$(needle_of node /opt/srv/dist/index.js)" == /opt/srv/dist/index.js ]]                   || fail "a build path under its own directory"
-printf 'claude\tplugin\tp\tp@m\t-\t/plug/root\tstdio\tnode\t${CLAUDE_PLUGIN_ROOT}/server.js\n' | _agents_awk mcp | grep -q $'\t/plug/root/server.js\t1$' \
+printf 'claude\tplugin\tp\tp@m\t-\t/plug/root\tstdio\tnode\t${CLAUDE_PLUGIN_ROOT}/server.js\n' | _agents_awk mcp | grep -q $'\t/plug/root/server.js\t1\t-$' \
     || fail "\${CLAUDE_PLUGIN_ROOT} is the plugin's install path"
 pass "needles: npx/uvx/npm exec packages without versions, scripts, python -m, docker images, programs; flags, URLs and interpreters never"
 
@@ -321,7 +321,7 @@ row() { printf '%-22s %-6s %-8s %-6s %-15s %-34s %s' "$@"; }
     || fail "agents mcp: copies of a user-scope server (two sessions' and a stale one):"$'\n'"$out"
 [[ "$out" == *"$(row remote claude user http - "(a URL)" "$tl/.claude.json")"* ]]                       || fail "agents mcp: an http server runs no process"
 [[ "$out" == *"$(row tok claude user stdio - - "$tl/.claude.json")"* ]]                                  || fail "agents mcp: a server not running"
-[[ "$out" == *$'\n'"chrome-devtools: 2 copies · 263M — user scope starts one per session; scope it to the projects that use it"$'\n'* ]] \
+[[ "$out" == *$'\n'"chrome-devtools: 2 copies · 263M — user scope starts one per session; scope it to the projects that use it, or agents mcp lazy chrome-devtools starts it on first use"$'\n'* ]] \
     || fail "agents mcp: no hint for a user-scope server in several sessions:"$'\n'"$out"
 [[ "$out" == *$'\n'"chrome-devtools: 1 stale copy · 87M — its session ended; agents stale lists it"* ]] || fail "agents mcp: no hint for a stale copy"
 [[ "$out" == *"RUNNING: copies now (each session starts its own) and their memory in use (RSS), not data sent"* ]] || fail "agents mcp: RUNNING is not explained"
@@ -337,5 +337,115 @@ got="$(agents_mcp_tsv | grep -e $'\tapp-db\t' -e $'\tchrome-devtools\t')"
     || fail "agents_mcp_tsv:"$'\n'"$got"
 for s in $SECRETS; do [[ "$(agents_mcp_tsv)" != *"$s"* ]] || fail "agents_mcp_tsv shows a secret: $s"; done
 pass "agents_mcp_tsv: each server's CLI, scope, name, source and project, never a secret"
+
+# --- Servers behind mcp-lazy ------------------------------------------------------------
+# The inventory names one by its own command, and says it is lazy.
+[[ "$(needle_of /u/.local/bin/mcp-lazy --name cd -- /opt/n/bin/chrome-devtools-mcp --isolated)" == chrome-devtools-mcp ]] \
+    || fail "the needle of a server behind mcp-lazy is its own command's"
+[[ "$(needle_of /u/.local/bin/mcp-lazy --name pw -- npx -y @playwright/mcp@latest)" == @playwright/mcp ]] || fail "mcp-lazy over npx"
+got="$(printf 'claude\tuser\tpw\tsrc\t-\t-\tstdio\t/u/bin/mcp-lazy\t--name\037pw\037--\037npx\037-y\037mcp-x@1\n' | _agents_awk mcp | cut -f8,10)"
+[[ "$got" == $'mcp-x\tlazy' ]] || fail "LAUNCH: lazy behind mcp-lazy: $got"
+[[ "$(printf 'claude\tuser\tx\tsrc\t-\t-\tstdio\tnpx\tmcp-x\n' | _agents_awk mcp | cut -f10)" == - ]] || fail "LAUNCH: - for a server started directly"
+# Codex: an args array over lines, a comment on one of them.
+got="$(printf '[mcp_servers.z]\ncommand = "npx"\nargs = [ # the package\n  "-y", # yes\n  "mcp-z@1",\n]\n' | _agents_awk mcp_toml -v src=c | _agents_awk mcp | cut -f8)"
+[[ "$got" == mcp-z ]] || fail "config.toml: the args after a comment line: $got"
+# Its process: lazy, and lazy-idle while mcp-lazy is alone (its server not
+# started).
+[[ "$(A="perl /u/.local/bin/mcp-lazy --name cd -- /opt/n/bin/chrome-devtools-mcp" via)" == lazy ]] || fail "launcher of mcp-lazy"
+lz_recs="$(
+    psl 900 1 "-zsh"
+    psl 5000 900 "claude"
+    psl 5001 5000 "perl /u/.local/bin/mcp-lazy --name chrome-devtools -- /opt/n/bin/chrome-devtools-mcp"
+    psl 6000 900 "claude"
+    psl 6001 6000 "perl /u/.local/bin/mcp-lazy --name chrome-devtools -- /opt/n/bin/chrome-devtools-mcp"
+    psl 6002 6001 "node /opt/n/lib/node_modules/chrome-devtools-mcp/build/src/index.js"
+)"
+lz_recs="$(printf '%s\n' "$lz_recs" | agents_classify "" "")"
+printf '%s\n' "$lz_recs" | awk -F '\t' '$1 == "job" && $3 == "mcp" && $10 == "own" { v[$11] = $16; n[$11] = $14 } END { exit !(v[5001] == "lazy-idle" && v[6001] == "lazy" && n[5001] == "chrome-devtools") }' \
+    || fail "job rows: lazy-idle for mcp-lazy alone, lazy once it started its server"$'\n'"$(printf '%s\n' "$lz_recs" | grep '^job')"
+# agents mcp: "(lazy)", the copies not started, and no lazy hint for it.
+got="$({ printf 'srv\tclaude\tuser\tchrome-devtools\t%s/.claude.json\t-\tstdio\tchrome-devtools-mcp\t1\tlazy\n' "$HOME"
+         printf '%s\n' "$lz_recs"; } | _agents_awk "lib_fmt mcp_view")"
+[[ "$got" == *"chrome-devtools-mcp (lazy)"* ]]                                                       || fail "agents mcp: (lazy):"$'\n'"$got"
+[[ "$got" == *"chrome-devtools: 1 of 2 copies not started — mcp-lazy stands in until a tool call"* ]] || fail "agents mcp: the copies not started:"$'\n'"$got"
+[[ "$got" != *"agents mcp lazy"* ]]                                                                    || fail "agents mcp: a lazy hint for a lazy server"
+pass "mcp-lazy: the inventory names a server by its own command and says lazy; job rows and agents mcp tell started from not"
+
+# agents mcp lazy|eager: the configs rewritten, and back, in a HOME of their
+# own. mcp-lazy needs perl's JSON::PP and Digest::SHA (a container without
+# them skips).
+if /usr/bin/perl -MJSON::PP -MDigest::SHA -e 1 2>/dev/null && command -v jq >/dev/null 2>&1; then
+(
+    export HOME="$tmp/lzhome" AGENTS_RUN_DIR="$tmp/lzrun" AGENTS_DATA_DIR="$tmp/lzdata"
+    mkdir -p "$HOME/.codex" "$HOME/w/p"
+    cat > "$HOME/.claude.json" <<'JSON'
+{
+  "numStartups": 12345678901234567890,
+  "mcpServers": {
+    "cd": {"type": "stdio", "command": "/opt/n/bin/chrome-devtools-mcp", "args": ["--isolated"], "env": {"PATH": "/opt/n/bin:/usr/bin:/bin", "TOKEN": "SECRET4-env"}},
+    "remote": {"type": "http", "url": "https://x.example/mcp"}
+  },
+  "projects": {"/w/p": {"mcpServers": {"pw": {"command": "npx", "args": ["-y", "@playwright/mcp@latest"]}}, "x": 1.10}}
+}
+JSON
+    printf '{"mcpServers":{"shared":{"command":"shared-mcp"}}}\n' > "$HOME/w/p/.mcp.json"
+    printf '{"projects":{"%s":{}}}\n' "$HOME/w/p" > "$tmp/proj.json"
+    jq -s '.[0] * .[1]' "$HOME/.claude.json" "$tmp/proj.json" > "$tmp/cj" && mv "$tmp/cj" "$HOME/.claude.json"
+    cat > "$HOME/.codex/config.toml" <<'TOML'
+model = "x"
+
+[mcp_servers.cd]
+command = "/opt/n/bin/chrome-devtools-mcp" # pinned
+args = [
+  "--isolated",   # one per session ]
+  "--x='y'", "--glob=[a-z]*",
+]
+startup_timeout_sec = 20
+
+[mcp_servers.cd.env]
+PATH = "/opt/n/bin:/usr/bin:/bin"
+
+[mcp_servers.esc]
+command = "C:\\srv\\x.exe"
+
+[mcp_servers.quo]
+command = "srv"
+args = ['it"s']
+TOML
+    cp "$HOME/.codex/config.toml" "$tmp/toml.orig"
+    # A dotfile manager's symlink stays one.
+    mv "$HOME/.codex/config.toml" "$HOME/.codex/real.toml" && ln -s real.toml "$HOME/.codex/config.toml"
+    lz="$REPO_DIR/bin/mcp-lazy"
+    out="$(agents_main mcp lazy cd pw shared remote esc quo nosuch 2>&1)" && fail "lazy: an unknown name fails"
+    [[ "$out" == *"no MCP server named nosuch"* ]]                                || fail "lazy: the unknown name is named:"$'\n'"$out"
+    [[ "$out" == *"shared (claude, project scope): left as it is"* ]]              || fail "lazy: a project's .mcp.json is left as it is:"$'\n'"$out"
+    [[ "$out" == *"remote (claude, user): left as it is: not a stdio server"* ]]   || fail "lazy: an http server is left as it is"
+    [[ "$out" == *"quo (codex): left as it is: a quote in its args"* ]]          || fail "lazy: an arg with a quote is left (eager could not undo it):"$'\n'"$out"
+    [[ "$out" == *"esc (codex): left as it is: escapes"* ]]                        || fail "lazy: a command with escapes is left for a hand edit:"$'\n'"$out"
+    [[ "$(printf '%s\n' "$out" | grep -c 'lazy: new sessions start it on its first tool call')" == 3 ]] || fail "lazy: three servers made lazy:"$'\n'"$out"
+    [[ "$(jq -c '.mcpServers.cd | [.command, .args, .env.TOKEN]' "$HOME/.claude.json")" == "[\"$lz\",[\"--name\",\"cd\",\"--env\",\"PATH,TOKEN\",\"--\",\"/opt/n/bin/chrome-devtools-mcp\",\"--isolated\"],\"SECRET4-env\"]" ]] \
+        || fail "lazy: .claude.json's user server: $(jq -c .mcpServers.cd "$HOME/.claude.json")"
+    [[ "$(jq -c '.projects["/w/p"].mcpServers.pw.args' "$HOME/.claude.json")" == '["--name","pw","--","npx","-y","@playwright/mcp@latest"]' ]] || fail "lazy: a local-scope server"
+    grep -q '"numStartups": 12345678901234567890' "$HOME/.claude.json" && grep -q '"x": 1.10' "$HOME/.claude.json" || fail "lazy: .claude.json's numbers kept as written"
+    grep -q "^args = \[\"--name\", \"cd\", \"--env\", \"PATH\", \"--\", \"/opt/n/bin/chrome-devtools-mcp\", \"--isolated\", \"--x='y'\", \"--glob=\[a-z\]\*\"\]$" "$HOME/.codex/config.toml" \
+        && grep -q "^command = \"$lz\"$" "$HOME/.codex/config.toml" || fail "lazy: config.toml:"$'\n'"$(cat "$HOME/.codex/config.toml")"
+    [[ "$(find "$AGENTS_DATA_DIR/backups" -type f | wc -l | tr -d ' ')" == 2 ]] || fail "lazy: each file backed up first"
+    [[ -L "$HOME/.codex/config.toml" ]] || fail "lazy: a symlinked config.toml is written through, not replaced"
+    [[ "$(agents_main mcp 2>&1)" == *"chrome-devtools-mcp (lazy)"* ]] || fail "agents mcp after lazy:"$'\n'"$(agents_main mcp 2>&1)"
+    [[ "$(agents_main mcp lazy cd 2>&1)" == *"already lazy"* ]] || fail "lazy twice: already lazy"
+    out="$(agents_main mcp eager --all 2>&1)" || fail "eager --all:"$'\n'"$out"
+    [[ "$(printf '%s\n' "$out" | grep -c 'starts with each session again')" == 3 ]] || fail "eager: three servers back:"$'\n'"$out"
+    [[ "$(jq -c '.mcpServers.cd | [.command, .args]' "$HOME/.claude.json")" == '["/opt/n/bin/chrome-devtools-mcp",["--isolated"]]' ]] || fail "eager: .claude.json"
+    grep -q "^args = \[\"--isolated\", \"--x='y'\", \"--glob=\[a-z\]\*\"\]$" "$HOME/.codex/config.toml" \
+        && grep -q '^command = "/opt/n/bin/chrome-devtools-mcp"$' "$HOME/.codex/config.toml" \
+        && [[ "$(grep -v '^args\|^command\|^  "\|^\]' "$tmp/toml.orig")" == "$(grep -v '^args\|^command' "$HOME/.codex/config.toml")" ]] \
+        || fail "eager: config.toml back but for comments:"$'\n'"$(cat "$HOME/.codex/config.toml")"
+    agents_main mcp lazy 2>/dev/null && fail "lazy without a name: usage"
+    true
+) || exit 1
+pass "agents mcp lazy|eager: Claude Code's and Codex's servers put behind mcp-lazy and back, backed up; project, http and escaped ones left as they are"
+else
+    echo "SKIP: agents mcp lazy|eager (no /usr/bin/perl with JSON::PP and Digest::SHA, or no jq)"
+fi
 
 echo "All agents MCP tests passed."

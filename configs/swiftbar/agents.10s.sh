@@ -656,7 +656,8 @@ job_lines() {
                     for (q = 1; q <= m; q++) {
                         split(l[q], r, SUBSEP); if (r[3] != nm) continue
                         a = (a == -1 || a == sa[l[q]]) ? sa[l[q]] : -2
-                        v = (v == "" || v == sv[l[q]]) ? sv[l[q]] : "-"
+                        # Copies behind mcp-lazy, some started: lazy.
+                        v = (v == "" || v == sv[l[q]]) ? sv[l[q]] : (v ~ /^lazy/ && sv[l[q]] ~ /^lazy/) ? "lazy" : "-"
                     }
                     ab = (a == -2) ? "configured in more than one place (agents mcp lists them)" : about(a)
                     if (gn[nm] > 1) print "G", j, pc(gc[nm]), gm[nm], gx[nm], gn[nm], gst[nm] + 0, "-", "-", "-", nm, "-", ab, v
@@ -681,6 +682,8 @@ mcp_about() {
 # command line shows (job rows' via); false when it shows none.
 via_text() {
     case "$1" in
+        lazy-idle)     REPLY="via mcp-lazy: not started, starts on its first tool call" ;;
+        lazy)          REPLY="via mcp-lazy: starts on its first tool call" ;;
         npx)           REPLY="via npx (adds an npm wrapper process)" ;;
         pnpm)          REPLY="via pnpm dlx" ;;
         bunx|uvx)      REPLY="via $1" ;;

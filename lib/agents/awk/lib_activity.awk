@@ -93,10 +93,12 @@ function mcp_name(a, cli,   s) {
     return s == "" ? pname(a) : s
 }
 # mcp_via(a): the launcher an MCP server's command line starts it through, a
-# process of its own above the server's: npx (npm exec, as ps shows it),
-# pnpm (dlx), bunx, uvx (uv tool), docker or podman (run); "-" for none.
-# Only that word: never the rest of the command line.
+# process of its own above the server's: lazy (mcp-lazy, which starts it on
+# its first tool call), npx (npm exec, as ps shows it), pnpm (dlx), bunx,
+# uvx (uv tool), docker or podman (run); "-" for none. Only that word: never
+# the rest of the command line.
 function mcp_via(a) {
+    if (a ~ /(^|\/)mcp-lazy( |$)/) return "lazy"
     if (a ~ /(^|\/)npm exec( |$)|(^|\/)npx( |$)/) return "npx"
     if (a ~ /(^|\/)pnpm dlx( |$)|(^|\/)pnpx( |$)/) return "pnpm"
     if (a ~ /(^|\/)bunx( |$)|(^|\/)bun x( |$)/) return "bunx"

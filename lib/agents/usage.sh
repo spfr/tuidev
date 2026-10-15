@@ -41,6 +41,10 @@ LOOK
                                scope, copies running now (one per session) and
                                their memory, what starts it, where; processes go
                                by these names (never shows args, env, headers or URLs)
+  agents mcp lazy|eager NAME...|--all
+                               lazy: put mcp-lazy in front of a stdio server in Claude
+                               Code's and Codex's configs, so a session starts it on
+                               its first tool call, not with the session; eager: back
   agents json | tsv            machine-readable snapshot (tsv feeds SwiftBar)
   agents why [--copy] PID[@START]
                                why an item is listed, the evidence (owner, age,

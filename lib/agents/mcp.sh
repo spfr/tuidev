@@ -38,7 +38,8 @@
 #   local scope, NAME@MARKETPLACE for a plugin's; enabled: 0 for a Codex
 #   server set `enabled = false`, else 1); with DIR, only those a session
 #   started in DIR loads (user, plugin, and DIR's local and project ones);
-#   agents_mcp_tsv (the menu's mcpcfg rows); agents_mcp (`agents mcp`);
+#   agents_mcp_tsv (the menu's mcpcfg rows); agents_mcp (`agents mcp`, and
+#   `agents mcp lazy|eager`, lazy.sh's);
 #   _agents_mcp_needles VAR; _agents_mcp_lookup.
 
 # Where each CLI keeps its configuration: sets the caller's cj (.claude.json),
@@ -160,7 +161,7 @@ _agents_mcp_plugins() {
 
 # The cache's format: a cache of another (an older agents', whose needles
 # were picked by other rules) is never read, only rebuilt.
-_AGENTS_MCP_CACHE_V=v2
+_AGENTS_MCP_CACHE_V=v3
 
 # _agents_mcp_refresh [VAR] — rebuild mcp.tsv (private; one rebuild at a
 # time), and with VAR set it to the srv rows built (also when the cache
@@ -231,9 +232,9 @@ _agents_mcp_load() {
 # From the rows already loaded while _AGENTS_MCP_HAVE is set (agents_tsv and
 # agents_mcp read the cache once a run), else it loads them.
 _agents_mcp_needles() {
-    local _l _out="" cli scope name src proj type nd en
+    local _l _out="" cli scope name src proj type nd en lz
     [[ -n "${_AGENTS_MCP_HAVE:-}" ]] || _agents_mcp_load
-    while IFS=$'\t' read -r _l cli scope name src proj type nd en; do
+    while IFS=$'\t' read -r _l cli scope name src proj type nd en lz; do
         [[ "$_l" == srv && -n "$nd" && "$nd" != - ]] && _out+="$nd"$'\t'"$name"$'\t'"$cli"$'\n'
     done <<<"$_AGENTS_MCP_ROWS"
     printf -v "$1" '%s' "$_out"
@@ -241,9 +242,9 @@ _agents_mcp_needles() {
 
 # agents_mcp_configured [DIR] — see the header.
 agents_mcp_configured() {
-    local dir="${1:-}" l cli scope name src proj type nd en
+    local dir="${1:-}" l cli scope name src proj type nd en lz
     _agents_mcp_load sync
-    while IFS=$'\t' read -r l cli scope name src proj type nd en; do
+    while IFS=$'\t' read -r l cli scope name src proj type nd en lz; do
         [[ "$l" == srv ]] || continue
         case "$scope" in local|project) [[ -z "$dir" || "$proj" == "$dir" ]] || continue ;; esac
         printf '%s\t%s\t%s\t%s\t%s\n' "$cli" "$scope" "$name" "$src" "${en:-1}"
@@ -253,9 +254,9 @@ agents_mcp_configured() {
 # _agents_mcp_lookup NAME [CLI] — "cli<TAB>scope<TAB>source<TAB>type<TAB>
 # needle" for each configured server called NAME (those of CLI first).
 _agents_mcp_lookup() {
-    local l cli scope name src proj type nd en mine="" rest=""
+    local l cli scope name src proj type nd en lz mine="" rest=""
     _agents_mcp_load
-    while IFS=$'\t' read -r l cli scope name src proj type nd en; do
+    while IFS=$'\t' read -r l cli scope name src proj type nd en lz; do
         [[ "$l" == srv && "$name" == "$1" ]] || continue
         if [[ "$cli" == "${2:-}" ]]; then mine+="$cli"$'\t'"$scope"$'\t'"$src"$'\t'"$type"$'\t'"$nd"$'\n'
         else rest+="$cli"$'\t'"$scope"$'\t'"$src"$'\t'"$type"$'\t'"$nd"$'\n'; fi
@@ -268,8 +269,8 @@ _agents_mcp_lookup() {
 #   mcpcfg CLI SCOPE NAME SOURCE PROJECT   (PROJECT "-" but for local and
 #   project scope)
 agents_mcp_tsv() {
-    local l cli scope name src proj type nd en
-    while IFS=$'\t' read -r l cli scope name src proj type nd en; do
+    local l cli scope name src proj type nd en lz
+    while IFS=$'\t' read -r l cli scope name src proj type nd en lz; do
         [[ "$l" == srv ]] && printf 'mcpcfg\t%s\t%s\t%s\t%s\t%s\n' "$cli" "$scope" "$name" "$src" "${proj:--}"
     done <<<"$_AGENTS_MCP_ROWS"
     return 0
@@ -282,7 +283,8 @@ agents_mcp_tsv() {
 agents_mcp() {
     local dir="" out _AGENTS_MCP_HAVE=1
     case "${1:-}" in
-        -*) echo "usage: agents mcp [DIR]" >&2; return 2 ;;
+        lazy|eager) agents_mcp_launch "$@"; return ;;
+        -*) echo "usage: agents mcp [DIR] | agents mcp lazy|eager NAME...|--all" >&2; return 2 ;;
         ?*) dir="$(cd "$1" 2>/dev/null && pwd -P)" || { echo "agents: no such directory: $1" >&2; return 2; } ;;
     esac
     _agents_mcp_load sync

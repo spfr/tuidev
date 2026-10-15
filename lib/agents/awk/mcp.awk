@@ -5,8 +5,10 @@
 # For each, the needle: the one word of its command line that names it in
 # ps (needle()). The args are read for that alone and never printed: the rest
 # of a command line can hold tokens. Prints, longest needle first:
-#   srv CLI SCOPE NAME SOURCE PROJECT TYPE NEEDLE ENABLED   ("-" when it has no
-#   needle; ENABLED 1, or 0 for a Codex server set `enabled = false`)
+#   srv CLI SCOPE NAME SOURCE PROJECT TYPE NEEDLE ENABLED LAUNCH   ("-" when
+#   it has no needle; ENABLED 1, or 0 for a Codex server set
+#   `enabled = false`; LAUNCH lazy for a server behind mcp-lazy, whose
+#   needle is then its own command's, after mcp-lazy's "--", else "-")
 
 function fname(p) { sub(/.*\//, "", p); return p }
 # pkg: a package without its version (@scope/name@1.2 → @scope/name,
@@ -87,14 +89,26 @@ function needle(cmd, args, root,   b, i, s, w) {
     return safe(b) ? b : ""
 }
 BEGIN { FS = "\t"; m = 0 }
+# lazy(cmd, args): whether cmd is mcp-lazy (lazy.sh); then sets lz_cmd and
+# lz_args to the command after its "--", the server's own.
+function lazy(cmd, args,   w, k, i) {
+    if (fname(cmd) != "mcp-lazy") return 0
+    k = split(args, w, "\037")
+    for (i = 1; i < k; i++) if (w[i] == "--") break
+    if (i >= k) return 0
+    lz_cmd = w[i + 1]; lz_args = ""
+    for (i += 2; i <= k; i++) lz_args = lz_args (lz_args == "" ? "" : "\037") w[i]
+    return 1
+}
 NF >= 8 {
     if (($1, $2, $3, $4, $5) in seen) next      # one server, named twice (a plugin's .mcp.json and plugin.json)
     seen[$1, $2, $3, $4, $5] = 1
-    nd = needle($8, (NF >= 9 ? $9 : ""), $6)
+    lz = lazy($8, (NF >= 9 ? $9 : ""))
+    nd = lz ? needle(lz_cmd, lz_args, $6) : needle($8, (NF >= 9 ? $9 : ""), $6)
     if (weak(nd)) nd = ""
     nm = $3; gsub(/[[:cntrl:]]/, "", nm)
     if (nm == "") next
-    row[++m] = "srv\t" $1 "\t" $2 "\t" nm "\t" $4 "\t" $5 "\t" $7 "\t" (nd == "" ? "-" : nd) "\t" ($10 == "0" ? 0 : 1)
+    row[++m] = "srv\t" $1 "\t" $2 "\t" nm "\t" $4 "\t" $5 "\t" $7 "\t" (nd == "" ? "-" : nd) "\t" ($10 == "0" ? 0 : 1) "\t" (lz ? "lazy" : "-")
     len[m] = length(nd)
 }
 END {
