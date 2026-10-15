@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `agents` treats a zombie (a process that has exited but whose parent has
+  not reaped it yet) as gone. In a container whose init reaps late, `agents
+  kill` used to wait out the whole grace period and send a pointless SIGKILL,
+  and a lock or keep-awake holder that had died could look alive. This was
+  also the cause of the occasional live kill test failure in containers.
+
 ## [3.7.0] - 2026-10-14
 
 `agents` now shows where your tokens go: by model, CLI, subagent type and

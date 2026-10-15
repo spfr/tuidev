@@ -344,8 +344,26 @@ if ps -o lstart= -p $$ >/dev/null 2>&1; then
     took=$((SECONDS - t0))
     [[ "$out" != *SIGKILL* ]] || fail "SIGKILL printed for a tree that exited on SIGTERM: $out"
     [[ $took -lt 3 ]] || fail "waited the full grace period (${took}s) for a tree that was already gone"
-    ! kill -0 "$root" 2>/dev/null || fail "tree root still running"
+    [[ -z "$(_agents_start "$root")" ]] || fail "tree root still running"
     pass "kill: a tree that exits on SIGTERM returns at once, with no SIGKILL line"
+    # A zombie (exited, unreaped: a container's init may reap late) is gone.
+    if command -v perl >/dev/null 2>&1; then
+        perl -e '$| = 1; my $c = fork; exit 0 unless $c; print "$c\n"; sleep 10' > "$tmp/zombie.pid" &
+        zparent=$!
+        for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$tmp/zombie.pid" ]] && break; sleep 0.1; done
+        zpid="$(cat "$tmp/zombie.pid")"; sleep 0.3
+        zstart="$(LC_ALL=C ps -o lstart= -p "$zpid" | awk 'NF >= 5 { print $1 "_" $2 "_" $3 "_" $4 "_" $5 }')"
+        [[ -n "$zstart" ]] || fail "zombie fixture: ps does not list the unreaped child"
+        _agents_zombie "$zpid" || fail "a zombie not recognized"
+        ! _agents_zombie "$zparent" || fail "a live process taken for a zombie"
+        [[ -z "$(_agents_start "$zpid")" ]] || fail "a zombie has a start time"
+        [[ -z "$(_agents_alive "$zpid"$'\t'"$zstart"$'\t'"z")" ]] || fail "a zombie counted as alive"
+        echo "$zpid $zstart" > "$tmp/zombie.lock"
+        rc=0; _agents_holder_check "$tmp/zombie.lock" "$zpid $zstart" "$zpid" "$zstart" || rc=$?
+        [[ $rc -eq 1 && ! -e "$tmp/zombie.lock" ]] || fail "a zombie lock holder not treated as gone (rc $rc)"
+        kill "$zparent" 2>/dev/null; wait "$zparent" 2>/dev/null || true
+        pass "a zombie counts as gone: no start time, not alive, its lock freed"
+    fi
 else
     echo "SKIP: ps unavailable here (sandbox?): live kill test not run"
 fi
@@ -362,11 +380,11 @@ if ps -o lstart= -p $$ >/dev/null 2>&1; then
     p2="$(cut -d' ' -f1 "$tmp/run/awake")"
     sleep 0.3
     [[ "$p1" != "$p2" ]] || fail "second awake on reused the holder"
-    ! kill -0 "$p1" 2>/dev/null || { kill "$p1"; fail "second awake on orphaned the first holder"; }
-    kill -0 "$p2" 2>/dev/null || fail "second holder not running"
+    [[ -z "$(_agents_start "$p1")" ]] || { kill "$p1"; fail "second awake on orphaned the first holder"; }
+    [[ -n "$(_agents_start "$p2")" ]] || fail "second holder not running"
     [[ "$(awake off)" == *"stopped pid $p2"* ]] || fail "awake off"
     sleep 0.3
-    ! kill -0 "$p2" 2>/dev/null || { kill "$p2"; fail "awake off left the holder running"; }
+    [[ -z "$(_agents_start "$p2")" ]] || { kill "$p2"; fail "awake off left the holder running"; }
     [[ ! -e "$tmp/run/awake" && ! -e "$tmp/run/awake.lock" ]] || fail "awake off left state or the lock behind"
 else
     echo "SKIP: ps unavailable here (sandbox?): live double-on check not run"
@@ -1296,12 +1314,12 @@ if ps -o lstart= -p $$ >/dev/null 2>&1; then
     root="$(cat "$tmp/gui.pid")"; sleep 0.2
     out="$(PATH="$tmp/osa:$PATH" OSA_ANSWER=Cancel AGENTS_SELF=$$ AGENTS_UID="$(id -u)" AGENTS_CONFIRM_GUI=true \
         AGENTS_YES=false AGENTS_DRY_RUN=false agents_kill_tokens true "$root" 2>&1)" && fail "kill went ahead after Cancel"
-    kill -0 "$root" 2>/dev/null || fail "Cancel still killed the session"
+    [[ -n "$(_agents_start "$root")" ]] || fail "Cancel still killed the session"
     [[ "$out" == *cancelled* ]] || fail "Cancel not reported: $out"
     : > "$tmp/osa.log"
     out="$(PATH="$tmp/osa:$PATH" OSA_ANSWER=Kill AGENTS_SELF=$$ AGENTS_UID="$(id -u)" AGENTS_CONFIRM_GUI=true AGENTS_NOTIFY=true \
         AGENTS_YES=false AGENTS_DRY_RUN=false AGENTS_GRACE=3 agents_kill_tokens true "$root" 2>&1)" || fail "kill after Kill failed: $out"
-    ! kill -0 "$root" 2>/dev/null || fail "Kill did not kill"
+    [[ -z "$(_agents_start "$root")" ]] || fail "Kill did not kill"
     grep -q "Killed bash (pid $root) and 1 child processes" "$tmp/osa.log" || fail "result notification: $(cat "$tmp/osa.log")"
     pass "live: Cancel in the dialog kills nothing; Kill kills and notifies"
 else

@@ -87,14 +87,14 @@ _agents_new_members() {
 }
 
 # _agents_alive PLAN — "pid start name" lines still running with that start
-# (one ps for the whole plan).
+# (one ps for the whole plan). A zombie counts as gone, as in _agents_start.
 _agents_alive() {
     local pid start name pids="" now
     while IFS=$'\t' read -r pid start name; do
         [[ "$pid" =~ ^[0-9]+$ ]] && pids+="${pids:+,}$pid"
     done <<<"$1"
     [[ -n "$pids" ]] || return 0
-    now="$(LC_ALL=C ps -o pid=,lstart= -p "$pids" 2>/dev/null | LC_ALL=C awk 'NF >= 6 { print $1 "\t" $2 "_" $3 "_" $4 "_" $5 "_" $6 }')"
+    now="$(LC_ALL=C ps -o pid=,stat=,lstart= -p "$pids" 2>/dev/null | LC_ALL=C awk 'NF >= 7 && $2 !~ /^Z/ { print $1 "\t" $3 "_" $4 "_" $5 "_" $6 "_" $7 }')"
     while IFS=$'\t' read -r pid start name; do
         [[ -n "$pid" && -n "$start" ]] || continue
         [[ $'\n'"$now"$'\n' == *$'\n'"$pid"$'\t'"$start"$'\n'* ]] && printf '%s\t%s\t%s\n' "$pid" "$start" "$name"

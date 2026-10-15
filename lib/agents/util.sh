@@ -164,14 +164,16 @@ _agents_lock_takeover() {
 
 # _agents_holder_check FILE CONTENT PID START — is PID, which the state file
 # FILE (holding CONTENT) records with start time START, still that process?
-# 0: yes, its start time matches. 1: no: kill -0 says "No such process", or
-# the pid now names a process with another start time (a reused pid); FILE
+# 0: yes, its start time matches. 1: no: kill -0 says "No such process", it
+# is a zombie, or the pid now names a process with another start time (a
+# reused pid); FILE
 # (unless "") is removed if it still holds CONTENT. 2: it exists, but START
 # is unknown ("-") or ps can't tell (a permission error, EPERM, also proves
 # nothing).
 _agents_holder_check() {
     local file="$1" content="$2" pid="$3" start="$4" err now
-    if [[ ! "$pid" =~ ^[0-9]+$ ]] || { ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; }; then
+    if [[ ! "$pid" =~ ^[0-9]+$ ]] || { ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; } \
+        || _agents_zombie "$pid"; then
         [[ -z "$file" ]] || _agents_rm_if_same "$file" "$content"
         return 1
     fi

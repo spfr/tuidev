@@ -147,7 +147,7 @@ _agents_awake_loop() {
     local hold="" sleeper=""
     trap '[[ -n "$hold" ]] && kill "$hold" 2>/dev/null; [[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT HUP
     while [[ "$(_agents_count)" -gt 0 ]]; do
-        if [[ -z "$hold" ]] || ! kill -0 "$hold" 2>/dev/null; then
+        if [[ -z "$hold" ]] || ! kill -0 "$hold" 2>/dev/null || _agents_zombie "$hold"; then
             _agents_detach _agents_hold "" "$$"
             hold=$!
         fi

@@ -21,8 +21,14 @@ agents_snapshot() {
 # shellcheck disable=SC2016  # awk source
 agents_secs() { printf '%s\n' "$1" | _agents_awk_eval lib_proc '{ print secs($1) }'; }
 
-# _agents_start PID — the process's start time as one token, or nothing.
-_agents_start() { LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | awk 'NF >= 5 { print $1 "_" $2 "_" $3 "_" $4 "_" $5 }'; }
+# _agents_start PID — the process's start time as one token, or nothing when
+# it is gone. A zombie counts as gone: it has exited and only waits for its
+# parent to reap it, which a container's init may do late.
+_agents_start() { LC_ALL=C ps -o stat=,lstart= -p "$1" 2>/dev/null | awk 'NF >= 6 && $1 !~ /^Z/ { print $2 "_" $3 "_" $4 "_" $5 "_" $6 }'; }
+
+# _agents_zombie PID — succeeds when PID has exited but is not yet reaped
+# (kill -0 still finds it).
+_agents_zombie() { LC_ALL=C ps -o stat= -p "$1" 2>/dev/null | awk '$1 ~ /^Z/ { z = 1 } END { exit !z }'; }
 
 # "pid port" for every TCP listener we can see (our own processes, unprivileged).
 # Fails when they could not be listed (no lsof or ss, or it failed): "no
