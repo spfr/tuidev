@@ -9,7 +9,8 @@
 # by: classifier (Claude Code's auto-mode classifier; reason is its tag),
 # safety (a built-in safety check) or user (you said no); subject is never an
 # argument: a command and its subcommand (git push, npm install), else the
-# tool (Edit; a host for WebFetch).
+# tool (Edit; a host for WebFetch). A subagent's worktree counts as its
+# repository (pfold).
 
 # denials_load FILE START — DL 1 when denials.tsv has any row at all; this
 # window's DN denials, DB[by] of them by each; by subject (subject SUBSEP
@@ -25,7 +26,7 @@ function denials_load(df, start,   ln, f, k, by, r, a, p) {
         DL = 1
         if (f[1] + 0 < start) continue
         DN++; DB[by]++
-        r = f[8] == "" ? "-" : f[8]; a = f[5] == "" ? "-" : f[5]; p = f[3] == "" ? "-" : f[3]
+        r = f[8] == "" ? "-" : f[8]; a = f[5] == "" ? "-" : f[5]; p = f[3] == "" ? "-" : pfold(f[3])
         k = (f[9] == "" ? (f[6] == "" ? "-" : f[6]) : f[9]) SUBSEP (f[6] == "" ? "-" : f[6])
         if (!(k in DSn)) DSO[++DSC] = k
         DSn[k]++; DSb[k, by]++

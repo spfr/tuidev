@@ -23,8 +23,9 @@
 #               from the cache;
 #   poll        model calls that only waited, above POLL_HIGH % of all
 #               tokens, on TOKENS_MIN or more: those tokens;
-#   compact     a session that compacted its context COMPACT_MANY times or
-#               more: the tokens before those compactions;
+#   compact     a session whose context filled up and compacted on its own
+#               (trigger auto) COMPACT_MANY times or more: the tokens before
+#               those compactions (a /compact you ran is not a finding);
 #   denied      a command or tool you denied DENY_MANY times or more: DENY_S
 #               a denial.
 
@@ -101,11 +102,16 @@ function token_insights(dash, x2,   i, k, c, n, m, t, w, s) {
         ins_add("poll", "tokens", tok_impact(Tpoll), "-", PS[1], "-", "wait", pct(Tpoll, Ttot) " of tokens (" tk(Tpoll) ") went to polling " \
             wword() " (most: " (PS[1] == "-" ? "sessions of unknown type" : PS[1] == "main" ? "main sessions" : PS[1] " subagents") ")" dash "wait on a background task's notification instead of polling")
     }
-    n = compacts_sorted(); m = 0; t = 0
-    for (i = 1; i <= n; i++) if (CSn[CS[i]] >= COMPACT_MANY) { m++; t += CSpre[CS[i]] }
+    m = 0; t = 0
+    for (i = 1; i <= CSC; i++) {
+        c = CSO[i]
+        if (CSauto[c] < COMPACT_MANY) continue
+        m++; t += CSautopre[c]
+        if (m == 1 || CSauto[c] > CSauto[k] || (CSauto[c] == CSauto[k] && (CSautopre[c] > CSautopre[k] || (CSautopre[c] == CSautopre[k] && c < k)))) k = c
+    }
     if (m) {
-        split(CS[1], w, SUBSEP); k = CS[1]
-        s = cut(proj(w[1]), 32) ": a session compacted its context " x2 CSn[k] " " wword() " (" (CSauto[k] + 0) " auto)"
+        split(k, w, SUBSEP)
+        s = cut(proj(w[1]), 32) ": a session filled its context and compacted " x2 CSauto[k] " " wword()
         if (m > 1) s = s ", and " (m - 1) " more " nouns(m - 1, "session") " " x2 COMPACT_MANY " or more"
         ins_add("compact", "tokens", tok_impact(t), w[1], "-", "-", "-", s dash "hand long work to subagents, or start a fresh session per task")
     }

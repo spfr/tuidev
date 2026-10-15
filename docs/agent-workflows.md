@@ -446,7 +446,7 @@ Each finding gets an impact in CPU seconds, and the summary lists the three larg
 | regression | a project's CPU rose by half and by 0.25 CPU-h or more on the window before | the rise |
 | cache (`tokens`) | a CLI's cache hit rate is below 70%, on 1M input tokens or more | the tokens a 70% rate would have read from the cache |
 | token polling (`tokens`) | model calls that only waited are over 5% of all tokens, on 1M tokens or more | those tokens |
-| compactions (`tokens`) | a session compacted its context 3 times or more | the tokens before those compactions |
+| compactions (`tokens`) | a session's context filled up and compacted on its own (`auto`) 3 times or more; a `/compact` you ran doesn't count | the tokens before those compactions |
 | denials (`denials`) | you denied the same command or tool 3 times or more | a CPU-minute per denial |
 
 Token findings are not CPU: each one counts once it passes its own threshold, and ranks by the tokens at stake, 1,000 tokens weighing as a CPU second, never below the 5 CPU-min floor. Each names its view, which the menu opens.
@@ -474,7 +474,7 @@ Each `agents sample` also reads what the Claude Code and Codex transcripts on di
 
 **Privacy.** These files hold counts and names only: a model, a project, a subagent type, a tool. A denial's `subject` never includes arguments: a command and, from a fixed list, its subcommand (`git push`, `npm install`, `docker run`), never an option's value, anything quoted or in a heredoc, a file, a target, or a name you typed; else the tool's name (`Edit`), and for a web fetch only the host. Nothing is sent anywhere: the report reads the files on this machine, and `AGENTS_HISTORY=0` records none of them.
 
-- **`agents report --view tokens`** (default `--since 24h`): the total (input, cache writes, cache reads and output, all counted), the cache hit rate (cache reads over the input side: `in + cache_write + cache_read`), then tables by model, CLI, agent type and project (the top 8; ties by name), each with its share, its split and its hit rate. Then the tokens of model calls that only waited, by agent type; context compactions (auto and manual, the average size before, the sessions that compacted most); and the Codex plan's headroom from its latest reading (the share of the window used, the window, and when it resets, in local time).
+- **`agents report --view tokens`** (default `--since 24h`): the total (input, cache writes, cache reads and output, all counted), the cache hit rate (cache reads over the input side: `in + cache_write + cache_read`), then tables by model, CLI and agent type (the top 10) and by project (the top 8), ties by name, each with its share, its split and its hit rate. Then the tokens of model calls that only waited, by agent type; context compactions (auto and manual, the average size before, the sessions that compacted most); and the Codex plan's headroom from its latest reading (the share of the window used, the window, and when it resets, in local time; a reading 6 days old or more shows its date). In this view, the denials view and the insights, a worktree Claude Code made for a subagent (`app/agent-a1b2c3`) counts as its repository (`app`); a worktree you named (`app/feat`) stays its own, and the files keep the name as `runs.tsv` does.
 - **`agents report --view denials`**: the denials by who denied them, then by subject (with the classifier's most frequent reason), the classifier's reasons, agent types and projects, and a hint for each command or tool denied twice or more by you or the classifier:
 
 ```text

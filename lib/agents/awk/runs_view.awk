@@ -1,23 +1,12 @@
 # lib/agents/awk/runs_view.awk — agents_runs: the runs that ended between
 # start and now, from runs.tsv lines sorted newest first (runs.sh documents
-# the columns): a table, or JSON with json=1. Needs lib_fmt and lib_json.
+# the columns): a table, or JSON with json=1. Needs lib_fmt (dur, mem, dayhm)
+# and lib_json.
 
-# when(e): "Oct 14 18:42" for epoch e, at UTC offset off (days from the
-# civil calendar: Howard Hinnant's days_from_civil, inverted).
-function when(e,   z, era, doe, yoe, doy, mp, d, m, s) {
-    e += off; s = e % 86400; z = int(e / 86400) + 719468
-    era = int(z / 146097); doe = z - era * 146097
-    yoe = int((doe - int(doe / 1460) + int(doe / 36524) - int(doe / 146096)) / 365)
-    doy = doe - (365 * yoe + int(yoe / 4) - int(yoe / 100))
-    mp = int((5 * doy + 2) / 153); d = doy - int((153 * mp + 2) / 5) + 1
-    m = mp < 10 ? mp + 3 : mp - 9
-    return sprintf("%s %2d %02d:%02d", mon[m], d, int(s / 3600), int((s % 3600) / 60))
-}
 function num(s) { return s ~ /^-?[0-9]+$/ ? s + 0 : "null" }
 function flags(dup, cl,   o) { o = (dup == 1 ? "dup" : ""); if (cl == 1) o = o (o == "" ? "" : ",") "cleaned"; return o == "" ? "-" : o }
 function cell(i, c, v) { cv[i, c] = v; if (length(v) > w[c]) w[c] = length(v) }
 BEGIN {
-    split("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec", mon, " ")
     split("ENDED TOOK CPU PEAK EXIT PROJECT SESSION AGENT CMD JOB FLAGS", hd, " ")
     nc = 11; for (c = 1; c <= nc; c++) w[c] = length(hd[c])
     B = ENVIRON["B"]; DIM = ENVIRON["DIM"]; R = ENVIRON["R"]; N = ENVIRON["N"]
@@ -50,7 +39,7 @@ END {
         (ncl > 0 ? " · " ncl " stopped by agents" : ""), N
     for (i = 1; i <= n; i++) {
         split(row[i], f, "\t")
-        cell(i, 1, when(f[1])); cell(i, 2, dur(f[8])); cell(i, 3, dur(f[9])); cell(i, 4, mem(f[10])); cell(i, 5, f[11])
+        cell(i, 1, dayhm(f[1])); cell(i, 2, dur(f[8])); cell(i, 3, dur(f[9])); cell(i, 4, mem(f[10])); cell(i, 5, f[11])
         cell(i, 6, cut(f[4], 32)); cell(i, 7, f[5]); cell(i, 8, cut(f[6], 24)); cell(i, 9, f[7]); cell(i, 10, f[3]); cell(i, 11, flags(f[12], f[13]))
         bad[i] = (f[11] ~ /^-?[0-9]+$/ && f[11] != 0)
     }

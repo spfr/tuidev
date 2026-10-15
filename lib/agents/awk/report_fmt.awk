@@ -13,6 +13,10 @@ function pctn(a, b) { return b > 0 ? pct(a, b) : "-" }
 function bar(p,   k, o) { k = int(p / 5 + 0.5); o = ""; while (k-- > 0) o = o "\342\226\210"; return o }
 function sess(s) { return s == "-" ? "stale" : s }
 function proj(s) { return s == "-" ? "(none)" : s }
+# pfold: a project as the token and denial tables count it: a worktree
+# Claude Code made for a subagent (REPO/agent-ID, as projname names it)
+# folds into REPO; a worktree you named (REPO/NAME) stays its own.
+function pfold(s) { if (s ~ /^[^\/]+\/agent-[A-Za-z0-9_-]+$/) sub(/\/.*$/, "", s); return s }
 function agentn(s) { return s == "-" ? "(unknown)" : s }
 # who: an agent type as the subject of a sentence.
 function who(s) { return s == "-" ? "Sessions of unknown type" : s == "main" ? "Main sessions" : s " subagents" }

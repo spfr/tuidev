@@ -14,7 +14,8 @@
 #   shop  S2 -        claude-sonnet-5  in 5k out 1k, 16h ago (not today)
 #   alpha, zeta       claude-opus-5-5  out 500 each (a tie: by name)
 # and 30h ago (in 7d, not 24h) 1M tokens of `old`; a header, a short row and a
-# row with a word for a number. app's session S1 compacted 3 times today.
+# row with a word for a number. app's session S1 compacted 3 times today (2
+# of them auto: below the insight's 3).
 # Denials: git push ×4 by the classifier [Git Destructive], npm install ×3 by
 # you, Edit ×2 by you, example.com (WebFetch) by you, rm by a safety check.
 
@@ -259,15 +260,15 @@ pass "summary: Tokens (total, cache hits, polling, est. \$ when priced, compacti
 # 7. The insights: past their thresholds, each naming its view; not below.
 ins="$(printf '%s\n' "$out" | sed -n '/^TOP INSIGHTS$/,/^$/p')"
 want="TOP INSIGHTS
-  1. app: a session compacted its context ×3 in 24h (2 auto) — hand long work to subagents, or start a fresh session per task
-  2. \`npm install\` denied ×3 by you in 24h — consider an allow rule, or an instruction not to try it
+  1. \`npm install\` denied ×3 by you in 24h — consider an allow rule, or an instruction not to try it
   more: agents report --view runs|waste|trends|agents|tokens|denials"
 [[ "$ins" == "$want" ]] || fail "insights:"$'\n'"$ins"
-jqt "$(rep --json)" '[.insights[] | [.kind, .view, .impact_s]] == [["compact","tokens",450],["denied","denials",300]] and .insights[1].cmd == "npm install"' "insights json" '.insights'
+jqt "$(rep --json)" '[.insights[] | [.kind, .view, .impact_s]] == [["denied","denials",300]] and .insights[0].cmd == "npm install"' "insights json" '.insights'
 w="$tmp/w"; fixture "$w"
+printf '%s\tclaude\tapp/agent-a1b2\tS1\tmain\tauto\t170000\t20000\n' $((FAKE_NOW - 500)) >> "$w/compacts.tsv"
 AGENTS_DATA_DIR="$w" agents_insight_write
-[[ "$(AGENTS_DATA_DIR="$w" _agents_insight_line)" == "insight"$'\t'"tokens"$'\t'"app: a session compacted its context ×3 today (2 auto) — "* ]] \
-    || fail "insight.txt: $(cat "$w/insight.txt")"
+[[ "$(AGENTS_DATA_DIR="$w" _agents_insight_line)" == "insight"$'\t'"tokens"$'\t'"app: a session filled its context and compacted ×3 today — "* ]] \
+    || fail "insight.txt (a subagent's worktree counts as its repository): $(cat "$w/insight.txt")"
 # One run of the summary's insights over a fixture made of rows "SECS CLI
 # PROJECT AGENT IN CW CR OUT POLL" (tokens) or "SECS TRIGGER" (S1's compactions)
 # or "SECS BY SUBJECT" (denials); prints the kinds found.
@@ -289,17 +290,51 @@ if has_jq; then
     [[ "$(kinds "$(th_case p51 '60 claude app main 0 0 949999 0 0'$'\n''50 claude app main 0 0 50001 0 1'$'\n' '' '')")" == "poll" ]] || fail "polling above 5% does not fire"
     [[ "$(kinds "$(th_case pvol '60 claude app main 0 0 899999 0 0'$'\n''50 claude app main 0 0 100000 0 1'$'\n' '' '')")" == "" ]] || fail "polling fires below 1M tokens"
     [[ "$(kinds "$(th_case k2 '' '30 auto'$'\n''20 manual'$'\n' '')")" == "" ]] || fail "2 compactions fire"
-    [[ "$(kinds "$(th_case k3 '' '30 auto'$'\n''20 manual'$'\n''10 auto'$'\n' '')")" == "compact" ]] || fail "3 compactions do not fire"
+    [[ "$(kinds "$(th_case k3 '' '30 auto'$'\n''20 manual'$'\n''10 auto'$'\n' '')")" == "" ]] || fail "a /compact you ran counts toward the compaction insight"
+    [[ "$(kinds "$(th_case k3a '' '30 auto'$'\n''20 auto'$'\n''15 manual'$'\n''10 auto'$'\n' '')")" == "compact" ]] || fail "3 auto compactions do not fire"
     [[ "$(kinds "$(th_case u2 '' '' '30 user rm'$'\n''20 user rm'$'\n''10 classifier rm'$'\n')")" == "" ]] || fail "2 user denials fire"
     [[ "$(kinds "$(th_case u3 '' '' '30 user rm'$'\n''20 user rm'$'\n''10 user rm'$'\n')")" == "denied" ]] || fail "3 user denials do not fire"
     out="$(AGENTS_DATA_DIR="$tmp/th-c69" agents_report)"
     [[ "$out" == *"  1. claude: 69% cache hits in 24h on 1M input tokens — long sessions on one model, with stable instructions, keep the prompt cache warm"$'\n'* ]] || fail "cache insight:"$'\n'"$out"
     out="$(AGENTS_DATA_DIR="$tmp/th-p51" agents_report)"
     [[ "$out" == *"  1. 5% of tokens (50k) went to polling in 24h (most: main sessions) — wait on a background task's notification instead of polling"$'\n'* ]] || fail "polling insight:"$'\n'"$out"
-    pass "insights: cache <70% on 1M+, polling >5% of 1M+, compactions ≥3 in a session, a subject you denied ≥3×; none below"
+    out="$(AGENTS_DATA_DIR="$tmp/th-k3a" agents_report --json | jq -r '.insights[0].text')"
+    [[ "$out" == "app: a session filled its context and compacted ×3 in 24h — hand long work to subagents, or start a fresh session per task" ]] || fail "compaction insight: $out"
+    pass "insights: cache <70% on 1M+, polling >5% of 1M+, auto compactions ≥3 in a session (a /compact you ran is not one), a subject you denied ≥3×; none below"
 else
     echo "SKIP: insight thresholds (no jq)"
 fi
+
+# 7b. A subagent's worktree (REPO/agent-ID, as runs.tsv names it) counts as
+# its repository in the token and denial tables; a worktree you named stays
+# its own; the files keep the raw name.
+f="$tmp/fold"
+rows "$f" tokens.tsv <<EOF
+600${T}claude${T}app${T}S1${T}main${T}m-1${T}100${T}0${T}0${T}0${T}0
+500${T}claude${T}app/agent-a1b2c3d4${T}S1${T}Explore${T}m-1${T}200${T}0${T}0${T}0${T}0
+400${T}claude${T}app/agent-ffff0000${T}S1${T}fork${T}m-1${T}300${T}0${T}0${T}0${T}0
+300${T}claude${T}app/feat${T}S1${T}main${T}m-1${T}50${T}0${T}0${T}0${T}0
+EOF
+rows "$f" denials.tsv <<EOF
+600${T}claude${T}app/agent-a1b2c3d4${T}S1${T}Explore${T}Bash${T}user${T}-${T}rm
+500${T}claude${T}app${T}S1${T}main${T}Bash${T}user${T}-${T}rm
+400${T}claude${T}app/feat${T}S1${T}main${T}Bash${T}user${T}-${T}rm
+EOF
+out="$(AGENTS_DATA_DIR="$f" agents_report --view tokens)"
+[[ "$out" == *"  PROJECT  "*$'\n'"  app                        600   92% "*$'\n'"  app/feat                    50    8% "* && "$out" != *agent-* ]] || fail "tokens: worktrees not folded:"$'\n'"$out"
+[[ "$(AGENTS_DATA_DIR="$f" agents_report --view denials)" == *"BY PROJECT   app 2 · app/feat 1"* ]] || fail "denials: worktrees not folded:"$'\n'"$(AGENTS_DATA_DIR="$f" agents_report --view denials)"
+jqt "$(AGENTS_DATA_DIR="$f" agents_report --view tokens --json)" '[.projects[] | [.project, .total]] == [["app",600],["app/feat",50]]' "tokens json: folded projects" '.projects'
+pass "a subagent's worktree (REPO/agent-ID) counts as its repository; a named worktree stays its own"
+
+# 7c. A Codex reading 6 days old or more shows its date, not a weekday that
+# would name the wrong week.
+o="$tmp/oldlim"; mkdir -p "$o"; cp "$d/tokens.tsv" "$o/"
+printf '%s\tcodex\t42.5\t300\t%s\n' $((FAKE_NOW - 8 * 86400)) $((FAKE_NOW - 8 * 86400 + 4800)) > "$o/limits.tsv"
+[[ "$(AGENTS_DATA_DIR="$o" agents_report --view tokens)" == *"CODEX PLAN  the 5h window has reset since the last reading (43% used at Oct  6 15:00)" ]] \
+    || fail "an old Codex reading:"$'\n'"$(AGENTS_DATA_DIR="$o" agents_report --view tokens | tail -1)"
+printf '%s\tcodex\t42.5\t300\t%s\n' $((FAKE_NOW - 2 * 86400)) $((FAKE_NOW - 2 * 86400 + 4800)) > "$o/limits.tsv"
+[[ "$(AGENTS_DATA_DIR="$o" agents_report --view tokens)" == *"(43% used at Sun 15:00)" ]] || fail "a 2-day-old Codex reading: $(AGENTS_DATA_DIR="$o" agents_report --view tokens | tail -1)"
+pass "the Codex plan: a weekday within the week, the date for an older reading"
 
 # 8. A month of tokens: thousands of names, JSON far past mawk's 8 KiB sprintf
 # limit, every number in place; the text cut at its row limits.

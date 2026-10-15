@@ -16,7 +16,8 @@
 #
 # A row counts in the window it was written in (epoch >= start). A total
 # counts every token, cache reads included; the cache hit rate is cache_read
-# over the input side (in + cache_write + cache_read).
+# over the input side (in + cache_write + cache_read). A subagent's worktree
+# counts as its repository (pfold); the files keep the name as runs.tsv does.
 
 # --- Reading ----------------------------------------------------------------------
 
@@ -77,7 +78,7 @@ function tokens_load(tf, cf, lf, pf, start,   ln, f, d, k, i, t, u, p, nm, poll)
             if (!(f[5] in PAt)) PAO[++PAC] = f[5]
             PAt[f[5]] += t
         }
-        TRow[2] = f[6]; TRow[3] = f[2]; TRow[4] = f[5]; TRow[5] = f[3]
+        TRow[2] = f[6]; TRow[3] = f[2]; TRow[4] = f[5]; TRow[5] = pfold(f[3])
         for (d = 1; d <= 4; d++) {
             nm = TRow[d + 1]; k = TDIMS[d] SUBSEP nm
             if (!(k in Dn)) DK[TDIMS[d], ++DKN[TDIMS[d]]] = nm
@@ -92,7 +93,8 @@ function tokens_load(tf, cf, lf, pf, start,   ln, f, d, k, i, t, u, p, nm, poll)
 
 # compacts_load FILE START — this window's CN compactions, CAUTO and CMAN of
 # them auto and manual, CPRE their tokens before; by session (project SUBSEP
-# session SUBSEP cli): CSO[1..CSC], CSn CSauto CSpre.
+# session SUBSEP cli): CSO[1..CSC], CSn CSauto CSpre, CSautopre (the auto
+# ones' tokens before).
 function compacts_load(cf, start,   ln, f, k) {
     CN = CAUTO = CMAN = CPRE = 0; CSC = 0
     while ((getline ln < cf) > 0) {
@@ -100,10 +102,10 @@ function compacts_load(cf, start,   ln, f, k) {
         if (f[7] !~ /^[0-9]+$/) f[7] = 0
         CN++; CPRE += f[7]
         if (f[6] == "auto") CAUTO++; else if (f[6] == "manual") CMAN++
-        k = (f[3] == "" ? "-" : f[3]) SUBSEP (f[4] == "" ? "-" : f[4]) SUBSEP f[2]
+        k = (f[3] == "" ? "-" : pfold(f[3])) SUBSEP (f[4] == "" ? "-" : f[4]) SUBSEP f[2]
         if (!(k in CSn)) CSO[++CSC] = k
         CSn[k]++; CSpre[k] += f[7]
-        if (f[6] == "auto") CSauto[k]++
+        if (f[6] == "auto") { CSauto[k]++; CSautopre[k] += f[7] }
     }
     close(cf)
 }
@@ -139,11 +141,14 @@ function usd(x) { return x > 0 && x < 0.005 ? "<$0.01" : sprintf("$%.2f", x) }
 # jbig / jusd: a JSON integer of any size, a JSON amount (null below 0).
 function jbig(x) { return sprintf("%.0f", x) }
 function jusd(x) { return x < 0 ? "null" : sprintf("%.2f", x) }
-# hm T — the local clock time of epoch T, with the weekday when it is not today.
-function hm(t,   s, d) {
+# hm T — the local clock time of epoch T, with the weekday when it is not
+# today, and the date instead when it is 6 days or more away (a weekday
+# would then name the wrong week).
+function hm(t,   s, d, n) {
+    d = int((t + off) / 86400); n = int((now + off) / 86400)
+    if (d - n >= 6 || n - d >= 6) return dayhm(t)
     s = sprintf("%02d:%02d", int(((t + off) % 86400) / 3600), int(((t + off) % 3600) / 60))
-    d = int((t + off) / 86400)
-    if (d != int((now + off) / 86400)) s = substr("ThuFriSatSunMonTueWed", (d % 7) * 3 + 1, 3) " " s
+    if (d != n) s = substr("ThuFriSatSunMonTueWed", (d % 7) * 3 + 1, 3) " " s
     return s
 }
 # wmin M — a window in minutes as 5h, 7d, 90m.
