@@ -16,11 +16,13 @@
 # lines it finds.
 #
 # Owns: those paths, the task-id lines, a subagent's meta fields and type,
-#   and which agent started a task.
+#   which agent started a task, and which transcripts changed lately and
+#   whose session each is (tokens.sh).
 # Uses: nothing.
 # Public: _AGENTS_TX_TASK_KEY, _agents_tx_path, _agents_tx_started,
 #   _agents_tx_ids, _agents_tx_meta, _agents_tx_type_ok, _agents_tx_agent_type,
-#   _agents_tx_main_of, _agents_tx_task_owners.
+#   _agents_tx_agent_types, _agents_tx_main_of, _agents_tx_task_owners,
+#   _agents_tx_find, _agents_tx_session_of.
 
 # The key on every transcript line that names a background task.
 _AGENTS_TX_TASK_KEY='"backgroundTaskId"'
@@ -75,6 +77,57 @@ _agents_tx_agent_type() {
     [[ -n "$t" ]] || t="$(_agents_tx_meta "$meta" agentType)"
     _agents_tx_type_ok "$t" || t=-
     printf '%s\n' "$t"
+}
+
+# _agents_tx_agent_types TRANSCRIPT... — "transcript<TAB>type" for each
+# subagent transcript whose meta.json names a plain type, as
+# _agents_tx_agent_type would (customAgentType first): one grep for all of
+# them, however many. A transcript without one gets no line.
+_agents_tx_agent_types() {
+    local f metas=()
+    [[ $# -gt 0 ]] || return 0
+    for f in "$@"; do metas+=("${f%.jsonl}.meta.json"); done
+    # grep -H: "META:MATCH"; the match is the line's last :"key": "value".
+    LC_ALL=C grep -HoE '"(customAgentType|agentType)": ?"[^"\\]*"' "${metas[@]}" 2>/dev/null | LC_ALL=C awk -v ok="$_AGENTS_TX_TYPE_CHARS" '
+        match($0, /:"(customAgentType|agentType)": ?"[^"\\]*"$/) {
+            m = substr($0, 1, RSTART - 1); v = substr($0, RSTART + 1)
+            c = (v ~ /^"customAgentType"/); sub(/^"[A-Za-z]+": ?"/, "", v); sub(/"$/, "", v)
+            if (!(m in seen)) { seen[m] = 1; o[++n] = m }
+            if (c) { if (!(m in cu)) cu[m] = v } else if (!(m in ag)) ag[m] = v
+        }
+        END {
+            for (i = 1; i <= n; i++) {
+                m = o[i]; v = (cu[m] != "") ? cu[m] : ag[m]
+                bad = (v == "" || length(v) > 64)
+                for (j = 1; !bad && j <= length(v); j++) if (index(ok, substr(v, j, 1)) == 0) bad = 1
+                if (bad) continue
+                f = m; sub(/\.meta\.json$/, ".jsonl", f); print f "\t" v
+            }
+        }'
+}
+
+# _agents_tx_find DAYS FIND_ACTION... — every transcript, main and subagent,
+# changed within the last DAYS days, with find's FIND_ACTION (-print, or
+# -exec CMD {} +). Nothing when there is no projects directory.
+_agents_tx_find() {
+    local days="$1" p="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
+    shift
+    [[ -d "$p" ]] || return 0
+    find "$p" -mindepth 2 -maxdepth 4 -type f -name '*.jsonl' -mtime "-$days" \
+        \( -path "$p/*/*/subagents/agent-*.jsonl" -o ! -path "$p/*/*/*" \) "$@" 2>/dev/null
+    return 0
+}
+
+# _agents_tx_session_of VAR TRANSCRIPT — set VAR to the id of the session a
+# transcript belongs to: its own name, or for a subagent's (…/<session>/
+# subagents/agent-<id>.jsonl) its main session's.
+_agents_tx_session_of() {
+    local s="$2"
+    case "$s" in
+        */subagents/agent-*.jsonl) s="${s%/subagents/*}" ;;
+        *) s="${s%.jsonl}" ;;
+    esac
+    printf -v "$1" '%s' "${s##*/}"
 }
 
 # _agents_tx_main_of OUTPUT — the main transcript of the session a task

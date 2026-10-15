@@ -68,7 +68,8 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `assess.sh` | Needs you: evidence and a verdict per item, `agents why` |
 | `history.sh` | `agents sample`: `history.tsv`, `today.tsv`, `sample.state`, pruning |
 | `runs.sh` | the run ledger (`runs.state`, `runs.tsv`), the menu's run feed, `agents runs` |
-| `transcript.sh` | reading Claude Code transcripts: task-id lines, subagent meta and type, which agent started a task (shared by `hooks.sh` and `runs.sh`) |
+| `tokens.sh` | the token scanner `agents sample` runs: what Claude Code and Codex transcripts say about tokens, read incrementally and within a byte budget (`tokens.state`), into `tokens.tsv`, `compacts.tsv`, `denials.tsv`, `limits.tsv` and the menu's `tokens.today` |
+| `transcript.sh` | reading Claude Code transcripts: task-id lines, subagent meta and type, which agent started a task, which transcripts changed lately and whose session each is (shared by `hooks.sh`, `runs.sh` and `tokens.sh`) |
 | `report.sh` | `agents report` and its views, `insight.txt` (`agents_insight_write`, the menu's top insight) |
 | `render.sh` | the human views: the table, its status lines, `agents watch` |
 | `json.sh` | `agents json`, a versioned contract |
@@ -79,7 +80,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `usage.sh` | `agents --help` |
 | `cli.sh` | `agents_main`: options and the subcommand table; `agents cwd` |
 | `awk/lib_*.awk` | awk functions shared by several programs: process-table primitives (`lib_proc`), what a tool shell runs and the name it goes by (`lib_activity`), jobs (`lib_jobs`), JSON strings (`lib_json`), ordering, heapsorts (`lib_sort`), durations and sizes for people (`lib_fmt`) |
-| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `refusal`, `tree`, `new_members`, `hook_*`), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_insights`, `report_views` |
+| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `tokens_plan`, `tokens`, `refusal`, `tree`, `new_members`, `hook_*`), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_insights`, `report_views` |
 
 The monitoring pack installs each file with `install_config --overwrite`, so the manifest records it and `uninstall.sh` removes it. Adding a module needs no migration; renaming or removing one does, like any installed file. `scripts/lib/test_agents_golden.sh` compares every view and dry run with recorded output byte for byte, and `test_agents_install.sh` runs the installed command outside the repo.
 
