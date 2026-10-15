@@ -9,9 +9,10 @@
 # session (the menu's summaries show it).
 #
 # `agents jump` resolves the rest when you click, never on a refresh: which
-# Herdr pane (by the Claude Code session id Herdr reports, else the only
-# agent of its kind in its directory, else the pane whose processes include
-# it), which tmux client, and which window or tab of the terminal app shows
+# Herdr pane (by the Claude Code session id Herdr reports, else the pane
+# whose processes include it, else, for a jump to a session whose id is
+# known, the only agent of its kind in its directory), which tmux client,
+# and which window or tab of the terminal app shows
 # it (by tty, through the app's AppleScript: Ghostty 1.3 and later, iTerm2,
 # Terminal; any other app is only brought forward).
 #
@@ -153,20 +154,19 @@ _agents_tmux_client() {
         | sort -rn | awk 'NR == 1 && $2 ~ /^[0-9]+$/ { print $2 "\t" $3 }'
 }
 
-# _agents_herdr_pane ROOT KIND CWD SESSION — the id of the Herdr pane the
-# agent ROOT runs in: the agent Herdr reports with session id SESSION, else
-# the only agent of KIND in CWD, else the pane whose processes include ROOT
-# (herdr pane process-info, pane by pane). Nothing when Herdr can't tell.
+# _agents_herdr_pane ROOT KIND CWD SESSION [guess] — the id of the Herdr
+# pane the agent ROOT runs in: the agent Herdr reports with session id
+# SESSION, else the pane whose processes include ROOT (herdr pane
+# process-info, pane by pane); else, with guess and a SESSION (a jump: a
+# wrong pane only costs a look), the only agent of KIND in CWD. Nothing when
+# Herdr can't tell.
 _agents_herdr_pane() {
-    local root="$1" kind="$2" cwd="$3" sid="$4" list pane p
+    local root="$1" kind="$2" cwd="$3" sid="$4" guess="${5:-}" list pane="" p
     command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
     list="$(_agents_timeout 2 herdr agent list 2>/dev/null | jq -r '.result.agents[]? |
         [(.pane_id // "-"), (.agent // "-"), (.cwd // "-"), (.agent_session.value // "-")] | map(tostring) | @tsv' 2>/dev/null)"
     [[ -n "$list" ]] || return 0
-    pane="$(printf '%s\n' "$list" | awk -F '\t' -v s="$sid" -v k="$kind" -v c="$cwd" '
-        s != "" && s != "-" && $4 == s { print $1; f = 1; exit }
-        $2 == k && $3 == c { n++; m = $1 }
-        END { if (!f && n == 1) print m }')"
+    [[ -z "$sid" || "$sid" == - ]] || pane="$(printf '%s\n' "$list" | awk -F '\t' -v s="$sid" '$4 == s { print $1; exit }')"
     if [[ -z "$pane" ]]; then
         while IFS=$'\t' read -r p _; do
             [[ "$p" =~ ^[A-Za-z0-9:_-]+$ ]] || continue
@@ -176,14 +176,31 @@ _agents_herdr_pane() {
             fi
         done <<<"$list"
     fi
+    if [[ -z "$pane" && "$guess" == guess && -n "$sid" && "$sid" != - ]]; then
+        pane="$(printf '%s\n' "$list" | awk -F '\t' -v k="$kind" -v c="$cwd" '$2 == k && $3 == c { n++; m = $1 } END { if (n == 1) print m }')"
+    fi
     [[ "$pane" =~ ^[A-Za-z0-9:_-]+$ ]] && printf '%s\n' "$pane"
     return 0
+}
+
+# _agents_herdr_target VAR PID ROOT KIND [guess] — set VAR to the Herdr pane
+# of PID, whose agent session is ROOT (KIND): _agents_herdr_pane with its
+# directory and, for Claude Code, the session id it recorded for ROOT.
+_agents_herdr_target() {
+    local _root="$3" _cwd _sid="" _age
+    [[ "$_root" =~ ^[0-9]+$ ]] || _root="$2"
+    _cwd="$(_agents_cwds "$_root" | cut -f2)"
+    if [[ "$4" == claude ]]; then
+        _age="$(agents_secs "$(LC_ALL=C ps -o etime= -p "$_root" 2>/dev/null | tr -d ' ')")"
+        _sid="$(_agents_session_of "$_root" claude "$_age" | awk -F '\t' '$1 == "session" { print $2 }')"
+    fi
+    printf -v "$1" '%s' "$(_agents_herdr_pane "$_root" "$4" "${_cwd:--}" "$_sid" "${5:-}")"
 }
 
 # _agents_jump_to PID SNAPSHOT — go to PID's place (agents_jump); its outcome
 # on stdout, false when there is nowhere to go.
 _agents_jump_to() {
-    local pid="$1" snap="$2" where how place root kind client app="" tty="" pane cwd sid age
+    local pid="$1" snap="$2" where how place root kind client app="" tty="" pane
     where="$(agents_where "$pid" "$snap" "$(_agents_panes)")"
     IFS=$'\t' read -r how place root kind <<<"${where%%$'\n'*}"
     case "$how" in
@@ -195,15 +212,8 @@ _agents_jump_to() {
             echo "tmux pane $place" ;;
         herdr)
             # The pane: by the session Herdr reports (the agent's), else its
-            # directory, else its processes.
-            [[ "$root" =~ ^[0-9]+$ ]] || root="$pid"
-            cwd="$(_agents_cwds "$root" | cut -f2)"
-            sid=""
-            if [[ "$kind" == claude ]]; then
-                age="$(agents_secs "$(LC_ALL=C ps -o etime= -p "$root" 2>/dev/null | tr -d ' ')")"
-                sid="$(_agents_session_of "$root" claude "$age" | awk -F '\t' '$1 == "session" { print $2 }')"
-            fi
-            pane="$(_agents_herdr_pane "$root" "$kind" "${cwd:--}" "$sid")"
+            # processes, else (a guess) its directory.
+            _agents_herdr_target pane "$pid" "$root" "$kind" guess
             [[ -z "$pane" ]] || _agents_timeout 2 herdr agent focus "$pane" >/dev/null 2>&1 || pane=""
             # The terminal a Herdr client runs in.
             IFS=$'\t' read -r _ client app <<<"$(printf '%s\n' "$where" | awk -F '\t' '$1 == "client" { print; exit }')"
@@ -242,16 +252,14 @@ agents_jump() {
 # lines of the tmux pane PID runs in, or of its Herdr pane (herdr pane read),
 # as plain text.
 agents_peek() {
-    local pid lines="${2:-40}" how place root kind pane cwd
+    local pid lines="${2:-40}" how place root kind pane
     _agents_pid_token pid "${1:-}" "agents peek PID[@START] [LINES]" || return
     [[ "$lines" =~ ^[1-9][0-9]{0,3}$ && $lines -le 2000 ]] || { echo "usage: agents peek PID[@START] [LINES] (1 to 2000)" >&2; return 2; }
     IFS=$'\t' read -r how place root kind <<<"$(agents_where "$pid" | head -1)"
     case "$how" in
         tmux)  printf '%s── tmux %s · pid %s ──%s\n' "$C_DIM" "$place" "$pid" "$C_0"
                tmux capture-pane -p -J -S "-$lines" -t "$place" ;;
-        herdr) [[ "$root" =~ ^[0-9]+$ ]] || root="$pid"
-               cwd="$(_agents_cwds "$root" | cut -f2)"
-               pane="$(_agents_herdr_pane "$root" "$kind" "${cwd:--}" "")"
+        herdr) _agents_herdr_target pane "$pid" "$root" "$kind"   # never a guess: it prints what it reads
                [[ -n "$pane" ]] || { echo "agents: pid $pid runs in Herdr, but its pane was not found" >&2; return 1; }
                printf '%s── Herdr %s · pid %s ──%s\n' "$C_DIM" "$pane" "$pid" "$C_0"
                _agents_timeout 3 herdr pane read "$pane" --lines "$lines" --format text 2>/dev/null ;;

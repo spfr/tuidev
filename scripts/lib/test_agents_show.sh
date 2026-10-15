@@ -136,7 +136,21 @@ printf '%s\n' '{"result":{"agents":[{"pane_id":"w3:p1","agent":"claude","cwd":"/
 clear_logs; agents_jump 820 >/dev/null
 [[ "$(log herdr)" == *"pane process-info --pane w3:p1"*"agent focus w2:p1"* ]] || fail "Herdr by process-info: $(log herdr)"
 printf '%s\n' "$HERDR_AGENTS" > "$tmp/herdr.json"
-pass "jump: a Herdr pane by session id, else its directory, else its processes; then the Herdr client's terminal tab"
+# Its processes come before a guess by its directory: another agent alone in
+# that directory is not it. The guess is a jump's last resort, and only for
+# a session whose id is known.
+printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api","agent_session":{"value":"zzz"}},{"pane_id":"w2:p1","agent":"claude","cwd":"/x"}]}}' > "$tmp/herdr.json"
+clear_logs; agents_jump 820 >/dev/null
+[[ "$(log herdr)" == *"agent focus w2:p1"* ]] || fail "Herdr: a guess by directory came before the exact process check: $(log herdr)"
+printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api","agent_session":{"value":"zzz"}}]}}' > "$tmp/herdr.json"
+clear_logs; out="$(agents_jump 820)"
+[[ "$out" == "pid 820: Herdr (its pane not found)" && "$(log herdr)" != *"agent focus"* ]] || fail "Herdr: a guess without a session id: $out / $(log herdr)"
+printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+clear_logs; agents_jump 820 >/dev/null
+[[ "$(log herdr)" == *"agent focus w9:p9"* ]] || fail "Herdr: no last-resort guess for a known session: $(log herdr)"
+rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"
+printf '%s\n' "$HERDR_AGENTS" > "$tmp/herdr.json"
+pass "jump: a Herdr pane by session id, else its processes, else (a known session) its directory; then the Herdr client's terminal tab"
 
 clear_logs
 out="$(agents_jump 601)" && [[ "$out" == "pid 601: Ghostty" ]] || fail "jump to Ghostty: $out"
@@ -155,6 +169,15 @@ pass "jump: a terminal tab by tty (Ghostty, iTerm, Terminal); ssh and gone pids 
 clear_logs
 out="$(agents_peek 721 60)"; [[ "$out" == *"tmux work:1.2"*"pane text" && "$(log tmux)" == *"capture-pane -p -J -S -60 -t work:1.2"* ]] || fail "peek tmux: $out / $(log tmux)"
 out="$(agents_peek 820)"; [[ "$out" == *"Herdr w2:p1"*"herdr pane text" && "$(log herdr)" == *"pane read w2:p1 --lines 40 --format text"* ]] || fail "peek Herdr: $out / $(log herdr)"
+# Peek never guesses: a pane it cannot tell is not read, even with another
+# agent alone in the directory (and a session id it knows).
+printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api","agent_session":{"value":"zzz"}}]}}' > "$tmp/herdr.json"
+printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+clear_logs; ! out="$(agents_peek 820 2>&1)" && [[ "$out" == *"its pane was not found"* && "$(log herdr)" != *"pane read"* ]] \
+    || fail "peek guessed a Herdr pane: $out / $(log herdr)"
+printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api"},{"pane_id":"w8:p1","agent":"claude","cwd":"/y","agent_session":{"value":"sess-820"}}]}}' > "$tmp/herdr.json"
+clear_logs; out="$(agents_peek 820)"; [[ "$(log herdr)" == *"pane read w8:p1"* ]] || fail "peek by session id: $out / $(log herdr)"
+rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"; printf '%s\n' "$HERDR_AGENTS" > "$tmp/herdr.json"
 [[ "$(agents_peek 601 2>&1)" == *"not in a tmux or Herdr pane (it runs in Ghostty)"* ]] || fail "peek a Ghostty tab"
 [[ "$(agents_peek 721 0 2>&1)" == usage:* && "$(agents_peek 721 3000 2>&1)" == usage:* ]] || fail "peek LINES bounds"
 pass "peek: a tmux pane's last lines, a Herdr pane's through herdr pane read; nothing else"

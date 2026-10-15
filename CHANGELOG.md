@@ -25,7 +25,7 @@ minute-by-minute sample stays cheap on a heavy machine.
   time, memory, threads, ports, open files and children. `--watch` redraws it
   every 2 s; `--json` gives a versioned object.
 - **`agents jump PID`** goes to where a process runs so you can answer it: its
-  Herdr pane (by session id, directory or processes; `herdr agent focus`) or
+  Herdr pane (by session id or processes, else by directory; `herdr agent focus`) or
   tmux pane, then the terminal tab that shows it (Ghostty 1.3+, iTerm2 and
   Terminal by tty; any other app is brought forward). **`agents peek PID`**
   prints the last lines of its tmux or Herdr pane.
