@@ -24,11 +24,21 @@ agents_secs() { printf '%s\n' "$1" | _agents_awk_eval lib_proc '{ print secs($1)
 # _agents_start PID — the process's start time as one token, or nothing when
 # it is gone. A zombie counts as gone: it has exited and only waits for its
 # parent to reap it, which a container's init may do late.
-_agents_start() { LC_ALL=C ps -o stat=,lstart= -p "$1" 2>/dev/null | awk 'NF >= 6 && $1 !~ /^Z/ { print $2 "_" $3 "_" $4 "_" $5 "_" $6 }'; }
+# One ps, read by bash: it runs for every lock and state file.
+_agents_start() {
+    local st a b c d e
+    read -r st a b c d e _ <<<"$(LC_ALL=C ps -o stat=,lstart= -p "$1" 2>/dev/null)"
+    [[ -n "$e" && "$st" != Z* ]] && printf '%s_%s_%s_%s_%s\n' "$a" "$b" "$c" "$d" "$e"
+    return 0
+}
 
 # _agents_zombie PID — succeeds when PID has exited but is not yet reaped
 # (kill -0 still finds it).
-_agents_zombie() { LC_ALL=C ps -o stat= -p "$1" 2>/dev/null | awk '$1 ~ /^Z/ { z = 1 } END { exit !z }'; }
+_agents_zombie() {
+    local st
+    read -r st _ <<<"$(LC_ALL=C ps -o stat= -p "$1" 2>/dev/null)"
+    [[ "$st" == Z* ]]
+}
 
 # "pid port" for every TCP listener we can see (our own processes, unprivileged).
 # Fails when they could not be listed (no lsof or ss, or it failed): "no
@@ -57,6 +67,55 @@ _agents_listeners() {
 # "pid<TAB>path<TAB>cwd|1" (agents_enrich reads both forms).
 _agents_cwds() {
     if [[ "${1:-}" == --stdout ]]; then shift; _agents_proc_paths cwd,1 "$@"; else _agents_proc_paths cwd "$@"; fi
+}
+
+# A refresh asks for the cwds of nearly the same processes as the one before
+# (the sessions, the stale trees, the commands still running), and lsof takes
+# as long for one pid as for ten. So agents_collect starts the lookup early,
+# alongside ps, for the pids the last run asked about (cwd.hint in the run
+# dir), and afterwards asks only about the new ones. Every answer is still
+# this run's: the hint only says which pids to ask about. Where /proc answers
+# at once (Linux), there is nothing to start early.
+
+# _agents_cwd_prefetch FD [--stdout] — start that early lookup on FD (as
+# _agents_bg), and set the caller's hint to the pids it asks about
+# (" pid pid "); false, with hint empty, when there is none to make.
+_agents_cwd_prefetch() {
+    local fd="$1" h=""
+    shift
+    hint=""
+    [[ ! -d /proc/self/fd && -f "$AGENTS_RUN_DIR/cwd.hint" ]] || return 1
+    { read -r h < "$AGENTS_RUN_DIR/cwd.hint"; } 2>/dev/null || true
+    [[ "$h" =~ ^[0-9]+( [0-9]+)*$ ]] || return 1
+    # shellcheck disable=SC2086  # one pid per word
+    _agents_bg "$fd" _agents_cwds "$@" $h
+    hint=" $h "
+}
+
+# _agents_cwds_hinted VAR FD HINT [--stdout] PID... — set VAR to what
+# _agents_cwds would print for PID...: the early lookup's lines (on FD, for
+# the pids in HINT; "" when none was started) for the pids it asked about,
+# and one lookup now for the rest. PID... become the next run's hint (a plain
+# write: a reader that catches it half-written only asks again).
+_agents_cwds_hinted() {
+    local _var="$1" fd="$2" hint="$3" so="" pre="" line p want=" " rest=() out=""
+    shift 3
+    [[ "${1:-}" == --stdout ]] && { so=--stdout; shift; }
+    if [[ -n "$hint" ]]; then
+        _agents_bg_wait pre "$fd" || true
+        for p in "$@"; do if [[ "$hint" == *" $p "* ]]; then want+="$p "; else rest+=("$p"); fi; done
+        while IFS= read -r line; do
+            [[ -n "$line" && "$want" == *" ${line%%$'\t'*} "* ]] && out+="$line"$'\n'
+        done <<<"$pre"
+    else
+        rest=("$@")
+    fi
+    [[ ${#rest[@]} -eq 0 ]] || out+="$(_agents_cwds $so "${rest[@]}")"
+    if [[ -d "$AGENTS_RUN_DIR" && ! -d /proc/self/fd ]]; then
+        { printf '%s\n' "$*" > "$AGENTS_RUN_DIR/cwd.hint"; } 2>/dev/null
+    fi
+    while [[ "$out" == *$'\n' ]]; do out="${out%$'\n'}"; done
+    printf -v "$_var" '%s' "$out"
 }
 
 # _agents_proc_paths cwd|FD|cwd,FD PID... — "pid<TAB>path" for each process's
@@ -167,15 +226,24 @@ _agents_keep_pids() {
 # to the run ledger (_agents_runs_feed): the same snapshot and lsof, plus the
 # tool shells' stdout from that lsof.
 agents_collect() {
-    local ps listen recs pids lprobe=ok enr feed=""
+    local ps listen keep kbg="" recs pids lprobe=ok enr feed="" hint=""
     [[ "${_AGENTS_FEED:-}" == 1 && "$AGENTS_HISTORY" == 1 ]] && feed=1
+    # Listing the listeners scans every process (lsof): the slowest probe, so
+    # it runs while ps reads the process table; so do launchctl on macOS,
+    # whose jobs (pids never stale) need no snapshot, and the cwd lookup for
+    # the pids the last run asked about (_agents_cwd_prefetch).
+    _agents_bg 5 _agents_listeners
+    if command -v launchctl >/dev/null 2>&1; then _agents_bg 7 _agents_keep_pids ""; kbg=1; fi
+    _agents_cwd_prefetch 8 ${feed:+--stdout} || true
     ps="$(agents_snapshot)"
+    _agents_bg_wait listen 5 || lprobe=fail
+    if [[ -n "$kbg" ]]; then _agents_bg_wait keep 7; else keep="$(_agents_keep_pids "$ps")"; fi
     if [[ -z "$ps" ]]; then
+        [[ -z "$hint" ]] || _agents_bg_wait _ 8 || true
         echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2
         return 1
     fi
-    listen="$(_agents_listeners)" || lprobe=fail
-    recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$(_agents_keep_pids "$ps")")"
+    recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep")"
     local type pid kind rest watch="" runs=""
     set --
     while IFS=$'\t' read -r type pid kind rest; do
@@ -186,7 +254,7 @@ agents_collect() {
             watch) watch+="$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;  # kind: the path; rest: read|exists
         esac
     done <<<"$recs"
-    pids="$(_agents_cwds ${feed:+--stdout} "$@")"
+    _agents_cwds_hinted pids 8 "$hint" ${feed:+--stdout} "$@"
     enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_watched "$watch")")"
     [[ -z "$enr" ]] || printf '%s\n' "$enr"
     # Runs are tool commands and stale trees: with neither, nothing to feed.

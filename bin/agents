@@ -21,7 +21,14 @@
 # (scripts/lib/test_agents*.sh do that). bash 3.2.
 
 # This script, as run (open-term and `awake agents` start it again).
-AGENTS_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+# Run by its absolute path (from PATH, or SwiftBar), it needs no fork.
+_agents_m="${BASH_SOURCE[0]}"
+case "$_agents_m" in */*) _agents_d="${_agents_m%/*}" ;; *) _agents_d=. ;; esac
+case "${_agents_d:-/}/" in
+    /*//*|*/./*|*/../*|[!/]*) AGENTS_PATH="$(cd "${_agents_d:-/}" && pwd)/${_agents_m##*/}" ;;
+    *) AGENTS_PATH="$_agents_d/${_agents_m##*/}" ;;
+esac
+unset _agents_d
 
 # _agents_find_lib SCRIPT — set _AGENTS_LIB to the module directory of the
 # agents at SCRIPT: PREFIX/lib/agents (a checkout) or PREFIX/lib/tuidev/agents

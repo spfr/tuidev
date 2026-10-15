@@ -2,8 +2,8 @@
 # lib/agents/tsv.sh — `agents tsv`, what the SwiftBar plugin
 # (configs/swiftbar/agents.10s.sh) reads every refresh.
 #
-# Uses: config.sh, snapshot.sh (agents_collect), assess.sh
-#   (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
+# Uses: config.sh, util.sh (_agents_bg), snapshot.sh (agents_collect),
+#   assess.sh (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
 #   (_agents_hist_line), report.sh (_agents_insight_line,
 #   _agents_tokens_line).
 # Public: agents_tsv.
@@ -18,29 +18,50 @@
 #   tokens total cache_pct  today's tokens and cache hit %, from tokens.today
 #   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
-# Built for the menu bar: Herdr is read from its cache (never waited on), and
-# the keep-awake state is read once. Each refresh also feeds the run ledger
-# (agents_collect with _AGENTS_FEED, runs.sh), so commands shorter than the
-# minute between samples are recorded too.
+# Built for the menu bar, every few seconds: Herdr is read from its cache
+# (never waited on), the keep-awake state is read once, and the machine's
+# state is read while the processes are collected (_agents_tsv_machine). Each
+# refresh also feeds the run ledger (agents_collect with _AGENTS_FEED,
+# runs.sh), so commands shorter than the minute between samples are recorded
+# too.
 agents_tsv() {
-    local recs state pid="-" mode="off" until=0 lvl sys key val cores lmax lpid luntil
+    local recs state pid="-" mode="off" until=0 sys thermal power lid key val cores mach
     # One clock for the whole refresh: every _agents_now under it reads this.
     local _AGENTS_CLOCK=""
     _agents_now _AGENTS_CLOCK
+    _agents_bg 6 _agents_tsv_machine
     _agents_awake_prime
-    recs="$(AGENTS_HERDR_MODE=async _AGENTS_FEED=1 agents_collect)" || return 1
+    if ! recs="$(AGENTS_HERDR_MODE=async _AGENTS_FEED=1 agents_collect)"; then
+        _agents_bg_wait mach 6 || true
+        return 1
+    fi
     _agents_with_needs "$recs"
-    sys="$(agents_system)"
+    _agents_bg_wait mach 6 || true
+    { IFS= read -r sys; IFS= read -r thermal; IFS= read -r power; IFS= read -r lid; } <<<"$mach"
     cores="${sys#*$'\t'}"; cores="${cores%%$'\t'*}"
     printf 'sys\t%s\t%s\n' "$(_agents_cpu_pct "$cores" "$recs")" "$sys"
-    state="$(_agents_awake_now)" && read -r pid mode until _ <<<"$state"
-    lvl="$(agents_thermal_level)"
+    _agents_awake_now state && read -r pid mode until _ <<<"$state"
     printf 'awake\t%s\t%s\t%s\n' "$mode" "$pid" "$until"
-    printf 'thermal\t%s\t%s\n' "${lvl:--}" "$(agents_thermal_name "${lvl:--}")"
-    printf 'power\t%s\n' "$(agents_powermode)"
+    printf '%s\n%s\n' "$thermal" "$power"
     _agents_hist_line
     _agents_insight_line
     _agents_tokens_line
+    printf '%s\n' "$lid"
+    for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP; do
+        val="${!key}"
+        printf 'conf\t%s\t%s\n' "$key" "${val:--}"
+    done
+}
+
+# _agents_tsv_machine — the machine's part of agents_tsv, which nothing in the
+# process table changes: agents_system's line (sys without its CPU%), then
+# the thermal, power and lid rows.
+_agents_tsv_machine() {
+    local lvl state lpid luntil lmax
+    agents_system
+    lvl="$(agents_thermal_level)"
+    printf 'thermal\t%s\t%s\n' "${lvl:--}" "$(agents_thermal_name "${lvl:--}")"
+    printf 'power\t%s\n' "$(agents_powermode)"
     lmax="$(_agents_lid_max)"
     if state="$(agents_lid_state)"; then
         read -r lpid luntil _ <<<"$state"; printf 'lid\ton\t%s\t%s\t%s\n' "$lpid" "$luntil" "$lmax"
@@ -49,8 +70,4 @@ agents_tsv() {
     else
         printf 'lid\toff\t-\t0\t%s\n' "$lmax"
     fi
-    for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP; do
-        val="${!key}"
-        printf 'conf\t%s\t%s\n' "$key" "${val:--}"
-    done
 }

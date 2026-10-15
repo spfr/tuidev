@@ -37,7 +37,7 @@ NF >= 14 {
     ord[++n] = p
     pp[p] = $2 + 0; uid[p] = $3; usr[p] = $4; cpu[p] = $5 + 0; rss[p] = $6 + 0
     ct[p] = secs($7); et[p] = secs($8); st[p] = lstart()
-    s = argv($0); gsub(/\t/, " ", s)
+    s = argv($0); if (index(s, "\t")) gsub(/\t/, " ", s)
     av[p] = s
 }
 END {
@@ -62,7 +62,7 @@ END {
         if (under) continue
         # A process that hosts a session (an agent, an interactive shell, a
         # tmux/screen/zellij/herdr/pm2 server) shelters every ancestor.
-        host = (kind[p] != "" || hosts(av[p]))
+        host = (kind[p] != "" || interactive_shell(av[p]) || supervisor(av[p]))   # hosts(), kind[] known
         q = p; d = 0
         while (q > 1 && (q in pp) && d++ < 64) {
             tcpu[q] += cpu[p]; trss[q] += rss[p]
