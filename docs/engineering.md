@@ -55,7 +55,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | Module | Owns |
 |--------|------|
 | `config.sh` | every `AGENTS_*` setting (`agents.conf`, the environment, defaults), the process patterns, the run and data dirs, this process's pid and uid; `agents config` |
-| `util.sh` | `_agents_awk` (runs the `awk/` programs), durations, `--since` windows, clock times, timeouts, detached jobs, lock directories, epoch stamps, atomic replace |
+| `util.sh` | `_agents_awk` (runs the `awk/` programs), durations, `--since` windows, clock times, timeouts, detached jobs, lock directories (each records its holder, `PID START`, and is taken over only once that holder is gone), a state file's holder check, epoch stamps, atomic replace |
 | `snapshot.sh` | the `ps` snapshot, start times, listeners, cwds (`/proc` or `lsof`), pids never stale, Herdr's cached view, `agents_collect` |
 | `classify.sh` | `agents_classify` and `agents_enrich`: agents, stale, hogs, what each session runs, jobs, flags, project names |
 | `watched.sh` | the files polling loops watch: quiet or fresh, mtime, last line, and the credential files never read |

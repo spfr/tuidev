@@ -5,11 +5,12 @@
 #   clock times, a word of a line, a command with a timeout or in the
 #   background, and the state files in the run and data directories: lock
 #   directories, epoch stamps, replacing or removing a file safely.
-# Uses: _AGENTS_AWK_DIR (set by bin/agents).
+# Uses: _AGENTS_AWK_DIR (set by bin/agents); snapshot.sh (_agents_start) for
+#   a lock's or a state file's holder.
 # Public: _agents_awk, _agents_awk_eval, agents_parse_duration,
 #   _agents_window, _agents_now, _agents_clock, _agents_field, _agents_timeout,
-#   _agents_detach, _agents_lock, _agents_unlock, _agents_stamp_age, _agents_replace,
-#   _agents_rm_if_same.
+#   _agents_detach, _agents_lock, _agents_unlock, _agents_holder_check,
+#   _agents_mypid, _agents_stamp_age, _agents_replace, _agents_rm_if_same.
 
 # _agents_awk "FILE..." [AWK_OPTION...] — awk, under LC_ALL=C, running the
 # concatenation of awk/FILE.awk... (the shared lib_*.awk first, then the
@@ -88,21 +89,104 @@ _agents_detach() {
 }
 
 # _agents_lock DIR [TRIES [PAUSE]] — take the lock DIR (mkdir is atomic),
-# trying TRIES times (default 1), PAUSE seconds apart (default 0.1). A lock
-# older than a minute was left by a run that died: the first failed try takes
-# it over. False when it could not be had; _agents_unlock DIR releases it.
+# trying TRIES times (default 1), PAUSE seconds apart (default 0.1), and
+# record the holder in DIR/holder: "PID START", this shell and its start time
+# (_agents_start; "-" when ps can't tell). The first failed try takes a held
+# lock over only when its holder is gone (_agents_holder_check: the pid ended,
+# or names another process now), however long it has held it; only a lock
+# whose holder can't be told (no holder file, no start time to check) is
+# taken over by age, once older than a minute. False when it could not be
+# had; _agents_unlock DIR releases it.
 _agents_lock() {
-    local lock="$1" tries="${2:-1}" pause="${3:-0.1}" i=0
+    local lock="$1" tries="${2:-1}" pause="${3:-0.1}" i=0 me start
     until mkdir "$lock" 2>/dev/null; do
-        if [[ $i -eq 0 && -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; then
-            rmdir "$lock" 2>/dev/null; i=1; continue
-        fi
+        if [[ $i -eq 0 ]] && _agents_lock_takeover "$lock"; then i=1; continue; fi
         i=$((i + 1))
         [[ $i -lt $tries ]] || return 1
         sleep "$pause" 2>/dev/null || sleep 1
     done
+    _agents_mypid me
+    start="$(_agents_start "$me")"
+    me="$me ${start:--}"
+    _agents_replace "$lock/holder" "$me" || true
+    _AGENTS_LOCKS="${_AGENTS_LOCKS:-}$lock"$'\t'"$me"$'\n'
 }
-_agents_unlock() { rmdir "$1" 2>/dev/null; return 0; }
+
+# _agents_unlock DIR — release a lock this shell took, only while it is still
+# its own (the holder file says so): never one another run took over since.
+_agents_unlock() {
+    local lock="$1" line mine="" keep="" h=""
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        if [[ "${line%%$'\t'*}" == "$lock" ]]; then mine="${line#*$'\t'}"; else keep+="$line"$'\n'; fi
+    done <<<"${_AGENTS_LOCKS:-}"
+    _AGENTS_LOCKS="$keep"
+    [[ -z "$mine" ]] || { read -r h < "$lock/holder"; } 2>/dev/null
+    if [[ -n "$mine" && "$h" == "$mine" ]]; then
+        rm -f "$lock/holder"; rmdir "$lock" 2>/dev/null
+    fi
+    return 0
+}
+
+# _agents_lock_takeover DIR — remove the held lock DIR when its holder is
+# gone (or, unknown, the lock is older than a minute). Of two runs that found
+# the same dead holder, only the one that renames its holder file goes on.
+_agents_lock_takeover() {
+    local lock="$1" h="" pid="" start="" moved
+    { read -r h < "$lock/holder"; } 2>/dev/null
+    read -r pid start _ <<<"$h"
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+        _agents_holder_check "" "" "$pid" "$start"
+        case $? in
+            0) return 1 ;;
+            2) [[ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || return 1 ;;
+        esac
+    else
+        [[ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || return 1
+    fi
+    if [[ -n "$h" ]]; then
+        moved="$lock/holder.$$.$RANDOM"
+        mv "$lock/holder" "$moved" 2>/dev/null || return 1
+        if [[ "$(cat "$moved" 2>/dev/null)" != "$h" ]]; then
+            mv "$moved" "$lock/holder" 2>/dev/null; return 1   # a new holder's: give it back
+        fi
+        rm -f "$moved"
+    fi
+    rmdir "$lock" 2>/dev/null
+}
+
+# _agents_holder_check FILE CONTENT PID START — is PID, which the state file
+# FILE (holding CONTENT) records with start time START, still that process?
+# 0: yes, its start time matches. 1: no: kill -0 says "No such process", or
+# the pid now names a process with another start time (a reused pid); FILE
+# (unless "") is removed if it still holds CONTENT. 2: it exists, but START
+# is unknown ("-") or ps can't tell (a permission error, EPERM, also proves
+# nothing).
+_agents_holder_check() {
+    local file="$1" content="$2" pid="$3" start="$4" err now
+    if [[ ! "$pid" =~ ^[0-9]+$ ]] || { ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; }; then
+        [[ -z "$file" ]] || _agents_rm_if_same "$file" "$content"
+        return 1
+    fi
+    [[ -n "$start" && "$start" != - ]] || return 2
+    now="$(_agents_start "$pid" 2>/dev/null)"
+    [[ -n "$now" ]] || return 2
+    [[ "$now" == "$start" ]] && return 0
+    [[ -z "$file" ]] || _agents_rm_if_same "$file" "$content"
+    return 1
+}
+
+# _agents_mypid VAR — set VAR to this shell's own pid, in a subshell too:
+# $BASHPID, or in bash 3.2 (where a subshell's $$ is its parent's) the parent
+# pid of a child it execs.
+_agents_mypid() {
+    if [[ ${BASH_VERSINFO[0]} -ge 4 ]]; then
+        printf -v "$1" '%s' "$BASHPID"
+    else
+        # shellcheck disable=SC2016  # expanded by sh
+        printf -v "$1" '%s' "$(exec sh -c 'echo "$PPID"')"
+    fi
+}
 
 # _agents_stamp_age VAR FILE NOW — set VAR to the seconds from the epoch on
 # FILE's first line to NOW; NOW itself when FILE is missing or damaged (the

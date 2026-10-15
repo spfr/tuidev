@@ -35,7 +35,7 @@ agents_auto_tokens() {
 # _agents_auto_due — true at most once a minute (the menu runs auto-reap on
 # every refresh that shows something it may stop). The stamp is read and
 # written under a lock (mkdir is atomic), so two overlapping menu runs never
-# both start a reap; a lock older than a minute is a leftover and is removed.
+# both start a reap; a lock whose holder is gone is taken over (_agents_lock).
 _agents_auto_due() {
     local f="$AGENTS_RUN_DIR/auto-reap" lock="$AGENTS_RUN_DIR/auto-reap.lock" now age rc=1
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1

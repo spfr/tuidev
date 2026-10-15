@@ -27,8 +27,8 @@ _agents_data_dir() {
 }
 
 # _agents_events_lock — take events.lock (a directory: mkdir is atomic),
-# waiting up to a second; a lock older than a minute is a leftover and is
-# taken over. agents_event appends and _agents_history_prune rewrites
+# waiting up to a second; a lock whose holder is gone is taken over
+# (_agents_lock). agents_event appends and _agents_history_prune rewrites
 # events.tsv only under it, so a prune never drops a line. False when it
 # could not be had.
 _agents_events_lock() { _agents_lock "$AGENTS_DATA_DIR/events.lock" 20 0.05; }

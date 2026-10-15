@@ -1373,12 +1373,39 @@ _agents_lock "$lk/a" || fail "lock: a free lock not taken"
 _agents_unlock "$lk/a"; [[ ! -e "$lk/a" ]] || fail "unlock left the lock"
 mkdir "$lk/old"; touch -t 202001010000 "$lk/old"
 _agents_lock "$lk/old" || fail "lock: a leftover lock (older than a minute) not taken over"
+# The holder: taken over when it is gone, never by age alone while it runs (a
+# slow sample); unlock removes only a lock still ours. ps is stubbed: T1 is the
+# start time of every live pid.
+# shellcheck disable=SC2154,SC2329  # _agents_mypid sets me and sub; the stub is called by _agents_lock
+(
+    _agents_start() { kill -0 "$1" 2>/dev/null && echo T1; return 0; }
+    sleep 0 & dead=$!; wait "$dead"
+    hold() { mkdir "$lk/$1"; printf '%s\n' "$2" > "$lk/$1/holder"; touch -t 202001010000 "$lk/$1"; }
+    _agents_lock "$lk/mine" && [[ "$(cat "$lk/mine/holder")" =~ ^[0-9]+\ T1$ ]] || fail "lock: holder not recorded: $(cat "$lk/mine/holder")"
+    _agents_mypid me; [[ "$(cat "$lk/mine/holder")" == "$me T1" ]] || fail "lock: the holder is not this shell ($me)"
+    _agents_unlock "$lk/mine"; [[ ! -e "$lk/mine" ]] || fail "unlock left a lock it holds"
+    hold live "$$ T1"
+    ! _agents_lock "$lk/live" || fail "lock: a live holder's lock, older than a minute, taken over"
+    hold dead "$dead T1"
+    _agents_lock "$lk/dead" && [[ "$(cat "$lk/dead/holder")" == "$me T1" ]] || fail "lock: a dead holder's lock not taken over"
+    hold reused "$$ T0"
+    _agents_lock "$lk/reused" || fail "lock: a holder whose pid names another process now not taken over"
+    hold unknown "$$ -"
+    _agents_lock "$lk/unknown" || fail "lock: a holder with no start time, older than a minute, not taken over"
+    hold fresh "$$ -"; touch "$lk/fresh"
+    ! _agents_lock "$lk/fresh" || fail "lock: a fresh lock whose holder can't be checked taken over"
+    _agents_lock "$lk/stolen" || fail "lock: stolen"
+    printf '%s\n' "$$ T1" > "$lk/stolen/holder"   # another run took it over meanwhile
+    _agents_unlock "$lk/stolen"; [[ -d "$lk/stolen" ]] || fail "unlock removed a lock another run holds"
+    ( _agents_lock "$lk/sub" && _agents_mypid sub && [[ "$(cut -d' ' -f1 "$lk/sub/holder")" == "$sub" && "$sub" != "$me" ]] ) \
+        || fail "lock: a subshell's lock names its parent"
+)
 _agents_stamp_age age "$lk/none" 1000; [[ "$age" == 1000 ]] || fail "stamp: a missing file is not long ago: $age"
 printf 'junk\n' > "$lk/s"; _agents_stamp_age age "$lk/s" 1000; [[ "$age" == 1000 ]] || fail "stamp: a damaged file is not long ago: $age"
 _agents_replace "$lk/s" 940 || fail "replace failed"
 _agents_stamp_age age "$lk/s" 1000
 [[ "$age" == 60 && "$(cat "$lk/s")" == 940 && ! -e "$lk/s.$$" ]] || fail "replace + stamp age: $age, $(cat "$lk/s")"
 ! _agents_replace "$lk/nodir/x" 1 || fail "replace into a missing directory succeeded"
-pass "state files: one lock holder, retries, a leftover lock taken over; epoch stamps; whole-file replace"
+pass "state files: one lock holder (pid and start in the lock), retries; a lock taken over only once its holder is gone (by age only when unknown), unlock only our own; epoch stamps; whole-file replace"
 
 echo "All agents tests passed."

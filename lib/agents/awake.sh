@@ -4,13 +4,14 @@
 # Owns: the keep-awake holder (caffeinate -di on macOS, systemd-inhibit on
 #   Linux): on for a while, on until off, on while agents run; its state
 #   file, its lock and its status line; the `agents awake` command.
-# Uses: config.sh, util.sh, snapshot.sh (agents_snapshot, _agents_start),
+# Uses: config.sh, util.sh (_agents_holder_check), snapshot.sh
+#   (agents_snapshot, _agents_start),
 #   classify.sh (agents_classify), lid.sh (lid mode runs alongside a holder:
 #   its state, `awake off` and `awake restore` end it).
 # Public: agents_awake, agents_awake_state, agents_awake_line,
 #   agents_awake_holders, _agents_awake_prime, _agents_awake_now,
 #   _agents_awake_pid; and, for lid.sh, _agents_hold, _agents_awake_write,
-#   _agents_awake_off_holder, _agents_inhibitor, _agents_holder_check.
+#   _agents_awake_off_holder, _agents_inhibitor.
 #
 # State: $AGENTS_RUN_DIR/awake holds "pid start mode until_epoch". The start
 # time guards against a reused pid after a reboot or a crash.
@@ -34,26 +35,8 @@ agents_awake_state() {
     echo "$pid $mode ${until:-0} $verified"
 }
 
-# _agents_holder_check FILE CONTENT PID START — is PID, which the state file
-# FILE (holding CONTENT) records with start time START, still that process?
-# 0: yes, its start time matches. 1: no: kill -0 says "No such process", or
-# the pid now names a process with another start time (a reused pid); FILE
-# is removed if it still holds CONTENT. 2: it exists, but START is unknown
-# ("-") or ps can't tell (a permission error, EPERM, also proves nothing).
-_agents_holder_check() {
-    local file="$1" content="$2" pid="$3" start="$4" err now
-    if [[ ! "$pid" =~ ^[0-9]+$ ]] || { ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; }; then
-        _agents_rm_if_same "$file" "$content"; return 1
-    fi
-    [[ -n "$start" && "$start" != - ]] || return 2
-    now="$(_agents_start "$pid" 2>/dev/null)"
-    [[ -n "$now" ]] || return 2
-    [[ "$now" == "$start" ]] && return 0
-    _agents_rm_if_same "$file" "$content"; return 1
-}
-
 # Serialize on/off/agents with a lock directory, waiting up to five seconds
-# (a lock left by a crashed run is broken after a minute).
+# (a lock whose holder is gone is taken over: _agents_lock).
 _agents_awake_lock() {
     mkdir -p "$AGENTS_RUN_DIR" || return 1
     _agents_lock "$AGENTS_RUN_DIR/awake.lock" 50 0.1 && return 0
