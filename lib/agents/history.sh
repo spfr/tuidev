@@ -17,8 +17,10 @@
 # "pid@start<TAB>cputime_s<TAB>agent" for each process in an agent tree or a
 # stale one; agent is 1 once a sample has seen it under an agent (kept while
 # it lives, so an orphan keeps it): the provenance auto-reap needs before it
-# stops a stale tree. Each sample also updates the run ledger (runs.sh) and
-# then the menu's top insight (report.sh: insight.txt).
+# stops a stale tree. Once those files are in place (and the feed it counted
+# removed), each sample also updates the run ledger (runs.sh; a failure there
+# never makes the next sample count history twice) and then the menu's top
+# insight (report.sh: insight.txt).
 #
 # Uses: config.sh, util.sh, snapshot.sh, classify.sh, events.sh (the data
 #   directory and the events lock), runs.sh (the run ledger), report.sh
@@ -62,10 +64,13 @@ _agents_sample_locked() {
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || feed="$(cat "${_AGENTS_RUNS_FED[@]}" 2>/dev/null)"
     { printf '%s\n' "$enr"; printf '%s\n' "$recs"; [[ -z "$feed" ]] || printf '%s\n' "$feed"; } \
         | _agents_sample_rows "$now" "$day" "$dir" >> "$dir/history.tsv" || return 1
-    _agents_runs_update "$now" "$feed" "$( { printf '%s\n' "$enr"; printf '%s\n' "$recs"; } | _agents_runs_observe "$now" "$paths")" || return 1
-    mv -f "$dir/sample.state.new" "$dir/sample.state" && mv -f "$dir/today.tsv.new" "$dir/today.tsv" \
-        && mv -f "$dir/runs.state.new" "$dir/runs.state"
+    # The history is committed before the ledger runs: its state, today's
+    # totals and the feed it counted, so nothing the ledger does can make the
+    # next sample count this interval again.
+    mv -f "$dir/sample.state.new" "$dir/sample.state" && mv -f "$dir/today.tsv.new" "$dir/today.tsv" || return 1
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || rm -f "${_AGENTS_RUNS_FED[@]}"
+    _agents_runs_update "$now" "$feed" "$( { printf '%s\n' "$enr"; printf '%s\n' "$recs"; } | _agents_runs_observe "$now" "$paths")" \
+        || echo "agents: the run ledger was not updated (runs.state kept)" >&2
     _agents_history_prune "$now" "$day"
     # The menu's top insight, from the ledger this sample just updated.
     agents_insight_write || true

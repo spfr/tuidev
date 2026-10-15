@@ -324,6 +324,30 @@ rm -rf "$fd"
     || fail "a sample with no run alive: no runs.state, or it complained"
 pass "the feed is bounded (64 refreshes); an idle refresh feeds nothing; AGENTS_HISTORY=0 feeds, samples and records nothing"
 
+# 4b. A ledger that fails (runs.state.new can't be written) never makes the
+# history count an interval twice: sample.state and today.tsv move on, the feed
+# the history read is gone, runs.state stays as it was.
+(
+    AGENTS_DATA_DIR="$tmp/lfail" AGENTS_RUN_DIR="$tmp/lfailrun"
+    snap() { { base "$1"; pl 301 300 1 "$((300 + $1))" 3000 08:55:00 "$(cc 'go test ./...')"
+               pl 302 301 "$2" "$((290 + $1))" 180000 08:55:10 "/tmp/go-build1/b001/app.test -test.v"; } > "$tmp/snap"; }
+    t302() { awk -F '\t' '$2 == "test" { s += $5 } END { print s + 0 }' "$AGENTS_DATA_DIR/history.tsv"; }
+    at 0; snap 0 10; agents_sample || fail "ledger failure: S0"
+    cp "$AGENTS_DATA_DIR/runs.state" "$tmp/runs.state.s0"
+    mkdir "$AGENTS_DATA_DIR/runs.state.new"   # the ledger's awk can't write it
+    at 10; snap 10 20; feed
+    at 60; snap 60 30
+    err="$(agents_sample 2>&1)" || fail "ledger failure: S1 failed: $err"
+    [[ "$err" == *"run ledger was not updated"* ]] || fail "ledger failure: S1 said nothing: $err"
+    cmp -s "$AGENTS_DATA_DIR/runs.state" "$tmp/runs.state.s0" || fail "ledger failure: runs.state changed"
+    [[ "$(sed -n 1p "$AGENTS_DATA_DIR/sample.state")" == $((T0 + 60)) ]] || fail "ledger failure: sample.state left stale"
+    [[ -z "$(ls "$AGENTS_RUN_DIR/runs.feed")" ]] || fail "ledger failure: the feed the history read is still there"
+    [[ "$(t302)" == 20 ]] || fail "ledger failure: S1 test CPU $(t302), want 20"
+    at 120; snap 120 40; agents_sample 2>/dev/null || fail "ledger failure: S2 failed"
+    [[ "$(t302)" == 30 ]] || fail "ledger failure: two samples counted test CPU $(t302), want 30 (no interval twice)"
+)
+pass "a failing run ledger leaves the history committed: two samples never count an interval twice"
+
 # 5. Prune: runs.tsv with history, by end_epoch.
 pd="$tmp/prune"; mkdir -p "$pd"
 old=$((T0 - 31 * 86400)) new=$((T0 - 86400))

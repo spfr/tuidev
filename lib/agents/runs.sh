@@ -85,13 +85,19 @@ _agents_runs_take() {
 }
 
 # _agents_runs_update NOW FEED OBS — fold the menu's observations (FEED,
-# oldest first) and this sample's (OBS, at NOW) into the ledger: writes
-# runs.state.new (the caller moves it in place) and appends one runs.tsv line
-# per run that ended. Runs inside agents_sample (sample.lock, umask 077).
+# oldest first) and this sample's (OBS, at NOW) into the ledger: replaces
+# runs.state, then appends one runs.tsv line per run that ended (the state
+# first: a failure loses those lines rather than writing them twice). False,
+# with runs.state as it was, when the update could not be made. Runs inside
+# agents_sample (sample.lock, umask 077), after the history is committed.
 _agents_runs_update() {
     local dir="$AGENTS_DATA_DIR" ended
-    ended="$( { [[ -z "$2" ]] || printf '%s\n' "$2"; [[ -z "$3" ]] || printf '%s\n' "$3"; } \
-        | _agents_awk runs -F '\t' -v now="$1" -v sf="$dir/runs.state" -v ef="$dir/events.tsv")" || return 1
+    if ! ended="$( { [[ -z "$2" ]] || printf '%s\n' "$2"; [[ -z "$3" ]] || printf '%s\n' "$3"; } \
+        | _agents_awk runs -F '\t' -v now="$1" -v sf="$dir/runs.state" -v ef="$dir/events.tsv")" \
+        || ! mv -f "$dir/runs.state.new" "$dir/runs.state" 2>/dev/null; then
+        rm -f "$dir/runs.state.new" 2>/dev/null
+        return 1
+    fi
     [[ -z "$ended" ]] || _agents_runs_finish "$ended" >> "$dir/runs.tsv"
 }
 
