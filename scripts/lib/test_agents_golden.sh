@@ -317,6 +317,21 @@ case_ stale stale
 case_ hogs hogs
 case_ json json
 case_ tsv tsv
+# The menu: the SwiftBar plugin over that same tsv, which a stub agents
+# replays (the plugin runs in its own bash, so it sees none of the functions
+# stubbed here; its one clock read, awake's time left, is long past). The menu
+# shortens long lines, so $tmp becomes one fixed path first: the golden does
+# not depend on how long $tmp is.
+menu_case() {   # NAME TSV_FILE
+    local fixed=/tmp/agents-fixture
+    sed "s|$tmp|$fixed|g" "$2" > "$tmp/menu.tsv"
+    printf '#!/bin/sh\n[ "$1" = tsv ] && cat "%s"\nexit 0\n' "$tmp/menu.tsv" > "$tmp/menu-agents"
+    chmod +x "$tmp/menu-agents"
+    ( USER=me HOME="$fixed/home" AGENTS_BIN="$tmp/menu-agents" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" ) 2>&1 \
+        | sed -e "s|$tmp|@TMP@|g" -e "s|$fixed|@TMP@|g" -e "s|$REPO_DIR|@REPO@|g" > "$tmp/out/$1"
+}
+( agents_main tsv ) > "$tmp/tsv.raw" 2>/dev/null || true
+menu_case menu "$tmp/tsv.raw"
 case_ thermal thermal
 case_ awake-status awake
 case_ awake-bad awake sideways
