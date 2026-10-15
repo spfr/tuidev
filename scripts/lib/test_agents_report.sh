@@ -143,7 +143,7 @@ want="TOP INSIGHTS
   1. api: 40 CPU-min in 24h, ↑200% on the 24h before (build +27 CPU-min) — see what changed: agents report --view trends
   2. app: \`go\` test runs ×10 in 24h, 5m30s median, 3 duplicates (20 CPU-min) — consider a shared test cache or serializing them
   3. Explore subagents left 3 polling loops running in 24h (2.1 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
-  more: agents report --view runs|waste|trends|agents"
+  more: agents report --view runs|waste|trends|agents|tokens|denials"
 [[ "$ins" == "$want" ]] || fail "top insights:"$'\n'"$ins"
 [[ "$out" == *"no CPU samples in this window"* ]] || fail "summary without history:"$'\n'"$out"
 json="$(rep --json)"
@@ -159,7 +159,7 @@ out="$(AGENTS_DATA_DIR="$tmp/d2" agents_report)"
     || fail "insights: polling and re-runs:"$'\n'"$out"
 awk -F '\t' -v OFS='\t' '$7 == "wait-loop" { next } $7 == "pytest" { $9 = 20 } { print }' "$tmp/r" > "$tmp/d2/runs.tsv"
 out="$(AGENTS_DATA_DIR="$tmp/d2" agents_report)"
-[[ "$out" == *"TOP INSIGHTS"$'\n'"  nothing stands out (agents report --view runs|waste|trends|agents)"* ]] || fail "insights below 5 CPU-min:"$'\n'"$out"
+[[ "$out" == *"TOP INSIGHTS"$'\n'"  nothing stands out (agents report --view runs|waste|trends|agents|tokens|denials)"* ]] || fail "insights below 5 CPU-min:"$'\n'"$out"
 pass "summary: the top 3 insights, ranked by CPU at stake; none below 5 CPU-min"
 
 # 6. Without a ledger, or nothing in the window: no invented numbers.
@@ -188,7 +188,7 @@ done
 pass "no ledger: the history report and a one-line note (JSON: ledger false, empty lists); nothing in the window says so"
 
 # 7. Options.
-for bad in "--view" "--view bogus" "--view insight" "--view=" "--since 3x --view runs"; do
+for bad in "--view" "--view bogus" "--view insight" "--view tokens --since 2x" "--view=" "--since 3x --view runs"; do
     rc=0
     # shellcheck disable=SC2086  # one argument per word
     rep $bad >/dev/null 2>&1 || rc=$?

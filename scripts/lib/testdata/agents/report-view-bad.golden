@@ -1,2 +1,2 @@
-agents: bad --view 'everything' (summary, runs, waste, trends, agents)
+agents: bad --view 'everything' (summary, runs, waste, trends, agents, tokens, denials)
 [rc=2]

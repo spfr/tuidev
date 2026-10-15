@@ -2,7 +2,7 @@ agents report · last 24h
 
 TOP INSIGHTS
   1. Sessions of unknown type left 2 runs running in 24h (3.1 h, 2 CPU-min) — have them stop what they start, or set AGENTS_AUTO_REAP=1
-  more: agents report --view runs|waste|trends|agents
+  more: agents report --view runs|waste|trends|agents|tokens|denials
 
 CPU 2.14 CPU-h of agent work
 

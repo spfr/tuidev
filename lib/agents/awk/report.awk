@@ -1,22 +1,30 @@
 # lib/agents/awk/report.awk — `agents report`, as text or JSON, from
-# history.tsv (hf), events.tsv (ef) and the run ledger runs.tsv (rf). Runs in
-# BEGIN: it reads no input. Needs lib_json, lib_sort, report_fmt,
-# report_runs, report_insights and report_views.
+# history.tsv (hf), events.tsv (ef), the run ledger runs.tsv (rf), and the
+# token files: tokens.tsv (tf), compacts.tsv (cf), denials.tsv (df),
+# limits.tsv (lf) and the price file (pf, "" without one). Runs in BEGIN: it
+# reads no input. Needs lib_json, lib_sort, report_fmt, report_runs,
+# report_tokens, report_denials, report_insights and report_views.
 #
-# view: summary (history, events and the top insights), runs, waste, trends,
-# agents (the ledger: report_views.awk), or insight (one line for the menu:
-# VIEW<TAB>TEXT, or nothing). Without a ledger, a ledger view falls back to
-# the summary, with a note; its JSON keeps its own shape, with "ledger":false.
+# view: summary (history, events, tokens, denials and the top insights), runs,
+# waste, trends, agents (the ledger: report_views.awk), tokens
+# (report_tokens.awk), denials (report_denials.awk), or insight (one line for
+# the menu: VIEW<TAB>TEXT, or nothing). Without a ledger, a ledger view falls
+# back to the summary, with a note; its JSON keeps its own shape, with
+# "ledger":false. The tokens and denials views say when they have no data.
 
 BEGIN {
     b = ENVIRON["B"]; dim = ENVIRON["DIM"]; e = ENVIRON["N"]
     when = (label == "today" ? "today" : "last " label)
     runs_load(rf, start, pstart, pend)
+    if (view == "summary" || view == "insight" || view == "tokens") tokens_load(tf, cf, lf, pf, start)
+    if (view == "summary" || view == "insight" || view == "denials") denials_load(df, start)
     if (view == "insight") {
         insights()
         if (IN) print IV[IO[1]] "\t" IT[IO[1]]
         exit
     }
+    if (view == "tokens") { view_tokens(); exit }
+    if (view == "denials") { view_denials(); exit }
     if (view != "summary" && (RL || json)) {
         if (view == "runs") view_runs()
         else if (view == "waste") view_waste()
@@ -27,8 +35,8 @@ BEGIN {
     summary()
 }
 
-# summary — where the CPU went (history.tsv) and what was cleaned up
-# (events.tsv), led by the top insights from the ledger.
+# summary — where the CPU went (history.tsv), the tokens and denials, and
+# what was cleaned up (events.tsv), led by the top insights.
 function summary(   ln, f, t, c, i, k, p, o, s, nm) {
     while ((getline ln < hf) > 0) {
         if (split(ln, f, "\t") < 7) continue
@@ -74,10 +82,11 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
         o = o sprintf("],\"cleanups\":{\"total\":%d,\"by_reason\":", ev) jlist(ro, nr, er, "reason", "count") ",\"by_kind\":" jlist(ko, nk, ek, "kind", "count") ",\"projects\":" jlist(eo, ne, ep, "project", "count") "}"
         o = o ",\"view\":\"summary\",\"ledger\":" jb(RL)
         o = o sprintf(",\"runs\":{\"count\":%d,\"failed\":%d,\"dup\":%d,\"cleaned\":%d}", RN, RFAIL, RDUP, RCLN)
+        o = o ",\"tokens\":" tokens_json() ",\"denials\":" denials_json()
         print o ",\"insights\":" insights_json(3) "}"
         return
     }
-    if (!any && !RL) {
+    if (!any && !RL && !TL && !DL) {
         if (hist != 1) print "agents report: history is off (AGENTS_HISTORY=0 in agents.conf); nothing is recorded"
         else print "agents report: no history yet; it starts within a minute of the menu running (or of agents watch; agents sample takes one now)"
         return
@@ -85,8 +94,8 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
     printf "%sagents report%s %s\302\267 %s%s\n", b, e, dim, when, e
     if (hist != 1) printf "%shistory is off (AGENTS_HISTORY=0): this is what was recorded before%s\n", dim, e
     print ""
-    if (RL) insights_text(3)
-    else printf "%sno runs recorded yet (runs.tsv): insights and the runs, waste, trends and agents views start with the first finished run%s\n\n", dim, e
+    if (RL || IN) insights_text(3)
+    if (!RL) printf "%sno runs recorded yet (runs.tsv): insights and the runs, waste, trends and agents views start with the first finished run%s\n\n", dim, e
     unit = (tot >= 3600 ? 3600 : 60); un = (unit == 3600 ? "CPU-h" : "CPU-min")
     if (rows) {
         printf "%sCPU%s %s %s of agent work\n\n", b, e, h(tot), un
@@ -108,6 +117,8 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
         printf "%sBUSIEST HOURS%s  %s %s%s%s\n", b, e, line(hk, nh, hcs, "h", 3), dim, un, e
     } else print "no CPU samples in this window"
     print ""
+    tokens_text()
+    denials_text()
     printf "%sCLEANUPS (%d)%s\n", b, ev, e
     if (ev) {
         printf "  why          %s\n", line(ro, nr, er, "n", 8)

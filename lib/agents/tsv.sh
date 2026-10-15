@@ -4,7 +4,8 @@
 #
 # Uses: config.sh, snapshot.sh (agents_collect), assess.sh
 #   (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
-#   (_agents_hist_line), report.sh (_agents_insight_line).
+#   (_agents_hist_line), report.sh (_agents_insight_line,
+#   _agents_tokens_line).
 # Public: agents_tsv.
 
 # agents_tsv — agents_assess's need/evid rows (first, so the menu knows an
@@ -14,6 +15,7 @@
 #   awake mode pid until · thermal level name · power mode
 #   hist state today_cpu_s top_job top_job_cpu_s  (_agents_hist_line)
 #   insight view text  today's top insight, while current (_agents_insight_line)
+#   tokens total cache_pct  today's tokens and cache hit %, from tokens.today
 #   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar: Herdr is read from its cache (never waited on), and
@@ -38,6 +40,7 @@ agents_tsv() {
     printf 'power\t%s\n' "$(agents_powermode)"
     _agents_hist_line
     _agents_insight_line
+    _agents_tokens_line
     lmax="$(_agents_lid_max)"
     if state="$(agents_lid_state)"; then
         read -r lpid luntil _ <<<"$state"; printf 'lid\ton\t%s\t%s\t%s\n' "$lpid" "$luntil" "$lmax"
