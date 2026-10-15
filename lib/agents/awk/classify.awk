@@ -1,7 +1,7 @@
 # lib/agents/awk/classify.awk — agents_classify's single pass over a
-# snapshot: agent, stale, cand, hog, top, total, act, watch and job records
-# (classify.sh documents the columns). Needs lib_proc, lib_activity and
-# lib_jobs.
+# snapshot: agent, stale, cand, hog, top, total, act, watch, where and job
+# records (classify.sh documents the columns). Needs lib_proc, lib_activity,
+# lib_jobs and lib_where.
 
 function addports(q, list,   n, a, i) {
     n = split(list, a, ",")
@@ -37,7 +37,7 @@ NF >= 14 {
     ord[++n] = p
     pp[p] = $2 + 0; uid[p] = $3; usr[p] = $4; cpu[p] = $5 + 0; rss[p] = $6 + 0
     ct[p] = secs($7); et[p] = secs($8); st[p] = lstart()
-    s = argv($0); gsub(/\t/, " ", s)
+    s = argv($0); if (index(s, "\t")) gsub(/\t/, " ", s)
     av[p] = s
 }
 END {
@@ -62,7 +62,7 @@ END {
         if (under) continue
         # A process that hosts a session (an agent, an interactive shell, a
         # tmux/screen/zellij/herdr/pm2 server) shelters every ancestor.
-        host = (kind[p] != "" || hosts(av[p]))
+        host = (kind[p] != "" || interactive_shell(av[p]) || supervisor(av[p]))   # hosts(), kind[] known
         q = p; d = 0
         while (q > 1 && (q in pp) && d++ < 64) {
             tcpu[q] += cpu[p]; trss[q] += rss[p]
@@ -77,6 +77,7 @@ END {
         p = ord[k]
         if (root[p] == p) {
             rec("agent", p, kind[p], tcpu[p], trss[p], kids[p], tp[p])
+            printf "where\t%d\t%s\n", p, where_of(p)
         } else if (pp[p] == 1 && uid[p] == me && kind[p] == "" && !(p in keep) && !mine[p] && !anc[p] && !shelter[p]) {
             hit = 0
             for (i = 1; i <= np; i++) if (pat[i] != "" && av[p] ~ pat[i]) { hit = 1; break }
@@ -134,7 +135,7 @@ END {
             c = tool_cmd(a); act(p, "tool", r, (tool_cd == "" ? "-" : tool_cd), c)
             if (tool_watch != "" && waits(c)) { gsub(/\t/, " ", tool_watch); printf "watch\t%d\t%s\t%s\n", p, tool_watch, (watch_reads ? "read" : "exists") }
         }
-        else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a), a)
+        else if (is_mcp(a)) act(p, "mcp", r, mcp_name(a, kind[r]), a)
         else act(p, "other", r, "-", a)
     }
     jobs_emit()

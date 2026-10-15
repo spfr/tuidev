@@ -15,7 +15,14 @@
 # through SwiftBar's terminal=true, which always picks Terminal.app.
 
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
-SELF="${SWIFTBAR_PLUGIN_PATH:-$(cd "$(dirname "$0")" && pwd)/$(basename "$0")}"
+# A refresh runs every few seconds, so the plugin forks as little as it can:
+# one `agents tsv`, one awk for the jobs, and a clock read for keep-awake.
+# Everything else is bash builtins (helpers set REPLY instead of printing).
+if [[ -n "${SWIFTBAR_PLUGIN_PATH:-}" ]]; then SELF="$SWIFTBAR_PLUGIN_PATH"
+else
+    case "$0" in */*) SELF="${0%/*}" ;; *) SELF=. ;; esac
+    SELF="$(cd "$SELF" && pwd)/${0##*/}"
+fi
 
 # Menu actions that are not `agents` subcommands call the plugin back, with
 # fixed words only (and a numeric pid for copy).
@@ -33,7 +40,14 @@ case "${1:-}" in
 esac
 
 # AGENTS_BIN picks a specific agents (a checkout, while developing).
-AGENTS="${AGENTS_BIN:-$(command -v agents 2>/dev/null)}"
+AGENTS="${AGENTS_BIN:-}"
+if [[ -z "$AGENTS" ]]; then
+    IFS=: read -r -a _path <<<"$PATH"
+    for _d in ${_path[@]+"${_path[@]}"}; do
+        [[ -n "$_d" && -f "$_d/agents" && -x "$_d/agents" ]] && { AGENTS="$_d/agents"; break; }
+    done
+    unset _path _d
+fi
 if [[ -z "$AGENTS" ]]; then
     echo ":exclamationmark.triangle: | sfcolor=#FF9F0A"
     echo "---"
@@ -68,39 +82,39 @@ ROW="refresh=true"
 
 # --- Formatting ------------------------------------------------------------------
 
-# Menu text must not contain "|" (SwiftBar's separator; shown as ¦) or start with "-"
-# (a "--" prefix would turn a process name into a submenu or a separator).
-clean() {
-    local s="${1//|/¦}" t='~'
-    s="${s#"${s%%[!-[:space:]]*}"}"
-    printf '%s' "${s/#"$HOME"/$t}"
-}
+# Menu text must not contain "|" (SwiftBar's separator; shown as ¦) or start
+# with "-" (a "--" prefix would turn a process name into a submenu or a
+# separator). cl TEXT sets REPLY to it made safe, and $HOME shortened to ~.
+cl() { local s="${1//|/¦}" t='~'; s="${s#"${s%%[!-[:space:]]*}"}"; REPLY="${s/#"$HOME"/$t}"; }
+# sh60 TEXT — cl, then at most 60 characters.
+sh60() { cl "$1"; [[ ${#REPLY} -le 60 ]] || REPLY="${REPLY:0:57}..."; }
 # Params carry only fixed words, PID@START tokens and the two trusted paths
 # below (agents and this plugin), double-quoted. Nothing a process controls (a
 # cwd, a name, Herdr's text) ever goes into a param: SwiftBar unescapes
 # backslashes there, and a later key overrides an earlier one. Paths are
 # resolved by `agents cwd|copy-path|reveal PID@START` when you click.
-qv() { printf '"%s"' "$1"; }
-# tok PID START — the action token, or nothing if either part looks odd.
-tok() { [[ "$1" =~ ^[0-9]+$ && "$2" =~ ^[A-Za-z0-9_:]+$ ]] && printf '%s@%s' "$1" "$2"; }
-mem() { if [[ $1 -ge 1048576 ]]; then echo "$(($1 * 10 / 1048576 / 10)).$(($1 * 10 / 1048576 % 10))G"; else echo "$(($1 / 1024))M"; fi; }
-age() {
+# tok PID START — REPLY = the action token PID@START; false (and REPLY empty)
+# if either part looks odd.
+tok() { REPLY=""; [[ "$1" =~ ^[0-9]+$ && "$2" =~ ^[A-Za-z0-9_:]+$ ]] && REPLY="$1@$2"; }
+# memv KIB, agev SECS — a size and an age for people, in REPLY.
+memv() { if [[ $1 -ge 1048576 ]]; then REPLY="$(($1 * 10 / 1048576 / 10)).$(($1 * 10 / 1048576 % 10))G"; else REPLY="$(($1 / 1024))M"; fi; }
+agev() {
     local s="$1"
-    if [[ $s -lt 3600 ]]; then echo "$((s / 60))m"
-    elif [[ $s -lt 86400 ]]; then echo "$((s / 3600))h$(((s % 3600) / 60))m"
-    else echo "$((s / 86400))d$(((s % 86400) / 3600))h"; fi
+    if [[ $s -lt 3600 ]]; then REPLY="$((s / 60))m"
+    elif [[ $s -lt 86400 ]]; then REPLY="$((s / 3600))h$(((s % 3600) / 60))m"
+    else REPLY="$((s / 86400))d$(((s % 86400) / 3600))h"; fi
 }
-# Action prefixes, built once (each $(…) is a fork, and a menu has dozens).
+# Action prefixes, built once.
 if [[ "$AGENTS$SELF" == *[\"\\]* ]]; then
     echo ":exclamationmark.triangle: | sfcolor=#FF9F0A"
     echo "---"
     echo "Refusing to run: the agents or plugin path contains a quote or a backslash | color=red"
     exit 0
 fi
-ACT="bash=$(qv "$AGENTS") terminal=false refresh=true"
-NOREF="bash=$(qv "$AGENTS") terminal=false"
-TERM_OPEN="bash=$(qv "$AGENTS") param1=open-term terminal=false"
-CALLBACK="bash=$(qv "$SELF") terminal=false"
+ACT="bash=\"$AGENTS\" terminal=false refresh=true"
+NOREF="bash=\"$AGENTS\" terminal=false"
+TERM_OPEN="bash=\"$AGENTS\" param1=open-term terminal=false"
+CALLBACK="bash=\"$SELF\" terminal=false"
 num() { [[ "$1" =~ ^[0-9]+$ ]]; }
 # humanize N — a count for people, in REPLY: 950, 64.2k, 640k, 12.4M, 1.2B.
 humanize() {
@@ -116,19 +130,20 @@ humanize() {
     REPLY+="$s"
 }
 charging() { [[ "$1" == charging || "$1" == charged || "$1" == "AC attached" || "$1" == "finishing charge" ]]; }
+# battery_symbol PERCENT STATE — its SF Symbol, in REPLY.
 battery_symbol() {
-    local p="$1" s="battery.0percent"
-    if charging "$2"; then echo "battery.100percent.bolt"; return; fi
-    if [[ $p -ge 88 ]]; then s=battery.100percent
-    elif [[ $p -ge 63 ]]; then s=battery.75percent
-    elif [[ $p -ge 38 ]]; then s=battery.50percent
-    elif [[ $p -ge 13 ]]; then s=battery.25percent; fi
-    echo "$s"
+    local p="$1"
+    REPLY=battery.0percent
+    if charging "$2"; then REPLY=battery.100percent.bolt; return; fi
+    if [[ $p -ge 88 ]]; then REPLY=battery.100percent
+    elif [[ $p -ge 63 ]]; then REPLY=battery.75percent
+    elif [[ $p -ge 38 ]]; then REPLY=battery.50percent
+    elif [[ $p -ge 13 ]]; then REPLY=battery.25percent; fi
 }
 
 # --- Read the snapshot -------------------------------------------------------------
 
-me="${USER:-$(id -un)}"
+me="${USER:-}"; [[ -n "$me" ]] || me="$(id -un)"
 n_agents=0 n_blocked=0 n_stale=0 n_hogs=0
 needs_menu="" agents_menu="" daemon_menu="" stale_menu="" hogs_menu="" top_menu="" stale_tokens=""
 awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
@@ -139,39 +154,27 @@ job_rows="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" i
 
 # Per-session activity, gathered from the act rows into variables named after
 # the session's pid (bash 3.2 has no associative arrays): A_<what>_<pid>.
-aget() { local v="A_$1_$2"; printf '%s' "${!v-}"; }
+aget() { local v="A_$1_$2"; REPLY="${!v-}"; }
 aadd() { local v="A_$1_$2"; printf -v "$v" '%s%s' "${!v-}" "$3"; }
 anum() { local v="A_$1_$2"; printf -v "$v" '%d' $(( ${!v:-0} + $3 )); }
-short() { local c; c="$(clean "$1")"; [[ ${#c} -le 60 ]] || c="${c:0:57}..."; printf '%s' "$c"; }
-# Fork-free twins of clean, short, age and mem for the per-row loops: they set
-# REPLY instead of printing (each $(…) costs a fork, and a busy session has
-# dozens of rows).
-cl() { local s="${1//|/¦}" t='~'; s="${s#"${s%%[!-[:space:]]*}"}"; REPLY="${s/#"$HOME"/$t}"; }
-sh60() { cl "$1"; [[ ${#REPLY} -le 60 ]] || REPLY="${REPLY:0:57}..."; }
-memv() { if [[ $1 -ge 1048576 ]]; then REPLY="$(($1 * 10 / 1048576 / 10)).$(($1 * 10 / 1048576 % 10))G"; else REPLY="$(($1 / 1024))M"; fi; }
-agev() {
-    local s="$1"
-    if [[ $s -lt 3600 ]]; then REPLY="$((s / 60))m"
-    elif [[ $s -lt 86400 ]]; then REPLY="$((s / 3600))h$(((s % 3600) / 60))m"
-    else REPLY="$((s / 86400))d$(((s % 86400) / 3600))h"; fi
-}
 
 # dup_groups LINES — for "cwd\037cmd<TAB>age<TAB>token" lines, one line per
-# command running more than once in one directory: "count<TAB>cwd\037cmd<TAB>
-# tokens of all but the newest".
+# command running more than once in one directory, in DUPS: "count<TAB>
+# cwd\037cmd<TAB>tokens of all but the newest". Sorts only when there are any.
 dup_groups() {
     local cmd tk prev="" n=0 toks=""
+    DUPS=""
     [[ -n "$1" ]] || return 0
     while IFS=$'\t' read -r cmd _ tk; do
         [[ -n "$tk" ]] || continue
         if [[ $n -gt 0 && "$cmd" == "$prev" ]]; then
             n=$((n + 1)); toks+=" $tk"
         else
-            [[ $n -gt 1 ]] && printf '%d\t%s\t%s\n' "$n" "$prev" "$toks"
+            [[ $n -gt 1 ]] && DUPS+="$n"$'\t'"$prev"$'\t'"$toks"$'\n'
             prev="$cmd"; n=1; toks=""
         fi
     done < <(printf '%s' "$1" | sort -t $'\t' -k1,1 -k2,2n)
-    [[ $n -gt 1 ]] && printf '%d\t%s\t%s\n' "$n" "$prev" "$toks"
+    [[ $n -gt 1 ]] && DUPS+="$n"$'\t'"$prev"$'\t'"$toks"$'\n'
     return 0
 }
 
@@ -186,34 +189,80 @@ activity_submenu() {   # PID
         SUB+="--Running ($n) | size=11"$'\n'"${!v}"
     fi
     if [[ -n "$m" ]]; then
+        local s=""; [[ $m -gt 1 ]] && s=s
         v="A_mcprss_$r"; memv "${!v:-0}"; v="A_mcpprocs_$r"
-        SUB+="--MCP: $m server$([[ $m -gt 1 ]] && echo s) · ${!v:-0} procs · $REPLY | size=11"$'\n'
+        SUB+="--MCP: $m server$s · ${!v:-0} procs · $REPLY | size=11"$'\n'
     fi
     v="A_dups_$r"
     [[ -n "${!v-}" ]] || return 0
+    dup_groups "${!v}"
     while IFS=$'\t' read -r g cmd toks; do
         [[ -n "$g" ]] || continue
         params="param1=kill param2=--confirm-gui param3=--notify"; i=4
         for tk in $toks; do params+=" param$i=$tk"; i=$((i + 1)); done
         sh60 "${cmd#*$'\037'}"
         SUB+="--Stop duplicates: ${g}× $REPLY (keep newest)… | $ACT $params sfimage=xmark.octagon symbolize=false"$'\n'
-    done <<<"$(dup_groups "${!v}")"
+    done <<<"$DUPS"
 }
 
-# The submenu under a session: where it is, what it is, and what you can do.
-# Sets SUB.
-session_submenu() {   # PID START KIND AGE KIDS PORTS CWD
-    local pid="$1" start="$2" kind="$3" age_s="$4" kids="$5" ports="$6" cwd="$7" t pl=""
+# --- Going to a session ---------------------------------------------------------------
+# Where each session lives comes with the snapshot (where rows: W_how_<pid>,
+# W_place_<pid>) for its summary only: Jump to session, Peek and Details run
+# `agents jump|peek|show`, which find it again when you click (a Herdr pane,
+# a tmux pane, the terminal tab that shows it), never on a refresh.
+
+# where_text PID — REPLY: where session PID lives, for people ("" unknown).
+where_text() {
+    local v="W_how_$1" h p
+    h="${!v-}"; v="W_place_$1"; p="${!v-}"
+    REPLY=""
+    case "$h" in
+        tmux)  cl "$p"; REPLY="in tmux pane $REPLY" ;;
+        herdr) REPLY="in Herdr"; [[ -z "$p" || "$p" == - ]] || { cl "$p"; REPLY="in Herdr (in $REPLY)"; } ;;
+        app)   cl "$p"; REPLY="in $REPLY" ;;
+        ssh)   REPLY="over ssh" ;;
+    esac
+}
+# jump_item TOKEN — REPLY: the Jump to session line (the first of a submenu).
+jump_item() { REPLY="--Jump to session | $NOREF param1=jump param2=--notify param3=$1 sfimage=arrow.up.forward.app"; }
+# look_items TOKEN SESSION — Peek (when SESSION lives in a tmux or Herdr
+# pane) and Details (agents show, live). Appends to SUB.
+look_items() {
+    local v h=""
+    if num "$2"; then v="W_how_$2"; h="${!v-}"; fi
+    case "$h" in
+        tmux|herdr) SUB+="--Peek | $TERM_OPEN param2=--hold param3=peek param4=$1 param5=60 sfimage=eye"$'\n' ;;
+    esac
+    SUB+="--Details | $TERM_OPEN param2=show param3=--watch param4=$1 sfimage=info.circle"$'\n'
+}
+
+# The submenu under a session: Jump to session first, then where it is, what
+# it is and does, and what you can do. Sets SUB.
+session_submenu() {   # PID START KIND AGE KIDS PORTS CWD [STATUS]
+    local pid="$1" start="$2" kind="$3" age_s="$4" kids="$5" ports="$6" cwd="$7" status="${8:--}" t="" pl="" s v
     SUB=""
+    [[ "$pid" =~ ^[0-9]+$ && "$start" =~ ^[A-Za-z0-9_:]+$ ]] && t="$pid@$start"
+    if [[ -n "$t" && "$kind" != daemon ]]; then jump_item "$t"; SUB+="$REPLY"$'\n'; fi
     if [[ "$cwd" != - ]]; then cl "$cwd"; SUB+="--$REPLY | symbolize=false"$'\n'; fi
     if [[ "$ports" != - ]]; then cl "$ports"; pl=" · ports $REPLY"; fi
-    agev "$age_s"; t="$REPLY"; cl "$kind"
-    SUB+="--$REPLY · pid $pid · up $t · $kids children$pl | symbolize=false"$'\n'
-    [[ "$pid" =~ ^[0-9]+$ && "$start" =~ ^[A-Za-z0-9_:]+$ ]] || return 0
-    t="$pid@$start"
+    agev "$age_s"; s="$REPLY"; cl "$kind"
+    SUB+="--$REPLY · pid $pid · up $s · $kids children$pl | symbolize=false"$'\n'
+    # Its state, where it lives, and the busiest command it runs.
+    s=""
+    case "$status" in
+        blocked) s="blocked: waiting for you" ;;
+        -|"")    ;;
+        *)       cl "$status"; s="$REPLY" ;;
+    esac
+    where_text "$pid"; [[ -z "$REPLY" ]] || s+="${s:+ · }$REPLY"
+    [[ -z "$s" ]] || SUB+="--$s | symbolize=false"$'\n'
+    v="A_bcpu_$pid"; if [[ "${!v:-0}" -ge 1 ]]; then v="A_busy_$pid"; SUB+="--busiest: ${!v} | symbolize=false"$'\n'; fi
+    [[ -n "$t" ]] || return 0
     activity_submenu "$pid"
     SUB+="-----"$'\n'
-    SUB+="--Kill $([[ "$kind" == daemon ]] && echo daemon || echo session)… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
+    look_items "$t" "$pid"
+    local what=session; [[ "$kind" == daemon ]] && what=daemon
+    SUB+="--Kill ${what}… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
     if [[ "$cwd" != - ]]; then
         SUB+="--Copy path | $NOREF param1=copy-path param2=$t sfimage=doc.on.doc"$'\n'
         SUB+="--Open in Finder | $NOREF param1=reveal param2=$t sfimage=folder"$'\n'
@@ -226,13 +275,16 @@ session_submenu() {   # PID START KIND AGE KIDS PORTS CWD
 # from agents_assess) and its evidence (evid rows), kept here in N_<what>_<pid>
 # and A_ev_<pid>. An item without one (an older agents) keeps the plain menu.
 
-# need_submenu PID TOKEN STOP_LINE — under an item: the verdict, the evidence,
-# then Stop (STOP_LINE), Copy details (`agents why --copy`) and, while its
-# session runs, Show session (`agents ps` of that session in your terminal).
-# Sets SUB.
+# need_submenu PID TOKEN STOP_LINE — under an item: while its session runs,
+# Jump to session first (to where it runs: you can answer it there); then the
+# verdict, the evidence, Stop (STOP_LINE), Copy details (`agents why
+# --copy`), Show session (`agents ps` of that session in your terminal),
+# Peek and Details. Sets SUB.
 need_submenu() {
     local p="$1" v o look=info.circle
     SUB=""
+    v="N_owner_$p"; o="${!v-}"
+    if num "$o"; then jump_item "$2"; SUB+="$REPLY"$'\n'; fi
     v="N_act_$p"
     case "${!v-}" in
         stop)  look=checkmark.circle ;;
@@ -244,8 +296,8 @@ need_submenu() {
     v="A_ev_$p"; SUB+="${!v-}"
     SUB+="-----"$'\n'"$3"$'\n'
     SUB+="--Copy details | $NOREF param1=why param2=--copy param3=$2 sfimage=doc.on.doc"$'\n'
-    v="N_owner_$p"; o="${!v-}"
     if num "$o"; then SUB+="--Show session | $TERM_OPEN param2=--hold param3=ps param4=$o sfimage=terminal"$'\n'; fi
+    look_items "$2" "${o:--}"
 }
 
 # need_item SYMBOL TEXT TOKEN — one command in Needs you: its verdict at a
@@ -283,7 +335,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             ;;
         agent) agent_rows+=("$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$start"$'\t'"$ports"$'\t'"$herdr"$'\t'"$cwd"$'\t'"$project") ;;
         act)   # act PID CLASS AGE CPU AVG RSS KIDS START PORTS ROOT LABEL CWD CMD ORIGIN FLAGS DUPS
-            r="$user"; num "$r" || continue
+            r="$user"; { num "$r" && num "$pid"; } || continue
+            printf -v "U_start_$pid" '%s' "$start"      # an MCP server's token (Where the CPU goes)
             case "$kind" in
                 tool)
                     [[ "$pid" =~ ^[0-9]+$ && "$start" =~ ^[A-Za-z0-9_:]+$ ]] || continue
@@ -299,6 +352,10 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                     sh60 "$args"; c="$REPLY"; agev "$age_s"; a="$REPLY"; cl "$project"
                     aadd tools "$r" "--$c · $a · ${pcpu%%.*}% · $REPLY$fl | $ROW$look symbolize=false"$'\n'"----Stop command… | $ACT param1=kill param2=--confirm-gui param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
                     anum ntools "$r" 1; anum tcpu "$r" "${pcpu%%.*}"
+                    v="A_bcpu_$r"   # the busiest command, for the session's summary
+                    if [[ -z "${!v-}" || ${pcpu%%.*} -gt ${!v} ]]; then
+                        printf -v "$v" '%d' "${pcpu%%.*}"; printf -v "A_busy_$r" '%s' "$c · $a · ${pcpu%%.*}%"
+                    fi
                     # Duplicates are the same command in the same directory.
                     [[ ",$aflags," == *,dup,* ]] && aadd dups "$r" "$cwd"$'\037'"$args"$'\t'"$age_s"$'\t'"$t"$'\n'
                     [[ ",$aflags," == *,long,* ]] && aadd longs "$r" "$args"$'\t'"$age_s"$'\t'"$t"$'\n'
@@ -311,36 +368,48 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                     ;;
             esac
             ;;
+        where)  # where PID tmux|herdr|ssh|app|- PLACE
+            num "$pid" || continue
+            printf -v "W_how_$pid" '%s' "$kind"; printf -v "W_place_$pid" '%s' "$age_s" ;;
         stale)
             n_stale=$((n_stale + 1))
             v="N_short_$pid"; vs=""; [[ -n "${!v-}" ]] && { cl "${!v}"; vs=" · $REPLY"; }
-            stale_menu+="$(clean "${args:0:60}") · $(age "$age_s") · $(mem "$rss")$vs | $ROW symbolize=false sfimage=$([[ "$kind" == server ]] && echo network || echo puzzlepiece.extension)"$'\n'
-            stale_menu+="--$kind · pid $pid$([[ "$cwd" != - ]] && echo " · $(clean "$cwd")")$([[ "$ports" != - ]] && echo " · ports $(clean "$ports")") | symbolize=false"$'\n'
-            if t="$(tok "$pid" "$start")"; then
+            cl "${args:0:60}"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
+            look=puzzlepiece.extension; [[ "$kind" == server ]] && look=network
+            stale_menu+="$c · $a · $REPLY$vs | $ROW symbolize=false sfimage=$look"$'\n'
+            c="--$kind · pid $pid"
+            [[ "$cwd" != - ]] && { cl "$cwd"; c+=" · $REPLY"; }
+            [[ "$ports" != - ]] && { cl "$ports"; c+=" · ports $REPLY"; }
+            stale_menu+="$c | symbolize=false"$'\n'
+            if tok "$pid" "$start"; then
+                t="$REPLY"
                 kl="--Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"
-                if [[ -n "$vs" ]]; then need_submenu "$pid" "$t" "$kl"; stale_menu+="$SUB"; else stale_menu+="$kl"$'\n'; fi
+                if [[ -n "$vs" ]]; then need_submenu "$pid" "$t" "$kl"; stale_menu+="$SUB"
+                else stale_menu+="$kl"$'\n'"--Details | $TERM_OPEN param2=show param3=--watch param4=$t sfimage=info.circle"$'\n'; fi
                 stale_tokens+=" $t"
             fi
             ;;
         hog)
             n_hogs=$((n_hogs + 1))
-            hogs_menu+="$(clean "$kind") · ${pcpu}% now · ${avg}% avg | $ROW symbolize=false sfimage=flame"$'\n'
-            hogs_menu+="--pid $pid · $(clean "$user") · up $(age "$age_s") · $(mem "$rss") | symbolize=false"$'\n'
-            if [[ "$user" == "$me" ]] && t="$(tok "$pid" "$start")"; then
-                hogs_menu+="--Terminate (SIGTERM) | $ACT param1=term param2=-y param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
+            cl "$kind"; hogs_menu+="$REPLY · ${pcpu}% now · ${avg}% avg | $ROW symbolize=false sfimage=flame"$'\n'
+            cl "$user"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
+            hogs_menu+="--pid $pid · $c · up $a · $REPLY | symbolize=false"$'\n'
+            if [[ "$user" == "$me" ]] && tok "$pid" "$start"; then
+                hogs_menu+="--Terminate (SIGTERM) | $ACT param1=term param2=-y param3=--notify param4=$REPLY sfimage=xmark.octagon"$'\n'
             elif [[ "$user" != "$me" ]]; then
-                hogs_menu+="--Owned by $(clean "$user"): run sudo kill $pid in a terminal | symbolize=false"$'\n'
+                hogs_menu+="--Owned by $c: run sudo kill $pid in a terminal | symbolize=false"$'\n'
             fi
             ;;
-        top)     top_menu+="--$(clean "$kind") · ${pcpu}% · $(mem "$rss") | $CALLBACK param1=activity-monitor symbolize=false"$'\n' ;;
+        top)     cl "$kind"; c="$REPLY"; memv "$rss"
+                 top_menu+="--$c · ${pcpu}% · $REPLY | $CALLBACK param1=activity-monitor symbolize=false"$'\n' ;;
         sys)     cpu="$pid"; load="$kind"; cores="$age_s"; memfree="$pcpu"; mempress="$avg"; batt="$rss"; bstate="$kids" ;;
         awake)   awake_mode="$pid"; awake_until="$age_s" ;;   # awake MODE PID UNTIL
         thermal) thermal="$pid"; thermal_name="$kind" ;;
         power)   power="$pid" ;;
         lid)     lid_state="$pid"; lid_until="$age_s"; lid_max="$pcpu" ;;   # lid STATE PID UNTIL MAX
-        # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD - PROJECT
-        job)     job_rows+="$kind"$'	'"$pcpu"$'	'"$rss"$'	'"$kids"$'	'"$herdr"$'	'"$project"$'	'"$pid"$'	'"$start"$'	'"$cwd"$'
-' ;;
+        # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD NAME PROJECT
+        # (NAME: the MCP server's for the mcp job, else "-")
+        job)     job_rows+="$kind"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$herdr"$'\t'"$project"$'\t'"$pid"$'\t'"$start"$'\t'"$cwd"$'\t'"$args"$'\t'"$user"$'\n' ;;
         hist)    hist_state="$pid"; hist_total="$kind"; hist_top="$age_s"; hist_top_s="$pcpu" ;;   # hist STATE TODAY_S TOP TOP_S
         insight) insight_view="$pid"; insight_text="$kind" ;;   # insight VIEW TEXT
         tokens)  tok_total="$pid"; tok_cache="$kind" ;;         # tokens TOTAL CACHE_PCT (today)
@@ -378,14 +447,16 @@ n_attn=0
 for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     IFS=$'\t' read -r pid kind age_s pcpu rss kids start ports herdr cwd project <<<"$row"
     if [[ "$kind" == daemon ]]; then
-        daemon_menu+="codex daemon · ${pcpu}% · $(mem "$rss") | sfimage=gearshape $ROW symbolize=false"$'\n'
+        memv "$rss"
+        daemon_menu+="codex daemon · ${pcpu}% · $REPLY | sfimage=gearshape $ROW symbolize=false"$'\n'
         session_submenu "$pid" "$start" daemon "$age_s" "$kids" "$ports" -
         daemon_menu+="$SUB"
         continue
     fi
     n_agents=$((n_agents + 1))
-    name="$(clean "${project:--}")"; [[ "$name" == - || -z "$name" ]] && name="$kind"
-    status=""; [[ "$herdr" != - ]] && status=" · $(clean "$herdr")"
+    cl "${project:--}"; name="$REPLY"; [[ "$name" == - || -z "$name" ]] && name="$kind"
+    cl "$kind"; ckind="$REPLY"
+    status=""; [[ "$herdr" != - ]] && { cl "$herdr"; status=" · $REPLY"; }
     case "$herdr" in
         blocked)   look="sfimage=exclamationmark.circle.fill $DOT_ORANGE" ;;
         working)   look="sfimage=circle.fill $DOT_GREEN" ;;
@@ -398,32 +469,38 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     # Clicking the row itself shows the project in Finder (resolved from
     # PID@START); everything else is in its submenu.
     click="$ROW"
-    t="$(tok "$pid" "$start")" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$t"
-    session_submenu "$pid" "$start" "$kind" "$age_s" "$kids" "$ports" "$cwd"; sub="$SUB"
+    tok "$pid" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
+    session_submenu "$pid" "$start" "$kind" "$age_s" "$kids" "$ports" "$cwd" "$herdr"; sub="$SUB"
     memv "$rss"
-    agents_menu+="$name · $(clean "$kind")$status · ${pcpu}%$hint · $REPLY | $look $click symbolize=false"$'\n'"$sub"
+    agents_menu+="$name · $ckind$status · ${pcpu}%$hint · $REPLY | $look $click symbolize=false"$'\n'"$sub"
     if [[ "$herdr" == blocked ]]; then
         n_blocked=$((n_blocked + 1)); n_attn=$((n_attn + 1))
-        needs_menu+="$name · $(clean "$kind") · waiting for you | sfimage=exclamationmark.circle.fill $DOT_ORANGE $click symbolize=false"$'\n'"$sub"
+        needs_menu+="$name · $ckind · waiting for you | sfimage=exclamationmark.circle.fill $DOT_ORANGE $click symbolize=false"$'\n'"$sub"
     fi
+    aget dups "$pid"; dup_groups "$REPLY"
     while IFS=$'\t' read -r g cmd toks; do
         [[ -n "$g" ]] || continue
         n_attn=$((n_attn + 1))
         params="param1=kill param2=--confirm-gui param3=--notify"; i=4
         for tk in $toks; do params+=" param$i=$tk"; i=$((i + 1)); done
-        needs_menu+="$name: ${g}× $(short "${cmd#*$'\037'}") running | sfimage=square.stack.3d.up $DOT_ORANGE $ROW symbolize=false"$'\n'
+        sh60 "${cmd#*$'\037'}"
+        needs_menu+="$name: ${g}× $REPLY running | sfimage=square.stack.3d.up $DOT_ORANGE $ROW symbolize=false"$'\n'
         needs_menu+="--Stop duplicates (keep newest)… | $ACT $params sfimage=xmark.octagon"$'\n'
-    done <<<"$(dup_groups "$(aget dups "$pid")")"
+    done <<<"$DUPS"
+    aget longs "$pid"
     while IFS=$'\t' read -r cmd lage tk; do
         [[ -n "$tk" ]] || continue
         n_attn=$((n_attn + 1))
-        need_item clock "$name: $(short "$cmd") · running $(age "$lage")" "$tk"
-    done <<<"$(aget longs "$pid")"
+        sh60 "$cmd"; c="$REPLY"; agev "$lage"
+        need_item clock "$name: $c · running $REPLY" "$tk"
+    done <<<"$REPLY"
+    aget stucks "$pid"
     while IFS=$'\t' read -r cmd lage tk; do
         [[ -n "$tk" ]] || continue
         n_attn=$((n_attn + 1))
-        need_item hourglass "$name: $(short "$cmd") · stuck $(age "$lage")" "$tk"
-    done <<<"$(aget stucks "$pid")"
+        sh60 "$cmd"; c="$REPLY"; agev "$lage"
+        need_item hourglass "$name: $c · stuck $REPLY" "$tk"
+    done <<<"$REPLY"
 done
 
 # Sleep disabled with no guard to restore it (a reboot killed it): a Mac in a
@@ -452,7 +529,7 @@ bar_title() {
             cpu)     num "$cpu" && t+=" :cpu: ${cpu}%" ;;
             mem)     num "$memfree" && t+=" :memorychip: $((100 - memfree))%" ;;
             load)    [[ "$load" != - ]] && t+=" :gauge.medium: $load" ;;
-            battery) num "$batt" && t+=" :$(battery_symbol "$batt" "$bstate"): ${batt}%" ;;
+            battery) num "$batt" && { battery_symbol "$batt" "$bstate"; t+=" :$REPLY: ${batt}%"; } ;;
             thermal) num "$thermal" && [[ $thermal -ge 1 ]] && t+=" :thermometer.medium: $thermal_name" ;;
             awake)   [[ "$awake_mode" != off ]] && t+=" :cup.and.saucer.fill:" ;;
             warn)    [[ -n "$attention" ]] && t+=" :exclamationmark.triangle.fill:" ;;
@@ -463,19 +540,22 @@ bar_title() {
     printf '\n'
 }
 
-# --- Sections (each prints nothing when it has nothing to say) ----------------------
+# --- Sections (each adds nothing when it has nothing to say) -------------------------
+# A section appends its lines to OUT (put LINE), in this shell: no subshell
+# per section.
+
+put() { OUT+="$1"$'\n'; }
 
 section_needs() {
     [[ $n_attn -gt 0 ]] || return 0
-    echo "Needs you ($n_attn) | size=12"
-    printf '%s' "$needs_menu"
+    put "Needs you ($n_attn) | size=12"
+    OUT+="$needs_menu"
 }
 
 section_agents() {
-    echo "Agents ($n_agents) | size=12"
-    [[ $n_agents -gt 0 ]] || echo "No agent sessions"
-    printf '%s' "$agents_menu"
-    printf '%s' "$daemon_menu"
+    put "Agents ($n_agents) | size=12"
+    [[ $n_agents -gt 0 ]] || put "No agent sessions"
+    OUT+="$agents_menu$daemon_menu"
 }
 
 # Where the CPU goes: CPU now by job type, busiest first, each with the
@@ -496,7 +576,9 @@ job_symbol() {
     esac
 }
 # job_lines — job_rows summed per job ("J job cpu rss procs") and per job and
-# session ("S job cpu rss procs project kind root start cwd"), busiest first.
+# session, or for MCP servers per server and session ("S job cpu rss procs
+# project kind root start cwd name unit": name "-" but for a named MCP
+# server, unit its first process), busiest first.
 job_lines() {
     printf '%s' "$job_rows" | LC_ALL=C awk -F '\t' -v OFS='\t' '
         function pc(x) { return (x > 0 && x < 0.5) ? "<1" : sprintf("%.0f", x) }
@@ -506,8 +588,9 @@ job_lines() {
         NF >= 9 {
             if (!($1 in jc)) jo[++nj] = $1
             jc[$1] += $2 + 0.001 * ($3 / 1048576); jcpu[$1] += $2; jm[$1] += $3; jn[$1] += $4
-            k = $1 SUBSEP $7
-            if (!(k in sc)) { sn[$1]++; sk[$1, sn[$1]] = k; sp[k] = $6; sd[k] = $5; ss[k] = $8; sw[k] = $9 }
+            nm = ($1 == "mcp" && $10 != "" && $10 != "-") ? $10 : "-"
+            k = $1 SUBSEP $7 SUBSEP nm
+            if (!(k in sc)) { sn[$1]++; sk[$1, sn[$1]] = k; sp[k] = $6; sd[k] = $5; ss[k] = $8; sw[k] = $9; su[k] = ($11 == "" ? "-" : $11) }
             sc[k] += $2; sm[k] += $3; sx[k] += $4
             so[k] += $2 + 0.000000001 * $3          # the sort key: ties go to more memory
         }
@@ -517,24 +600,63 @@ job_lines() {
                 j = jo[i]; print "J", j, pc(jcpu[j]), jm[j], jn[j]
                 m = sn[j]; for (q = 1; q <= m; q++) l[q] = sk[j, q]
                 sortk(so, l, m)
-                for (q = 1; q <= m; q++) { k = l[q]; split(k, r, SUBSEP); print "S", j, pc(sc[k]), sm[k], sx[k], sp[k], sd[k], r[2], ss[k], sw[k] }
+                for (q = 1; q <= m; q++) { k = l[q]; split(k, r, SUBSEP); print "S", j, pc(sc[k]), sm[k], sx[k], sp[k], sd[k], r[2], ss[k], sw[k], r[3], su[k] }
             }
         }'
 }
+# job_submenu JOB PROCS KIND ROOT START NAME UNIT — under a session's share of
+# a job (or one MCP server): Jump to session, what it is and where, Peek and
+# Details (of the MCP server itself, else of the session), and Kill tree for
+# a stale one. Sets SUB, one level deeper ("----").
+job_submenu() {
+    local job="$1" n="$2" kind="$3" root="$4" start="$5" name="$6" unit="$7" t="" d v s es=es
+    SUB=""
+    tok "$root" "$start" && t="$REPLY"
+    [[ -n "$t" ]] || return 0
+    d="$t"
+    if [[ "$name" != - && "$unit" != "$root" ]] && num "$unit"; then
+        v="U_start_$unit"; d="$unit"; tok "$unit" "${!v-}" && d="$REPLY"
+    fi
+    if [[ "$kind" != - && "$kind" != daemon ]]; then jump_item "$t"; SUB+="--$REPLY"$'\n'; fi
+    job_label "$job"; s="$REPLY"
+    [[ "$name" == - ]] || { cl "$name"; s="MCP server $REPLY"; }
+    [[ "$n" == 1 ]] && es=""
+    s+=" · $n process$es"
+    case "$kind" in
+        -)      s+=" · stale: its session ended" ;;
+        daemon) s+=" · the codex daemon" ;;
+        *)      cl "$kind"; s+=" · $REPLY $root"; where_text "$root"; [[ -z "$REPLY" ]] || s+=" · $REPLY" ;;
+    esac
+    SUB+="----$s | symbolize=false"$'\n'
+    local keep="$SUB"
+    SUB=""; look_items "$d" "$root"
+    SUB="$keep--${SUB//$'\n'--/$'\n'----}"
+    SUB="${SUB%----}"
+    [[ "$kind" != - ]] || SUB+="----Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
+}
 section_jobs() {
-    local tag job cpu rss n proj kind root start cwd line t sym click tip q="'"
+    local tag job cpu rss n proj kind root start cwd name unit line t sym click tip q="'"
     [[ -n "$job_rows" || "$hist_state" == ok || "$hist_state" == due ]] || return 0
-    echo "Where the CPU goes | size=12"
-    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd; do
+    put "Where the CPU goes | size=12"
+    while IFS=$'\t' read -r tag job cpu rss n proj kind root start cwd name unit; do
         case "$tag" in
             J)  job_symbol "$job"; sym="$REPLY"; job_label "$job"; line="$REPLY · ${cpu}%"; memv "${rss:-0}"
-                echo "$line · $REPLY | sfimage=$sym $ROW symbolize=false" ;;
-            S)  cl "${proj:--}"; line="$REPLY"
-                case "$kind" in -) line+=" · stale" ;; daemon) line+=" · codex daemon" ;; *) cl "$kind"; line+=" · $REPLY" ;; esac
+                put "$line · $REPLY | sfimage=$sym $ROW symbolize=false" ;;
+            S)  # An MCP server: server · project; anything else: project · kind.
+                line=""
+                [[ -n "$name" && "$name" != - ]] && { cl "$name"; line="$REPLY · "; }
+                cl "${proj:--}"; line+="$REPLY"
+                case "$kind" in
+                    -)      line+=" · stale" ;;
+                    daemon) line+=" · codex daemon" ;;
+                    *)      [[ -n "$name" && "$name" != - ]] || { cl "$kind"; line+=" · $REPLY"; } ;;
+                esac
                 memv "${rss:-0}"; line+=" · ${cpu}% · $REPLY"
                 click="$ROW"
-                t="$(tok "$root" "$start")" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$t"
-                echo "--$line | $click symbolize=false" ;;
+                tok "$root" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
+                put "--$line | $click symbolize=false"
+                job_submenu "$job" "$n" "$kind" "$root" "$start" "$name" "${unit:--}"
+                OUT+="$SUB" ;;
         esac
     done < <([[ -z "$job_rows" ]] || job_lines)
     [[ "$hist_state" == ok || "$hist_state" == due ]] || return 0
@@ -549,12 +671,12 @@ section_jobs() {
     else
         line="Today: nothing recorded yet (a sample a minute)"
     fi
-    echo "$line | sfimage=chart.bar.xaxis $ROW symbolize=false"
+    put "$line | sfimage=chart.bar.xaxis $ROW symbolize=false"
     # Today's tokens (from tokens.today, which `agents sample` writes) and the
     # share read from the prompt cache; opens today's token report.
     if num "$tok_total" && num "$tok_cache" && [[ $tok_total -gt 0 ]]; then
         humanize "$tok_total"
-        echo "$REPLY tokens today · ${tok_cache}% cached | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
+        put "$REPLY tokens today · ${tok_cache}% cached | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
     fi
     # Today's top insight (from insight.txt, which `agents sample` refreshes):
     # what it found as the label (the text before " — ", at most 70
@@ -566,70 +688,74 @@ section_jobs() {
                 cl "${insight_text//\`/}"
                 tip="${REPLY//\"/$q}" line="${REPLY%% — *}"
                 [[ ${#line} -le 70 ]] || { line="${line:0:67}"; line="${line% *}..."; }
-                echo "$line | $TERM_OPEN param2=--hold param3=report param4=--view param5=$insight_view tooltip=\"$tip\" sfimage=lightbulb symbolize=false"
+                put "$line | $TERM_OPEN param2=--hold param3=report param4=--view param5=$insight_view tooltip=\"$tip\" sfimage=lightbulb symbolize=false"
             fi ;;
     esac
-    echo "Open report | $TERM_OPEN param2=--hold param3=report sfimage=doc.text.magnifyingglass"
+    put "Open report | $TERM_OPEN param2=--hold param3=report sfimage=doc.text.magnifyingglass"
 }
 
 section_stale() {
     [[ $n_stale -gt 0 ]] || return 0
-    echo "Stale ($n_stale) | size=12"
-    printf '%s' "$stale_menu"
+    put "Stale ($n_stale) | size=12"
+    OUT+="$stale_menu"
     # Exactly the processes listed above, not whatever is stale at click time.
     local params="param1=kill param2=-y param3=--notify" i=4 tk
     for tk in $stale_tokens; do params+=" param$i=$tk"; i=$((i + 1)); done
-    echo "Reap all stale | $ACT $params sfimage=trash"
+    put "Reap all stale | $ACT $params sfimage=trash"
 }
 
 section_hogs() {
     [[ $n_hogs -gt 0 ]] || return 0
-    echo "Hogs ($n_hogs) | size=12"
-    printf '%s' "$hogs_menu"
+    put "Hogs ($n_hogs) | size=12"
+    OUT+="$hogs_menu"
 }
 
+# now_s — the epoch in NOW_S, read once (bash 3.2 has no $EPOCHSECONDS).
+now_s() { [[ -n "${NOW_S:-}" ]] || NOW_S="$(date +%s)"; }
+# left_text SECS PREFIX — REPLY = "PREFIX<1m left" or "PREFIX2h5m left".
+left_text() { if [[ $1 -lt 60 ]]; then REPLY="$2<1m left"; else agev "$1"; REPLY="$2$REPLY left"; fi; }
+# ck MODE — REPLY = " checked=true" for the active keep-awake mode.
+ck() { REPLY=""; [[ "$awake_mode" == "$1" ]] && REPLY=" checked=true"; return 0; }
+
 section_awake() {
-    local text left
+    local text sym=cup.and.saucer
     case "$awake_mode" in
         off)    text="Awake: off" ;;
         agents) text="Awake: while agents run" ;;
         timed|lid) num "$awake_until" || awake_until=0
-                left=$((awake_until - $(date +%s)))
-                if [[ $left -lt 60 ]]; then text="Awake: <1m left"; else text="Awake: $(age "$left") left"; fi ;;
+                now_s; left_text $((awake_until - NOW_S)) "Awake: "; text="$REPLY" ;;
         *)      text="Awake: on until turned off" ;;
     esac
     # Lid mode reads its time from the guard's record.
     if [[ "$lid_state" == on ]]; then
         num "$lid_until" || lid_until=0
-        left=$((lid_until - $(date +%s)))
-        if [[ $left -lt 60 ]]; then text="Awake: lid closed · <1m left"; else text="Awake: lid closed · $(age "$left") left"; fi
+        now_s; left_text $((lid_until - NOW_S)) "Awake: lid closed · "; text="$REPLY"; sym=laptopcomputer
     fi
-    ck() { [[ "$awake_mode" == "$1" ]] && printf ' checked=true'; }
     if [[ "$lid_state" == stale ]]; then
-        echo "Lid sleep disabled, nothing restores it | sfimage=exclamationmark.triangle.fill $DOT_RED $ROW"
-        echo "Restore lid sleep… | $ACT param1=awake param2=restore param3=--notify sfimage=lock.open"
+        put "Lid sleep disabled, nothing restores it | sfimage=exclamationmark.triangle.fill $DOT_RED $ROW"
+        put "Restore lid sleep… | $ACT param1=awake param2=restore param3=--notify sfimage=lock.open"
     fi
-    echo "$text | sfimage=$([[ "$lid_state" == on ]] && echo laptopcomputer || echo cup.and.saucer) $ROW"
-    echo "--Until turned off | $ACT param1=awake param2=on$(ck on)"
-    echo "--For 1 hour | $ACT param1=awake param2=on param3=1h"
-    echo "--For 3 hours | $ACT param1=awake param2=on param3=3h"
-    echo "--While agents run | $ACT param1=awake param2=agents$(ck agents)"
+    put "$text | sfimage=$sym $ROW"
+    ck on; put "--Until turned off | $ACT param1=awake param2=on$REPLY"
+    put "--For 1 hour | $ACT param1=awake param2=on param3=1h"
+    put "--For 3 hours | $ACT param1=awake param2=on param3=3h"
+    ck agents; put "--While agents run | $ACT param1=awake param2=agents$REPLY"
     # Lid mode (AGENTS_LID=0 hides it): disables lid sleep as root, time-boxed,
     # after a password dialog. Results come back as notifications (--notify):
     # a menu action has no terminal.
     if [[ "$BAR_LID" == 1 ]]; then
-        echo "--Lid closed too… | sfimage=laptopcomputer $ROW"
+        put "--Lid closed too… | sfimage=laptopcomputer $ROW"
         num "$lid_max" || lid_max=28800
-        [[ $lid_max -ge 3600 ]] && echo "----For 1 hour | $ACT param1=awake param2=lid param3=1h param4=--notify"
-        [[ $lid_max -ge 10800 ]] && echo "----For 3 hours | $ACT param1=awake param2=lid param3=3h param4=--notify"
-        [[ $lid_max -ge 28800 ]] && echo "----For 8 hours | $ACT param1=awake param2=lid param3=8h param4=--notify"
-        echo "----Asks for your password; restores on timeout or low battery | size=11"
+        [[ $lid_max -ge 3600 ]] && put "----For 1 hour | $ACT param1=awake param2=lid param3=1h param4=--notify"
+        [[ $lid_max -ge 10800 ]] && put "----For 3 hours | $ACT param1=awake param2=lid param3=3h param4=--notify"
+        [[ $lid_max -ge 28800 ]] && put "----For 8 hours | $ACT param1=awake param2=lid param3=8h param4=--notify"
+        put "----Asks for your password; restores on timeout or low battery | size=11"
     fi
-    echo "--Off | $ACT param1=awake param2=off$(ck off)"
-    echo "-----"
-    echo "--Who holds the Mac awake? | $TERM_OPEN param2=--hold param3=awake param4=status"
+    ck off; put "--Off | $ACT param1=awake param2=off$REPLY"
+    put "-----"
+    put "--Who holds the Mac awake? | $TERM_OPEN param2=--hold param3=awake param4=status"
     if [[ "$lid_state" == on ]]; then
-        echo "End lid mode now… | $ACT param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"
+        put "End lid mode now… | $ACT param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"
     fi
 }
 
@@ -638,7 +764,7 @@ section_awake() {
 # Settings › Battery, where Energy Mode lives. A
 # warning colors the symbol (orange or red), never the text.
 section_system() {
-    local used="" line hot=""
+    local used="" line hot="" bolt=""
     num "$memfree" && used=" · Mem $((100 - memfree))%"
     line="CPU ${cpu}%$used · Load $load/$cores"
     case "$mempress" in
@@ -646,28 +772,31 @@ section_system() {
         critical) line+=" · memory pressure critical | sfimage=memorychip $DOT_RED" ;;
         *)        line+=" | sfimage=cpu" ;;
     esac
-    echo "$line $TERM_OPEN param2=watch"
+    put "$line $TERM_OPEN param2=watch"
     if [[ -n "$top_menu" ]]; then
-        echo "--Busiest processes | size=11"
-        printf '%s' "$top_menu"
+        put "--Busiest processes | size=11"
+        OUT+="$top_menu"
     fi
     num "$thermal" && [[ $thermal -ge 2 ]] && hot=" $DOT_RED"
     if num "$batt"; then
-        echo "Battery ${batt}%$(charging "$bstate" && echo " :bolt.fill:") · Thermal $thermal_name · Energy $power | sfimage=$(battery_symbol "$batt" "$bstate")$hot $CALLBACK param1=battery-settings"
+        charging "$bstate" && bolt=" :bolt.fill:"
+        battery_symbol "$batt" "$bstate"
+        put "Battery ${batt}%$bolt · Thermal $thermal_name · Energy $power | sfimage=$REPLY$hot $CALLBACK param1=battery-settings"
     else
-        echo "Thermal $thermal_name · Energy $power | sfimage=thermometer.medium$hot $CALLBACK param1=battery-settings"
+        put "Thermal $thermal_name · Energy $power | sfimage=thermometer.medium$hot $CALLBACK param1=battery-settings"
     fi
 }
 
 bar_title
 for section in $BAR_SECTIONS; do
+    OUT=""
     case "$section" in
-        needs|agents|jobs|stale|hogs|awake|system) out="$("section_$section")" ;;
-        *) out="" ;;
+        needs|agents|jobs|stale|hogs|awake|system) "section_$section" ;;
     esac
-    [[ -n "$out" ]] || continue
+    while [[ "$OUT" == *$'\n' ]]; do OUT="${OUT%$'\n'}"; done
+    [[ -n "$OUT" ]] || continue
     echo "---"
-    printf '%s\n' "$out"
+    printf '%s\n' "$OUT"
 done
 echo "---"
 echo "Open agents watch | $TERM_OPEN param2=watch sfimage=rectangle.and.text.magnifyingglass"

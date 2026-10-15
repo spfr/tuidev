@@ -7,13 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-`agents` keeps its minute-by-minute sample cheap on a heavy machine, and the
-token report learns what the tokens would cost at API list prices, who drove
-them, and which MCP servers, skills and plugins your sessions load but never
-use.
+Every process the menu lists now has a detail view and one click to the session
+it belongs to (Herdr, tmux or the terminal tab), MCP servers go by the names you
+gave them, and the token report learns what the tokens would cost at API list
+prices, who drove them, and which MCP servers, skills and plugins your sessions
+load but never use. The menu refreshes in half the time, and the
+minute-by-minute sample stays cheap on a heavy machine.
 
 ### Added
 
+- **`agents show PID`**: one process in detail, like Activity Monitor's
+  inspector: what and whose it is, its verdict and evidence (as `agents why`),
+  its session (id, name, model, version, from Claude Code's
+  `sessions/PID.json` or Codex's open rollout file), what that session is
+  doing now (the last tool call and its target, the last line it wrote, read
+  from the transcript's last 256 KiB), where it lives, its runtime, CPU, CPU
+  time, memory, threads, ports, open files and children. `--watch` redraws it
+  every 2 s; `--json` gives a versioned object.
+- **`agents jump PID`** goes to where a process runs so you can answer it: its
+  Herdr pane (by session id, directory or processes; `herdr agent focus`) or
+  tmux pane, then the terminal tab that shows it (Ghostty 1.3+, iTerm2 and
+  Terminal by tty; any other app is brought forward). **`agents peek PID`**
+  prints the last lines of its tmux or Herdr pane.
+- **`agents pick`**: everything in fzf, with `agents show` as the preview;
+  enter jumps, ctrl-p peeks, ctrl-d opens the details live, ctrl-k kills. The
+  list reloads every 2 s where fzf has `every()` (0.70+).
+- **MCP servers by name.** `agents mcp [DIR]` lists the servers Claude Code
+  (user, local, project and plugin scope) and Codex are configured with, and
+  every MCP-server process goes by its configured name in `agents ls`, `ps`,
+  `json`, `tsv` and the menu (`playwright · api · 0% · 211M` under MCP
+  servers), else by its package (`@playwright/mcp` → `playwright`). Only names,
+  scopes, sources and the word that starts each server are kept: never args,
+  env, headers or URLs. A configured server whose command line does not say
+  `mcp` now counts as an MCP server.
+- **Menu:** every session and Needs-you submenu starts with **Jump to
+  session**, and sessions, Needs-you items, stale processes and every row under
+  Where the CPU goes get a summary (status, where it lives, busiest command)
+  with Peek and Details.
 - **API-equivalent cost.** `agents report` (the summary's Tokens line, the
   tokens view and their JSON) shows what the tokens would cost at API list
   prices, which now ship with `agents` (`lib/agents/prices.tsv`, Anthropic's
@@ -43,6 +73,14 @@ use.
 
 ### Changed
 
+- **The menu refreshes in about 0.15 s instead of 0.3 s** on a Mac with 900
+  processes: the plugin forks 3 times instead of about 60, and `agents tsv`
+  runs `lsof`, `launchctl`, tmux and the machine's probes alongside `ps`,
+  looks up the cwds the last refresh asked about early, and classifies with
+  `index()` where it used regexes.
+- MCP servers' names lose their `-mcp` suffix when no config names them
+  (`chrome-devtools-mcp` → `chrome-devtools`), in `agents json` too. `agents
+  ls` shows the names on each session's `mcp:` line.
 - **The run ledger no longer searches transcripts.** Finding which agent
   started a background command used to `grep` the session's whole main and
   subagent transcripts each time commands ended (10 s on a 395 MB session).

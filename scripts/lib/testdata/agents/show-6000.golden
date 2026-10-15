@@ -1,0 +1,19 @@
+stale helper · npm exec chrome-devtools-mcp@latest  pid 6000 · me
+
+project   ~
+cwd       ~
+command   npm exec chrome-devtools-mcp@latest
+running   50m (since Wed Oct 14 08:10:00 2026)
+cpu       0.0% now · 0s CPU time · 0.0% average · 2 threads
+memory    95M · 210M with 1 child process
+files     17 open
+verdict   safe to stop — its session ended (high confidence)
+          owner: none, its session ended (the process now belongs to pid 1)
+          running 50m · 0% CPU
+          in @HOME@
+          ran under an agent session before it ended (agents sample saw it)
+
+children (1)
+  PID        CPU%    MEM  COMMAND
+  6001        0.0   114M  chrome-devtools-mcp
+[rc=0]

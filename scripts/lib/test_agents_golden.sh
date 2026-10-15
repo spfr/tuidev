@@ -182,6 +182,9 @@ _agents_cwds() {
 _agents_herdr() { printf 'claude\tworking\t%s\n' "$HOME/work/app"; }
 _agents_start() { printf '%s\n' "$FIX_PS" | awk -v p="$1" '$1 == p { print $9 "_" $10 "_" $11 "_" $12 "_" $13; exit }'; }
 _agents_keep_pids() { _agents_awake_pid; return 0; }
+# tmux: two panes, the shells that started claude 90419 and the sessions under 900.
+_agents_tmux_up() { return 0; }
+_agents_panes() { printf '510\tmain:2.1\n900\twork:1.0\n'; }
 _agents_hook_stdouts() {
     local p
     for p in "$@"; do printf '%s\n' "${FIX_OUTS:-}" | awk -F '\t' -v p="$p" '$1 == p'; done
@@ -317,6 +320,32 @@ case_ stale stale
 case_ hogs hogs
 case_ json json
 case_ tsv tsv
+# The menu: the SwiftBar plugin over that same tsv, which a stub agents
+# replays (the plugin runs in its own bash, so it sees none of the functions
+# stubbed here; its one clock read, awake's time left, is long past). The menu
+# shortens long lines, so $tmp becomes one fixed path first: the golden does
+# not depend on how long $tmp is.
+menu_case() {   # NAME TSV_FILE
+    local fixed=/tmp/agents-fixture
+    sed "s|$tmp|$fixed|g" "$2" > "$tmp/menu.tsv"
+    printf '#!/bin/sh\n[ "$1" = tsv ] && cat "%s"\nexit 0\n' "$tmp/menu.tsv" > "$tmp/menu-agents"
+    chmod +x "$tmp/menu-agents"
+    ( USER=me HOME="$fixed/home" AGENTS_BIN="$tmp/menu-agents" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" ) 2>&1 \
+        | sed -e "s|$tmp|@TMP@|g" -e "s|$fixed|@TMP@|g" -e "s|$REPO_DIR|@REPO@|g" > "$tmp/out/$1"
+}
+( agents_main tsv ) > "$tmp/tsv.raw" 2>/dev/null || true
+menu_case menu "$tmp/tsv.raw"
+# agents show: the process's own files and threads come from lsof and ps -M,
+# so they are fixed here; no session transcripts exist in this HOME.
+_agents_show_proc() { printf 'f\tfiles\t17\nf\tthreads\t%s\n' "$(( $1 % 7 + 1 ))"; }
+case_ show-1000 show 1000
+case_ show-1001 show 1001
+case_ show-1012 show 1012
+case_ show-6000 show 6000
+case_ show-json-90419 show --json 90419
+case_ show-gone show 4242
+case_ pick-list pick --list
+case_ peek-app peek 84091
 case_ thermal thermal
 case_ awake-status awake
 case_ awake-bad awake sideways

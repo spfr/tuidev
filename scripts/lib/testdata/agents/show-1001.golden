@@ -1,0 +1,21 @@
+MCP server chrome-devtools · repo  pid 1001 · me
+in claude 1000
+
+mcp       not in any config agents read (named by its package)
+project   repo
+cwd       /Users/NAME/repo
+where     tmux pane work:1.0
+command   npm exec chrome-devtools-mcp@latest
+running   1h00m (since Wed Oct 14 08:00:01 2026)
+cpu       0.0% now · 0s CPU time · 0.0% average · 1 thread
+memory    87M · 253M with 2 child processes
+files     17 open
+verdict   informational — part of a live session; it ends with the session (high confidence)
+          owner: claude 1000 in repo
+          running 1h0m · 0% CPU
+
+children (2)
+  PID        CPU%    MEM  COMMAND
+  1002        0.0   107M  chrome-devtools-mcp
+  1003        0.0    58M    node /Users/NAME/.npm/_npx/abc/node_modules/chrome-devtools-mcp/build/index.js
+[rc=0]

@@ -1,6 +1,7 @@
 # lib/agents/awk/lib_activity.awk — what a session runs: tool shells and the
 # command they run, MCP servers, polling loops and the file they watch.
-#   tool_shell, is_mcp, mcp_name, waits, watched, tool_cmd, cmd_name.
+#   tool_shell, is_mcp, mcp_known, mcp_name (mcp_word, mcp_tidy), waits, watched,
+#   tool_cmd, cmd_name. ENVIRON AGENTS_MCP: the configured servers (mcp.sh).
 # Needs lib_proc.awk (base, pname, hostinit and its name lists).
 
 # A tool shell: a shell running one command line, "/bin/zsh -c …" (the Claude
@@ -11,10 +12,33 @@ function tool_shell(a,   b) {
     if (b == "sandbox-exec") return a ~ / (\/[^ ]*\/)?(bash|zsh|sh) +-[A-Za-z]*c /
     return (b in shells) && a ~ /^[^ ]+ +-[A-Za-z]*c( |$)/
 }
-function is_mcp(a) { return a ~ /(^|\/)npm exec( |$)|(^|\/)npx( |$)|\/_npx\/|mcp/ }
-# mcp_name: "chrome-devtools-mcp" from "npm exec chrome-devtools-mcp@latest",
-# "example-agent-mcp" from "node …/example-agent-mcp.cjs".
-function mcp_name(a,   n, w, i, s) {
+# is_mcp: an MCP server by its command line (npm exec, npx, the npx cache,
+# "mcp" in it), or one you configured (mcp_known).
+function is_mcp(a) { return a ~ /(^|\/)npm exec( |$)|(^|\/)npx( |$)|\/_npx\/|mcp/ || mcp_known(a, "") != "" }
+# The configured servers (mcp.sh's inventory), from ENVIRON AGENTS_MCP:
+# "needle<TAB>name<TAB>cli" lines, longest needle first.
+function mcpinit(   n, t, i, f) {
+    if (mcp_ok++) return
+    n = split(ENVIRON["AGENTS_MCP"], t, "\n"); mcpn = 0
+    for (i = 1; i <= n; i++) if (split(t[i], f, "\t") >= 3 && f[1] != "") { mcpn++; mcpnd[mcpn] = f[1]; mcpnm[mcpn] = f[2]; mcpcli[mcpn] = f[3] }
+}
+# mcp_known(a, cli): the configured name of the server whose needle a's
+# command line holds, "" for none; with cli (claude, codex), that CLI's
+# server first when two configs start the same program.
+function mcp_known(a, cli,   i, hit) {
+    mcpinit(); hit = ""
+    for (i = 1; i <= mcpn; i++) {
+        if (!index(a, mcpnd[i])) continue
+        if (cli == "" || mcpcli[i] == cli) return mcpnm[i]
+        if (hit == "") hit = mcpnm[i]
+    }
+    return hit
+}
+# mcp_word: the package or program an MCP server's command line names, without
+# version or extension: "npm exec X"'s or "npx X"'s package, the package a
+# path under node_modules/ belongs to, else the first word with mcp in it,
+# else the program's name.
+function mcp_word(a,   n, w, i, s) {
     if (match(a, /(npm exec|npx)( +-[^ ]+)* +[^ -][^ ]*/)) {
         s = substr(a, RSTART, RLENGTH); sub(/.* /, "", s)
     } else {
@@ -22,7 +46,33 @@ function mcp_name(a,   n, w, i, s) {
         for (i = 1; i <= n; i++) if (w[i] ~ /mcp/) { s = w[i]; break }
         if (s == "") s = pname(a)
     }
-    sub(/.*\//, "", s); sub(/@[^@\/]*$/, "", s); sub(/\.(c|m)?js$|\.py$|\.ts$/, "", s)
+    if ((i = index(s, "node_modules/")) > 0) {
+        s = substr(s, i + 13)
+        if (substr(s, 1, 5) == ".bin/") s = substr(s, 6)
+        if (substr(s, 1, 1) == "@") { if (match(s, /^@[^\/]+\/[^\/]+/)) s = substr(s, 1, RLENGTH) }
+        else sub(/\/.*/, "", s)
+    }
+    if (substr(s, 1, 1) == "@") sub(/@[^@\/]*$/, "", s); else sub(/@.*$/, "", s)
+    sub(/\.(c|m)?js$|\.py$|\.ts$/, "", s)
+    return s
+}
+# mcp_tidy: the short name that goes by: the scope of @scope/mcp (or
+# /mcp-server, /server), else its last path part without an mcp-server-,
+# server- or mcp- prefix and a -mcp-server, -mcp or -server suffix
+# (@playwright/mcp → playwright, chrome-devtools-mcp → chrome-devtools,
+# @modelcontextprotocol/server-filesystem → filesystem).
+function mcp_tidy(s,   t) {
+    if (s ~ /^@[^\/]+\/(mcp|mcp-server|server)$/) { s = substr(s, 2); sub(/\/.*/, "", s); return s }
+    sub(/.*\//, "", s); t = s
+    sub(/^(mcp-server-|server-|mcp-)/, "", t); sub(/(-mcp-server|-mcp|-server)$/, "", t)
+    return (t == "" || t == "mcp" || t == "server") ? s : t
+}
+# mcp_name(a, cli): the name an MCP server's process goes by: its configured
+# name (mcp_known), else mcp_tidy of mcp_word; printable, never empty.
+function mcp_name(a, cli,   s) {
+    s = mcp_known(a, cli)
+    if (s == "") s = mcp_tidy(mcp_word(a))
+    gsub(/[[:cntrl:]]/, "", s)
     return s == "" ? pname(a) : s
 }
 # A polling loop a session waits on ("until …; do sleep 5; done"), given the

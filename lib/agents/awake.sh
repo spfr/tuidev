@@ -26,9 +26,10 @@ _agents_awake_file() { echo "$AGENTS_RUN_DIR/awake"; }
 # permission error (EPERM) proves nothing and keeps the record.
 agents_awake_state() {
     local file content pid start mode until verified=0
-    file="$(_agents_awake_file)"
+    file="$AGENTS_RUN_DIR/awake"   # _agents_awake_file, without the fork
     [[ -f "$file" ]] || return 1
-    content="$(cat "$file" 2>/dev/null)"
+    { IFS= read -r -d '' content < "$file"; } 2>/dev/null || true   # $(cat FILE) without the fork
+    while [[ "$content" == *$'\n' ]]; do content="${content%$'\n'}"; done
     read -r pid start mode until <<<"$content" || true
     _agents_holder_check "$file" "$content" "$pid" "$start"
     case $? in 0) verified=1 ;; 1) return 1 ;; esac
@@ -52,14 +53,17 @@ _agents_inhibitor() {
     echo "agents: no caffeinate or systemd-inhibit on this system; keep-awake is unavailable" >&2
     return 1
 }
-# _agents_awake_now — agents_awake_state, read once per run once primed (the
-# menu and the table ask several times; _agents_awake_prime re-reads it).
+# _agents_awake_now [VAR] — agents_awake_state, read once per run once primed
+# (the menu and the table ask several times; _agents_awake_prime re-reads it).
+# With VAR, VAR gets it instead of stdout (no subshell). False when none.
 _agents_awake_prime() { _AGENTS_AWAKE_STATE="$(agents_awake_state)"; _AGENTS_AWAKE_PRIMED=1; }
 _agents_awake_now() {
-    if [[ -z "${_AGENTS_AWAKE_PRIMED:-}" ]]; then agents_awake_state; return; fi
-    [[ -n "$_AGENTS_AWAKE_STATE" ]] && echo "$_AGENTS_AWAKE_STATE"
+    local _s
+    if [[ -n "${_AGENTS_AWAKE_PRIMED:-}" ]]; then _s="$_AGENTS_AWAKE_STATE"; else _s="$(agents_awake_state)"; fi
+    if [[ -n "${1:-}" ]]; then printf -v "$1" '%s' "$_s"; elif [[ -n "$_s" ]]; then echo "$_s"; fi
+    [[ -n "$_s" ]]
 }
-_agents_awake_pid() { local s; s="$(_agents_awake_now)" && echo "${s%% *}"; }
+_agents_awake_pid() { local s; _agents_awake_now s && echo "${s%% *}"; }
 
 # _agents_hold [SECS] [WATCH_PID] — run the platform's sleep inhibitor in the
 # foreground: caffeinate -di (system and display idle sleep) on macOS,
@@ -164,7 +168,7 @@ _agents_awake_loop() {
 agents_awake_line() {
     local state pid mode until verified lid=""
     lid="$(agents_lid_state)" || lid=""
-    if state="$(_agents_awake_now)"; then
+    if _agents_awake_now state; then
         read -r pid mode until verified <<<"$state"
         local note="pid $pid"
         [[ "$verified" == 1 ]] || note="pid $pid, unverified"

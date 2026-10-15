@@ -9,14 +9,16 @@
 # secs: ps `time`/`etime` ([DD-][HH:]MM:SS[.cc]) to seconds.
 # pname: a readable name for argv (the executable inside an .app bundle).
 function secs(s,   d, i, n, a, t) {
-    sub(/\.[0-9]*$/, "", s)
+    if ((i = index(s, ".")) > 0) s = substr(s, 1, i - 1)    # the fraction (cheaper than a sub)
     d = 0; i = index(s, "-")
     if (i > 0) { d = substr(s, 1, i - 1) + 0; s = substr(s, i + 1) }
     n = split(s, a, ":"); t = 0
     for (i = 1; i <= n; i++) t = t * 60 + a[i]
     return d * 86400 + t
 }
-function base(a,   b) { b = a; sub(/ .*/, "", b); sub(/.*\//, "", b); return b }
+# base, and the checks below, run for every process: they use index() where
+# a regex would scan the whole command line.
+function base(a,   b, i) { i = index(a, " "); b = i ? substr(a, 1, i - 1) : a; sub(/.*\//, "", b); return b }
 function pname(a,   i, s) {
     i = index(a, ".app/Contents/MacOS/")
     if (i == 0) return base(a)
@@ -37,20 +39,21 @@ function hostinit(   n, t, i) {
     n = split(ENVIRON["AGENTS_SUPERVISOR_NAMES"], t, " "); for (i = 1; i <= n; i++) sups[t[i]] = 1
     n = split(ENVIRON["AGENTS_SHELL_NAMES"], t, " "); for (i = 1; i <= n; i++) shells[t[i]] = 1
 }
-function agent_kind(a,   b) {
+function agent_kind(a,   b, k) {
     hostinit()
-    if (a ~ /--chrome-native-host/) return ""        # a browser bridge, not a session
     b = base(a)
-    if (b in names) return b
-    if (a ~ /claude-code\/cli\.m?js/) return "claude"
-    if (a ~ /@openai\/codex\/bin\/codex/) return "codex"
-    return ""
+    if (b in names) k = b
+    else if (index(a, "claude-code/cli.") && a ~ /claude-code\/cli\.m?js/) k = "claude"
+    else if (index(a, "@openai/codex/bin/codex")) k = "codex"
+    else return ""
+    return index(a, "--chrome-native-host") ? "" : k     # a browser bridge, not a session
 }
 # An interactive or login shell: "-zsh", "zsh", "/bin/bash -l", but not
 # "bash -c CMD" or "sh script.sh".
-function interactive_shell(a,   b, login, rest) {
+function interactive_shell(a,   b, login, rest, i) {
     hostinit()
-    b = a; sub(/ .*/, "", b); login = (substr(b, 1, 1) == "-"); sub(/^-/, "", b); sub(/.*\//, "", b)
+    i = index(a, " "); b = i ? substr(a, 1, i - 1) : a
+    login = (substr(b, 1, 1) == "-"); sub(/^-/, "", b); sub(/.*\//, "", b)
     if (!(b in shells)) return 0
     if (login || index(a, " ") == 0) return 1
     rest = a; sub(/^[^ ]+ +/, "", rest)
@@ -63,11 +66,21 @@ function hosts(a) {
     return agent_kind(a) != "" || a ~ ENVIRON["AGENTS_DAEMON_PATTERN"] || interactive_shell(a) || supervisor(a)
 }
 # argv(): the command line, column 14 on, of the current record (line is $0).
-# Skips the 13 fields by position, cheaper than 13 regex substitutions.
-function argv(line,   s, i, p, k) {
-    p = 1
-    for (i = 1; i <= 13; i++) { k = index(substr(line, p), $i); p += k - 1 + length($i) }
-    s = substr(line, p); sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s
+# It starts after the start time's clock and year (" 07:31:08 2026 "), found
+# with one index(); a record without them is walked field by field.
+function argv(line,   s, i, p, k, t, c) {
+    t = " " $12 " " $13 " "
+    if ((k = index(line, t)) > 0) p = k + length(t)
+    else {
+        p = 1
+        for (i = 1; i <= 13; i++) { k = index(substr(line, p), $i); p += k - 1 + length($i) }
+    }
+    # Trimmed a character at a time: ps pads with a few spaces, and a regex
+    # would scan the whole command line.
+    while ((c = substr(line, p, 1)) == " " || c == "\t") p++
+    k = length(line)
+    while (k >= p && ((c = substr(line, k, 1)) == " " || c == "\t")) k--
+    return substr(line, p, k - p + 1)
 }
 # lstart(): the current record's start time (its 5 lstart words) as one token,
 # Wed_Oct_14_08:00:00_2026: what PID@START names a process by.

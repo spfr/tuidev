@@ -90,6 +90,11 @@ agents_main() {
         json)     local r; _agents_awake_prime; r="$(agents_collect)"
                   _agents_with_needs "$r" | agents_json ;;
         why)      agents_why "$@" ;;
+        mcp)      agents_mcp "$@" ;;
+        show)     agents_show "$@" ;;
+        jump)     agents_jump "$@" ;;
+        peek)     agents_peek "$@" ;;
+        pick)     agents_pick "$@" ;;
         tsv)      agents_tsv ;;
         report)   agents_report "$@" ;;
         runs)     agents_runs "$@" ;;

@@ -1,0 +1,12 @@
+/tmp/go-build1/b001/web.test -test.paniconexit0  pid 1012 · me
+in claude 1000 · under tool 1010
+
+project   repo
+cwd       /Users/NAME/repo
+where     tmux pane work:1.0
+command   /tmp/go-build1/b001/web.test -test.paniconexit0
+running   1m (since Wed Oct 14 08:58:05 2026)
+cpu       99.0% now · 1m50s CPU time · 95.7% average · 5 threads
+memory    175M
+files     17 open
+[rc=0]

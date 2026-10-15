@@ -5,11 +5,12 @@
 #   helpers, dev-server candidates, hogs, what each session runs, jobs) and
 #   agents_enrich (cwds, Herdr status, projects, flags), and the rule for a
 #   session's project name.
-# Uses: config.sh (the patterns), util.sh (_agents_awk); awk/classify.awk,
+# Uses: config.sh (the patterns), util.sh (_agents_awk), mcp.sh
+#   (_agents_mcp_needles: which MCP server is which); awk/classify.awk,
 #   awk/enrich.awk and the lib_*.awk they need.
 # Public: agents_classify, agents_enrich, agents_project.
 
-# agents_classify LISTENERS KEEP_PIDS < SNAPSHOT
+# agents_classify LISTENERS KEEP_PIDS [PANES] < SNAPSHOT
 # LISTENERS: "pid port" lines. KEEP_PIDS: pids never flagged (our own
 # keep-awake holder). Prints tab-separated records, 14 columns:
 #   type pid kind age_s cpu avg rss_kib kids start ports user herdr cwd args
@@ -17,15 +18,19 @@
 # by cwd) | hog. Unknown fields are "-". Plus "watch PID PATH read|exists"
 # records: the file a polling loop waits on, and whether its condition reads
 # it or only tests that it exists (agents_collect checks its age,
-# agents_enrich drops them), and "job" records (awk/lib_jobs.awk).
+# agents_enrich drops them), "where PID tmux|herdr|ssh|app|- PLACE" records
+# for each session (awk/lib_where.awk; PANES: tmux's "pane_pid<TAB>
+# session:window.pane" lines, where.sh), and "job" records (awk/lib_jobs.awk).
 agents_classify() {
+    local mcp
+    _agents_mcp_needles mcp     # which configured MCP server each process is
     local IFS=$'\n'
-    AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
+    AGENTS_MCP="$mcp" AGENTS_PANES="${3:-}" AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
     AGENTS_UID="$AGENTS_UID" AGENTS_SELF="$AGENTS_SELF" AGENTS_NAMES="$AGENTS_NAMES" \
     AGENTS_DAEMON="$AGENTS_DAEMON_PATTERN" AGENTS_SYSTEM="$AGENTS_SYSTEM_PATTERN" \
     AGENTS_HOG_PCT="$AGENTS_HOG_PCT" AGENTS_HOG_MIN="$AGENTS_HOG_MIN" \
     AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_HOG_TOP="$AGENTS_HOG_TOP" AGENTS_BAR_TOP="$AGENTS_BAR_TOP" \
-    _agents_awk "lib_proc lib_activity lib_jobs classify"
+    _agents_awk "lib_proc lib_activity lib_jobs lib_where classify"
 }
 
 # Where a dev server's cwd must be for it to count as one an agent left: a

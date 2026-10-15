@@ -9,8 +9,9 @@
 #   a lock's or a state file's holder.
 # Public: _agents_awk, _agents_awk_eval, agents_parse_duration,
 #   _agents_window, _agents_now, _agents_clock, _agents_field, _agents_timeout,
-#   _agents_detach, _agents_lock, _agents_unlock, _agents_holder_check,
-#   _agents_mypid, _agents_stamp_age, _agents_replace, _agents_rm_if_same.
+#   _agents_bg, _agents_bg_wait, _agents_detach, _agents_lock, _agents_unlock,
+#   _agents_holder_check, _agents_mypid, _agents_stamp_age, _agents_replace,
+#   _agents_rm_if_same.
 
 # _agents_awk "FILE..." [AWK_OPTION...] — awk, under LC_ALL=C, running the
 # concatenation of awk/FILE.awk... (the shared lib_*.awk first, then the
@@ -86,6 +87,32 @@ _agents_timeout() {
     wait "$pid"; rc=$?
     kill "$watcher" 2>/dev/null
     return "$rc"
+}
+
+# _agents_bg FD CMD... — start CMD now, in the background, for
+# _agents_bg_wait FD to collect later: a process substitution on file
+# descriptor FD (5 to 9), so nothing touches the disk. A slow probe (lsof,
+# pmset) then runs while ps does. CMD's exit status follows its output.
+_agents_bg() {
+    local fd="$1"; shift
+    [[ "$fd" =~ ^[5-9]$ ]] || return 2
+    eval "exec $fd< <(\"\$@\"; printf '\\n%s\\n' \"\$?\")"
+}
+
+# _agents_bg_wait VAR FD — wait for what _agents_bg started on FD and close
+# it: VAR gets its output (trailing newlines dropped, as $( ) drops them),
+# and its exit status is returned.
+_agents_bg_wait() {
+    local _out="" _rc
+    IFS= read -r -d "" _out <&"$2" || true    # it reads to the end: always false
+    eval "exec $2<&-"
+    _out="${_out%$'\n'}"
+    _rc="${_out##*$'\n'}"
+    _out="${_out%$'\n'*}"
+    while [[ "$_out" == *$'\n' ]]; do _out="${_out%$'\n'}"; done
+    printf -v "$1" '%s' "$_out"
+    [[ "$_rc" =~ ^[0-9]+$ ]] || _rc=1
+    return "$_rc"
 }
 
 # _agents_detach CMD... — run CMD in the background, immune to hangups, with
@@ -171,16 +198,16 @@ _agents_lock_takeover() {
 # is unknown ("-") or ps can't tell (a permission error, EPERM, also proves
 # nothing).
 _agents_holder_check() {
-    local file="$1" content="$2" pid="$3" start="$4" err now
-    if [[ ! "$pid" =~ ^[0-9]+$ ]] || { ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; } \
-        || _agents_zombie "$pid"; then
-        [[ -z "$file" ]] || _agents_rm_if_same "$file" "$content"
-        return 1
+    local file="$1" content="$2" pid="$3" start="$4" err now=""
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+        # A live holder, the usual case, costs one ps: _agents_start answers
+        # nothing for a pid that is gone or a zombie, and when ps can't tell.
+        [[ -z "$start" || "$start" == - ]] || now="$(_agents_start "$pid" 2>/dev/null)"
+        [[ -n "$now" && "$now" == "$start" ]] && return 0
+        if [[ -z "$now" ]]; then
+            { ! err="$(kill -0 "$pid" 2>&1)" && [[ "$err" == *"No such process"* ]]; } || _agents_zombie "$pid" || return 2
+        fi
     fi
-    [[ -n "$start" && "$start" != - ]] || return 2
-    now="$(_agents_start "$pid" 2>/dev/null)"
-    [[ -n "$now" ]] || return 2
-    [[ "$now" == "$start" ]] && return 0
     [[ -z "$file" ]] || _agents_rm_if_same "$file" "$content"
     return 1
 }

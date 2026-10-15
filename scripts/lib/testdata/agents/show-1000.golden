@@ -1,0 +1,33 @@
+claude · repo  pid 1000 · me
+
+project   repo
+cwd       /Users/NAME/repo
+where     tmux pane work:1.0
+command   claude
+running   1h00m (since Wed Oct 14 08:00:00 2026)
+cpu       5.0% now · 1m00s CPU time · 1.7% average · 7 threads
+memory    585M · 1.4G with 16 child processes
+files     17 open
+verdict   informational — a live agent session (high confidence)
+          a claude session in repo
+          running 1h0m · 107% CPU · 16 child processes
+
+children (16)
+  PID        CPU%    MEM  COMMAND
+  1001        0.0    87M  npm exec chrome-devtools-mcp@latest
+  1002        0.0   107M    chrome-devtools-mcp
+  1003        0.0    58M      node /Users/NAME/.npm/_npx/abc/node_modules/chrome-devtools-mcp/build/index.js
+  1004        0.0    48M  node /Users/NAME/.local/lib/example-agent-mcp.cjs
+  1005        0.0     1M  caffeinate -i -t 300
+  1010        0.0     2M  /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'cd /Users/NAME/repo/.clau...
+  1011        1.0    87M    go test -race ./internal/web
+  1012       99.0   175M      /tmp/go-build1/b001/web.test -test.paniconexit0
+  1013        0.0  1000K    tail -30
+  1020        0.0     2M  /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'cd /Users/NAME/repo/.clau...
+  1030        0.0     1M  /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'until [ -s /nonexistent/x...
+  1040        0.0     1M  bash -lc claude -p hello
+  1041        2.0   292M    claude -p hello
+  1050        0.0     1M  /usr/local/bin/some-helper --serve
+  1060        0.0     1M  /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'GOPRIVATE='"'"'x/*'"'"' g...
+  1080        0.0     8M  /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'make serve' < /dev/null &...
+[rc=0]

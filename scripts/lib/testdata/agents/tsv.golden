@@ -156,12 +156,12 @@ agent	2000	codex	1800	1.0	1.7	306000	2	Wed_Oct_14_08:30:00_2026	-	me	-	/Users/NA
 agent	5000	claude	21600	13.6	0.1	524900	11	Wed_Oct_14_03:00:00_2026	3000	me	-	@HOME@/work/myapp	claude	myapp
 agent	100	codex	3600	146.0	1.7	1112000	9	Wed_Oct_14_08:00:00_2026	-	me	-	/Users/NAME/repo	codex	repo
 agent	61904	daemon	66043	0.0	0.0	71888	1	Tue_Oct_13_14:53:18_2026	-	me	-	-	/Users/NAME/.codex/packages/app-server-daemon/releases/0.1/bin/codex app-server daemon pid-update-loop	-
-act	90466	mcp	6170	0.0	0.0	205088	1	Wed_Oct_14_07:31:11_2026	-	90419	chrome-devtools-mcp	-	npm exec chrome-devtools-mcp@latest	-	-	1
+act	90466	mcp	6170	0.0	0.0	205088	1	Wed_Oct_14_07:31:11_2026	-	90419	chrome-devtools	-	npm exec chrome-devtools-mcp@latest	-	-	1
 act	26603	keepawake	92	0.0	0.0	1920	0	Wed_Oct_14_09:12:29_2026	-	90419	-	-	caffeinate -i -t 300	-	-	1
 act	22443	other	169	102.1	98.2	185072	0	Wed_Oct_14_09:11:12_2026	41234,41235	90419	-	-	/tmp/go-build1/b001/web.test -test.count=1	-	hot	1
 act	6999	tool	5	0.0	0.0	3000	0	Wed_Oct_14_09:14:00_2026	-	84091	-	-	agents ls	-	-	1
-act	1001	mcp	3600	0.0	0.0	260000	2	Wed_Oct_14_08:00:01_2026	-	1000	chrome-devtools-mcp	-	npm exec chrome-devtools-mcp@latest	-	-	1
-act	1004	mcp	3600	0.0	0.0	50000	0	Wed_Oct_14_08:00:01_2026	-	1000	example-agent-mcp	-	node /Users/NAME/.local/lib/example-agent-mcp.cjs	-	-	1
+act	1001	mcp	3600	0.0	0.0	260000	2	Wed_Oct_14_08:00:01_2026	-	1000	chrome-devtools	-	npm exec chrome-devtools-mcp@latest	-	-	1
+act	1004	mcp	3600	0.0	0.0	50000	0	Wed_Oct_14_08:00:01_2026	-	1000	example-agent	-	node /Users/NAME/.local/lib/example-agent-mcp.cjs	-	-	1
 act	1005	keepawake	60	0.0	0.0	1900	0	Wed_Oct_14_08:59:00_2026	-	1000	-	-	caffeinate -i -t 300	-	-	1
 act	1010	tool	120	100.0	0.0	274000	3	Wed_Oct_14_08:58:00_2026	-	1000	/Users/NAME/repo/.claude/worktrees/feat-a	/Users/NAME/repo/.claude/worktrees/feat-a	go test -race ./internal/web	feat-a	dup,hot	3
 act	1020	tool	240	0.0	0.0	3000	0	Wed_Oct_14_08:56:00_2026	-	1000	/Users/NAME/repo/.claude/worktrees/feat-a	/Users/NAME/repo/.claude/worktrees/feat-a	go test -race ./internal/web	feat-a	dup	3
@@ -200,21 +200,21 @@ top	1012	web.test	115	99.0	95.7	180000	0	Wed_Oct_14_08:58:05_2026	-	me	-	-	/tmp/
 top	48170	appstoreagent	655271	77.0	0.1	33728	0	Tue_Oct_6_19:12:50_2026	-	_appstore	-	-	/System/Library/PrivateFrameworks/AppStoreDaemon.framework/Support/appstoreagent	-
 total	0	-	0	670.8	0	0	0	-	-	-	-	-	-	-
 job	90419	agent	0	0.3	0	688336	1	Wed_Oct_14_07:31:08_2026	own	90419	claude	@HOME@/work/app	-	app
-job	90419	mcp	0	0.0	0	205088	2	Wed_Oct_14_07:31:08_2026	own	90466	claude	@HOME@/work/app	-	app
+job	90419	mcp	0	0.0	0	205088	2	Wed_Oct_14_07:31:08_2026	own	90466	claude	@HOME@/work/app	chrome-devtools	app
 job	90419	other	0	0.0	0	1920	1	Wed_Oct_14_07:31:08_2026	own	26603	claude	@HOME@/work/app	-	app
 job	90419	test	0	102.1	0	185072	1	Wed_Oct_14_07:31:08_2026	own	22443	claude	@HOME@/work/app	-	app
 job	61904	agent	0	0.0	0	22992	1	Tue_Oct_13_14:53:18_2026	own	61904	daemon	-	-	-
 job	61904	agent	0	0.0	0	48896	1	Tue_Oct_13_14:53:18_2026	own	197	daemon	-	-	-
-job	60829	mcp	0	0.0	0	97888	1	Wed_Oct_14_08:23:56_2026	own	60829	-	@HOME@	-	~
-job	60829	mcp	0	0.0	0	117280	1	Wed_Oct_14_08:23:56_2026	own	60872	-	@HOME@	-	~
-job	60831	mcp	0	0.0	0	56208	1	Wed_Oct_14_08:23:56_2026	own	60831	-	@HOME@	-	~
+job	60829	mcp	0	0.0	0	97888	1	Wed_Oct_14_08:23:56_2026	own	60829	-	@HOME@	chrome-devtools	~
+job	60829	mcp	0	0.0	0	117280	1	Wed_Oct_14_08:23:56_2026	own	60872	-	@HOME@	chrome-devtools	~
+job	60831	mcp	0	0.0	0	56208	1	Wed_Oct_14_08:23:56_2026	own	60831	-	@HOME@	example-agent	~
 job	27681	other	0	0.0	0	1920	1	Wed_Oct_14_09:13:19_2026	own	27681	-	@HOME@	-	~
 job	4100	server	0	0.5	0	80000	1	Wed_Oct_14_06:00:00_2026	own	4100	-	@HOME@/work/app	-	app
 job	84091	agent	0	6.8	0	644704	1	Wed_Oct_14_08:40:22_2026	own	84091	claude	@HOME@/work/shop/.claude/worktrees/fix-cart	-	shop/fix-cart
 job	84091	other	0	0.0	0	3000	1	Wed_Oct_14_08:40:22_2026	own	6999	claude	@HOME@/work/shop/.claude/worktrees/fix-cart	-	shop/fix-cart
 job	1000	agent	0	5.0	0	600000	1	Wed_Oct_14_08:00:00_2026	own	1000	claude	/Users/NAME/repo	-	repo
-job	1000	mcp	0	0.0	0	260000	3	Wed_Oct_14_08:00:00_2026	own	1001	claude	/Users/NAME/repo	-	repo
-job	1000	mcp	0	0.0	0	50000	1	Wed_Oct_14_08:00:00_2026	own	1004	claude	/Users/NAME/repo	-	repo
+job	1000	mcp	0	0.0	0	260000	3	Wed_Oct_14_08:00:00_2026	own	1001	claude	/Users/NAME/repo	chrome-devtools	repo
+job	1000	mcp	0	0.0	0	50000	1	Wed_Oct_14_08:00:00_2026	own	1004	claude	/Users/NAME/repo	example-agent	repo
 job	1000	other	0	0.0	0	1900	1	Wed_Oct_14_08:00:00_2026	own	1005	claude	/Users/NAME/repo	-	repo
 job	1000	test	0	100.0	0	274000	4	Wed_Oct_14_08:00:00_2026	own	1010	claude	/Users/NAME/repo	-	repo
 job	1000	test	0	0.0	0	3000	1	Wed_Oct_14_08:00:00_2026	own	1020	claude	/Users/NAME/repo	-	repo
@@ -237,8 +237,8 @@ job	5000	server	0	0.6	0	160000	2	Wed_Oct_14_03:00:00_2026	own	5060	claude	@HOME@
 job	5000	test	0	12.0	0	50000	1	Wed_Oct_14_03:00:00_2026	own	5070	claude	@HOME@/work/myapp	-	myapp
 job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5080	claude	@HOME@/work/myapp	-	myapp
 job	5000	wait	0	0.0	0	2000	1	Wed_Oct_14_03:00:00_2026	own	5090	claude	@HOME@/work/myapp	-	myapp
-job	6000	mcp	0	0.0	0	97888	1	Wed_Oct_14_08:10:00_2026	own	6000	-	@HOME@	-	~
-job	6000	mcp	0	0.0	0	117280	1	Wed_Oct_14_08:10:00_2026	own	6001	-	@HOME@	-	~
+job	6000	mcp	0	0.0	0	97888	1	Wed_Oct_14_08:10:00_2026	own	6000	-	@HOME@	chrome-devtools	~
+job	6000	mcp	0	0.0	0	117280	1	Wed_Oct_14_08:10:00_2026	own	6001	-	@HOME@	chrome-devtools	~
 job	6100	server	0	0.5	0	80000	1	Wed_Oct_14_06:00:00_2026	own	6100	-	@HOME@/work/app	-	app
 job	100	agent	0	5.0	0	600000	1	Wed_Oct_14_08:00:00_2026	own	100	codex	/Users/NAME/repo	-	repo
 job	100	test	0	51.0	0	173000	3	Wed_Oct_14_08:00:00_2026	own	101	codex	/Users/NAME/repo	-	repo
@@ -246,8 +246,8 @@ job	100	test	0	30.0	0	93000	2	Wed_Oct_14_08:00:00_2026	own	111	codex	/Users/NAME
 job	100	build	0	20.0	0	93000	2	Wed_Oct_14_08:00:00_2026	own	123	codex	/Users/NAME/repo	-	repo
 job	100	test	0	0.0	0	3000	1	Wed_Oct_14_08:00:00_2026	own	144	codex	/Users/NAME/repo	-	repo
 job	100	browser	0	40.0	0	150000	1	Wed_Oct_14_08:00:00_2026	sub	144	codex	/Users/NAME/repo	-	repo
-job	200	mcp	0	0.0	0	90000	1	Wed_Oct_14_08:10:00_2026	own	200	-	@HOME@/work/app	-	app
-job	200	mcp	0	0.0	0	80000	1	Wed_Oct_14_08:10:00_2026	own	201	-	@HOME@/work/app	-	app
+job	200	mcp	0	0.0	0	90000	1	Wed_Oct_14_08:10:00_2026	own	200	-	@HOME@/work/app	playwright	app
+job	200	mcp	0	0.0	0	80000	1	Wed_Oct_14_08:10:00_2026	own	201	-	@HOME@/work/app	playwright	app
 job	200	browser	0	3.0	0	150000	1	Wed_Oct_14_08:10:00_2026	sub	201	-	@HOME@/work/app	-	app
 watched	1030	/nonexistent/x	-	-	exists
 watched	5010	@TMP@/w/done.output	1577851200	[exited with code 0]	read
@@ -256,6 +256,13 @@ watched	5040	@TMP@/w/missing.out	-	-	exists
 watched	5050	@TMP@/w/live.log	4070908800	compiling...	read
 watched	5080	@TMP@/w/fail.out	1577861400	--- FAIL: TestX (0.01s)	read
 watched	5090	@TMP@/w/build.log	1577863800	-	exists
+where	90419	tmux	main:2.1
+where	61904	-	-
+where	84091	app	Ghostty
+where	1000	tmux	work:1.0
+where	2000	tmux	work:1.0
+where	5000	-	-
+where	100	tmux	work:1.0
 probe	listen	ok
 sys	84	1.50	8	42	normal	87	discharging
 awake	timed	8800	1577872800
