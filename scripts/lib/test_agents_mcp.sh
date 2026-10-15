@@ -119,6 +119,10 @@ enabled = false   # off, but still configured
 [profiles.fast]
 command = "not-a-server"
 EOF
+# Written long ago: a config written in the second a build begins makes the
+# cache stale, and these must not.
+touch -t 202601010000 "$HOME/.claude.json" "$proj/.mcp.json" "$HOME/.claude/settings.json" "$HOME/.claude/plugins/installed_plugins.json" \
+    "$HOME/.claude/plugins/cache/m/pw/1/.mcp.json" "$HOME/.claude/plugins/cache/m/off/1/.mcp.json" "$HOME/.codex/config.toml"
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "SKIP: jq not installed (the fixtures and Claude Code's configs need it)"
@@ -189,11 +193,20 @@ printf '%s' "$_AGENTS_MCP_ROWS" | grep -q $'\tlate\t' || fail "the stale rows we
 unset -f _agents_detach; . "$REPO_DIR/lib/agents/util.sh"
 rm -f "$cache"
 _agents_mcp_load; builds; [[ $build_count == 3 ]] || fail "the first build is not waited for"
+# A config written while the inventory is being built (after it was read,
+# in the same second) leaves the cache stale: the cache's mtime is when the
+# build began.
+_agents_mcp_build() { _agents_mcp_build_real; jq -n '{mcpServers: {during: {command: "during-mcp"}}}' > "$other/.mcp.json"; }
+rm -f "$cache"; _agents_mcp_load sync
+printf '%s' "$_AGENTS_MCP_ROWS" | grep -q $'\tduring\t' && fail "the build read a config written after it"
+_agents_mcp_build() { echo x >> "$tmp/builds"; _agents_mcp_build_real; }
+_agents_mcp_load sync
+printf '%s' "$_AGENTS_MCP_ROWS" | grep -q $'\tduring\t' || fail "a config written during the build left the cache fresh"
 # A cache an older agents wrote (another format) is never read.
 printf 'v1\t%s\nsrv\tclaude\tuser\tlegacy\tx\t-\tstdio\tsk-old-SECRET\t1\n' "$(date +%s)" > "$cache"
 _agents_mcp_load
 [[ "$_AGENTS_MCP_ROWS" != *legacy* && "$_AGENTS_MCP_ROWS" == *playwright* ]] || fail "an older cache's rows were used: $_AGENTS_MCP_ROWS"
-pass "cache: rebuilt when a config changes or appears; classify uses a stale one and rebuilds it in the background, at most every 30 s; an older format is rebuilt, never read"
+pass "cache: rebuilt when a config changes or appears, also during a build; classify uses a stale one and rebuilds it in the background, at most every 30 s; an older format is rebuilt, never read"
 
 # --- Without jq: Codex's servers only ----------------------------------------------------
 mkdir -p "$tmp/nojq"
