@@ -86,6 +86,12 @@ your desk, an agent that needs you rings once, not twice.
   proxies · server not started", not "4 copies".
 - Codex 0.163: `/daemon` can restart the background server.
 
+### Fixed
+
+- **`update.sh --configs` refreshes `notify.sh`.** Only `install.sh` wrote
+  `~/.local/bin/notify.sh`, so machines that only updated kept an old one
+  and missed notification changes.
+
 ## [3.10.1] - 2026-10-15
 
 Numbers you can quote: token costs that match the official price list, a

@@ -251,11 +251,7 @@ _install_cross_cutting "$HOME/.config/starship.toml"   "$TUIDEV_REPO/configs/sta
 tuidev_git_defaults
 
 # --- Local bin helpers ---
-if [[ -f "$TUIDEV_REPO/scripts/notify.sh" ]]; then
-    install_config "$HOME/.local/bin/notify.sh" "$TUIDEV_REPO/scripts/notify.sh" \
-        --overwrite
-    [[ "$DRY_RUN" == true ]] || chmod +x "$HOME/.local/bin/notify.sh"
-fi
+tuidev_install_notify "$TUIDEV_REPO"
 
 # --- Default shell ---
 # chsh authenticates through PAM. Run where it cannot succeed — no TTY, or a

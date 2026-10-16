@@ -698,6 +698,8 @@ run_configs_mode() {
     pack_reapply_configs
     # New git defaults reach existing machines too (unset keys only).
     tuidev_git_defaults
+    # So is the hooks' notify.sh (install.sh writes it outside any pack).
+    tuidev_install_notify "$REPO_DIR"
     tuidev_manifest_disable
     print_success "Pack configs re-applied"
 }

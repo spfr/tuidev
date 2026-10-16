@@ -593,3 +593,13 @@ remove_managed_block() {
         print_info "removed ${file} (only held the tuidev block)"
     fi
 }
+
+# tuidev_install_notify REPO — ~/.local/bin/notify.sh, which the Claude Code
+# hooks call, from REPO's scripts/notify.sh. tuidev owns the file. Called by
+# install.sh and by `update.sh --configs`, so a new notify.sh reaches
+# machines that only update.
+tuidev_install_notify() {
+    [[ -f "$1/scripts/notify.sh" ]] || return 0
+    install_config "$HOME/.local/bin/notify.sh" "$1/scripts/notify.sh" --overwrite
+    [[ "${DRY_RUN:-false}" == true ]] || chmod +x "$HOME/.local/bin/notify.sh"
+}
