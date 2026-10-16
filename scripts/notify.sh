@@ -16,10 +16,10 @@
 # The first of 1 and 2 that works shows it in the terminal. On a Mac the
 # banner (3) shows it too, because a toast or a status line can't be seen
 # from another app, unless the session is one you reach over ssh
-# (is_remote) or, inside Herdr, you are at the Mac looking at the terminal
-# its client runs in (at_terminal): then the toast, with Herdr's own sound,
-# is the one alert. tmux's status line is silent and brief, so tmux keeps
-# the banner. Otherwise the
+# (is_remote) or, inside Herdr, you are at the Mac looking at the session's
+# own pane (at_terminal: its terminal app in front, its pane Herdr's focused
+# one): then the toast, with Herdr's own sound, is the one alert. tmux's
+# status line is silent and brief, so tmux keeps the banner. Otherwise the
 # first of 3 to 5 that works does. Pushing to a phone when nobody reacts is
 # left to whatever escalates for you; ntfy (5) is for setups without one.
 #
@@ -135,14 +135,30 @@ notify_tmux() {
 
 is_macos() { [[ "$(uname -s 2>/dev/null)" == Darwin ]]; }
 
+# in_focused_pane — true when Herdr says the pane this session runs in
+# (HERDR_PANE_ID, which Herdr sets in each pane and the hook inherits) is
+# the focused one: `herdr pane get`, over its socket, bounded to a second
+# (it takes 10-30 ms). Its "focused" is Herdr's own focus, one pane across
+# every workspace and tab. False when the pane is unknown, Herdr can't
+# answer or names another pane: the banner shows.
+in_focused_pane() {
+    local pane="${HERDR_PANE_ID:-}" out
+    [[ "$pane" =~ ^[A-Za-z0-9:_-]+$ ]] || return 1
+    out="$(with_timeout 1 herdr pane get "$pane" 2>/dev/null)" || return 1
+    # JSON escapes every quote inside a string, so these match keys only.
+    [[ "$out" =~ \"pane_id\"[[:space:]]*:[[:space:]]*\"$pane\" && "$out" =~ \"focused\"[[:space:]]*:[[:space:]]*true ]]
+}
+
 # at_terminal — true when you are at this Mac looking at the session's
-# terminal: the screen is unlocked, a key or the mouse moved within
-# TUIDEV_NOTIFY_PRESENT_IDLE seconds, and the app in front is the one that
+# pane: the screen is unlocked, a key or the mouse moved within
+# TUIDEV_NOTIFY_PRESENT_IDLE seconds, the app in front is the one that
 # shows the session, as agents names it (a Herdr session no client shows,
-# or one whose clients run in different apps, has none). Asked once, at
-# notify time, each probe bounded (they take about 10-20 ms): ioreg and
-# lsappinfo need no permission prompt. A probe that fails or can't tell
-# says no, so the banner shows as it always did.
+# or one whose clients run in different apps, has none), and Herdr's
+# focused pane is the session's (in_focused_pane): another pane or tab of
+# the same Herdr is somewhere else. Asked once, at notify time, each probe
+# bounded (they take about 10-30 ms): ioreg and lsappinfo need no
+# permission prompt. A probe that fails or can't tell says no, so the
+# banner shows as it always did.
 at_terminal() {
     local idle="${TUIDEV_NOTIFY_PRESENT_IDLE:-120}" v front
     [[ "${TUIDEV_NOTIFY_BANNER:-}" != always && "$idle" =~ ^[0-9]+$ && $idle -gt 0 ]] || return 1
@@ -154,7 +170,8 @@ at_terminal() {
     v="$(with_timeout 2 lsappinfo front)"
     [[ "$v" == ASN:* ]] || return 1
     front="$(with_timeout 2 lsappinfo info -only bundleid "$v" | sed -n 's/.*[bB]undle[iI][dD][a-zA-Z]*"*="\([^"]*\)".*/\1/p' | head -1)"
-    [[ -n "$front" && "$front" == "$BUNDLE" ]]
+    [[ -n "$front" && "$front" == "$BUNDLE" ]] || return 1
+    in_focused_pane
 }
 
 # terminal-notifier's path: Homebrew's before PATH's (an older Ruby gem of

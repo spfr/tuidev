@@ -263,6 +263,68 @@ pass "today.tsv: today's totals, busiest job first, reset at midnight"
 )
 pass "sample: waits.tsv gets each session Herdr shows blocked or done, credited the time since the last sample (60 s for the first, at most 5 min)"
 
+# Waits Claude Code's hooks recorded (agents hook wait-start|wait-end, for
+# sessions outside Herdr): credited like Herdr's, the part of each interval
+# the wait was open; ended ones and those of exited sessions removed.
+(
+    AGENTS_DATA_DIR="$tmp/hwaits" herdr_out=""
+    # shellcheck disable=SC2317,SC2329  # called by the functions under test
+    agents_snapshot() { cat "$tmp/snap.w"; }
+    # shellcheck disable=SC2317,SC2329
+    _agents_herdr() { [[ "$1" == sync ]] && printf '%s' "$herdr_out"; }
+    w="$AGENTS_DATA_DIR/waiting" d="$AGENTS_DATA_DIR/waited"
+    C=300@Wed_Oct_14_08:00:00_2026
+    mkdir -p "$w" "$d"
+    rows() { cat "$AGENTS_DATA_DIR/waits.tsv" 2>/dev/null; }
+    # A wait opened 30 s before the first sample: 30 s, not the first sample's 60.
+    printf '%s\tblocked\tapp\t%s\n' "$((FAKE_NOW - 30))" "$C" > "$w/sid-a"
+    # A wait of a session that has exited (no such agent): removed, never counted.
+    printf '%s\tdone\tgone\t%s\n' "$((FAKE_NOW - 30))" "999@Wed_Oct_14_07:00:00_2026" > "$w/sid-gone"
+    # Not a wait file (a write in progress, a stray): left alone.
+    printf '%s\tblocked\tx\t%s\n' "$((FAKE_NOW - 30))" "$C" > "$w/sid-a.4242"
+    t0=$FAKE_NOW
+    agents_sample || fail "hook waits: first sample"
+    [[ "$(rows)" == "$t0"$'\tapp\tclaude\tblocked\t'"$C"$'\t30' ]] || fail "hook waits, first sample: $(rows)"
+    [[ -f "$w/sid-a" && ! -e "$w/sid-gone" && -f "$w/sid-a.4242" ]] || fail "hook waits: open wait dropped, or an exited session's kept: $(ls "$w")"
+    # Still open 90 s later: the whole interval.
+    FAKE_NOW=$((FAKE_NOW + 90)); agents_sample
+    [[ "$(rows | tail -1)" == "$((t0 + 90))"$'\tapp\tclaude\tblocked\t'"$C"$'\t90' ]] || fail "hook waits, open: $(rows | tail -1)"
+    # Ended 20 s into the next interval: 20 s, then the file goes.
+    mv "$w/sid-a" "$d/sid-a@$((FAKE_NOW + 20))"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample
+    [[ "$(rows | tail -1)" == "$((t0 + 150))"$'\tapp\tclaude\tblocked\t'"$C"$'\t20' && ! -e "$d/sid-a@$((t0 + 110))" ]] \
+        || fail "hook waits, ended: $(rows | tail -1), $(ls "$d")"
+    # Opened and ended between two samples: just its own 15 s.
+    printf '%s\tdone\tapp\t%s\n' "$((FAKE_NOW + 10))" "$C" > "$d/sid-b@$((FAKE_NOW + 25))"
+    # Ended before the last sample (no menu then): nothing, and removed.
+    printf '%s\tdone\tapp\t%s\n' "$((FAKE_NOW - 500))" "$C" > "$d/sid-c@$((FAKE_NOW - 400))"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample
+    [[ "$(rows | tail -1)" == "$((t0 + 210))"$'\tapp\tclaude\tdone\t'"$C"$'\t15' && "$(grep -c . "$AGENTS_DATA_DIR/waits.tsv")" == 4 ]] \
+        || fail "hook waits, within one interval / before the last sample: $(rows)"
+    [[ -z "$(ls "$d")" ]] || fail "hook waits: ended waits kept: $(ls "$d")"
+    # An open wait after the Mac slept: at most 5 minutes, like Herdr's.
+    printf '%s\tblocked\tapp\t%s\n' "$((FAKE_NOW - 30))" "$C" > "$w/sid-d"
+    FAKE_NOW=$((FAKE_NOW + 7200)); agents_sample
+    [[ "$(rows | tail -1)" == "$((t0 + 7410))"$'\tapp\tclaude\tblocked\t'"$C"$'\t300' ]] || fail "hook waits, after a sleep: $(rows | tail -1)"
+    # Herdr counts the same session this sample: its row only, never both.
+    herdr_out=$'claude\tblocked\t/Users/NAME/code/app\n'
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample
+    [[ "$(rows | tail -1 | cut -f2-)" == $'app\tclaude\tblocked\t'"$C"$'\t60' && "$(grep -c . "$AGENTS_DATA_DIR/waits.tsv")" == 6 ]] \
+        || fail "hook waits: counted twice with Herdr: $(rows | tail -2)"
+    [[ -f "$w/sid-d" ]] || fail "hook waits: Herdr's count removed the hook's open wait"
+    # A sample that sees no agent at all (a ps that shows only its own
+    # processes): the open wait is neither credited nor removed.
+    herdr_out=""; cp "$tmp/snap.w" "$tmp/snap.w.all"
+    psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd > "$tmp/snap.w"
+    n="$(grep -c . "$AGENTS_DATA_DIR/waits.tsv")"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample
+    [[ -f "$w/sid-d" && "$(grep -c . "$AGENTS_DATA_DIR/waits.tsv")" == "$n" ]] || fail "hook waits, no agent seen: $(ls "$w"), $(rows | tail -1)"
+    cp "$tmp/snap.w.all" "$tmp/snap.w"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample
+    [[ -f "$w/sid-d" && "$(rows | tail -1 | cut -f2-)" == $'app\tclaude\tblocked\t'"$C"$'\t60' ]] || fail "hook waits, agents seen again: $(rows | tail -1)"
+)
+pass "sample: the hooks' waits (sessions outside Herdr) are credited like Herdr's, the part of each interval they were open (at most 5 min), never twice with Herdr; ended and exited ones removed, none when the sample sees no agent"
+
 # The lock: a sample while another one runs returns at once, writing nothing.
 mkdir "$AGENTS_DATA_DIR/sample.lock"
 before="$(cat "$AGENTS_DATA_DIR/sample.stamp")"

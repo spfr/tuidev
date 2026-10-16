@@ -5,8 +5,11 @@
 #
 # Stub uname, terminal-notifier, osascript, agents, herdr, tmux, notify-send,
 # curl, ioreg and lsappinfo on PATH record their arguments, one per line:
-# nothing is shown, and this Mac's own lock, idle time and front app never
-# reach a test (ioreg and lsappinfo say "away" unless a test sets them).
+# nothing is shown, and this Mac's own lock, idle time, front app and Herdr
+# focus never reach a test (ioreg and lsappinfo say "away" unless a test
+# sets them). Timing checks bound a hang with a wide margin (a stub that
+# hangs for a minute must be cut off well before), never how fast a run
+# is: a loaded machine can take seconds to start a process.
 # The timeout and escaping helpers notify.sh shares with lib/agents (it
 # stands alone, so it carries its own copies) are run side by side. The last
 # test runs the real agents under a fake claude process; it is skipped where
@@ -31,7 +34,11 @@ mkdir -p "$tmp/bin" "$tmp/log" "$tmp/home"
 # Only what a test sets reaches notify.sh (run passes these through).
 unset TMUX HERDR_ENV SSH_CONNECTION NTFY_URL TN TN_FAIL TN_HANG AGENTS_OUT STUB_UNAME \
     STUB_LOCKED STUB_IDLE STUB_FRONT STUB_PROBE_FAIL TUIDEV_NOTIFY_BANNER TUIDEV_NOTIFY_PRESENT_IDLE STDIN CLAUDE_PROJECT_DIR \
-    AGENTS_DATA_DIR XDG_STATE_HOME AGENTS_HISTORY AGENTS_CONF
+    AGENTS_DATA_DIR XDG_STATE_HOME AGENTS_HISTORY AGENTS_CONF HERDR_PANE_ID STUB_FOCUS STUB_HERDR
+# The pane a Herdr session runs in (Herdr sets HERDR_PANE_ID in each pane):
+# run passes it on, and it is the herdr stub's focused pane unless a test
+# says otherwise.
+HERDR_PANE_ID=w1:p1
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
@@ -41,11 +48,39 @@ stub() {
     printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s/log/%s"\n%s\n' "$tmp" "$1" "$2" > "$tmp/bin/$1"
     chmod +x "$tmp/bin/$1"
 }
+# A hung terminal-notifier (TN_HANG) notes its pid, then sleeps a minute.
+TN_BODY='[[ -z "$TN_HANG" ]] || { echo $$ > "'"$tmp"'/tn.pid"; exec sleep 60; }; [[ -z "$TN_FAIL" ]]'
 stub uname 'echo "${STUB_UNAME:-Darwin}"'
-stub terminal-notifier '[[ -z "$TN_HANG" ]] || exec sleep 30; [[ -z "$TN_FAIL" ]]'
+stub terminal-notifier "$TN_BODY"
 stub osascript 'exit 0'
 stub agents 'printf "%s" "${AGENTS_OUT-}"; [[ -n "${AGENTS_OUT-}" ]]'
-stub herdr 'exit 0'
+# herdr: `pane get PANE` (the focus probe) logs to log/herdr-pane and
+# answers as Herdr 0.9.5 does, PANE focused when it is STUB_FOCUS (default
+# w1:p1), under a title that spells "focused":true and another pane_id
+# inside a string; any other call (the toast) logs to log/herdr.
+# STUB_HERDR: fail (Herdr's error, exit 1), hang (a minute), other (it
+# answers for another pane, focused).
+herdr_stub() {
+    sed "s|@LOG@|$tmp/log|g" > "$tmp/bin/herdr" <<'EOF'
+#!/bin/bash
+if [[ "$1 $2" == "pane get" ]]; then
+    printf '%s\n' "$@" > "@LOG@/herdr-pane"
+    case "${STUB_HERDR:-}" in
+        fail)  echo '{"error":{"code":"pane_not_found","message":"pane not found"},"id":"cli:pane:get"}'; exit 1 ;;
+        hang)  exec sleep 60 ;;
+        other) set -- pane get w9:p9 ;;
+    esac
+    f=false
+    [[ "$3" == "${STUB_FOCUS-w1:p1}" || "${STUB_HERDR:-}" == other ]] && f=true
+    t='\"focused\":true \"pane_id\":\"w1:p1\"'
+    printf '{"id":"cli:pane:get","result":{"pane":{"agent":"claude","agent_status":"blocked","focused":%s,"pane_id":"%s","tab_id":"w1:t1","terminal_title":"%s","workspace_id":"w1"},"type":"pane_info"}}\n' "$f" "$3" "$t"
+    exit 0
+fi
+printf '%s\n' "$@" > "@LOG@/herdr"
+EOF
+    chmod +x "$tmp/bin/herdr"
+}
+herdr_stub
 stub tmux 'exit 0'
 stub notify-send 'exit 0'
 stub curl 'exit 0'
@@ -82,6 +117,7 @@ run() {
         TUIDEV_TERMINAL_NOTIFIER="${TN-$tmp/bin/terminal-notifier}" \
         ${AGENTS_OUT+AGENTS_OUT="$AGENTS_OUT"} ${STUB_UNAME:+STUB_UNAME="$STUB_UNAME"} \
         ${TN_FAIL:+TN_FAIL=1} ${TN_HANG:+TN_HANG=1} ${TMUX:+TMUX="$TMUX"} ${HERDR_ENV:+HERDR_ENV="$HERDR_ENV"} \
+        ${HERDR_PANE_ID:+HERDR_PANE_ID="$HERDR_PANE_ID"} ${STUB_FOCUS:+STUB_FOCUS="$STUB_FOCUS"} ${STUB_HERDR:+STUB_HERDR="$STUB_HERDR"} \
         ${SSH_CONNECTION:+SSH_CONNECTION="$SSH_CONNECTION"} ${NTFY_URL:+NTFY_URL="$NTFY_URL"} \
         ${STUB_LOCKED:+STUB_LOCKED="$STUB_LOCKED"} ${STUB_IDLE:+STUB_IDLE="$STUB_IDLE"} \
         ${STUB_FRONT:+STUB_FRONT="$STUB_FRONT"} ${STUB_PROBE_FAIL:+STUB_PROBE_FAIL=1} \
@@ -99,6 +135,9 @@ called() { [[ -f "$tmp/log/$1" ]]; }
 quiet() { [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "$1: rc $(cat "$tmp/rc"), output: $(cat "$tmp/out")"; }
 # arg OPTION — the value terminal-notifier got for OPTION.
 arg() { awk -v o="$1" 'f { print; exit } $0 == o { f = 1 }' "$tmp/log/terminal-notifier"; }
+# gone PID — true once PID has exited, waiting up to 20 s (a loaded machine
+# can take that long to reap it).
+gone() { local _; for _ in $(seq 400); do kill -0 "$1" 2>/dev/null || return 0; /bin/sleep 0.05; done; return 1; }
 
 # --- A clickable banner -----------------------------------------------------------------
 AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
@@ -191,11 +230,34 @@ pass "on a Mac, away from it, the banner fires inside Herdr and tmux too (not ov
 HERDR_ENV=1 STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
 quiet "present in Herdr"
 if ! called herdr || called terminal-notifier || called osascript; then fail "a banner while at the Mac with Ghostty in front: $(log terminal-notifier)"; fi
+[[ "$(log herdr-pane)" == $'pane\nget\nw1:p1' ]] || fail "Herdr not asked about the session's pane: $(log herdr-pane)"
 TMUX=/tmp/x,1,0 STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
 if ! called tmux || ! called terminal-notifier; then fail "tmux at the Mac: its status line is silent and brief, the banner stays"; fi
 STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
 called terminal-notifier || fail "a plain Ghostty tab, at the Mac: the banner is its only alert"
-pass "at the Mac (unlocked, input within 2 min, the session's terminal in front): inside Herdr, no banner; tmux and a plain tab keep it"
+pass "at the Mac (unlocked, input within 2 min, the session's terminal in front, its pane focused): inside Herdr, no banner; tmux and a plain tab keep it"
+
+# Pane by pane: Herdr's focused pane must be the session's own.
+HERDR_ENV=1 STUB_IDLE=5 STUB_FOCUS=w1:p2 AGENTS_OUT="$GHOSTTY" run "T" "M"
+quiet "another pane focused"
+if ! called herdr || ! called terminal-notifier; then fail "another Herdr pane focused: no banner: $(log herdr-pane)"; fi
+HERDR_ENV=1 STUB_IDLE=5 STUB_HERDR=other AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "Herdr answered for another pane (focused): no banner"
+HERDR_ENV=1 STUB_IDLE=5 STUB_HERDR=fail AGENTS_OUT="$GHOSTTY" run "T" "M"
+quiet "herdr fails"
+called terminal-notifier || fail "Herdr can't answer: no banner"
+HERDR_ENV=1 HERDR_PANE_ID="" STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
+if called herdr-pane || ! called terminal-notifier; then fail "no HERDR_PANE_ID: Herdr asked, or no banner"; fi
+HERDR_ENV=1 HERDR_PANE_ID='w1:p1"; touch x' STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
+if called herdr-pane || ! called terminal-notifier; then fail "a malformed HERDR_PANE_ID: Herdr asked, or no banner"; fi
+HERDR_ENV=1 AGENTS_OUT="$GHOSTTY" run "T" "M"
+! called herdr-pane || fail "Herdr asked about focus while you are away (the cheap probes come first)"
+start=$SECONDS
+HERDR_ENV=1 STUB_IDLE=5 STUB_HERDR=hang AGENTS_OUT="$GHOSTTY" run "T" "M"
+quiet "herdr hangs"
+called terminal-notifier || fail "a hung Herdr: no banner"
+[[ $((SECONDS - start)) -lt 40 ]] || fail "a hung herdr pane get held the hook $((SECONDS - start)) s (its stub sleeps 60)"
+pass "inside Herdr, at the Mac: another pane or tab focused, Herdr failing, hanging or naming another pane, or no pane id: the banner"
 
 HERDR_ENV=1 STUB_IDLE=5 STUB_FRONT=com.google.Chrome AGENTS_OUT="$GHOSTTY" run "T" "M"
 called terminal-notifier || fail "another app in front: no banner"
@@ -268,18 +330,24 @@ for u in Darwin Linux; do
 done
 run; quiet "no arguments"; ! called terminal-notifier || fail "notified with no message"
 run "T"; quiet "no message"
-stub terminal-notifier '[[ -z "$TN_HANG" ]] || exec sleep 30; [[ -z "$TN_FAIL" ]]'
+stub terminal-notifier "$TN_BODY"
 stub osascript 'exit 0'
 stub agents 'printf "%s" "${AGENTS_OUT-}"; [[ -n "${AGENTS_OUT-}" ]]'
-start=$SECONDS
+# The stub hangs for a minute: the hook coming back well inside that, with
+# the notifier gone, is the 5 s cut-off at work, however loaded the machine.
+rm -f "$tmp/tn.pid"; start=$SECONDS
 TN_HANG=1 AGENTS_OUT="$GHOSTTY" run "T" "M"
 quiet "terminal-notifier hangs"
-[[ $((SECONDS - start)) -le 8 ]] || fail "a hung terminal-notifier held the hook $((SECONDS - start))s"
+[[ $((SECONDS - start)) -lt 40 ]] || fail "a hung terminal-notifier held the hook $((SECONDS - start)) s (its stub sleeps 60)"
+tn_pid="$(cat "$tmp/tn.pid" 2>/dev/null)"
+[[ -n "$tn_pid" ]] || fail "the hung terminal-notifier stub never ran"
+gone "$tn_pid" || fail "the hung terminal-notifier ($tn_pid) outlived the hook"
 ! called osascript || fail "osascript after terminal-notifier timed out: a second banner"
-pass "prints nothing and exits 0 whatever fails; a hung notifier is cut off after 5 s, with no second banner"
+pass "prints nothing and exits 0 whatever fails; a hung notifier is cut off (and killed), with no second banner"
 
 # --- The notification log (notify.tsv, for agents report --view waits) -------------------
-for s in herdr tmux notify-send curl; do stub "$s" 'exit 0'; done   # working again
+for s in tmux notify-send curl; do stub "$s" 'exit 0'; done   # working again
+herdr_stub
 state="$tmp/home/.local/state"
 ntsv="$state/tuidev/agents/notify.tsv"
 # nlast — the log's last line; nlines — how many it has.
@@ -361,24 +429,23 @@ mkdir -p "$tmp/sleep"
 # shellcheck disable=SC2016  # the stub's own $$ and $@
 printf '#!/bin/bash\necho $$ >> "%s"\nexec /bin/sleep "$@"\n' "$tmp/sleep.pids" > "$tmp/sleep/sleep"
 chmod +x "$tmp/sleep/sleep"
-gone() { local _; for _ in $(seq 40); do kill -0 "$1" 2>/dev/null || return 0; /bin/sleep 0.05; done; return 1; }
 for to in with_timeout _agents_timeout; do
     # A grandchild (here a sleep a shell started) holds the $( ) pipe open:
     # it is killed with the rest, and the timeout says 124.
     start=$SECONDS; rc=0
-    out="$("$to" 1 bash -c 'echo started; sleep 6 & wait')" || rc=$?
-    [[ $rc == 124 && "$out" == started && $((SECONDS - start)) -le 3 ]] \
+    out="$("$to" 1 bash -c 'echo started; sleep 60 & wait')" || rc=$?
+    [[ $rc == 124 && "$out" == started && $((SECONDS - start)) -lt 30 ]] \
         || fail "$to: a grandchild outlived the timeout: rc $rc, '$out', $((SECONDS - start)) s"
     # A command that ends first (once the watcher's sleep runs) takes that
     # sleep with it.
     : > "$tmp/sleep.pids"; rc=0
-    ( PATH="$tmp/sleep:$PATH"; "$to" 30 bash -c 'for _ in $(seq 100); do [ -s "$1" ] && break; /bin/sleep 0.05; done
+    ( PATH="$tmp/sleep:$PATH"; "$to" 30 bash -c 'for _ in $(seq 400); do [ -s "$1" ] && break; /bin/sleep 0.05; done
         echo out; echo err >&2; exit 7' _ "$tmp/sleep.pids" ) > "$tmp/to.out" 2>&1 || rc=$?
     [[ $rc == 7 && "$(cat "$tmp/to.out")" == $'out\nerr' ]] || fail "$to: status or output: rc $rc, $(cat "$tmp/to.out")"
     pid="$(head -1 "$tmp/sleep.pids")"
     if [[ -z "$pid" ]] || ! gone "$pid"; then fail "$to: the watcher's sleep ($pid) outlived the command"; fi
     # Killed: 124, with nothing from bash about it.
-    rc=0; out="$("$to" 1 sleep 5 2>&1)" || rc=$?
+    rc=0; out="$("$to" 1 sleep 60 2>&1)" || rc=$?
     [[ $rc == 124 && -z "$out" ]] || fail "$to: a killed command: rc $rc, '$out'"
 done
 pass "the timeout (notify.sh's and lib/agents'): kills grandchildren, takes its watcher's sleep along, 124 when it fired"
@@ -406,8 +473,8 @@ if ps -o lstart= -p $$ >/dev/null 2>&1; then
         env -i HOME="$1" PATH="$2:/usr/bin:/bin" TUIDEV_TERMINAL_NOTIFIER="$2/terminal-notifier" AGENTS_CONF=/nonexistent \
             /bin/sh -c "\"$3\" \"Claude Code\" \"Needs your approval\" Permission; :"
         echo done > "$4"
-        sleep 30' _ "$tmp/home" "$tmp/bin" "$NOTIFY" "$tmp/live.done" "$tmp/live.pid" ) </dev/null >/dev/null 2>&1 & )
-    for _ in $(seq 100); do [[ -s "$tmp/live.done" ]] && break; sleep 0.1; done
+        sleep 120' _ "$tmp/home" "$tmp/bin" "$NOTIFY" "$tmp/live.done" "$tmp/live.pid" ) </dev/null >/dev/null 2>&1 & )
+    for _ in $(seq 300); do [[ -s "$tmp/live.done" ]] && break; sleep 0.1; done
     live_pid="$(cat "$tmp/live.pid" 2>/dev/null)"
     [[ -s "$tmp/live.done" ]] || fail "live: notify.sh did not finish"
     start="$(LC_ALL=C ps -o lstart= -p "$live_pid" | awk '{ print $1 "_" $2 "_" $3 "_" $4 "_" $5 }')"

@@ -4,11 +4,13 @@
 # report_fmt.
 #
 # waits.tsv (agents sample, history.sh), one row per session and sample
-# while Herdr shows it blocked or done:
+# while Herdr shows it blocked or done, or, for a Claude Code session outside
+# Herdr, while its hooks say it waits (hooks.sh):
 #   epoch project agent status session secs
 # blocked: waiting for your answer (a permission prompt, a question); done:
-# finished, not yet looked at; secs: the time since the sample before, at
-# most 5 minutes. notify.tsv (scripts/notify.sh), one row per notification:
+# finished, not yet looked at (outside Herdr: from the idle prompt to your
+# next one); secs: the part of the time since the sample before that it
+# waited, at most 5 minutes. notify.tsv (scripts/notify.sh), one row per notification:
 #   epoch session project kind channels banner_skipped
 # banner_skipped: present (you were at the Mac, in front of the session),
 # remote (a session reached over ssh) or "-". Projects fold a subagent's
@@ -112,7 +114,7 @@ function view_waits(   i, p, a, k, o, n) {
     vhead("waits")
     if (!WaL) {
         if (hist != 1) print "history is off (AGENTS_HISTORY=0): no waits or notifications are recorded"
-        else print "no waits recorded yet (waits.tsv, notify.tsv): each agents sample adds the sessions Herdr shows waiting on you, and each notification the hooks send is logged"
+        else print "no waits recorded yet (waits.tsv, notify.tsv): each agents sample adds the sessions waiting on you (from Herdr, or Claude Code's hooks outside it), and each notification the hooks send is logged"
         return
     }
     if (!WaPC) { print "no waits or notifications in this window"; return }
@@ -134,7 +136,7 @@ function view_waits(   i, p, a, k, o, n) {
         printf "\n%sBY AGENT%s     %s\n", b, e, o
     }
     print ""
-    th("blocked: waiting for your answer; done: finished, not yet looked at. Counted for sessions in Herdr panes, once a minute while the menu runs.")
+    th("blocked: waiting for your answer; done: finished, not yet looked at (outside Herdr: until your next prompt). Counted once a minute while the menu runs.")
 }
 
 # waits_text — the summary's Waits line (nothing without wait data).

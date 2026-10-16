@@ -10,5 +10,5 @@ NOTIFICATIONS  10 · Permission 8 · other 1 · Idle 1 · 6 banners skipped (5 w
 
 BY AGENT     claude 45 min · codex 18 min
 
-blocked: waiting for your answer; done: finished, not yet looked at. Counted for sessions in Herdr panes, once a minute while the menu runs.
+blocked: waiting for your answer; done: finished, not yet looked at (outside Herdr: until your next prompt). Counted once a minute while the menu runs.
 [rc=0]

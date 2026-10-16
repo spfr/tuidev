@@ -104,6 +104,16 @@
             "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Waiting for your input' 'Idle'"
           }
         ]
+      },
+      {
+        "matcher": "permission_prompt|idle_prompt|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x \"$HOME/.local/bin/agents\" ] && \"$HOME/.local/bin/agents\" hook wait-start; exit 0",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "TeammateIdle": [
@@ -122,6 +132,61 @@
           {
             "type": "command",
             "command": "\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Auto mode denied a tool call' 'Auto mode'"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"${HERDR_ENV:-}\" != 1 ] && [ \"${AGENTS_HISTORY:-1}\" != 0 ] && [ -x \"$HOME/.local/bin/agents\" ] || exit 0; d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}\"; [ -n \"$(find \"$d/sample.stamp\" -mmin -60 2>/dev/null)\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ ! -e \"$d/waiting/$s\" ] || exit 0 ;; esac; { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-start >/dev/null 2>&1; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
+            "timeout": 10
           }
         ]
       }

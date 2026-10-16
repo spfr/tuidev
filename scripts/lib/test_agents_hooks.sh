@@ -38,6 +38,8 @@ fi
 
 export AGENTS_TESTING=1 AGENTS_SELF=5101 AGENTS_UID=501 AGENTS_CONF="$tmp/none.conf"
 export AGENTS_DATA_DIR="$tmp/data" AGENTS_HISTORY=1
+# This test may itself run in a Herdr pane or under claude -p: the wait hooks read both.
+unset HERDR_ENV XDG_STATE_HOME CLAUDE_CODE_ENTRYPOINT
 # shellcheck source=../../bin/agents disable=SC1091
 . "$REPO_DIR/bin/agents"
 
@@ -282,7 +284,9 @@ done
 t0="$(date +%s)"
 jq -nc --arg m "$big/s.jsonl" '{session_id: "s", transcript_path: $m, cwd: "/work/big", hook_event_name: "SessionEnd", reason: "clear"}' \
     | agents_main hook session-end -n > "$tmp/out" 2> "$tmp/err" || true
-[[ $(( $(date +%s) - t0 )) -le 8 ]] || fail "session-end on a 20 MB session with 30 subagents took $(( $(date +%s) - t0 )) s"
+# The bound is the hook's 30 s timeout with room to spare, not a speed: a
+# loaded machine (bash 3.2 at load 30 takes 9-10 s) must not fail it.
+[[ $(( $(date +%s) - t0 )) -le 25 ]] || fail "session-end on a 20 MB session with 30 subagents took $(( $(date +%s) - t0 )) s"
 [[ "$(cat "$tmp/err")" == *"none of its background commands still runs"* ]] || fail "big session-end: $(cat "$tmp/out" "$tmp/err")"
 rm -rf "$big"
 pass "budget: session-end on a 20 MB session with 30 subagents stays well inside the hook timeout"
@@ -332,6 +336,276 @@ case "$(uname)" in Darwin) mode="$(stat -f %Lp "$AGENTS_DATA_DIR/hooks.log")" ;;
 [[ "$(AGENTS_HOOK_LOG=yes bash "$REPO_DIR/bin/agents" config 2>/dev/null | grep '^AGENTS_HOOK_LOG=')" == AGENTS_HOOK_LOG=0 ]] || fail "a bad AGENTS_HOOK_LOG is not reset to 0"
 pass "AGENTS_HOOK_LOG: off by default; one private line per run with handback, tasks, matches, dry"
 
+# --- Waits: wait-start (Notification), wait-end (prompt, tool, turn end) ----------
+W="$AGENTS_DATA_DIR/waiting" WD="$AGENTS_DATA_DIR/waited"
+SESSION_TOK="5000@Wed_Oct_14_09:00:00_2026"   # claude 5000, above the hook (agents 5101)
+wait_json() {   # NOTIFICATION_TYPE [SESSION_ID]
+    jq -nc --arg t "$1" --arg s "${2:-$sess}" \
+        '{session_id: $s, transcript_path: "/x.jsonl", cwd: "/work/myapp", hook_event_name: "Notification",
+          message: "Claude needs your permission to use Bash", notification_type: $t}'
+}
+event_json() {  # EVENT [SESSION_ID [DURATION_MS]]
+    jq -nc --arg e "$1" --arg s "${2:-$sess}" --arg d "${3:-}" '{session_id: $s, cwd: "/work/myapp", hook_event_name: $e,
+        tool_name: "Bash", tool_input: {command: "ls"}, tool_response: {stdout: "x"}}
+        + (if $d == "" then {} else {duration_ms: ($d | tonumber)} end)'
+}
+fresh() { mkdir -p "$AGENTS_DATA_DIR"; date +%s > "$AGENTS_DATA_DIR/sample.stamp"; }
+wclear() { rm -rf "$W" "$WD"; }
+fresh; wclear
+t0="$(date +%s)"
+run_hook wait-start "$(wait_json permission_prompt)"; quiet_ok "wait-start"
+IFS=$'\t' read -r ws wst wp wt wx < "$W/$sess" || fail "wait-start wrote no wait: $(ls -A "$AGENTS_DATA_DIR")"
+[[ "$ws" =~ ^[0-9]+$ && $ws -ge $t0 && "$wst|$wp|$wt|${wx:-}" == "blocked|myapp|$SESSION_TOK|" ]] || fail "the wait: $(cat "$W/$sess")"
+case "$(uname)" in Darwin) mode="$(stat -f %Lp "$W/$sess")" ;; *) mode="$(stat -c %a "$W/$sess")" ;; esac
+[[ "$mode" == 600 ]] || fail "wait file mode $mode"
+first="$(cat "$W/$sess")"
+run_hook wait-start "$(wait_json idle_prompt)"
+[[ "$(cat "$W/$sess")" == "$first" ]] || fail "a second notification moved the wait's start: $(cat "$W/$sess")"
+run_hook wait-end "$(event_json PostToolUse other-session)"
+[[ "$(cat "$W/$sess")" == "$first" ]] || fail "another session's tool call ended this wait"
+run_hook wait-end "$(event_json PostToolUse)"; quiet_ok "wait-end"
+ended="$(ls "$WD")"
+[[ ! -e "$W/$sess" && "$ended" =~ ^"$sess"@[0-9]+$ && "$(cat "$WD/$ended")" == "$first" ]] || fail "wait-end: waiting $(ls "$W"), waited $ended"
+run_hook wait-end "$(event_json Stop)"; quiet_ok "wait-end, nothing open"
+[[ "$(ls "$WD")" == "$ended" ]] || fail "a wait-end with nothing open wrote $(ls "$WD")"
+wclear
+run_hook wait-start "$(wait_json idle_prompt)"
+[[ "$(cut -f2 "$W/$sess")" == "done" ]] || fail "idle_prompt is not done: $(cat "$W/$sess")"
+run_hook wait-end "$(event_json UserPromptSubmit)"
+[[ ! -e "$W/$sess" ]] || fail "UserPromptSubmit did not end the wait"
+wclear
+run_hook wait-start "$(wait_json elicitation_dialog)"
+[[ "$(cut -f2 "$W/$sess")" == blocked ]] || fail "elicitation_dialog is not blocked: $(cat "$W/$sess" 2>/dev/null)"
+# An approved tool's end: the wait ended when the tool started (the hook's
+# time less duration_ms), not when it finished. A tool that started before
+# the wait opened (a subagent's, alongside) leaves it open.
+wclear; now="$(date +%s)"
+mkdir -p "$W"; printf '%s\tblocked\tmyapp\t%s\n' "$((now - 700))" "$SESSION_TOK" > "$W/$sess"
+run_hook wait-end "$(event_json PostToolUse "$sess" 800000)"; quiet_ok "wait-end, an older tool"
+[[ -e "$W/$sess" && -z "$(ls -A "$WD" 2>/dev/null)" ]] || fail "a tool that started before the wait ended it: $(ls "$WD" 2>/dev/null)"
+run_hook wait-end "$(event_json PostToolUseFailure "$sess" 600500)"; quiet_ok "wait-end, the approved tool"
+ended="$(ls "$WD")"; e="${ended#*@}"
+[[ ! -e "$W/$sess" && "$e" =~ ^[0-9]+$ && $e -ge $((now - 601)) && $e -le $((now - 590)) ]] \
+    || fail "a 10-minute tool approved after 100 s: the wait ended at ${e:-none}, want about $((now - 600))"
+wclear; mkdir -p "$W"; printf '%s\tblocked\tmyapp\t%s\n' "$((now - 5))" "$SESSION_TOK" > "$W/$sess"
+run_hook wait-end "$(event_json PostToolUse "$sess" 3000)" -n
+[[ "$(cat "$tmp/out")" == "agents hook: the wait ended when the tool started, 3s ago" && -e "$W/$sess" ]] || fail "dry wait-end: $(cat "$tmp/out")"
+run_hook wait-end "$(event_json Stop)"
+ended="$(ls "$WD")"
+[[ "$ended" =~ ^"$sess"@[0-9]+$ && "${ended#*@}" -ge "$now" ]] || fail "a turn end (no duration) ended the wait at $ended"
+wclear
+pass "wait-start opens one wait per session (permission and elicitation blocked, idle done, the first start stands); wait-end moves it to waited/, dated by the approved tool's start"
+
+# /clear and /resume end the old session's wait, cleanups on or off.
+for reap in 1 0; do
+    wclear; run_hook wait-start "$(wait_json permission_prompt)"
+    AGENTS_HOOK_REAP=$reap run_hook session-end "$(jq -nc --arg s "$sess" \
+        '{session_id: $s, transcript_path: "/nonexistent.jsonl", cwd: "/work/myapp", hook_event_name: "SessionEnd", reason: "clear"}')"
+    quiet_ok "session-end, reap $reap"
+    [[ ! -e "$W/$sess" && -n "$(ls "$WD")" ]] || fail "session-end (AGENTS_HOOK_REAP=$reap) left the wait open"
+done
+# Dry run: says what it would record, writes nothing.
+wclear; run_hook wait-start "$(wait_json permission_prompt)" -n
+[[ "$(cat "$tmp/out")" == "agents hook: $SESSION_TOK waits on you (blocked) in myapp" && ! -e "$W/$sess" ]] || fail "dry wait-start: $(cat "$tmp/out")"
+# Nothing recorded: not a wait, in Herdr, history off, no recent sample, no
+# session above the hook, a session_id unfit for a file name. Silent, rc 0.
+wclear
+run_hook wait-start "$(wait_json auth_success)"; quiet_ok "auth_success"
+HERDR_ENV=1 run_hook wait-start "$(wait_json permission_prompt)"; quiet_ok "in Herdr"
+AGENTS_HISTORY=0 run_hook wait-start "$(wait_json permission_prompt)"; quiet_ok "history off"
+run_hook wait-start "$(wait_json permission_prompt ../../x)"; quiet_ok "a path as session_id"
+( SNAP="$(printf '%s\n' "$SNAP" | sed 's/claude --continue/node server.js/')"
+  run_hook wait-start "$(wait_json permission_prompt)"; quiet_ok "no claude above the hook" )
+echo $(( $(date +%s) - 7200 )) > "$AGENTS_DATA_DIR/sample.stamp"
+run_hook wait-start "$(wait_json permission_prompt)"; quiet_ok "no sample within the hour"
+rm -f "$AGENTS_DATA_DIR/sample.stamp"
+run_hook wait-start "$(wait_json permission_prompt)"; quiet_ok "never sampled"
+[[ -z "$(ls -A "$W" 2>/dev/null)" && ! -e "$AGENTS_DATA_DIR/x" ]] || fail "a wait recorded where none should be: $(ls -A "$W")"
+fresh
+# History turned off while a wait is open: the end just drops it.
+run_hook wait-start "$(wait_json permission_prompt)"
+AGENTS_HISTORY=0 run_hook wait-end "$(event_json Stop)"
+[[ ! -e "$W/$sess" && -z "$(ls -A "$WD" 2>/dev/null)" ]] || fail "history off: the wait was not dropped"
+# hooks.log is for cleanups: the wait hooks never write it.
+rm -f "$AGENTS_DATA_DIR/hooks.log"
+AGENTS_HOOK_LOG=1 run_hook wait-start "$(wait_json permission_prompt)"
+AGENTS_HOOK_LOG=1 run_hook wait-end "$(event_json PostToolUse)"
+[[ ! -e "$AGENTS_DATA_DIR/hooks.log" ]] || fail "a wait hook logged to hooks.log: $(cat "$AGENTS_DATA_DIR/hooks.log")"
+wclear
+pass "waits: none for other notifications, sessions in Herdr, history off, no sample within the hour, no session or a bad id; /clear ends one; -n writes nothing"
+
+# PermissionRequest: Claude Code runs it as the dialog is about to show, so
+# the blocked wait starts then, not when permission_prompt comes about six
+# seconds later (that one finds the wait open: the earlier start stands).
+# It must never answer the dialog: rc 0, nothing on stdout or stderr.
+pr_json() {     # [SESSION_ID [PERMISSION_MODE]]: the hooks reference's PermissionRequest input
+    jq -nc --arg s "${1:-$sess}" --arg m "${2:-default}" '{session_id: $s, transcript_path: "/x.jsonl",
+        cwd: "/work/myapp", permission_mode: $m, hook_event_name: "PermissionRequest", tool_name: "Bash",
+        tool_input: {command: "rm -rf node_modules", description: "Remove node_modules directory"},
+        permission_suggestions: [{type: "addRules", rules: [{toolName: "Bash", ruleContent: "rm -rf node_modules"}],
+            behavior: "allow", destination: "localSettings"}]}'
+}
+backdate() {    # SECONDS: the open wait started that long ago (the dialog showed then)
+    local rest; IFS=$'\t' read -r _ rest < "$W/$sess"
+    printf '%s\t%s\n' "$(($(date +%s) - $1))" "$rest" > "$W/$sess"
+}
+silent() {      # LABEL: quiet_ok, and nothing on stderr either
+    quiet_ok "$1"; [[ ! -s "$tmp/err" ]] || fail "$1: stderr $(cat "$tmp/err")"
+}
+fresh; wclear; t0="$(date +%s)"
+run_hook wait-start "$(pr_json)"; silent "PermissionRequest"
+IFS=$'\t' read -r ws wst wp wt wx < "$W/$sess" || fail "PermissionRequest opened no wait: $(ls -A "$AGENTS_DATA_DIR")"
+[[ "$ws" =~ ^[0-9]+$ && $ws -ge $t0 && $ws -le $(date +%s) && "$wst|$wp|$wt|${wx:-}" == "blocked|myapp|$SESSION_TOK|" ]] \
+    || fail "PermissionRequest's wait: $(cat "$W/$sess")"
+backdate 46; first="$(cat "$W/$sess")"
+run_hook wait-start "$(wait_json permission_prompt)"; silent "permission_prompt after PermissionRequest"
+[[ "$(cat "$W/$sess")" == "$first" ]] || fail "permission_prompt moved PermissionRequest's start: $(cat "$W/$sess")"
+# Approved after 40 s; the tool ran 6 s: the wait ends at the approval.
+now="$(date +%s)"; run_hook wait-end "$(event_json PostToolUse "$sess" 6000)"; silent "wait-end after PermissionRequest"
+ended="$(ls "$WD")"; e="${ended#*@}"
+[[ ! -e "$W/$sess" && "$e" =~ ^[0-9]+$ && $e -ge $((now - 7)) && $e -le $((now - 5)) && "$(cat "$WD/$ended")" == "$first" ]] \
+    || fail "approved after 40 s, a 6 s tool: the wait ended at ${e:-none}, want about $((now - 6))"
+# A call approved without you (another hook's allow; were the dialog's hook
+# ever run for a call auto mode or a rule approves, the same): the tool
+# starts as the hook runs, so its PostToolUse ends the wait at its start,
+# and a sample credits nothing.
+wclear; run_hook wait-start "$(pr_json)"; backdate 2
+run_hook wait-end "$(event_json PostToolUse "$sess" 2000)"; silent "wait-end, an auto-approved call"
+ended="$(ls "$WD")"; IFS=$'\t' read -r ws _ < "$WD/$ended"
+[[ "$ended" =~ ^"$sess"@[0-9]+$ && $(( ${ended#*@} - ws )) -le 1 ]] || fail "an auto-approved call waited $(( ${ended#*@} - ws ))s"
+rows="$(printf '' | _agents_hook_waits_rows "$(date +%s)" "$(( $(date +%s) - 60 ))")"
+[[ "$(printf '%s' "$rows" | awk -F '\t' '{ s += $6 } END { print s + 0 }')" -le 1 && -z "$(ls -A "$WD")" ]] \
+    || fail "an auto-approved call's wait was credited: $rows"
+wclear
+# Dry run: what it would record.
+run_hook wait-start "$(pr_json)" -n
+[[ "$(cat "$tmp/out")" == "agents hook: $SESSION_TOK waits on you (blocked) in myapp" && ! -e "$W/$sess" ]] || fail "dry PermissionRequest: $(cat "$tmp/out")"
+# No wait: no dialog shows (dontAsk mode, claude -p deny it unasked), in
+# Herdr, history off, a bad session id, no sample within the hour.
+run_hook wait-start "$(pr_json "$sess" dontAsk)"; silent "PermissionRequest in dontAsk mode"
+CLAUDE_CODE_ENTRYPOINT=sdk-cli run_hook wait-start "$(pr_json)"; silent "PermissionRequest under claude -p"
+HERDR_ENV=1 run_hook wait-start "$(pr_json)"; silent "PermissionRequest in Herdr"
+AGENTS_HISTORY=0 run_hook wait-start "$(pr_json)"; silent "PermissionRequest, history off"
+run_hook wait-start "$(pr_json ../../x)"; silent "PermissionRequest, a path as session_id"
+echo $(( $(date +%s) - 7200 )) > "$AGENTS_DATA_DIR/sample.stamp"
+run_hook wait-start "$(pr_json)"; silent "PermissionRequest, no sample within the hour"
+[[ -z "$(ls -A "$W" 2>/dev/null)" ]] || fail "a PermissionRequest wait recorded where none should be: $(ls -A "$W")"
+fresh
+for m in acceptEdits plan auto bypassPermissions; do
+    wclear; run_hook wait-start "$(pr_json "$sess" "$m")"; silent "PermissionRequest in $m mode"
+    [[ -e "$W/$sess" ]] || fail "a dialog in $m mode opened no wait"
+done
+wclear
+pass "PermissionRequest opens the blocked wait as the dialog shows (permission_prompt later leaves its start), ended at the approval; an auto-approved call counts nothing; none in dontAsk, claude -p, Herdr, history off; silent always"
+
+# The shipped hooks (configs/claude/settings.json) run as Claude Code runs
+# them: sh -c, the hook's JSON on stdin. wait-end's command starts agents
+# only while a wait is open, so a tool call costs a glob, not an agents run.
+S="$REPO_DIR/configs/claude/settings.json"
+start_cmd="$(jq -r '.hooks.Notification[] | select(.matcher == "permission_prompt|idle_prompt|elicitation_dialog") | .hooks[0].command' "$S")"
+end_cmd="$(jq -r '.hooks.PostToolUse[0].hooks[0].command' "$S")"
+for e in UserPromptSubmit PostToolUseFailure Stop; do
+    [[ "$(jq -r ".hooks.${e}[0].hooks[0].command" "$S")" == "$end_cmd" ]] || fail "settings.json: $e does not run the wait-end command"
+done
+for e in PostToolUse PostToolUseFailure; do
+    [[ "$(jq -r ".hooks.${e}[0].matcher // \"\"" "$S")" == "" ]] || fail "settings.json: $e must match every tool"
+done
+SH="$tmp/shiphome"; mkdir -p "$SH/.local/bin"
+printf '#!/bin/sh\necho "$@" >> "%s/ran"\ncat > "%s/in"\nexit 3\n' "$SH" "$SH" > "$SH/.local/bin/agents"; chmod +x "$SH/.local/bin/agents"
+ship() {    # COMMAND [VAR=VALUE...]: rc in $tmp/rc; the hook's JSON from $SHIP_JSON, else a PostToolUse
+    local c="$1"; shift
+    rm -f "$SH/ran" "$SH/in"
+    printf '%s\n' "${SHIP_JSON:-$(event_json PostToolUse)}" | env -i PATH=/usr/bin:/bin HOME="$SH" "$@" /bin/sh -c "$c" > "$tmp/out" 2>&1
+    echo $? > "$tmp/rc"
+}
+ship "$end_cmd"
+[[ "$(cat "$tmp/rc")" == 0 && ! -e "$SH/ran" && ! -s "$tmp/out" ]] || fail "wait-end hook with no data directory: rc $(cat "$tmp/rc"), ran $(cat "$SH/ran" 2>/dev/null)"
+mkdir -p "$SH/.local/state/tuidev/agents/waiting"
+ship "$end_cmd"
+[[ ! -e "$SH/ran" ]] || fail "wait-end hook ran agents with no wait open"
+# Gated per session: another session's open wait starts nothing here.
+: > "$SH/.local/state/tuidev/agents/waiting/other-session"
+ship "$end_cmd"
+[[ "$(cat "$tmp/rc")" == 0 && ! -e "$SH/ran" ]] || fail "wait-end hook ran agents for another session's wait"
+: > "$SH/.local/state/tuidev/agents/waiting/$sess"
+ship "$end_cmd"
+[[ "$(cat "$tmp/rc")" == 0 && "$(cat "$SH/ran")" == "hook wait-end" ]] || fail "wait-end hook with a wait open: rc $(cat "$tmp/rc"), ran $(cat "$SH/ran" 2>/dev/null)"
+[[ "$(cat "$SH/in")" == "$(event_json PostToolUse)" ]] || fail "wait-end hook: agents got $(head -c 200 "$SH/in")"
+# A payload larger than the gate reads reaches agents whole; spaces after
+# the key's colon parse too.
+big="$(jq -nc --arg s "$sess" --arg x "$(head -c 50000 /dev/zero | tr '\0' a)" '{session_id: $s, hook_event_name: "PostToolUse", tool_response: {stdout: $x}, duration_ms: 7}')"
+SHIP_JSON="$big" ship "$end_cmd"
+[[ "$(cat "$SH/ran")" == "hook wait-end" && "$(cat "$SH/in")" == "$big" ]] || fail "wait-end hook, a 50 KB payload: ran $(cat "$SH/ran" 2>/dev/null), $(wc -c < "$SH/in") bytes in"
+SHIP_JSON="{\"session_id\" : \"$sess\", \"hook_event_name\": \"Stop\"}" ship "$end_cmd"
+[[ "$(cat "$SH/ran")" == "hook wait-end" ]] || fail "wait-end hook: a spaced session_id key not parsed"
+# No session_id it can read (none, or an odd one): agents decides.
+SHIP_JSON='{"hook_event_name":"Stop"}' ship "$end_cmd"
+[[ "$(cat "$SH/ran")" == "hook wait-end" ]] || fail "wait-end hook skipped agents with no session_id to go by"
+SHIP_JSON='{"session_id":"a/b","hook_event_name":"Stop"}' ship "$end_cmd"
+[[ "$(cat "$SH/ran")" == "hook wait-end" ]] || fail "wait-end hook skipped agents for an odd session_id"
+rm -f "$SH/.local/state/tuidev/agents/waiting/$sess"
+SHIP_JSON="$(event_json PostToolUse other-session)" ship "$end_cmd"
+[[ "$(cat "$SH/ran")" == "hook wait-end" ]] || fail "wait-end hook: the other session's own wait"
+rm -f "$SH/.local/state/tuidev/agents/waiting/other-session"; : > "$SH/.local/state/tuidev/agents/waiting/$sess"
+mkdir -p "$tmp/own/waiting"
+ship "$end_cmd" AGENTS_DATA_DIR="$tmp/own"
+[[ ! -e "$SH/ran" ]] || fail "wait-end hook ignored AGENTS_DATA_DIR"
+ship "$end_cmd" XDG_STATE_HOME="$tmp/xdg"
+[[ ! -e "$SH/ran" ]] || fail "wait-end hook ignored XDG_STATE_HOME"
+ship "$start_cmd"
+[[ "$(cat "$tmp/rc")" == 0 && "$(cat "$SH/ran")" == "hook wait-start" ]] || fail "wait-start hook: rc $(cat "$tmp/rc"), ran $(cat "$SH/ran" 2>/dev/null)"
+rm "$SH/.local/bin/agents"
+ship "$end_cmd"; [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "wait-end hook without agents: rc $(cat "$tmp/rc"), $(cat "$tmp/out")"
+ship "$start_cmd"; [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "wait-start hook without agents: rc $(cat "$tmp/rc"), $(cat "$tmp/out")"
+pass "shipped wait hooks: wait-start on permission, idle and elicitation notifications; wait-end on prompts, every tool call (done or failed) and turn ends, running agents only while this session has a wait open; exit 0 always, a no-op without the monitoring pack"
+
+# The shipped PermissionRequest hook (every tool: no matcher) starts agents
+# only when a wait could open: the pack installed, not in Herdr, history not
+# off, a sample within the hour, no wait open for this session. Whatever
+# agents prints, the hook prints nothing, so it never answers the dialog.
+pr_cmd="$(jq -r '.hooks.PermissionRequest[0].hooks[0].command' "$S")"
+[[ "$(jq -c '.hooks.PermissionRequest | [length, (.[0].matcher // ""), (.[0].hooks | length), .[0].hooks[0].type, .[0].hooks[0].timeout]' "$S")" == '[1,"",1,"command",10]' ]] \
+    || fail "settings.json: PermissionRequest must be one command hook on every tool: $(jq -c .hooks.PermissionRequest "$S")"
+for f in "$S" "$REPO_DIR/configs/claude/settings.linux.json"; do
+    [[ "$(jq -c '.hooks.PermissionRequest' "$f")" == "$(jq -c '.hooks.PermissionRequest' "$S")" ]] || fail "${f##*/}: another PermissionRequest hook"
+    jq -e '[.. | objects | select(has("decision") or has("permissionDecision"))] | length == 0' "$f" >/dev/null || fail "${f##*/} answers a permission"
+done
+SH="$tmp/prhome"; PD="$SH/.local/state/tuidev/agents"; mkdir -p "$SH/.local/bin"
+printf '#!/bin/sh\necho "$@" >> "%s/ran"\ncat > "%s/in"\necho %s\necho oops >&2\nexit 3\n' "$SH" "$SH" \
+    "'{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'" > "$SH/.local/bin/agents"
+chmod +x "$SH/.local/bin/agents"
+pr_ok() {       # LABEL WANT(ran|skip): rc 0, no output, agents ran (with the whole payload) or not
+    [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "PermissionRequest hook, $1: rc $(cat "$tmp/rc"), printed $(cat "$tmp/out")"
+    case "$2" in
+        ran)  [[ "$(cat "$SH/ran" 2>/dev/null)" == "hook wait-start" && "$(cat "$SH/in")" == "$SHIP_JSON" ]] \
+                  || fail "PermissionRequest hook, $1: ran $(cat "$SH/ran" 2>/dev/null), got $(head -c 200 "$SH/in" 2>/dev/null)" ;;
+        skip) [[ ! -e "$SH/ran" ]] || fail "PermissionRequest hook, $1: started agents" ;;
+    esac
+}
+SHIP_JSON="$(pr_json)"
+ship "$pr_cmd"; pr_ok "never sampled" skip
+mkdir -p "$PD"; : > "$PD/sample.stamp"
+ship "$pr_cmd"; pr_ok "a fresh sample" ran
+ship "$pr_cmd" HERDR_ENV=1; pr_ok "in Herdr" skip
+ship "$pr_cmd" AGENTS_HISTORY=0; pr_ok "history off" skip
+mkdir -p "$PD/waiting"; : > "$PD/waiting/$sess"
+ship "$pr_cmd"; pr_ok "a wait already open" skip
+rm "$PD/waiting/$sess"; : > "$PD/waiting/other-session"
+ship "$pr_cmd"; pr_ok "another session's wait" ran
+SHIP_JSON="$(jq -c --arg x "$(head -c 50000 /dev/zero | tr '\0' a)" '.tool_input.content = $x' <<<"$SHIP_JSON")"
+ship "$pr_cmd"; pr_ok "a 50 KB payload" ran
+SHIP_JSON='{"hook_event_name":"PermissionRequest"}'; ship "$pr_cmd"; pr_ok "no session_id (agents decides)" ran
+SHIP_JSON="$(pr_json)"
+mkdir -p "$tmp/prown"; : > "$tmp/prown/sample.stamp"
+mkdir -p "$tmp/prown/waiting"; : > "$tmp/prown/waiting/$sess"
+ship "$pr_cmd" AGENTS_DATA_DIR="$tmp/prown"; pr_ok "AGENTS_DATA_DIR's open wait" skip
+touch -t 202001010000 "$PD/sample.stamp"
+ship "$pr_cmd"; pr_ok "no sample within the hour" skip
+: > "$PD/sample.stamp"; rm "$SH/.local/bin/agents"
+ship "$pr_cmd"; pr_ok "without the monitoring pack" skip
+unset SHIP_JSON
+pass "shipped PermissionRequest hook: every tool, starts agents only when a wait could open (pack, not Herdr, history on, a sample within the hour, none open for the session), whole payload; exit 0 and silent whatever agents prints"
+
 # --- Live: a real throwaway task under a fake claude --------------------------------
 # A process named claude starts two tool shells (sh -c 'until …'), one writing
 # to a task file the transcript names, one a decoy; then runs the hook as its
@@ -362,13 +636,13 @@ if [[ "$live_ok" == true ]]; then
         sleep 60 & echo $! > sleep.pid; wait $!' "$L" "$REPO_DIR/bin/agents" ) </dev/null >/dev/null 2>&1 &
     fake=$!; live_pids="$fake"
     disown "$fake" 2>/dev/null || true
-    for _ in $(seq 100); do [[ -s "$L/hook.rc" ]] && break; sleep 0.1; done
+    for _ in $(seq 300); do [[ -s "$L/hook.rc" ]] && break; sleep 0.1; done
     [[ -s "$L/hook.rc" ]] || fail "live: the hook did not finish: $(cat "$L/hook.out" 2>/dev/null)"
     task="$(cat "$L/task.pid")"; decoy="$(cat "$L/decoy.pid")"
     live_pids="$fake $decoy $task $(cat "$L/sleep.pid" 2>/dev/null)"
     [[ "$(cat "$L/hook.rc")" == 0 && ! -s "$L/hook.out" ]] || fail "live: rc $(cat "$L/hook.rc"), output $(cat "$L/hook.out")"
     alive() { kill -0 "$1" 2>/dev/null && [[ "$(ps -o stat= -p "$1" 2>/dev/null)" != Z* ]]; }   # a zombie is gone
-    for _ in 1 2 3 4 5 6 7 8 9 10; do alive "$task" || break; sleep 0.1; done
+    for _ in $(seq 300); do alive "$task" || break; sleep 0.1; done
     ! alive "$task" || fail "live: the subagent's loop still runs ($(ps -o pid=,stat=,args= -p "$task"))"
     alive "$decoy" || fail "live: the decoy was stopped"
     alive "$fake" || fail "live: the fake claude was stopped"

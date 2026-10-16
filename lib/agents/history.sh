@@ -19,7 +19,9 @@
 # it lives, so an orphan keeps it): the provenance auto-reap needs before it
 # stops a stale tree. Once those files are in place (and the feed it counted
 # removed), each sample appends to waits.tsv the sessions Herdr shows
-# blocked or done (_agents_waits_rows), scans the transcripts for tokens
+# blocked or done (_agents_waits_rows) and the waits Claude Code's hooks
+# recorded for sessions outside Herdr (_agents_hook_waits_rows; hooks.sh
+# writes them), scans the transcripts for tokens
 # (tokens.sh; a failure there never stops the sample), updates the run
 # ledger (runs.sh; a failure there never makes the next sample count history
 # twice) and then the menu's top insight (report.sh: insight.txt).
@@ -80,7 +82,8 @@ _agents_sample_locked() {
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || rm -f "${_AGENTS_RUNS_FED[@]}"
     # The sessions waiting on you, once the interval they are credited is
     # committed (a sample that fails before this credits nothing twice).
-    printf '%s\n' "$enr" | _agents_waits_rows "$now" "$prev" >> "$dir/waits.tsv" \
+    { printf '%s\n' "$enr" | _agents_waits_rows "$now" "$prev"
+      printf '%s\n' "$enr" | _agents_hook_waits_rows "$now" "$prev"; } >> "$dir/waits.tsv" \
         || echo "agents: waits.tsv was not updated" >&2
     # Where the tokens went (tokens.sh), in a subshell: nothing it does can
     # stop the sample. Before the ledger: the task ids it indexes name the
@@ -119,6 +122,57 @@ _agents_waits_rows() {
         s > 0 && $1 == "agent" && NF >= 15 && ($12 == "blocked" || $12 == "done") && $3 != "daemon" {
             print now "\t" $15 "\t" $3 "\t" $12 "\t" $2 "@" $9 "\t" s
         }'
+}
+
+# _agents_hook_waits_rows NOW PREV < ENRICHED_RECORDS — waits.tsv's rows
+# (stdout, agent claude) for the waits Claude Code's hooks recorded outside
+# Herdr (hooks.sh: waiting/ and waited/ in the data directory), credited
+# like _agents_waits_rows: the part of the sample's interval (since PREV,
+# at most _AGENTS_WAIT_CAP) the wait was open, ending at its END for an
+# ended one. A session Herdr counted this sample (blocked or done) is left
+# to Herdr. Then removes the ended waits, and the open ones whose session
+# (PID@START) is no longer an agent here: it exited without a hook. A sample
+# that sees no agent at all (a ps that shows only its own processes, under
+# a sandbox) can't tell, so it neither credits nor removes open waits.
+_agents_hook_waits_rows() {
+    local dir="$AGENTS_DATA_DIR" f line waits="" out
+    for f in "$dir"/waiting/* "$dir"/waited/*; do
+        [[ -f "$f" ]] || continue
+        line=""; IFS= read -r line < "$f" 2>/dev/null || [[ -n "$line" ]] || continue
+        waits+="$f"$'\t'"$line"$'\n'
+    done
+    if [[ -z "$waits" ]]; then cat >/dev/null; return 0; fi
+    out="$(H_WAITS="$waits" LC_ALL=C awk -F '\t' -v now="$1" -v prev="$2" -v cap="$_AGENTS_WAIT_CAP" '
+        BEGIN { s = prev ~ /^[0-9]+$/ ? now - prev : 60; if (s > cap) s = cap; if (s < 0) s = 0 }
+        $1 == "agent" && NF >= 15 && $3 != "daemon" {
+            live[$2 "@" $9] = 1; nlive++
+            if (s > 0 && ($12 == "blocked" || $12 == "done")) herdr[$2 "@" $9] = 1
+        }
+        END {
+            n = split(ENVIRON["H_WAITS"], w, "\n")
+            for (i = 1; i <= n; i++) {
+                if (split(w[i], f, "\t") < 5) continue
+                path = f[1]; base = path; sub(/.*\//, "", base)
+                ended = path ~ /\/waited\/[^\/]*$/
+                if (ended) { if (base !~ /^[A-Za-z0-9_-]+@[0-9]+$/) continue; end = substr(base, index(base, "@") + 1) + 0 }
+                else if (base !~ /^[A-Za-z0-9_-]+$/) continue
+                start = f[2]; st = f[3]; proj = f[4]; tok = f[5]
+                ok = start ~ /^[0-9]+$/ && (st == "blocked" || st == "done") && tok ~ /^[0-9]+@[A-Za-z0-9_:]+$/
+                if (ok && !ended && !(tok in live)) { if (nlive) print "rm\t" path; continue }
+                if (ended || !ok) print "rm\t" path
+                if (!ok || tok in herdr) continue
+                from = now - s; if (start + 0 > from) from = start + 0
+                to = ended && end < now ? end : now
+                if (to > from) print "row\t" now "\t" (proj == "" ? "-" : proj) "\tclaude\t" st "\t" tok "\t" (to - from)
+            }
+        }')"
+    [[ -n "$out" ]] || return 0
+    while IFS=$'\t' read -r f line; do
+        case "$f" in
+            row) printf '%s\n' "$line" ;;
+            rm)  rm -f "$line" ;;
+        esac
+    done <<<"$out"
 }
 
 # _agents_history_prune NOW DAY — drop history, runs, waits, notification

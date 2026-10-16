@@ -22,20 +22,31 @@
 # agents_kill_tokens (start-time pinned, refusals, SIGTERM then SIGKILL).
 # Always exits 0; prints nothing unless it is a dry run.
 #
-# Uses: config.sh (AGENTS_HOOK_REAP, AGENTS_HOOK_LOG, _AGENTS_HOOK_DRY),
-#   util.sh, snapshot.sh, classify.sh (agents_project), kill.sh
-#   (agents_kill_tokens), events.sh (agents_event, _agents_data_dir),
-#   notify.sh, where.sh (agents_root_of: the session a click goes to),
-#   transcript.sh (the transcript reads);
-#   awk/hook_claude.awk, awk/hook_children.awk, awk/hook_match.awk.
+# `agents hook wait-start|wait-end` note when a Claude Code session outside
+# Herdr waits on you, for waits.tsv (see Waits below); session-end also
+# ends the wait of the session /clear or /resume left. wait-start runs from
+# the PermissionRequest hook too, and there it must never touch the
+# permission outcome: it prints nothing, so it never returns a decision.
+#
+# Uses: config.sh (AGENTS_HOOK_REAP, AGENTS_HOOK_LOG, _AGENTS_HOOK_DRY,
+#   AGENTS_HISTORY, AGENTS_DATA_DIR), util.sh, snapshot.sh, classify.sh
+#   (agents_project), kill.sh (agents_kill_tokens), events.sh
+#   (agents_event, _agents_data_dir), notify.sh, where.sh (agents_root_of:
+#   the session a click goes to, and a wait's session), transcript.sh (the
+#   transcript reads); awk/hook_claude.awk, awk/hook_children.awk,
+#   awk/hook_match.awk.
 # Public: agents_hook.
 
 # _agents_hook_input < HOOK_JSON — one tab-separated line: event session
-# transcript agent_id agent_type agent_transcript cwd reason ("-" if absent).
+# transcript agent_id agent_type agent_transcript cwd reason
+# notification_type duration_ms permission_mode ("-" if absent; a number as
+# a whole one).
 _agents_hook_input() {
     jq -r '[.hook_event_name, .session_id, .transcript_path, .agent_id, .agent_type,
-            .agent_transcript_path, .cwd, .reason]
-        | map(if type == "string" and . != "" then gsub("[\t\n]"; " ") else "-" end) | join("\t")' 2>/dev/null
+            .agent_transcript_path, .cwd, .reason, .notification_type, .duration_ms,
+            .permission_mode]
+        | map(if type == "string" and . != "" then gsub("[\t\n]"; " ")
+              elif type == "number" and . >= 0 then floor | tostring else "-" end) | join("\t")' 2>/dev/null
 }
 
 # Transcripts are read as transcript.sh says (a fixed-string grep first); jq
@@ -214,15 +225,125 @@ _agents_hook_log() {
     return 0
 }
 
-# agents_hook subagent-stop|session-end [-n] < HOOK_JSON — the hook itself.
-# Returns 0 whatever happens: a failing SubagentStop hook would keep the
-# subagent running. Quiet unless -n (or AGENTS_DRY_RUN=true): then it prints
-# what it would stop and signals nothing.
+# --- Waits ---------------------------------------------------------------------
+# Herdr shows when a session in one of its panes waits on you, and each
+# agents sample counts that (history.sh). For a session anywhere else (tmux,
+# a plain tab), Claude Code's hooks say it instead, one file per wait in
+# $AGENTS_DATA_DIR:
+#   waiting/SESSION_ID      open:  start<TAB>status<TAB>project<TAB>PID@START
+#   waited/SESSION_ID@END   ended at END (epoch), the same line
+# SESSION_ID is Claude Code's session_id; PID@START names the session as
+# every other record does. wait-start opens one: blocked from the
+# PermissionRequest hook, which Claude Code runs as it is about to show a
+# permission dialog, and from the Notification hook for permission_prompt
+# and elicitation_dialog (it waits for your answer); done for idle_prompt
+# (finished, waiting for your next prompt). permission_prompt comes only
+# once a dialog has waited about six seconds, so after a tool's dialog it
+# finds the wait PermissionRequest opened, and the earlier start stands; it
+# still opens one for the dialogs PermissionRequest skips (a sandboxed
+# command's network request). A call an allow rule, the permission mode or
+# auto mode's classifier approves shows no dialog and runs no
+# PermissionRequest; one that ran it anyway (another hook approved it)
+# ends its wait at the tool's start, as below: nothing counted. Claude Code
+# also runs PermissionRequest for a call it denies unasked (dontAsk mode,
+# claude -p): no wait then. wait-end (UserPromptSubmit, PostToolUse,
+# PostToolUseFailure and Stop; their command starts agents only while this
+# session has a wait open: configs/claude/settings.json) moves it to
+# waited/. No hook fires when you answer a prompt, so a tool's end dates
+# it: the end is the hook's time less the tool's duration_ms (its run,
+# without the prompt), the moment you approved. A tool that started before
+# the wait opened is another one (a subagent's, run alongside) and ends
+# nothing. agents sample credits both as it credits Herdr's
+# (_agents_hook_waits_rows), then removes the ended ones and those whose
+# session exited. One write each, no network: the hooks stay cheap, and
+# PermissionRequest's command starts agents only when a wait could open.
+
+# _AGENTS_WAIT_FRESH — a wait is recorded only when a sample ran within this
+# many seconds: without the menu (or a cron `agents sample`) nothing would
+# credit it, or ever remove its file.
+_AGENTS_WAIT_FRESH=3600
+
+# _agents_hook_sid_ok ID — a session_id fit to name a file.
+_agents_hook_sid_ok() { [[ "${1:-}" =~ ^[A-Za-z0-9_-]{1,128}$ ]]; }
+
+# _agents_hook_wait_start SESSION_ID TYPE CWD [PERMISSION_MODE] — open a
+# wait. TYPE: the notification type, or PermissionRequest for that hook.
+# Unless: it is no wait (another notification type), no dialog shows (a
+# PermissionRequest in dontAsk mode or claude -p), the session runs in
+# Herdr (HERDR_ENV=1: Herdr's status counts it, so nothing is counted
+# twice), history is off, one is open already (the earlier start stands),
+# no sample ran within _AGENTS_WAIT_FRESH, or agents finds no session above
+# this hook.
+_agents_hook_wait_start() {
+    local sid="$1" type="$2" cwd="$3" mode="${4:--}" dir="$AGENTS_DATA_DIR" status now age tok _r proj
+    case "$type" in
+        PermissionRequest|permission_prompt|elicitation_dialog) status=blocked ;;
+        idle_prompt) status="done" ;;
+        *) _agents_hook_say "a $type notification is not a wait"; return 0 ;;
+    esac
+    # CLAUDE_CODE_ENTRYPOINT is sdk-cli under claude -p (its transcripts'
+    # entrypoint), which denies what it would ask.
+    if [[ "$type" == PermissionRequest && ( "$mode" == dontAsk || "${CLAUDE_CODE_ENTRYPOINT:-}" == sdk-cli ) ]]; then
+        _agents_hook_say "no dialog: Claude Code denies this call unasked"; return 0
+    fi
+    [[ "${HERDR_ENV:-}" != 1 ]] || { _agents_hook_say "in a Herdr pane: Herdr's status counts this wait"; return 0; }
+    [[ "$AGENTS_HISTORY" == 1 ]] || { _agents_hook_say "AGENTS_HISTORY=$AGENTS_HISTORY: no waits recorded"; return 0; }
+    _agents_hook_sid_ok "$sid" || { _agents_hook_say "no usable session_id"; return 0; }
+    [[ ! -e "$dir/waiting/$sid" ]] || { _agents_hook_say "already waiting: the earlier start stands"; return 0; }
+    now="$(date +%s)"
+    _agents_stamp_age age "$dir/sample.stamp" "$now"
+    [[ $age -lt $_AGENTS_WAIT_FRESH ]] || { _agents_hook_say "no agents sample within the hour (is the menu running?): nothing would count it"; return 0; }
+    IFS=$'\t' read -r tok _r <<<"$(agents_root_of "$AGENTS_SELF" 2>/dev/null)"
+    _agents_token "$tok" || { _agents_hook_say "not running under an agent session"; return 0; }
+    [[ -n "$cwd" && "$cwd" != - ]] || cwd="$PWD"
+    proj="$(agents_project "$cwd")"; proj="${proj//[[:cntrl:]]/ }"
+    if [[ "$_AGENTS_HOOK_DRY" == true ]]; then
+        printf 'agents hook: %s waits on you (%s) in %s\n' "$tok" "$status" "${proj:--}"
+        return 0
+    fi
+    (
+        umask 077
+        _agents_data_dir && mkdir -p "$dir/waiting" || exit 0
+        _agents_replace "$dir/waiting/$sid" "$now"$'\t'"$status"$'\t'"${proj:--}"$'\t'"$tok"
+    ) 2>/dev/null
+    return 0
+}
+
+# _agents_hook_wait_end SESSION_ID [DURATION_MS] — end the session's open
+# wait, if it has one (with history off, just drop it). DURATION_MS: the
+# run time of the tool whose end this is (PostToolUse's duration_ms): the
+# wait ended when the tool started, and a tool that started before the
+# wait opened leaves it open.
+_agents_hook_wait_end() {
+    local sid="$1" dur="${2:-}" dir="$AGENTS_DATA_DIR" now end start="" rest
+    _agents_hook_sid_ok "$sid" && [[ -f "$dir/waiting/$sid" ]] || return 0
+    now="$(date +%s)"; end="$now"
+    if [[ "$dur" =~ ^[0-9]{1,12}$ ]]; then
+        end=$(( now - dur / 1000 ))
+        IFS=$'\t' read -r start rest < "$dir/waiting/$sid" 2>/dev/null
+        if [[ "$start" =~ ^[0-9]+$ && $end -lt $start ]]; then
+            _agents_hook_say "a tool that started before the wait opened: the wait goes on"; return 0
+        fi
+    fi
+    if [[ "$_AGENTS_HOOK_DRY" == true ]]; then
+        if [[ $end -lt $now ]]; then echo "agents hook: the wait ended when the tool started, $(( now - end ))s ago"; else echo "agents hook: the wait ends"; fi
+        return 0
+    fi
+    if [[ "$AGENTS_HISTORY" != 1 ]]; then rm -f "$dir/waiting/$sid"; return 0; fi
+    ( umask 077; mkdir -p "$dir/waited" && mv -f "$dir/waiting/$sid" "$dir/waited/$sid@$end" ) 2>/dev/null
+    return 0
+}
+
+# agents hook subagent-stop|session-end|wait-start|wait-end [-n] < HOOK_JSON
+# — the hook itself. Returns 0 whatever happens: a failing SubagentStop hook
+# would keep the subagent running. Quiet unless -n (or AGENTS_DRY_RUN=true):
+# then it prints what it would do, and signals and writes nothing.
 agents_hook() {
     local _AGENTS_HL_AID=- _AGENTS_HL_HB=- _AGENTS_HL_TASKS=0 _AGENTS_HL_MATCHED=0
     local _AGENTS_HOOK_DRY="$_AGENTS_HOOK_DRY"   # -n lasts for this call only
     _agents_hook_run "$@"
-    _agents_hook_log "${1:-}"
+    # hooks.log is about cleanups; the wait hooks run at every tool call.
+    case "${1:-}" in wait-*) ;; *) _agents_hook_log "${1:-}" ;; esac
     return 0
 }
 
@@ -231,17 +352,29 @@ _agents_hook_run() {
     [[ $# -gt 0 ]] && shift
     for a in "$@"; do case "$a" in -n|--dry-run) _AGENTS_HOOK_DRY=true ;; esac; done
     case "$event" in
-        subagent-stop|session-end) ;;
-        *) echo "usage: agents hook subagent-stop|session-end [-n] < HOOK_JSON" >&2; return 0 ;;
+        subagent-stop|session-end|wait-start|wait-end) ;;
+        *) echo "usage: agents hook subagent-stop|session-end|wait-start|wait-end [-n] < HOOK_JSON" >&2; return 0 ;;
     esac
-    [[ "$AGENTS_HOOK_REAP" == 1 ]] || { _agents_hook_say "AGENTS_HOOK_REAP=$AGENTS_HOOK_REAP: off"; return 0; }
+    # AGENTS_HOOK_REAP turns the cleanups off, not the waits (session-end
+    # ends one too).
+    if [[ "$event" == subagent-stop && "$AGENTS_HOOK_REAP" != 1 ]]; then
+        _agents_hook_say "AGENTS_HOOK_REAP=$AGENTS_HOOK_REAP: off"; return 0
+    fi
     command -v jq >/dev/null 2>&1 || return 0
     if _agents_is_root; then return 0; fi
     if [[ -t 0 ]]; then echo "agents hook: pipe the hook's JSON to stdin" >&2; return 0; fi
-    local fields _ev _sid main _aid atype agent cwd reason
+    local fields _ev _sid main _aid atype agent cwd reason ntype dur pmode
     fields="$(_agents_hook_input)"
     [[ -n "$fields" ]] || { _agents_hook_say "no hook JSON on stdin"; return 0; }
-    IFS=$'\t' read -r _ev _sid main _aid atype agent cwd reason <<<"$fields"
+    IFS=$'\t' read -r _ev _sid main _aid atype agent cwd reason ntype dur pmode <<<"$fields"
+    case "$event" in
+        wait-start)
+            [[ "$_ev" == PermissionRequest ]] && ntype=PermissionRequest
+            _agents_hook_wait_start "$_sid" "$ntype" "$cwd" "$pmode"; return 0 ;;
+        wait-end)   _agents_hook_wait_end "$_sid" "$dur"; return 0 ;;
+        session-end) _agents_hook_wait_end "$_sid" ;;
+    esac
+    [[ "$AGENTS_HOOK_REAP" == 1 ]] || { _agents_hook_say "AGENTS_HOOK_REAP=$AGENTS_HOOK_REAP: off"; return 0; }
     main="$(_agents_tx_path "$main")"; agent="$(_agents_tx_path "$agent")"
     _agents_tx_type_ok "$atype" || atype=-
     if [[ "$AGENTS_HOOK_LOG" == 1 ]]; then

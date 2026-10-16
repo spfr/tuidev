@@ -12,7 +12,8 @@
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`;
   - a `statusLine` that runs `~/.local/bin/agents statusline` (it records Claude's usage limits, then prints a compact line or `AGENTS_STATUSLINE_CMD`'s; nothing without the `monitoring` pack, and a user's own `statusLine` survives the merge);
-  - `SubagentStop` and `SessionEnd` (`clear|resume`) hooks that run `~/.local/bin/agents hook` to stop the background commands a finished subagent or cleared session left running (a no-op without the `monitoring` pack; `AGENTS_HOOK_REAP=0` turns them off).
+  - `SubagentStop` and `SessionEnd` (`clear|resume`) hooks that run `~/.local/bin/agents hook` to stop the background commands a finished subagent or cleared session left running (a no-op without the `monitoring` pack; `AGENTS_HOOK_REAP=0` turns them off);
+  - wait hooks for `waits.tsv`: a `PermissionRequest` hook and a second `Notification` hook (`agents hook wait-start`; the `PermissionRequest` one prints nothing, so it never answers the dialog, and starts `agents` only when a wait could open) and `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure` and `Stop` hooks (`agents hook wait-end`, started only while that session has a wait open).
 
   The credential paths live in `configs/sandbox/credential-paths.txt`; `test_contract.sh` fails until `bin/sbx`, the `.sb` profiles, those deny rules and the docs match it.
 - **Agent teams are off by default.** While they are on, every subagent Claude names launches as a teammate. Use plain subagents; turn teams on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) only when teammates must talk to each other. `teammateMode: "auto"` then gives them tmux panes.

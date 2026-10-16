@@ -115,6 +115,9 @@ CLAUDE CODE HOOKS AND STATUS LINE (shipped in ~/.claude/settings.json; JSON on s
   agents hook session-end      on /clear or /resume: stop the session's polling
                                loops and what its finished subagents left
     -n, --dry-run              print what it would stop (or AGENTS_DRY_RUN=true)
+  agents hook wait-start       Notification: a session outside Herdr starts
+                               waiting on you (permission or idle prompt)
+  agents hook wait-end         its next prompt, tool run or turn end ends it
   Only tasks matched to their own process (its stdout is the task's output
   file) under the claude that runs the hook. AGENTS_HOOK_REAP=0 turns it off;
   AGENTS_HOOK_LOG=1 logs each run to @TMP@/data/hooks.log
