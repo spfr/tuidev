@@ -11,7 +11,7 @@
 
 # agents_tsv — agents_assess's need/evid rows (first, so the menu knows an
 # item's verdict when it meets the item), the records (agent, stale, hog, top,
-# total, act, watched, job), then:
+# total, act, herdr, ident, watched, job), then:
 #   mcpcfg cli scope name source project  each configured MCP server, while
 #     one runs (agents_mcp_tsv: who configured it, for the menu)
 #   sys  cpu_pct load1 cores mem_free_pct mem_pressure battery_pct battery_state
@@ -62,7 +62,8 @@ agents_tsv() {
     # Herdr: "hhealth server stale" and "hhealth outdated NAME…" while
     # Herdr's server or integrations need an update (an hourly check, never
     # waited on: _agents_herdr_health). Each session's Herdr pane and task
-    # title came with the records ("herdr PID PANE TITLE", agents_enrich).
+    # title came with the records ("herdr PID PANE TITLE", agents_enrich), and
+    # so did each agent row's join key ("ident PID PANE SESSION").
     _agents_herdr_health
     for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP; do
         val="${!key}"

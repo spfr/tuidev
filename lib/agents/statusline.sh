@@ -54,7 +54,47 @@ agents_statusline() {
     return 0
 }
 
+# _agents_claude_account — limits.tsv's cli and label for this Claude Code
+# (REPLY_CLI, REPLY_LABEL): CLAUDE_CONFIG_DIR unset, empty or $HOME/.claude is
+# the plain account ("claude", "-"); any other directory is "claude:NAME",
+# label NAME: its basename without leading dots and a "claude-" prefix,
+# lowercased, [a-z0-9._-] only, at most 24 characters. A basename that says
+# no more than "claude" (~/.config/claude, /work/.claude) is named by its
+# parent directory the same way, cut to 18 characters, and the first 5 hex
+# digits of the path's checksum ("config-1a2b3", "work-4c5d6"), so it never
+# shares a row with a directory named so itself (~/.claude-work is "work");
+# one directly in $HOME, or with no usable parent name, by "c" and the
+# checksum. Only directory names: never an email, a credential file or the
+# Keychain, nor your user name.
+_agents_claude_account() {
+    local d="${CLAUDE_CONFIG_DIR:-}" n p sum
+    while [[ "$d" == */ && "$d" != / ]]; do d="${d%/}"; done
+    REPLY_CLI=claude REPLY_LABEL=-
+    [[ -n "$d" && "$d" != "$HOME/.claude" ]] || return 0
+    n="$(_agents_claude_acct_name "${d##*/}")"
+    if [[ -z "$n" || "$n" == claude ]]; then
+        p="${d%/*}"; n=""
+        sum="$(printf '%s' "$d" | cksum | cut -d' ' -f1)"
+        [[ "$d" == */* && -n "$p" && "$p" != "$HOME" && "$p" != "${HOME%/}" ]] && n="$(_agents_claude_acct_name "${p##*/}")"
+        if [[ -n "$n" && "$n" != claude ]]; then
+            printf -v sum '%08x' "$sum"; n="${n:0:18}-${sum:0:5}"
+        else
+            n="c$sum"
+        fi
+    fi
+    REPLY_CLI="claude:$n" REPLY_LABEL="$n"
+}
+
+# _agents_claude_acct_name NAME — a directory name as an account label
+# (_agents_claude_account), "" when nothing is left.
+_agents_claude_acct_name() {
+    printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -e 's/[^a-z0-9._-]/-/g' -e 's/^[^a-z0-9]*//' -e 's/^claude-//' -e 's/^[^a-z0-9]*//' | cut -c1-24
+}
+
 # _agents_statusline_awk NOW < JSON — awk/statusline.awk (NOW empty: its clock).
 _agents_statusline_awk() {
-    _agents_awk statusline -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$1" -v hist="$AGENTS_HISTORY" 2>/dev/null
+    local REPLY_CLI REPLY_LABEL
+    _agents_claude_account
+    _agents_awk statusline -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$1" -v hist="$AGENTS_HISTORY" \
+        -v acct="$REPLY_CLI" -v label="$REPLY_LABEL" 2>/dev/null
 }

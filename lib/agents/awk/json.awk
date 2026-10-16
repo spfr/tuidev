@@ -85,6 +85,7 @@ $1 == "evid" {
     next
 }
 $1 == "total" { total = $5; next }
+$1 == "ident" && NF >= 4 { ipane[$2] = $3; isid[$2] = $4; next }   # agents_enrich's join key
 $1 == "act" { x[++nx] = $0; next }
 $1 == "agent" && NF >= 14 { ag[++na] = $0; next }
 $1 == "job" && NF >= 14 { jobrow(); next }
@@ -101,7 +102,8 @@ END {
         (total == "" ? "null" : int(total / (y[2] > 0 ? y[2] : 1) + 0.5)), num(y[1]), num(y[2]), num(y[3]), opt(y[4]), num(y[5]), opt(y[6]))
     for (i = 1; i <= na; i++) {
         split(ag[i], f, "\t"); s = obj(ag[i])
-        o["agent"] = o["agent"] (i > 1 ? "," : "") substr(s, 1, length(s) - 1) ",\"activity\":" activity(f[2], f[5], f[7]) ",\"job\":\"agent\"}"
+        o["agent"] = o["agent"] (i > 1 ? "," : "") substr(s, 1, length(s) - 1) ",\"activity\":" activity(f[2], f[5], f[7]) ",\"job\":\"agent\"" \
+            ",\"herdr_pane\":" opt(ipane[f[2]]) ",\"session_id\":" opt(isid[f[2]]) "}"
     }
     # Lists are joined, not passed through %s: mawk caps one sprintf/printf at 8 KiB.
     print "{\"schema_version\":1,\"agents\":[" o["agent"] "],\"stale\":[" o["stale"] "],\"hogs\":[" o["hog"] "],\"top\":[" o["top"] "],\"jobs\":[" jobs_json() "],\"system\":" sys ",\"awake\":" aw ",\"lid\":" ENVIRON["LID"] \

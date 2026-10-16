@@ -190,7 +190,13 @@ _agents_cwds() {
     local IFS=,
     printf '%s\n' "$FIX_CWDS" | awk -F '\t' -v want=",$*," 'index(want, "," $1 ",") { print $1 "\t" $2 }'
 }
-_agents_herdr() { printf 'claude\tworking\t%s\n' "$HOME/work/app"; }
+# Herdr knows 90419 (by its directory) and its session id; no pane or title.
+_agents_herdr() { printf 'claude\tworking\t%s\t-\t-\tsess-90419-herdr\n' "$HOME/work/app"; }
+# Claude Code's own records: 5000's (its start: 6h before the clock, 03:00
+# UTC), and one a crash left for an earlier process with 84091's pid.
+mkdir -p "$HOME/.claude/sessions"
+printf '{"pid":5000,"sessionId":"5e550000-0000-4000-8000-000000005000","procStart":"Wed Jan  1 03:00:00 2020"}\n' > "$HOME/.claude/sessions/5000.json"
+printf '{"pid":84091,"sessionId":"0ld00000-0000-4000-8000-000000084091","procStart":"Tue Dec 31 10:00:00 2019"}\n' > "$HOME/.claude/sessions/84091.json"
 _agents_start() { printf '%s\n' "$FIX_PS" | awk -v p="$1" '$1 == p { print $9 "_" $10 "_" $11 "_" $12 "_" $13; exit }'; }
 _agents_keep_pids() { _agents_awake_pid; return 0; }
 # tmux: two panes, the shells that started claude 90419 and the sessions under 900.
@@ -347,6 +353,15 @@ menu_case() {   # NAME TSV_FILE
 }
 ( agents_main tsv ) > "$tmp/tsv.raw" 2>/dev/null || true
 menu_case menu "$tmp/tsv.raw"
+# The same with the Usage section (two Claude accounts, a CLI by model, a
+# window past 80%) and Herdr's maintenance (a session works: no restart).
+{ cat "$tmp/tsv.raw"; printf '%s\n' \
+    $'limit\tClaude\t5h\t86\t14:05\tclaude\t60' $'limit\tClaude\tweek\t41\tMon 09:00\tclaude\t60' \
+    $'limit\tClaude · work\t5h\t12\t15:40\tclaude:work\t300' $'limit\tCodex\tweek\t0\t-\tcodex\t5400' \
+    $'limit\tAntigravity · Claude and GPT\tweek\t3\t-\tagy:3p\t900' $'limit\tAntigravity · Gemini\t5h\t9\t21:10\tagy:gemini\t900' \
+    $'tokens\t12400000\t94' $'denials\t12\tProduction Deploy' $'compacts\t3' \
+    $'hhealth\tserver\tstale\t0.9.4\t0.9.5' $'hhealth\toutdated\tclaude codex'; } > "$tmp/tsv-usage.raw"
+menu_case menu-usage "$tmp/tsv-usage.raw"
 # agents show: the process's own files and threads come from lsof and ps -M,
 # so they are fixed here; no session transcripts exist in this HOME.
 _agents_show_proc() { printf 'f\tfiles\t17\nf\tthreads\t%s\n' "$(( $1 % 7 + 1 ))"; }

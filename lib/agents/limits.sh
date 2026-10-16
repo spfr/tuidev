@@ -7,7 +7,10 @@
 # AGENTS_HISTORY=0), one line per CLI and window, tab-separated, no header:
 #   epoch cli used_percent window_minutes resets_at [label]
 # epoch: when the CLI reported it; cli: its family (claude, codex, agy...),
-# then ":KEY" for a CLI with several quotas per window (agy:gemini);
+# then ":KEY" for a CLI with several quotas per window (agy:gemini) or
+# several accounts (claude:work, one per CLAUDE_CONFIG_DIR, named by its
+# directory: _agents_claude_account in statusline.sh; plain "claude" is
+# ~/.claude, label "-");
 # used_percent: 0-100, may have decimals; resets_at: epoch, 0 when the CLI
 # gives none (nothing used yet); label: the quota's name for people ("-" or
 # absent: none). Each source replaces only its own lines

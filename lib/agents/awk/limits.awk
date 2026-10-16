@@ -10,7 +10,12 @@
 #
 # A reading is stale once its window has reset (resets_at passed), or, with
 # no reset time (a window nothing has been used of yet), a day after it was
-# read: the menu hides it, the view shows it dimmed.
+# read: the menu hides it, the view shows it dimmed. So is a plain claude
+# reading that an account's (claude:NAME) supersedes: a later reading of the
+# same window, resetting at the same second, at least as used. That is the
+# copy agents before 3.12 wrote for every account under "claude"; usage in
+# a window only grows, so hiding it never lowers what the menu's gauge
+# shows, and a plain account in use reads anew within minutes.
 
 # cliname F — a CLI family (limits.tsv's cli up to its ":") for people. A
 # new CLI adds its line here and its probe in limits.sh.
@@ -51,13 +56,13 @@ function rtext(t,   s) {
     if (t - now < 7 * 86400) return wday(t) " " hhmm(t)
     s = dayhm(t); return substr(s, 1, 6)
 }
-function stale(i) { return (R[i] > 0 && R[i] <= now) || (R[i] <= 0 && now - E[i] > 86400) }
+function stale(i) { return (R[i] > 0 && R[i] <= now) || (R[i] <= 0 && now - E[i] > 86400) || (i in SUP) }
 function name(i) { return cliname(F[i]) (L[i] != "-" && L[i] != "" ? " \302\267 " L[i] : "") }
 function pcti(p) { return int(p + 0.5) }
 
 # load — N rows, the latest per cli and window: E epoch, C cli, F family,
 # P used %, W window minutes, R resets_at, L label; sorted by family,
-# label and window (K the sort keys).
+# label and window (K the sort keys); SUP the superseded plain claude rows.
 function load(   ln, f, k, i, j, t, n) {
     N = 0
     while ((getline ln < lf) > 0) {
@@ -72,6 +77,11 @@ function load(   ln, f, k, i, j, t, n) {
         F[i] = C[i]; sub(/:.*/, "", F[i])
     }
     close(lf)
+    for (i = 1; i <= N; i++) {
+        if (C[i] != "claude" || R[i] <= 0) continue
+        for (j = 1; j <= N; j++)
+            if (F[j] == "claude" && C[j] != "claude" && W[j] == W[i] && R[j] == R[i] && E[j] > E[i] && P[j] >= P[i]) { SUP[i] = 1; break }
+    }
     for (i = 1; i <= N; i++) { O[i] = i; K[i] = corder(F[i]) " " F[i] " " (L[i] == "-" ? "" : L[i]) " " sprintf("%09d", W[i]) }
     for (i = 2; i <= N; i++) {
         t = O[i]

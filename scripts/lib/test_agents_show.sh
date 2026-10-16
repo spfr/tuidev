@@ -58,6 +58,12 @@ SNAP="$(
     psl 960 955 1.0 300000 01:00:00 codex
 )"
 agents_snapshot() { printf '%s\n' "$SNAP"; }
+# Claude Code's sessions/PID.json, its procStart the fixture's start (UTC):
+# 600 started 1h and 820 2h before AGENTS_NOW.
+cc_session() {  # cc_session PID JSON-FIELDS
+    local st; case "$1" in 600) st="Wed Oct 14 16:46:40 2026" ;; 820) st="Wed Oct 14 15:46:40 2026" ;; esac
+    printf '{%s,"procStart":"%s"}\n' "$2" "$st" > "$CLAUDE_CONFIG_DIR/sessions/$1.json"
+}
 _agents_listeners() { :; }
 _agents_keep_pids() { :; }
 _agents_cwds() {
@@ -87,6 +93,9 @@ stub() {   # NAME SCRIPT_BODY
 stub tmux 'case "$1" in list-clients) echo "100 7000 /dev/ttys002" ;; capture-pane) echo "pane text" ;; esac; exit 0'
 stub osascript 'echo ok'
 stub open 'exit 0'
+# where.sh asks ps for a process's age (ps -o etime= -p PID): the fixture's.
+printf '%s\n' "$SNAP" > "$tmp/snap"
+stub ps 'if [[ "$1 $2 $3" == "-o etime= -p" ]]; then awk -v p="$4" '"'"'$1 == p { print $8 }'"'"' "'"$tmp"'/snap"; else exit 1; fi'
 HERDR_AGENTS='{"result":{"agents":[
   {"pane_id":"w1:p1","agent":"claude","cwd":"/work/other","agent_session":{"value":"sess-820"}},
   {"pane_id":"w2:p1","agent":"claude","cwd":"/work/api","agent_session":{"value":"other"}}]}}'
@@ -159,7 +168,7 @@ out="$(agents_jump 820)" || fail "jump to Herdr failed: $out"
 [[ "$out" == "pid 820: Herdr pane w2:p1" && "$(log herdr)" == *"agent focus w2:p1"* ]] || fail "Herdr by its directory: $out / $(log herdr)"
 [[ "$(log osascript)" == *"Ghostty"*"/dev/ttys003"* ]] || fail "the Herdr client's Ghostty tab is not focused: $(log osascript)"
 # By the session id Claude Code recorded for the pid (preferred over the directory).
-printf '{"sessionId":"sess-820","name":"api-1","status":"busy","version":"2.1.0"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+cc_session 820 '"sessionId":"sess-820","name":"api-1","status":"busy","version":"2.1.0"'
 clear_logs; agents_jump 820 >/dev/null
 [[ "$(log herdr)" == *"agent focus w1:p1"* ]] || fail "Herdr by session id: $(log herdr)"
 rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"
@@ -177,7 +186,7 @@ clear_logs; agents_jump 820 >/dev/null
 printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api","agent_session":{"value":"zzz"}}]}}' > "$tmp/herdr.json"
 clear_logs; out="$(agents_jump 820)"
 [[ "$out" == "pid 820: Herdr (its pane not found)" && "$(log herdr)" != *"agent focus"* ]] || fail "Herdr: a guess without a session id: $out / $(log herdr)"
-printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+cc_session 820 '"sessionId":"sess-820"'
 clear_logs; agents_jump 820 >/dev/null
 [[ "$(log herdr)" == *"agent focus w9:p9"* ]] || fail "Herdr: no last-resort guess for a known session: $(log herdr)"
 rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"
@@ -185,7 +194,7 @@ rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"
 # process-info round; one Herdr no longer lists is passed over.
 _agents_pane_env() { [[ "$1" == 820 && -n "${PANE_820:-}" ]] && printf '820\t%s\n' "$PANE_820"; return 0; }
 printf '%s\n' '{"result":{"agents":[{"pane_id":"w2:p1","agent":"claude","cwd":"/work/api","agent_session":{"value":"sess-820"}},{"pane_id":"w7:p2","agent":"claude","cwd":"/elsewhere"}]}}' > "$tmp/herdr.json"
-printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+cc_session 820 '"sessionId":"sess-820"'
 clear_logs; out="$(PANE_820=w7:p2 agents_jump 820)"
 [[ "$out" == "pid 820: Herdr pane w7:p2" && "$(log herdr)" == *"agent focus w7:p2"* && "$(log herdr)" != *"process-info"* ]] \
     || fail "Herdr by the pane in its environment: $out / $(log herdr)"
@@ -216,7 +225,7 @@ out="$(agents_peek 820)"; [[ "$out" == *"Herdr w2:p1"*"herdr pane text" && "$(lo
 # Peek never guesses: a pane it cannot tell is not read, even with another
 # agent alone in the directory (and a session id it knows).
 printf '%s\n' '{"result":{"agents":[{"pane_id":"w9:p9","agent":"claude","cwd":"/work/api","agent_session":{"value":"zzz"}}]}}' > "$tmp/herdr.json"
-printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+cc_session 820 '"sessionId":"sess-820"'
 clear_logs
 if out="$(agents_peek 820 2>&1)"; then fail "peek guessed a Herdr pane: $out"; fi
 [[ "$out" == *"its pane was not found"* && "$(log herdr)" != *"pane read"* ]] || fail "peek guessed a Herdr pane: $out / $(log herdr)"
@@ -231,7 +240,7 @@ pass "peek: a tmux pane's last lines, a Herdr pane's through herdr pane read; no
 _agents_show_proc() { printf 'f\tfiles\t12\nf\tthreads\t9\n'; }
 mkdir -p "$tmp/repo/.git" "$CLAUDE_CONFIG_DIR/projects/-repo"
 echo "ref: refs/heads/feat-x" > "$tmp/repo/.git/HEAD"
-printf '{"sessionId":"sess-600","name":"repo-1","status":"busy","version":"2.1.300"}\n' > "$CLAUDE_CONFIG_DIR/sessions/600.json"
+cc_session 600 '"sessionId":"sess-600","name":"repo-1","status":"busy","version":"2.1.300"'
 tx="$CLAUDE_CONFIG_DIR/projects/-repo/sess-600.jsonl"
 {
     # A long first part that must not be read, then the end.
@@ -265,6 +274,17 @@ agents_session_tokens() { :; }
 # Claude Code's record of a pid is checked against the process's start.
 printf '{"sessionId":"sess-x","procStart":"Mon Jan  1 00:00:00 2024"}\n' > "$CLAUDE_CONFIG_DIR/sessions/600.json"
 [[ "$(agents_show 601)" != *sess-x* ]] || fail "a stale session record names a new process"
+# One without a procStart that parses can't say whose it is.
+for st in '' ',"procStart":"soon"' ',"procStart":1791996400'; do
+    printf '{"sessionId":"sess-x"%s}\n' "$st" > "$CLAUDE_CONFIG_DIR/sessions/600.json"
+    [[ "$(agents_show 601)" != *sess-x* ]] || fail "a session record without a usable procStart names a process: $st"
+done
+# Jump trusts the same record only for the process that wrote it.
+printf '%s\n' "$HERDR_AGENTS" > "$tmp/herdr.json"
+printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+clear_logs; agents_jump 820 >/dev/null
+[[ "$(log herdr)" == *"agent focus w2:p1"* ]] || fail "jump by a session record without a procStart: $(log herdr)"
+rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"
 pass "show: what it is, its session (id, name, model, version; origin, tokens and API-equivalent cost once the scanner has seen it), where, cpu, threads, files, activity, children; JSON"
 
 # _agents_activity reads only the end of a transcript.

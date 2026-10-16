@@ -121,6 +121,68 @@ out="$(sl_json 61 1792180000 41.2 1792500000 | "$REPO_DIR/bin/agents" statusline
 [[ "$out" == "Opus 5.5 · ctx 42% · 5h 61% · wk 41%" ]] || fail "agents statusline: $out"
 pass "agents statusline: Claude's 5h and weekly windows recorded when they change (or every 5 min), a forged key in a string ignored, your command's output and status untouched, no loop, no jq needed"
 
+# --- 2b. Claude accounts: one row per CLAUDE_CONFIG_DIR ------------------------------
+acct() { ( CLAUDE_CONFIG_DIR="$1"; _agents_claude_account; echo "$REPLY_CLI $REPLY_LABEL" ); }
+[[ "$(acct "")" == "claude -" && "$(acct "$HOME/.claude")" == "claude -" && "$(acct "$HOME/.claude/")" == "claude -" ]] || fail "plain account"
+[[ "$(acct "$HOME/.claude-work")" == "claude:work work" && "$(acct "/x/Claude-Pers One/")" == "claude:pers-one pers-one" ]] \
+    || fail "account labels: $(acct "$HOME/.claude-work") / $(acct "/x/Claude-Pers One/")"
+# A directory named just claude is named by its parent and a checksum of its
+# path, so it never shares a row with one named so itself ($HOME/.claude-work
+# and $HOME/work/claude); never the home directory's name (your user name).
+pw="$(acct "/work/.claude")" pc="$(acct "$HOME/.config/claude/")" px="$(acct "/x/...")" pl="$(acct "/Clients/Claude-/")"
+[[ "$pw" =~ ^claude:work-[0-9a-f]{5}\ work-[0-9a-f]{5}$ && "$pc" =~ ^claude:config-[0-9a-f]{5}\ config-[0-9a-f]{5}$ \
+    && "$px" =~ ^claude:x-[0-9a-f]{5}\ x-[0-9a-f]{5}$ && "$pl" =~ ^claude:clients-[0-9a-f]{5}\ clients-[0-9a-f]{5}$ \
+    && "$(acct "/work/.claude/")" == "$pw" && "$(acct "/elsewhere/work/claude")" != "$pw" && "$pc" != *"${HOME##*/}"* ]] \
+    || fail "a claude-named directory: $pw / $pc / $px / $pl"
+[[ "$(acct "$HOME/.claude-work")" != "$(acct "$HOME/work/claude")" && "$(acct "$HOME/work/claude")" == claude:work-* ]] \
+    || fail "two accounts on one row: $(acct "$HOME/.claude-work") / $(acct "$HOME/work/claude")"
+[[ "$(acct "/$(printf 'p%.0s' {1..40})/claude")" =~ ^claude:p{18}-[0-9a-f]{5}\ p{18}-[0-9a-f]{5}$ ]] \
+    || fail "a long parent name: $(acct "/$(printf 'p%.0s' {1..40})/claude")"
+a1="$(acct "$HOME/claude")" a2="$(acct "/.claude")" a3="$(acct "/claude/.claude")"
+[[ "$a1" =~ ^claude:c[0-9]+\ c[0-9]+$ && "$a2" =~ ^claude:c[0-9]+\ c[0-9]+$ && "$a3" =~ ^claude:c[0-9]+\ c[0-9]+$ \
+    && "$a1" != "$a2" && "$a2" != "$a3" && "$(acct "$HOME/claude")" == "$a1" && "$a1" != *"${HOME##*/}"* ]] \
+    || fail "no usable parent: a stable checksum: $a1 / $a2 / $a3"
+# A v3.11 limits.tsv (plain claude rows, no account) keeps working; accounts are added beside it.
+printf '%s\n' "$((NOW - 60))${T}claude${T}10${T}300${T}$((NOW + 3600))${T}-" "$((NOW - 60))${T}claude${T}20${T}10080${T}$((NOW + 90000))${T}-" "$((NOW - 60))${T}codex${T}5${T}300${T}$((NOW + 600))${T}-" > "$L"
+out="$(sl_json 10 $((NOW + 3600)) 20 $((NOW + 90000)) | agents_statusline)"
+[[ "$(wc -l < "$L" | tr -d ' ')" == 3 && "$(cut -f1 "$L" | sort -u | tr '\n' ' ')" == "$((NOW - 60)) " ]] || fail "an unchanged plain reading was rewritten: $(cat "$L")"
+sl_json 70 $((NOW + 7200)) 30 $((NOW + 95000)) | CLAUDE_CONFIG_DIR="$HOME/.claude-work" agents_statusline >/dev/null
+[[ "$(grep -c "${T}claude:work${T}" "$L")" == 2 && "$(grep -c "${T}claude${T}" "$L")" == 2 ]] || fail "second account: $(cat "$L")"
+[[ "$(grep "${T}claude:work${T}.*${T}300${T}" "$L")" == "${NOW}${T}claude:work${T}70${T}300${T}$((NOW + 7200))${T}work" ]] || fail "work row: $(cat "$L")"
+# Upsert isolation: the plain account changing leaves work's rows, and the reverse.
+( AGENTS_NOW=$((NOW + 30)); sl_json 15 $((NOW + 3600)) 20 $((NOW + 90000)) | agents_statusline >/dev/null )
+[[ "$(grep -c "${T}claude:work${T}" "$L")" == 2 && "$(grep "${T}claude${T}.*${T}300${T}" "$L" | cut -f3)" == 15 ]] || fail "plain update touched work: $(cat "$L")"
+( AGENTS_NOW=$((NOW + 40)); sl_json 71 $((NOW + 7200)) 30 $((NOW + 95000)) | CLAUDE_CONFIG_DIR="$HOME/.claude-work" agents_statusline >/dev/null )
+[[ "$(grep "${T}claude${T}.*${T}300${T}" "$L" | cut -f3)" == 15 && "$(grep "${T}claude:work${T}.*${T}300${T}" "$L" | cut -f3)" == 71 ]] || fail "work update touched plain: $(cat "$L")"
+# Each account's repeat reading is compared with its own rows.
+before="$(cat "$L")"
+( AGENTS_NOW=$((NOW + 50)); sl_json 15 $((NOW + 3600)) 20 $((NOW + 90000)) | agents_statusline >/dev/null
+  sl_json 71 $((NOW + 7200)) 30 $((NOW + 95000)) | CLAUDE_CONFIG_DIR="$HOME/.claude-work" agents_statusline >/dev/null )
+[[ "$(cat "$L")" == "$before" ]] || fail "an unchanged reading was rewritten: $(cat "$L")"
+# agents limits: the plain account first, then work, then Codex.
+out="$(agents_limits)"
+names="$(printf '%s\n' "$out" | grep -E '^(Claude|Codex)' | cut -c1-17 | tr -s ' ' | tr '\n' '|')"
+[[ "$names" == "Claude 5h|Claude week|Claude · work 5h|Claude · work week|Codex 5h|" || "$out" == *"Claude · work"* ]] || fail "limits view: $out"
+[[ "$(printf '%s\n' "$out" | grep -nE '^Claude  ' | head -1 | cut -d: -f1)" -lt "$(printf '%s\n' "$out" | grep -n 'Claude · work' | head -1 | cut -d: -f1)" ]] || fail "plain account not first: $out"
+[[ "$(printf '%s\n' "$out" | grep -c 'Claude Code: no reading yet')" == 0 ]] || fail "claude reading missed"
+tsvout="$(_agents_limits_lines | grep '^limit' | cut -f2,3,6 | tr '\t\n' ' |')"
+[[ "$tsvout" == "Claude 5h claude|Claude week claude|Claude · work 5h claude:work|Claude · work week claude:work|Codex 5h codex|" ]] || fail "tsv order: $tsvout"
+js="$(agents_limits --json)"
+[[ "$js" == *'"cli":"claude:work","name":"Claude","label":"work"'* && "$js" == *'"cli":"claude","name":"Claude","label":null'* ]] || fail "json: $js"
+# A v3.11 copy: a plain reading an account's later one of the same window
+# (same reset, at least as used) supersedes is stale: hidden in the menu,
+# dimmed in the view, stale in --json. One the account doesn't match stays.
+printf '%s\n' "$((NOW - 600))${T}claude${T}40${T}10080${T}$((NOW + 90000))${T}-" \
+    "$((NOW - 600))${T}claude${T}90${T}300${T}$((NOW + 3600))${T}-" \
+    "$((NOW - 60))${T}claude:work${T}45${T}10080${T}$((NOW + 90000))${T}work" \
+    "$((NOW - 60))${T}claude:work${T}30${T}300${T}$((NOW + 3600))${T}work" > "$L"
+tsvout="$(_agents_limits_lines | grep '^limit' | cut -f2,3,4 | tr '\t\n' ' |')"
+[[ "$tsvout" == "Claude 5h 90|Claude · work 5h 30|Claude · work week 45|" ]] || fail "a superseded plain reading in the menu: $tsvout"
+js="$(agents_limits --json)"
+[[ "$js" == *'"cli":"claude","name":"Claude","label":null,"window_minutes":10080,"used_percent":40,'*'"stale":true}'* \
+    && "$js" == *'"cli":"claude","name":"Claude","label":null,"window_minutes":300,"used_percent":90,'*'"stale":false}'* ]] || fail "superseded in --json: $js"
+pass "Claude accounts: CLAUDE_CONFIG_DIR names a claude:LABEL row (a claude-named one by its parent, else a checksum), each upserts alone, a v3.11 limits.tsv keeps working, its copy an account supersedes goes stale, the plain account lists first in agents limits, its tsv records and --json"
+
 # --- 3. agents limits, the tsv records ---------------------------------------------------
 printf '%s\n' \
     "$((NOW - 120))${T}claude${T}83.4${T}300${T}$((NOW + 3900))${T}-" \
@@ -253,38 +315,75 @@ case "\$1" in tsv) cat "$tmp/tsv" ;; esac
 EOF
 chmod +x "$tmp/agents-stub"
 menu() { AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh"; }
+usage() { printf '%s\n' "$1" | awk '/^Usage \|/ { on = 1 } on && /^---$/ { exit } on'; }
+A="bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold"
+L="$A param3=limits symbolize=false"
+orange="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19"
+red="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19"
+gray="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19"
+G="sfimage=gauge.with.dots.needle"
 usage_rows="limit${T}Claude${T}5h${T}23${T}14:05${T}claude${T}60
 limit${T}Claude${T}week${T}81${T}Mon 09:00${T}claude${T}60
 limit${T}Antigravity · Gemini${T}5h${T}2${T}-${T}agy:gemini${T}600"
 printf '%s\ntokens\t2637000\t91\ndenials\t12\tProduction Deploy\ncompacts\t3\n' "$usage_rows" > "$tmp/tsv"
 m="$(menu)"
-sec="$(printf '%s\n' "$m" | awk '/^Usage \|/ { on = 1 } on && /^---$/ { exit } on')"
-A="bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold"
-orange="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19"
+sec="$(usage "$m")"
 want="Usage | size=12
-Claude · 5h 23% · resets 14:05 | sfimage=gauge.with.needle $A param3=limits symbolize=false
-Claude · week 81% · resets Mon 09:00 | sfimage=gauge.with.needle $orange $A param3=limits symbolize=false
-Antigravity · Gemini · 5h 2% | sfimage=gauge.with.needle $A param3=limits symbolize=false
-2.6M tokens today · 91% cached | $A param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false
-Denials today: 12 (top: Production Deploy) | $A param3=report param4=--view param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false
-Compactions today: 3 | $A param3=report param4=--view param5=tokens param6=--since param7=today sfimage=arrow.down.right.and.arrow.up.left symbolize=false"
+Claude: 5h 23% · wk 81% (resets Mon 09:00) | $G.67percent $orange $L
+--5h 23% · resets 14:05 | $G.33percent $L
+--week 81% · resets Mon 09:00 | $G.67percent $orange $L
+--updated 1m ago | size=11
+Antigravity: 5h 2% | $G.0percent $L
+--Gemini · 5h 2% | $G.0percent $L
+--updated 10m ago | size=11
+Today: 2.6M tokens · 91% cached · 12 denials · 3 compactions | $A param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false
+--2.6M tokens · 91% read from the prompt cache | $A param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false
+--12 denials · top: Production Deploy | $A param3=report param4=--view param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false
+--3 context compactions | $A param3=report param4=--view param5=tokens param6=--since param7=today sfimage=arrow.down.right.and.arrow.up.left symbolize=false"
 [[ "$sec" == "$want" ]] || fail "Usage section:"$'\n'"$sec"$'\n'"want:"$'\n'"$want"
 [[ "$(printf '%s\n' "$m" | head -1)" == ":terminal:" ]] || fail "81% tinted the icon: $(printf '%s\n' "$m" | head -1)"
 [[ $(printf '%s\n' "$m" | grep -n '^Agents (' | cut -d: -f1) -lt $(printf '%s\n' "$m" | grep -n '^Usage |' | cut -d: -f1) ]] || fail "Usage before Agents"
-# 95%: a red dot and an orange icon; the limit title token.
-printf 'limit\tCodex\tweek\t96\tFri 10:00\tcodex\t60\nconf\tAGENTS_BAR_TITLE\tcount limit\n' > "$tmp/tsv"
-m="$(menu)"
-[[ "$(printf '%s\n' "$m" | head -1)" == ":terminal: :gauge.with.needle: 96% | sfcolor=#FF9F0A" ]] || fail "95% title: $(printf '%s\n' "$m" | head -1)"
-[[ "$m" == *$'\n'"Codex · week 96% · resets Fri 10:00 | sfimage=gauge.with.needle sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 "* ]] || fail "95%: no red dot"
+pass "menu: one line per CLI, its windows side by side (the reset only from 80%), each window and the reading's age in its submenu; one Today line for tokens, denials and compactions, each opening its view"
+
+# Accounts (claude:work, old and new names), a CLI by model collapsed to each
+# window's highest model, windows shortest first, 0% gray, 95% red.
+printf '%s\n' "limit${T}Claude${T}week${T}10${T}Wed 08:00${T}claude${T}30
+limit${T}Claude${T}5h${T}40${T}16:30${T}claude${T}30
+limit${T}Claude · work${T}5h${T}97${T}15:10${T}claude:work${T}120
+limit${T}Claude (home)${T}5h${T}5${T}-${T}claude:home${T}4000
+limit${T}Codex${T}week${T}0${T}-${T}codex${T}600
+limit${T}Antigravity · Claude and GPT${T}week${T}3${T}-${T}agy:3p${T}1751
+limit${T}Antigravity · Gemini${T}5h${T}81${T}17:10${T}agy:gemini${T}1751
+limit${T}Antigravity · Gemini 4 Argon${T}week${T}7${T}Fri 03:00${T}agy:gemini-argon${T}1751
+denials${T}1${T}-
+conf${T}AGENTS_BAR_TITLE${T}count limit" > "$tmp/tsv"
+m="$(menu)"; sec="$(usage "$m")"
+lines="$(printf '%s\n' "$sec" | grep -v '^--' | sed 's/ | .*//')"
+[[ "$lines" == "Usage
+Claude: 5h 40% · wk 10%
+Claude (work): 5h 97% (resets 15:10)
+Claude (home): 5h 5%
+Codex: wk 0%
+Antigravity: 5h 81% (resets 17:10) · wk 7%
+Today: 1 denial" ]] || fail "CLI lines:"$'\n'"$lines"
+[[ "$sec" == *$'\n'"Claude (work): 5h 97% (resets 15:10) | $G.100percent $red $L"$'\n'* ]] || fail "95%: red"
+[[ "$sec" == *$'\n'"Codex: wk 0% | $G.0percent $gray $L"$'\n'* ]] || fail "0%: gray"
+[[ "$sec" == *$'\n'"Antigravity: 5h 81% (resets 17:10) · wk 7% | $G.67percent $orange $L"$'\n'"--Claude and GPT · week 3% | "*$'\n'"--Gemini · 5h 81% · resets 17:10 | $G.67percent $orange $L"$'\n'"--Gemini 4 Argon · week 7% · resets Fri 03:00 | "*$'\n'"--updated 29m ago | size=11"$'\n'* ]] \
+    || fail "models in the submenu:"$'\n'"$sec"
+[[ "$sec" == *$'\n'"--updated 1h6m ago | size=11"$'\n'* ]] || fail "the reading's age"
+[[ "$sec" == *$'\n'"Today: 1 denial | $A param3=report param4=--view param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false"$'\n'"--1 denial | "* ]] || fail "one denial"
+[[ "$(printf '%s\n' "$m" | head -1)" == ":terminal: :gauge.with.dots.needle.100percent: 97% | sfcolor=#FF9F0A" ]] || fail "95% title: $(printf '%s\n' "$m" | head -1)"
+pass "menu: each account its own line (Claude (work)), Antigravity's models collapsed to each window's highest, shortest window first; gray at 0%, orange from 80%, red and an orange icon from 95%; the limit title token"
+
 # Nothing to say: no section; hostile text stays text.
 printf 'denials\t0\t-\n' > "$tmp/tsv"
 [[ "$(menu)" != *"Usage |"* ]] || fail "an empty Usage section"
 printf 'limit\t---Evil | bash=/bin/rm\t5h\t1\t-\tclaude\t1\ncompacts\t2\n' > "$tmp/tsv"
 m="$(menu)"
-[[ "$m" == *$'\n'"Evil ¦ bash=/bin/rm · 5h 1% | sfimage="* && "$m" == *$'\n'"Compactions today: 2 | "* ]] || fail "hostile limit name: $(printf '%s\n' "$m" | grep -i evil)"
+[[ "$m" == *$'\n'"Evil ¦ bash=/bin/rm: 5h 1% | $G.0percent $L"$'\n'* && "$m" == *$'\n'"Today: 2 compactions | "* ]] || fail "hostile limit name: $(printf '%s\n' "$m" | grep -i evil)"
 printf 'conf\tAGENTS_BAR_SECTIONS\tagents\nlimit\tClaude\t5h\t1\t-\tclaude\t1\n' > "$tmp/tsv"
 [[ "$(menu)" != *"Usage |"* ]] || fail "Usage shown though AGENTS_BAR_SECTIONS leaves it out"
-pass "menu: Usage lists each window (orange from 80%, red and an orange icon from 95%), then today's tokens, denials (top reason) and compactions, each opening its view; the limit title token"
+pass "menu: no Usage section with nothing to show or when AGENTS_BAR_SECTIONS leaves it out; a hostile name stays text"
 grep -q '^        limits)' "$REPO_DIR/lib/agents/cli.sh" || fail "the menu opens agents limits, which the CLI lacks"
 
 echo

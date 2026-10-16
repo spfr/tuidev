@@ -24,7 +24,8 @@ _AGENTS_ACTIVITY_TAIL=262144   # bytes of a transcript read for its activity
 # name, status, version, transcript; nothing that is unknown. KIND: claude or
 # codex. AGE: how long the process has run (seconds), checked against the
 # start Claude Code recorded (procStart, in UTC), so a record a crash left
-# behind never names a new process with the same pid. FILES: the paths the
+# behind never names a new process with the same pid; a record without a
+# procStart that parses names nothing. FILES: the paths the
 # process has open (lsof), where Codex's rollout file is found.
 _agents_session_of() {
     local pid="$1" kind="$2" age="$3" files="${4:-}" cdir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -37,7 +38,9 @@ _agents_session_of() {
                 | map(if . == null then "-" else tostring | gsub("[[:cntrl:]]"; " ") end) | join("\t")' \
                 "$cdir/sessions/$pid.json" 2>/dev/null)" || return 0
             IFS=$'\t' read -r sid name status ver pstart <<<"$rec"
-            if [[ "$pstart" =~ ^[0-9]+$ && "$age" =~ ^[0-9]+$ ]]; then
+            # No procStart that parses: nothing says the record is this process's.
+            [[ "$pstart" =~ ^[0-9]+$ ]] || return 0
+            if [[ "$age" =~ ^[0-9]+$ ]]; then
                 _agents_now now
                 (( (now - age - pstart) * (now - age - pstart) <= 25 )) || return 0
             fi

@@ -8,7 +8,9 @@
 # (whole percents; a field absent or null is left out), then a limits.tsv
 # row for each window that changed, or was read 5 minutes ago or more (none
 # with hist other than 1):
-#   NOW claude USED WINDOW RESETS -
+#   NOW ACCT USED WINDOW RESETS LABEL
+# ACCT is the -v acct ("claude", or "claude:NAME" for another Claude account),
+# LABEL the -v label ("-" or NAME); only that account's rows are compared.
 # Reads at most a MiB of JSON.
 #
 # JSON is not parsed whole: an object is found by its key, followed by
@@ -61,7 +63,7 @@ function window(w, o,   p, r) {
     if (r == "" || r + 0 < 0) r = 0
     p = p + 0; r = sprintf("%.0f", r)
     if ((w in old) && old[w] == p "\t" r && now - oldt[w] < 300) return ""
-    rows = rows now "\tclaude\t" p "\t" w "\t" r "\t-\n"
+    rows = rows now "\t" acct "\t" p "\t" w "\t" r "\t" label "\n"
     return p
 }
 length(s) < 1048576 { s = s $0 "\n" }
@@ -70,7 +72,7 @@ END {
     if (now !~ /^[0-9]+$/) { srand(); now = srand() }
     if (hist == 1) {
         while ((getline ln < lf) > 0)
-            if (split(ln, f, "\t") >= 5 && f[2] == "claude" && f[1] ~ /^[0-9]+$/) { old[f[4]] = (f[3] + 0) "\t" f[5]; oldt[f[4]] = f[1] + 0 }
+            if (split(ln, f, "\t") >= 5 && f[2] == acct && f[1] ~ /^[0-9]+$/) { old[f[4]] = (f[3] + 0) "\t" f[5]; oldt[f[4]] = f[1] + 0 }
         close(lf)
     }
     rl = obj(s, "rate_limits")

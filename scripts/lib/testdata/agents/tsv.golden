@@ -156,6 +156,13 @@ agent	2000	codex	1800	1.0	1.7	306000	2	Wed_Oct_14_08:30:00_2026	-	me	-	/Users/NA
 agent	5000	claude	21600	13.6	0.1	524900	11	Wed_Oct_14_03:00:00_2026	3000	me	-	@HOME@/work/myapp	claude	myapp
 agent	100	codex	3600	146.0	1.7	1112000	9	Wed_Oct_14_08:00:00_2026	-	me	-	/Users/NAME/repo	codex	repo
 agent	61904	daemon	66043	0.0	0.0	71888	1	Tue_Oct_13_14:53:18_2026	-	me	-	-	/Users/NAME/.codex/packages/app-server-daemon/releases/0.1/bin/codex app-server daemon pid-update-loop	-
+ident	90419	-	sess-90419-herdr
+ident	61904	-	-
+ident	84091	-	-
+ident	1000	-	-
+ident	2000	-	-
+ident	5000	-	5e550000-0000-4000-8000-000000005000
+ident	100	-	-
 act	90466	mcp	6170	0.0	0.0	205088	1	Wed_Oct_14_07:31:11_2026	-	90419	chrome-devtools	-	npm exec chrome-devtools-mcp@latest	-	-	1
 act	26603	keepawake	92	0.0	0.0	1920	0	Wed_Oct_14_09:12:29_2026	-	90419	-	-	caffeinate -i -t 300	-	-	1
 act	22443	other	169	102.1	98.2	185072	0	Wed_Oct_14_09:11:12_2026	41234,41235	90419	-	-	/tmp/go-build1/b001/web.test -test.count=1	-	hot	1

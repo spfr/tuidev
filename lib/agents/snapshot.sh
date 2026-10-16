@@ -145,18 +145,22 @@ _agents_proc_paths() {
     fi
 }
 
-# Herdr's view: "agent<TAB>status<TAB>cwd<TAB>pane<TAB>title" per agent
-# pane, "-" for what it does not say. The title is the pane's task title
-# (terminal_title_stripped): control characters become spaces, at most 60
-# characters. A cache written before the last two columns existed still
-# reads (agents_enrich takes three). Silent when Herdr, its socket or jq is
-# missing, or when AGENTS_NO_HERDR=1; false when Herdr did not answer.
+# Herdr's view: "agent<TAB>status<TAB>cwd<TAB>pane<TAB>title<TAB>session"
+# per agent pane, "-" for what it does not say. The title is the pane's task
+# title (terminal_title_stripped): control characters become spaces, at most
+# 60 characters; the session is the agent's own session id, as Herdr's
+# integration reports it (agent_session.value). A cache written before the
+# last three columns existed still reads (agents_enrich takes three). Silent
+# when Herdr, its socket or jq is missing, or when AGENTS_NO_HERDR=1; false
+# when Herdr did not answer.
 _agents_herdr_query() {
     local out
     out="$(herdr agent list 2>/dev/null)" || return 1
     printf '%s\n' "$out" | jq -r '.result.agents[]? | [(.agent // "-"), (.agent_status // "-"), (.cwd // "-"), (.pane_id // "-"),
         ((.terminal_title_stripped // "") | tostring | gsub("[[:cntrl:]]"; " ") | gsub("  +"; " ") | sub("^ +"; "")
-            | .[0:60] | sub(" +$"; "") | if . == "" then "-" else . end)] | map(tostring) | @tsv' 2>/dev/null
+            | .[0:60] | sub(" +$"; "") | if . == "" then "-" else . end),
+        ((.agent_session | if type == "object" then .value elif type == "string" then . else null end) // "-"
+            | tostring | gsub("[[:cntrl:]]"; "") | if . == "" then "-" else . end)] | map(tostring) | @tsv' 2>/dev/null
 }
 _agents_herdr() {
     [[ -z "${AGENTS_NO_HERDR:-}" ]] || return 0
@@ -209,25 +213,38 @@ _agents_herdr_refresh() {
 }
 
 # _agents_herdr_health — what a Herdr upgrade left behind, as records for the
-# menu, from a cache in the run dir that a background check rewrites at most
-# once an hour (never waited on: the first refresh after it has nothing):
-#   hhealth server stale            the server runs an older binary than the
-#                                   client (herdr status: server_binary_stale)
+# menu, from a cache in the run dir that a background check rewrites (never
+# waited on: the first refresh after it has nothing):
+#   hhealth server stale SV CV      the server runs an older binary than the
+#                                   client (herdr status: server_binary_stale),
+#                                   with the server's and the client's versions
 #   hhealth outdated NAME…          integrations herdr integration status
 #                                   reports outdated (space-separated names)
+# The check runs at most once an hour while all is current, but every
+# _AGENTS_HHEALTH_RETRY seconds while the cache reports a problem (fixing one,
+# by a restart or a reinstall, clears its row within a minute), and at once
+# when Herdr's server restarted after the last check: its socket, which a
+# starting server binds anew, is newer than the cache (bash's -nt, no fork).
 # Nothing when all is current, when Herdr is not installed, with
 # AGENTS_NO_HERDR=1, or under the test harness (AGENTS_TESTING, whose run dir
 # must not meet this machine's Herdr: a test unsets it and redefines
 # _agents_herdr_health_check).
+_AGENTS_HHEALTH_RETRY=60
 _agents_herdr_health() {
     [[ -z "${AGENTS_NO_HERDR:-}" && -z "${AGENTS_TESTING:-}" ]] || return 0
     command -v herdr >/dev/null 2>&1 || return 0
-    local cache="$AGENTS_RUN_DIR/herdr.health" now age line
+    local cache="$AGENTS_RUN_DIR/herdr.health" now age line rows="" ttl=3600
+    local sock="${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}"
     _agents_now now
     _agents_stamp_age age "$cache" "$now"
-    [[ $age -lt 3600 ]] || _agents_detach _agents_herdr_health_refresh
-    [[ -r "$cache" ]] || return 0
-    { read -r _; while IFS= read -r line; do [[ "$line" == hhealth$'\t'* ]] && printf '%s\n' "$line"; done; } < "$cache"
+    if [[ -r "$cache" ]]; then
+        { read -r _; while IFS= read -r line; do [[ "$line" == hhealth$'\t'* ]] && rows+="$line"$'\n'; done; } < "$cache"
+    fi
+    [[ -z "$rows" ]] || ttl=$_AGENTS_HHEALTH_RETRY
+    if [[ $age -ge $ttl ]] || { [[ -e "$sock" && -e "$cache" && "$sock" -nt "$cache" ]]; }; then
+        _agents_detach _agents_herdr_health_refresh
+    fi
+    printf '%s' "$rows"
     return 0
 }
 
@@ -244,12 +261,21 @@ _agents_herdr_health_refresh() {
 }
 
 # _agents_herdr_health_check — the hhealth records, from `herdr status` and
-# `herdr integration status` (5s each). Integration lines read
-# "NAME[ (experimental)]: outdated (v3 < v4) (PATH)": only the name is kept.
+# `herdr integration status` (5s each). The stale-server record also names
+# the server's and the client's versions ("version:" under "server:" and
+# "client:"; "-" when absent or not a plain version):
+#   hhealth server stale SERVER_VERSION CLIENT_VERSION
+# Integration lines read "NAME[ (experimental)]: outdated (v3 < v4) (PATH)":
+# only the name is kept.
 # shellcheck disable=SC2016  # awk source
 _agents_herdr_health_check() {
     _agents_timeout 5 herdr status 2>/dev/null \
-        | awk '$1 == "server_binary_stale:" && $2 == "yes" { print "hhealth\tserver\tstale"; exit }'
+        | awk 'function ver(v) { return (v ~ /^[0-9A-Za-z._+-]+$/ && length(v) <= 32) ? v : "-" }
+               /^[^ \t]/ { sec = $1 }
+               $1 == "version:" && sec == "server:" { sv = $2 }
+               $1 == "version:" && sec == "client:" { cv = $2 }
+               $1 == "server_binary_stale:" && $2 == "yes" { st = 1 }
+               END { if (st) print "hhealth\tserver\tstale\t" ver(sv) "\t" ver(cv) }'
     _agents_timeout 5 herdr integration status 2>/dev/null \
         | awk '/^[A-Za-z0-9_.-]+( \([^)]*\))?: outdated/ { n = $1; sub(/:$/, "", n); s = s (s == "" ? "" : " ") n }
                END { if (s != "") print "hhealth\toutdated\t" s }'
