@@ -181,8 +181,19 @@ printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
 clear_logs; agents_jump 820 >/dev/null
 [[ "$(log herdr)" == *"agent focus w9:p9"* ]] || fail "Herdr: no last-resort guess for a known session: $(log herdr)"
 rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"
+# The pane its environment names (HERDR_PANE_ID) comes first, exact: no
+# process-info round; one Herdr no longer lists is passed over.
+_agents_pane_env() { [[ "$1" == 820 && -n "${PANE_820:-}" ]] && printf '820\t%s\n' "$PANE_820"; return 0; }
+printf '%s\n' '{"result":{"agents":[{"pane_id":"w2:p1","agent":"claude","cwd":"/work/api","agent_session":{"value":"sess-820"}},{"pane_id":"w7:p2","agent":"claude","cwd":"/elsewhere"}]}}' > "$tmp/herdr.json"
+printf '{"sessionId":"sess-820"}\n' > "$CLAUDE_CONFIG_DIR/sessions/820.json"
+clear_logs; out="$(PANE_820=w7:p2 agents_jump 820)"
+[[ "$out" == "pid 820: Herdr pane w7:p2" && "$(log herdr)" == *"agent focus w7:p2"* && "$(log herdr)" != *"process-info"* ]] \
+    || fail "Herdr by the pane in its environment: $out / $(log herdr)"
+clear_logs; out="$(PANE_820=w5:p5 agents_jump 820)"
+[[ "$(log herdr)" == *"agent focus w2:p1"* ]] || fail "a pane Herdr does not list was focused: $out / $(log herdr)"
+rm -f "$CLAUDE_CONFIG_DIR/sessions/820.json"
 printf '%s\n' "$HERDR_AGENTS" > "$tmp/herdr.json"
-pass "jump: a Herdr pane by session id, else its processes, else (a known session) its directory; then the Herdr client's terminal tab"
+pass "jump: a Herdr pane by HERDR_PANE_ID, else session id, else its processes, else (a known session) its directory; then the Herdr client's terminal tab"
 
 clear_logs
 out="$(agents_jump 601)" || fail "jump to Ghostty failed: $out"

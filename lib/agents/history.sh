@@ -24,8 +24,8 @@
 # ledger (runs.sh; a failure there never makes the next sample count history
 # twice) and then the menu's top insight (report.sh: insight.txt).
 #
-# Uses: config.sh, util.sh, snapshot.sh (_agents_herdr), classify.sh,
-#   events.sh (the data directory and the events lock), runs.sh (the run
+# Uses: config.sh, util.sh, snapshot.sh (_agents_herdr, _agents_herdr_panes),
+#   classify.sh, events.sh (the data directory and the events lock), runs.sh (the run
 #   ledger), tokens.sh (_agents_tokens_scan, _agents_tokens_prune), report.sh
 #   (agents_insight_write); awk/sample.awk.
 # Public: agents_sample, _agents_sample_kick, _agents_hist_line,
@@ -47,7 +47,7 @@ agents_sample() {
 }
 
 _agents_sample_locked() {
-    local dir="$AGENTS_DATA_DIR" now day ps recs type pid kind rest paths enr feed="" prev=""
+    local dir="$AGENTS_DATA_DIR" now day ps recs type pid kind rest paths enr feed="" prev="" herdr
     read -r now day <<<"$(date '+%s %Y-%m-%d')"
     # The last sample that counted (sample.state's epoch): what waits credit.
     [[ ! -r "$dir/sample.state" ]] || read -r prev < "$dir/sample.state"
@@ -64,8 +64,10 @@ _agents_sample_locked() {
         esac
     done <<<"$recs"
     paths="$(_agents_cwds --stdout "$@")"
-    # Herdr's status (blocked, done…) as the terminal sees it: what waits count.
-    enr="$(printf '%s\n' "$recs" | agents_enrich "$paths" "$(_agents_herdr sync)" "")"
+    # Herdr's status (blocked, done…) as the terminal sees it, by each
+    # session's own pane (_agents_herdr_panes): what waits count.
+    herdr="$(_agents_herdr sync)"
+    enr="$(printf '%s\n' "$recs" | agents_enrich "$paths" "$herdr" "" "$(_agents_herdr_panes "$herdr" "$recs")")"
     # What the menu saw since the last sample (runs.sh), oldest first.
     _agents_runs_take "$now"
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || feed="$(cat "${_AGENTS_RUNS_FED[@]}" 2>/dev/null)"

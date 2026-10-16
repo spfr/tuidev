@@ -3,14 +3,16 @@
 #
 # Owns: the ps snapshot, a process's start time, listening ports, working
 #   directories, the pids never flagged stale (launchd jobs, systemd
-#   services, our own keep-awake holder), Herdr's view (cached), and
+#   services, our own keep-awake holder), Herdr's view (cached), the Herdr
+#   pane each session runs in (HERDR_PANE_ID in its environment), Herdr's
+#   health (an hourly check: a stale server, outdated integrations), and
 #   agents_collect, the full record set every view starts from.
 # Uses: config.sh, util.sh, classify.sh (agents_classify, agents_enrich),
 #   watched.sh (_agents_watched, _agents_watch_info), awake.sh
 #   (_agents_awake_pid), runs.sh (_agents_runs_feed), where.sh
 #   (_agents_tmux_up, _agents_panes).
 # Public: agents_snapshot, agents_collect, agents_secs, _agents_start,
-#   _agents_cwds, _agents_proc_paths.
+#   _agents_cwds, _agents_proc_paths, _agents_pane_env, _agents_herdr_health.
 
 # One line per process: pid ppid uid user %cpu rss(KiB) cputime etime
 # lstart(5 words) args. BSD option syntax, which macOS and procps both take.
@@ -143,11 +145,18 @@ _agents_proc_paths() {
     fi
 }
 
-# Herdr's view: "agent<TAB>status<TAB>cwd". Silent when Herdr, its socket or
-# jq is missing, or when AGENTS_NO_HERDR=1.
+# Herdr's view: "agent<TAB>status<TAB>cwd<TAB>pane<TAB>title" per agent
+# pane, "-" for what it does not say. The title is the pane's task title
+# (terminal_title_stripped): control characters become spaces, at most 60
+# characters. A cache written before the last two columns existed still
+# reads (agents_enrich takes three). Silent when Herdr, its socket or jq is
+# missing, or when AGENTS_NO_HERDR=1; false when Herdr did not answer.
 _agents_herdr_query() {
-    _agents_timeout 2 herdr agent list 2>/dev/null \
-        | jq -r '.result.agents[]? | [(.agent // "-"), (.agent_status // "-"), (.cwd // "-")] | @tsv' 2>/dev/null
+    local out
+    out="$(herdr agent list 2>/dev/null)" || return 1
+    printf '%s\n' "$out" | jq -r '.result.agents[]? | [(.agent // "-"), (.agent_status // "-"), (.cwd // "-"), (.pane_id // "-"),
+        ((.terminal_title_stripped // "") | tostring | gsub("[[:cntrl:]]"; " ") | gsub("  +"; " ") | sub("^ +"; "")
+            | .[0:60] | sub(" +$"; "") | if . == "" then "-" else . end)] | map(tostring) | @tsv' 2>/dev/null
 }
 _agents_herdr() {
     [[ -z "${AGENTS_NO_HERDR:-}" ]] || return 0
@@ -157,22 +166,23 @@ _agents_herdr() {
 }
 
 # _agents_herdr_cached sync|async — Herdr's answer, cached for 10s in the run
-# dir. async (the menu bar) never waits: it serves the cache (up to a minute
-# old) and refreshes it in the background. sync (the terminal) asks Herdr
-# when the cache is stale.
+# dir. Herdr answers in milliseconds, so a stale cache is refreshed first:
+# sync (the terminal) waits up to 2s for it; async (the menu bar) up to 1s,
+# and only when that fails (Herdr slow, or another refresh holds the lock)
+# serves the cache while it is under a minute old and refreshes it in the
+# background.
 _agents_herdr_cached() {
     local cache="$AGENTS_RUN_DIR/herdr.tsv" now age
     _agents_now now
     _agents_stamp_age age "$cache" "$now"    # a damaged cache counts as stale
-    if [[ $age -lt 10 || ( "$1" == async && $age -lt 60 ) ]]; then
-        _agents_herdr_show "$cache"
-        [[ $age -lt 10 ]] && return 0
-    fi
+    if [[ $age -lt 10 ]]; then _agents_herdr_show "$cache"; return 0; fi
     if [[ "$1" == async ]]; then
+        if _agents_herdr_refresh 1; then _agents_herdr_show "$cache"; return 0; fi
+        [[ $age -lt 60 ]] && _agents_herdr_show "$cache"
         _agents_detach _agents_herdr_refresh
         return 0
     fi
-    _agents_herdr_refresh
+    _agents_herdr_refresh 2 || true
     [[ -r "$cache" ]] && _agents_herdr_show "$cache"
     return 0
 }
@@ -183,17 +193,117 @@ _agents_herdr_show() {
     { read -r _; while IFS= read -r line; do printf '%s\n' "$line"; done; } < "$1"
 }
 
-# Rewrite the cache from a fresh query; one refresh at a time.
+# _agents_herdr_refresh [SECS] — rewrite the cache from a fresh query, given
+# SECS (default 2) to answer; one refresh at a time. False when it did not:
+# another refresh holds the lock, or Herdr did not answer in time.
 _agents_herdr_refresh() {
-    local lock="$AGENTS_RUN_DIR/herdr.lock" now out
-    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 0
-    _agents_lock "$lock" || return 0
+    local lock="$AGENTS_RUN_DIR/herdr.lock" now out rc=1
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
+    _agents_lock "$lock" || return 1
     now="$(date +%s)"
-    if out="$(_agents_herdr_query)"; then
-        _agents_replace "$AGENTS_RUN_DIR/herdr.tsv" "$now${out:+$'\n'$out}"
+    if out="$(_agents_timeout "${1:-2}" _agents_herdr_query)"; then
+        _agents_replace "$AGENTS_RUN_DIR/herdr.tsv" "$now${out:+$'\n'$out}" && rc=0
     fi
     _agents_unlock "$lock"
+    return "$rc"
+}
+
+# _agents_herdr_health — what a Herdr upgrade left behind, as records for the
+# menu, from a cache in the run dir that a background check rewrites at most
+# once an hour (never waited on: the first refresh after it has nothing):
+#   hhealth server stale            the server runs an older binary than the
+#                                   client (herdr status: server_binary_stale)
+#   hhealth outdated NAME…          integrations herdr integration status
+#                                   reports outdated (space-separated names)
+# Nothing when all is current, when Herdr is not installed, with
+# AGENTS_NO_HERDR=1, or under the test harness (AGENTS_TESTING, whose run dir
+# must not meet this machine's Herdr: a test unsets it and redefines
+# _agents_herdr_health_check).
+_agents_herdr_health() {
+    [[ -z "${AGENTS_NO_HERDR:-}" && -z "${AGENTS_TESTING:-}" ]] || return 0
+    command -v herdr >/dev/null 2>&1 || return 0
+    local cache="$AGENTS_RUN_DIR/herdr.health" now age line
+    _agents_now now
+    _agents_stamp_age age "$cache" "$now"
+    [[ $age -lt 3600 ]] || _agents_detach _agents_herdr_health_refresh
+    [[ -r "$cache" ]] || return 0
+    { read -r _; while IFS= read -r line; do [[ "$line" == hhealth$'\t'* ]] && printf '%s\n' "$line"; done; } < "$cache"
     return 0
+}
+
+# Rewrite the health cache (one check at a time); its stamp is written even
+# when Herdr does not answer, so a broken Herdr is asked once an hour too.
+_agents_herdr_health_refresh() {
+    local lock="$AGENTS_RUN_DIR/herdr-health.lock" out
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 0
+    _agents_lock "$lock" || return 0
+    out="$(_agents_herdr_health_check)"
+    _agents_replace "$AGENTS_RUN_DIR/herdr.health" "$(date +%s)${out:+$'\n'$out}" || true
+    _agents_unlock "$lock"
+    return 0
+}
+
+# _agents_herdr_health_check — the hhealth records, from `herdr status` and
+# `herdr integration status` (5s each). Integration lines read
+# "NAME[ (experimental)]: outdated (v3 < v4) (PATH)": only the name is kept.
+# shellcheck disable=SC2016  # awk source
+_agents_herdr_health_check() {
+    _agents_timeout 5 herdr status 2>/dev/null \
+        | awk '$1 == "server_binary_stale:" && $2 == "yes" { print "hhealth\tserver\tstale"; exit }'
+    _agents_timeout 5 herdr integration status 2>/dev/null \
+        | awk '/^[A-Za-z0-9_.-]+( \([^)]*\))?: outdated/ { n = $1; sub(/:$/, "", n); s = s (s == "" ? "" : " ") n }
+               END { if (s != "") print "hhealth\toutdated\t" s }'
+}
+
+# _agents_herdr_panes HERDR RECORDS — agents_enrich's PANES: _agents_pane_env
+# for the sessions whose "where" record (in RECORDS) places them in Herdr;
+# asked only when HERDR (_agents_herdr's answer) lists agents. agents_collect
+# and agents_sample both use it, so a sample's waits see the exact pane too.
+_agents_herdr_panes() {
+    local t p k hosted=()
+    [[ -n "$1" ]] || return 0
+    while IFS=$'\t' read -r t p k _; do
+        [[ "$t" == where && "$k" == herdr ]] && hosted+=("$p")
+    done <<<"$2"
+    [[ ${#hosted[@]} -eq 0 ]] || _agents_pane_env "${hosted[@]}"
+    return 0
+}
+
+# _agents_pane_env PID... — "pid<TAB>pane" for each PID started in a Herdr
+# pane: HERDR_PANE_ID from its environment, which Herdr sets in every pane
+# (so the agent in it knows exactly which pane it is, whatever its cwd). One
+# read for all of them: /proc/PID/environ on Linux, else one `ps -E` (macOS
+# shows a process's environment after its command line; only your own),
+# given 2s. Never under the test harness (AGENTS_TESTING), whose fixture
+# pids would meet this machine's processes: a test redefines it.
+_agents_pane_env() {
+    [[ $# -gt 0 && -z "${AGENTS_TESTING:-}" ]] || return 0
+    local p kv out=""
+    if [[ -r /proc/self/environ ]]; then
+        for p in "$@"; do
+            [[ "$p" =~ ^[0-9]+$ ]] || continue
+            while IFS= read -r -d '' kv; do
+                [[ "$kv" == HERDR_PANE_ID=* ]] && { out+="$p $kv"$'\n'; break; }
+            done 2>/dev/null < "/proc/$p/environ"
+        done
+        [[ -z "$out" ]] || printf '%s' "$out" | _agents_pane_env_parse
+        return 0
+    fi
+    local IFS=,
+    _agents_timeout 2 env LC_ALL=C ps -E -ww -o pid=,command= -p "$*" 2>/dev/null | _agents_pane_env_parse
+    return 0
+}
+
+# _agents_pane_env_parse < LINES — "pid<TAB>pane" from "PID COMMAND… ENV…"
+# lines: the last HERDR_PANE_ID= word (the environment comes after the
+# arguments), and only a pane id made of [A-Za-z0-9:_-].
+# shellcheck disable=SC2016  # awk source
+_agents_pane_env_parse() {
+    awk '{
+        p = $1; s = $0; id = ""; sub(/^[ \t]*[0-9]+/, "", s)
+        while (match(s, /[ \t]HERDR_PANE_ID=[^ \t]*/)) { id = substr(s, RSTART + 15, RLENGTH - 15); s = substr(s, RSTART + RLENGTH) }
+        if (p ~ /^[0-9]+$/ && id ~ /^[A-Za-z0-9:_-]+$/) print p "\t" id
+    }'
 }
 
 # _agents_launchd_pids < `launchctl list` — the PIDs of running launchd jobs.
@@ -224,7 +334,8 @@ _agents_keep_pids() {
 # "probe listen ok|fail": whether the listening ports could be listed (when
 # not, a stale tree's "no ports" proves nothing, and auto-reap leaves it).
 # Each session's "where" record (its tmux pane, Herdr, ssh or terminal app)
-# comes just before. With _AGENTS_FEED=1 (agents tsv) and history on, it also
+# comes just before, and agents_enrich's "herdr" records (the Herdr pane and
+# task title of each session Herdr lists) with the agent rows. With _AGENTS_FEED=1 (agents tsv) and history on, it also
 # hands what it saw to the run ledger (_agents_runs_feed): the same snapshot
 # and lsof, plus the tool shells' stdout from that lsof.
 agents_collect() {
@@ -249,7 +360,7 @@ agents_collect() {
         return 1
     fi
     recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
-    local type pid kind rest watch="" where="" runs=""
+    local type pid kind rest watch="" where="" runs="" herdr
     set --
     while IFS=$'\t' read -r type pid kind rest; do
         case "$type" in
@@ -261,7 +372,8 @@ agents_collect() {
         esac
     done <<<"$recs"
     _agents_cwds_hinted pids 8 "$hint" ${feed:+--stdout} "$@"
-    enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")" "$(_agents_watched "$watch")")"
+    herdr="$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")"
+    enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$herdr" "$(_agents_watched "$watch")" "$(_agents_herdr_panes "$herdr" "$where")")"
     [[ -z "$enr" ]] || printf '%s\n' "$enr"
     # Runs are tool commands and stale trees: with neither, nothing to feed.
     [[ -z "$feed" || -z "$runs" ]] || _agents_runs_feed "$enr" "$recs" "$pids"

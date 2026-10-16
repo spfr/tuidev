@@ -2,7 +2,8 @@
 # lib/agents/tsv.sh — `agents tsv`, what the SwiftBar plugin
 # (configs/swiftbar/agents.10s.sh) reads every refresh.
 #
-# Uses: config.sh, util.sh (_agents_bg), snapshot.sh (agents_collect),
+# Uses: config.sh, util.sh (_agents_bg), snapshot.sh (agents_collect,
+#   _agents_herdr_health),
 #   assess.sh (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
 #   (_agents_hist_line), report.sh (_agents_insight_line,
 #   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv).
@@ -52,6 +53,11 @@ agents_tsv() {
     _agents_insight_line
     _agents_tokens_line
     printf '%s\n' "$lid"
+    # Herdr: "hhealth server stale" and "hhealth outdated NAME…" while
+    # Herdr's server or integrations need an update (an hourly check, never
+    # waited on: _agents_herdr_health). Each session's Herdr pane and task
+    # title came with the records ("herdr PID PANE TITLE", agents_enrich).
+    _agents_herdr_health
     for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP; do
         val="${!key}"
         printf 'conf\t%s\t%s\n' "$key" "${val:--}"

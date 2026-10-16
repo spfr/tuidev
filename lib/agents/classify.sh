@@ -55,10 +55,14 @@ agents_project() {
     _AGENTS_CWD="$1" HOME="$HOME" _agents_awk_eval lib_proc 'BEGIN { print projname(ENVIRON["_AGENTS_CWD"]) }'
 }
 
-# agents_enrich CWDS HERDR < RECORDS — fill in cwd ("pid<TAB>cwd" lines, or
-# _agents_cwds --stdout's, whose "pid<TAB>path<TAB>1" lines it skips) and
-# Herdr status ("kind<TAB>status<TAB>cwd" lines), and append column 15, the
-# project name (agents_project). A dev-server candidate is kept, as stale,
+# agents_enrich CWDS HERDR [WATCHED [PANES]] < RECORDS — fill in cwd
+# ("pid<TAB>cwd" lines, or _agents_cwds --stdout's, whose "pid<TAB>path<TAB>1"
+# lines it skips) and Herdr status (_agents_herdr's "kind<TAB>status<TAB>cwd
+# [<TAB>pane<TAB>title]" lines), and append column 15, the project name
+# (agents_project). A session's Herdr agent is the one in its pane (PANES:
+# _agents_pane_env's "pid<TAB>pane" lines), else the only one of its kind in
+# its directory that no session claimed by pane; each match also adds a
+# "herdr PID PANE TITLE" record ("-" for unknown) after the agent rows. A dev-server candidate is kept, as stale,
 # only when its cwd is under one of _agents_cwd_roots. Agent rows come first,
 # ordered by what needs you: blocked, working, idle/done, unknown, the daemon;
 # then activity rows, where column 15 is the origin (main, or the worktree a
@@ -68,7 +72,7 @@ agents_project() {
 # "pid<TAB>quiet|fresh" for polling loops whose watched file exists
 # (_agents_watched).
 agents_enrich() {
-    AGENTS_CWDS="$1" AGENTS_HERDR="$2" AGENTS_WATCHED="${3:-}" AGENTS_CWD_ROOTS="$(_agents_cwd_roots)" HOME="$HOME" \
+    AGENTS_CWDS="$1" AGENTS_HERDR="$2" AGENTS_WATCHED="${3:-}" AGENTS_HPANES="${4:-}" AGENTS_CWD_ROOTS="$(_agents_cwd_roots)" HOME="$HOME" \
     AGENTS_TOOL_LONG="$AGENTS_TOOL_LONG" AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_WAIT_STUCK="$AGENTS_WAIT_STUCK" \
     _agents_awk "lib_proc lib_activity enrich" -F '\t' -v OFS='\t'
 }

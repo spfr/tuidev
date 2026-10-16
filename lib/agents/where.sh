@@ -9,7 +9,8 @@
 # session (the menu's summaries show it).
 #
 # `agents jump` resolves the rest when you click, never on a refresh: which
-# Herdr pane (by the Claude Code session id Herdr reports, else the pane
+# Herdr pane (the one its environment names, HERDR_PANE_ID; else by the
+# Claude Code session id Herdr reports, else the pane
 # whose processes include it, else, for a jump to a session whose id is
 # known, the only agent of its kind in its directory), which tmux client,
 # and which window or tab of the terminal app shows
@@ -20,7 +21,7 @@
 #   jumps to (`agents root-of`), `agents jump` and `agents peek`.
 # Uses: config.sh, util.sh (_agents_awk, _agents_timeout, _agents_token,
 #   _AGENTS_TOKEN_RE), snapshot.sh (agents_snapshot, _agents_start,
-#   agents_secs), activity.sh (_agents_session_of), terminal.sh
+#   agents_secs, _agents_pane_env), activity.sh (_agents_session_of), terminal.sh
 #   (agents_terminal: the app to bring forward when none is found), notify.sh
 #   (_agents_notify, _agents_jump_command);
 #   awk/lib_where.awk, awk/where.awk, awk/root.awk.
@@ -188,18 +189,21 @@ _agents_tmux_client() {
 }
 
 # _agents_herdr_pane ROOT KIND CWD SESSION [guess] — the id of the Herdr
-# pane the agent ROOT runs in: the agent Herdr reports with session id
-# SESSION, else the pane whose processes include ROOT (herdr pane
-# process-info, pane by pane); else, with guess and a SESSION (a jump: a
-# wrong pane only costs a look), the only agent of KIND in CWD. Nothing when
-# Herdr can't tell.
+# pane the agent ROOT runs in: the pane its environment names
+# (HERDR_PANE_ID, _agents_pane_env), when Herdr lists it; else the agent
+# Herdr reports with session id SESSION, else the pane whose processes
+# include ROOT (herdr pane process-info, pane by pane); else, with guess and
+# a SESSION (a jump: a wrong pane only costs a look), the only agent of KIND
+# in CWD. Nothing when Herdr can't tell.
 _agents_herdr_pane() {
-    local root="$1" kind="$2" cwd="$3" sid="$4" guess="${5:-}" list pane="" p
+    local root="$1" kind="$2" cwd="$3" sid="$4" guess="${5:-}" list pane="" p env=""
     command -v herdr >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
     list="$(_agents_timeout 2 herdr agent list 2>/dev/null | jq -r '.result.agents[]? |
         [(.pane_id // "-"), (.agent // "-"), (.cwd // "-"), (.agent_session.value // "-")] | map(tostring) | @tsv' 2>/dev/null)"
     [[ -n "$list" ]] || return 0
-    [[ -z "$sid" || "$sid" == - ]] || pane="$(printf '%s\n' "$list" | awk -F '\t' -v s="$sid" '$4 == s { print $1; exit }')"
+    [[ "$root" =~ ^[0-9]+$ ]] && env="$(_agents_pane_env "$root" | cut -f2)"
+    [[ -z "$env" ]] || pane="$(printf '%s\n' "$list" | awk -F '\t' -v e="$env" '$1 == e { print $1; exit }')"
+    [[ -n "$pane" || -z "$sid" || "$sid" == - ]] || pane="$(printf '%s\n' "$list" | awk -F '\t' -v s="$sid" '$4 == s { print $1; exit }')"
     if [[ -z "$pane" ]]; then
         while IFS=$'\t' read -r p _; do
             [[ "$p" =~ ^[A-Za-z0-9:_-]+$ ]] || continue

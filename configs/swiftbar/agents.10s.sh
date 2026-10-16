@@ -74,6 +74,7 @@ DOT_GREEN="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4
 DOT_ORANGE="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19"
 DOT_GRAY="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19"
 DOT_RED="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19"
+DOT_BLUE="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMEE4NEZGIl19"   # calm: done, to review
 # Text keeps the system label color (no color=, which would also not adapt to
 # light, dark and translucent menus). A row SwiftBar sees without an action
 # (bash, href, refresh) renders disabled, i.e. secondary; primary rows get a
@@ -150,6 +151,9 @@ awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents jobs stale hogs awake system" BAR_ICON=terminal CONF=""
+# Calm items in Needs you (finished sessions, Herdr's health): counted in its
+# header, never in the title's tint.
+n_done=0 calm_menu="" herdr_stale="" herdr_outdated=""
 job_rows="" mcp_cfg="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text="" tok_total=0 tok_cache=0
 
 # Per-session activity, gathered from the act rows into variables named after
@@ -371,6 +375,14 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         where)  # where PID tmux|herdr|ssh|app|- PLACE
             num "$pid" || continue
             printf -v "W_how_$pid" '%s' "$kind"; printf -v "W_place_$pid" '%s' "$age_s" ;;
+        herdr)  # herdr PID PANE TITLE: the session's Herdr pane and task title
+            num "$pid" || continue
+            [[ "$age_s" == - ]] || printf -v "H_title_$pid" '%s' "$age_s" ;;
+        hhealth)   # hhealth server stale | hhealth outdated NAME…
+            case "$pid" in
+                server)   [[ "$kind" == stale ]] && herdr_stale=1 ;;
+                outdated) herdr_outdated="$kind" ;;
+            esac ;;
         stale)
             n_stale=$((n_stale + 1))
             v="N_short_$pid"; vs=""; [[ -n "${!v-}" ]] && { cl "${!v}"; vs=" · $REPLY"; }
@@ -458,11 +470,16 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     n_agents=$((n_agents + 1))
     cl "${project:--}"; name="$REPLY"; [[ "$name" == - || -z "$name" ]] && name="$kind"
     cl "$kind"; ckind="$REPLY"
+    # Herdr's task title for the pane, when it has one: it leads the row
+    # ("Fix the login flow · app · claude") and names it in Needs you.
+    v="H_title_$pid"; label="$name" who="$name"
+    if [[ -n "${!v-}" ]]; then sh60 "${!v}"; who="$REPLY"; [[ "$who" == "$name" ]] || label="$who · $name"; fi
     status=""; [[ "$herdr" != - ]] && { cl "$herdr"; status=" · $REPLY"; }
     case "$herdr" in
         blocked)   look="sfimage=exclamationmark.circle.fill $DOT_ORANGE" ;;
         working)   look="sfimage=circle.fill $DOT_GREEN" ;;
-        idle|done) look="sfimage=circle.fill $DOT_GRAY" ;;
+        done)      look="sfimage=checkmark.circle.fill $DOT_BLUE" ;;
+        idle)      look="sfimage=circle.fill $DOT_GRAY" ;;
         *)         look="sfimage=circle" ;;
     esac
     # When its commands use most of the CPU, say so: "346% (tools 300%)".
@@ -474,10 +491,14 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     tok "$pid" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
     session_submenu "$pid" "$start" "$kind" "$age_s" "$kids" "$ports" "$cwd" "$herdr"; sub="$SUB"
     memv "$rss"
-    agents_menu+="$name · $ckind$status · ${pcpu}%$hint · $REPLY | $look $click symbolize=false"$'\n'"$sub"
+    agents_menu+="$label · $ckind$status · ${pcpu}%$hint · $REPLY | $look $click symbolize=false"$'\n'"$sub"
     if [[ "$herdr" == blocked ]]; then
         n_blocked=$((n_blocked + 1)); n_attn=$((n_attn + 1))
-        needs_menu+="$name · $ckind · waiting for you | sfimage=exclamationmark.circle.fill $DOT_ORANGE $click symbolize=false"$'\n'"$sub"
+        needs_menu+="$who · $ckind · waiting for you | sfimage=exclamationmark.circle.fill $DOT_ORANGE $click symbolize=false"$'\n'"$sub"
+    elif [[ "$herdr" == "done" ]]; then
+        # Finished, not yet looked at (Herdr's done): worth a look, never urgent.
+        n_done=$((n_done + 1))
+        calm_menu+="$who · $ckind · finished, to review | $look $click symbolize=false"$'\n'"$sub"
     fi
     aget dups "$pid"; dup_groups "$REPLY"
     while IFS=$'\t' read -r g cmd toks; do
@@ -512,8 +533,28 @@ if [[ "$lid_state" == stale ]]; then
     needs_menu="Restore lid sleep (disabled, nothing restores it)… | sfimage=exclamationmark.triangle.fill $DOT_RED $ACT param1=awake param2=restore param3=--notify symbolize=false"$'\n'"$needs_menu"
 fi
 
+# Herdr after an upgrade (an hourly check, hhealth rows): a server still
+# running the old binary, integrations older than the client. Calm items
+# whose submenus give the commands to run; nothing is run from here.
+n_herdr=0
+if [[ -n "$herdr_stale" ]]; then
+    n_herdr=$((n_herdr + 1))
+    calm_menu+="Herdr server is older than the client · restart when idle | sfimage=arrow.triangle.2.circlepath $DOT_GRAY $ROW symbolize=false"$'\n'
+    calm_menu+="--Once its agents are idle, in a terminal outside Herdr: | size=11"$'\n'
+    calm_menu+="--herdr server stop | $ROW sfimage=terminal symbolize=false"$'\n'"--then: herdr | $ROW sfimage=terminal symbolize=false"$'\n'
+fi
+herdr_names=""
+for v in $herdr_outdated; do [[ "$v" =~ ^[A-Za-z0-9_.-]+$ ]] && herdr_names+=" $v"; done
+if [[ -n "$herdr_names" ]]; then
+    n_herdr=$((n_herdr + 1))
+    calm_menu+="Herdr integrations outdated:$herdr_names | sfimage=puzzlepiece.extension $DOT_GRAY $ROW symbolize=false"$'\n'
+    calm_menu+="--Reinstall each, in a terminal: | size=11"$'\n'
+    for v in $herdr_names; do calm_menu+="--herdr integration install $v | $ROW sfimage=terminal symbolize=false"$'\n'; done
+fi
+
 # --- Title -------------------------------------------------------------------------
-# The icon, the session count, and how many sessions wait for you. The icon is
+# The icon, the session count, how many sessions wait for you and how many
+# finished ones you have not looked at (done never tints). The icon is
 # tinted only when something needs a look: orange for a blocked session, stale
 # processes, hogs or memory pressure; red for heavy thermal or critical memory
 # pressure.
@@ -527,7 +568,8 @@ bar_title() {
     for tok in $BAR_TITLE; do
         case "$tok" in
             count)   [[ $n_agents -gt 0 ]] && t+=" $n_agents"
-                     [[ $n_blocked -gt 0 ]] && t+=" · $n_blocked blocked" ;;
+                     [[ $n_blocked -gt 0 ]] && t+=" · $n_blocked blocked"
+                     [[ $n_done -gt 0 ]] && t+=" · $n_done done" ;;
             cpu)     num "$cpu" && t+=" :cpu: ${cpu}%" ;;
             mem)     num "$memfree" && t+=" :memorychip: $((100 - memfree))%" ;;
             load)    [[ "$load" != - ]] && t+=" :gauge.medium: $load" ;;
@@ -548,10 +590,13 @@ bar_title() {
 
 put() { OUT+="$1"$'\n'; }
 
+# Needs you: what needs a look now (the orange items, n_attn), then the calm
+# ones (finished sessions, Herdr's health), all counted in its header.
 section_needs() {
-    [[ $n_attn -gt 0 ]] || return 0
-    put "Needs you ($n_attn) | size=12"
-    OUT+="$needs_menu"
+    local n=$((n_attn + n_done + n_herdr))
+    [[ $n -gt 0 ]] || return 0
+    put "Needs you ($n) | size=12"
+    OUT+="$needs_menu$calm_menu"
 }
 
 section_agents() {
@@ -737,8 +782,12 @@ section_jobs() {
             G)  # An MCP server in several sessions (proj: its copies, kind:
                 # the stale ones), who configured it and how it starts, then
                 # its copies (C).
+                # Every copy an mcp-lazy proxy whose server never started:
+                # proxies, not copies of the server.
                 cl "$name"; line="$REPLY · $proj copies"
+                [[ "$via" != lazy-idle ]] || line="$REPLY · $proj lazy proxies"
                 [[ "$kind" == 0 ]] || line+=", $kind stale"
+                [[ "$via" != lazy-idle ]] || line+=" · server not started"
                 memv "${rss:-0}"; put "--$line · ${cpu}% · $REPLY | $ROW symbolize=false"
                 mcp_about "----" "${about:--}" "${via:--}"; OUT+="$REPLY"
                 put "-------" ;;
