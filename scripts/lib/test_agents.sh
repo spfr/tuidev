@@ -220,6 +220,103 @@ out="$(henr $'501\tw1:p1')"
 [[ "$(hf agent "$out" 501 12)/$(hf agent "$out" 502 12)" == working/- ]] || fail "a pane claimed by one session went to another: $(printf '%s\n' "$out" | cut -f1-3,12)"
 pass "Herdr: status and task title by the session's own pane; by directory only when unique and unclaimed"
 
+# Kind-aware panes: a second CLI in a session's pane (a codex run from the
+# shell claude's pane holds) never takes the status of the agent Herdr sees
+# there, whichever row comes first; two of Herdr's kind in one pane leave it
+# unmatched; with no kind from Herdr, the pane's only row is it; Herdr's
+# names for Cursor's and Antigravity's CLIs count as ours.
+hrecs="$(hrec 501 codex; hrec 502 claude)"
+hlist=$'claude\tblocked\t/w/app\tw1:p1\tFix the login'
+out="$(henr $'501\tw1:p1\n502\tw1:p1')"
+[[ "$(hf agent "$out" 501 12)/$(hf agent "$out" 502 12)" == -/blocked ]] \
+    || fail "a codex sharing claude's pane took its status: $(printf '%s\n' "$out" | cut -f1-3,12)"
+[[ "$(printf '%s\n' "$out" | grep '^herdr')" == $'herdr\t501\tw1:p1\t-\nherdr\t502\tw1:p1\tFix the login' ]] \
+    || fail "the pane's title went to the other CLI: $(printf '%s\n' "$out" | grep '^herdr')"
+hrecs="$(hrec 502 claude)"; hlist=$'codex\tworking\t/w/app\tw1:p1\tcodex'
+[[ "$(hf agent "$(henr $'502\tw1:p1')" 502 12)" == - ]] || fail "a claude took the status of the codex Herdr sees in its pane"
+hrecs="$(hrec 501 claude; hrec 502 claude)"; hlist=$'claude\tworking\t/w/app\tw1:p1\tx'
+out="$(henr $'501\tw1:p1\n502\tw1:p1')"
+[[ "$(hf agent "$out" 501 12)/$(hf agent "$out" 502 12)" == -/- ]] || fail "two claudes in one pane: a guess: $(printf '%s\n' "$out" | cut -f1-3,12)"
+hrecs="$(hrec 502 claude)"; hlist=$'-\tidle\t/w/app\tw1:p1\tx'
+[[ "$(hf agent "$(henr $'502\tw1:p1')" 502 12)" == idle ]] || fail "no kind from Herdr: the pane's only session not matched"
+hrecs="$(hrec 503 cursor-agent; hrec 504 agy)"; hlist=$'Cursor\tworking\t/w/app\tw3:p1\tx\nantigravity\tdone\t/w/app\tw4:p1\tx'
+out="$(henr $'503\tw3:p1\n504\tw4:p1')"
+[[ "$(hf agent "$out" 503 12)/$(hf agent "$out" 504 12)" == working/done ]] || fail "Herdr's names for Cursor and Antigravity: $(printf '%s\n' "$out" | cut -f1-3,12)"
+# A kind Herdr names that agents doesn't know, or a kind of your own
+# (AGENTS_NAMES): the pane's only row, as before kinds were compared; not
+# when the pane holds two rows.
+hrecs="$(hrec 505 claude-dev)"; hlist=$'Claude Code\tblocked\t/w/app\tw5:p1\tx'
+[[ "$(hf agent "$(henr $'505\tw5:p1')" 505 12)" == blocked ]] || fail "a kind of your own: the pane's only session not matched"
+hrecs="$(hrec 506 claude)"; hlist=$'Letta\tworking\t/w/app\tw6:p1\tx'
+[[ "$(hf agent "$(henr $'506\tw6:p1')" 506 12)" == working ]] || fail "a kind agents doesn't know: the pane's only session not matched"
+hrecs="$(hrec 505 claude-dev; hrec 506 codex)"; hlist=$'Letta\tworking\t/w/app\tw5:p1\tx'
+out="$(henr $'505\tw5:p1\n506\tw5:p1')"
+[[ "$(hf agent "$out" 505 12)/$(hf agent "$out" 506 12)" == -/- ]] || fail "an unknown kind in a pane of two: a guess: $(printf '%s\n' "$out" | cut -f1-3,12)"
+pass "Herdr by pane is kind-aware: another CLI in the pane never takes the status; two of a kind match neither; an unknown or custom kind falls back to the pane's only row"
+
+# The join key: one "ident PID PANE SESSION" per agent row. The session is
+# Claude Code's own record (sessions/PID.json, only for the process that
+# started at its procStart), else the one Herdr reports, else a --resume or
+# resume UUID on the command line; never the daemon's, never an unsafe id.
+ccd="$tmp/ccdir"; mkdir -p "$ccd/sessions"
+irec() { printf 'agent\t%s\t%s\t%s\t1.0\t1.0\t1000\t0\ts\t-\tme\t-\t-\t%s\n' "$@"; }
+cc_rec() { printf '{"pid":%s,"sessionId":"%s","cwd":"/w","procStart":"Fri Oct 16 18:13:16 2026","status":"busy"}\n' "$1" "$2" > "$ccd/sessions/$1.json"; }
+cc_rec 601 aaaaaaaa-1111-4111-8111-000000000601
+cc_rec 602 aaaaaaaa-1111-4111-8111-000000000602
+cc_rec 605 'x;rm -rf'
+irecs="$(irec 601 claude 60 claude; irec 602 claude 3600 'claude --resume bbbbbbbb-2222-4222-8222-000000000602 --model x'
+    irec 603 codex 60 'node /x/@openai/codex/bin/codex resume cccccccc-3333-4333-8333-000000000603'
+    irec 604 codex 60 'codex resume dddddddd-4444-4444-8444-000000000604'; irec 605 claude 60 'claude -r my-name'
+    irec 606 daemon 60 'codex app-server --resume eeeeeeee-5555-4555-8555-000000000606'; irec 607 codex 60 codex)"
+ilist=$'codex\tworking\t/w\tw3:p1\tx\tcodex-thread-603\ncodex\tidle\t/w\tw7:p1\tx\tbad id'
+# procStart is UTC: Fri Oct 16 18:13:16 2026 is 1792174396, so 601, 60s
+# old at 1792174456, is the process that wrote its record; 602 is not.
+out="$(printf '%s\n' "$irecs" | AGENTS_TESTING=1 AGENTS_NOW=1792174456 CLAUDE_CONFIG_DIR="$ccd" agents_enrich "" "$ilist" "" $'603\tw3:p1\n607\tw7:p1')"
+[[ "$(printf '%s\n' "$out" | grep '^ident' | sort)" == "$(printf 'ident\t%s\t%s\t%s\n' \
+        601 - aaaaaaaa-1111-4111-8111-000000000601 602 - bbbbbbbb-2222-4222-8222-000000000602 603 w3:p1 codex-thread-603 \
+        604 - dddddddd-4444-4444-8444-000000000604 605 - - 606 - - 607 w7:p1 -)" ]] \
+    || fail "ident records: $(printf '%s\n' "$out" | grep '^ident')"
+[[ "$(printf '%s\n' "$out" | awk -F '\t' '$1 == "agent"' | wc -l | tr -d ' ')" == 7 ]] || fail "ident changed the agent rows"
+if command -v jq >/dev/null 2>&1; then
+    j="$(printf '%s\n' "$out" | agents_json)"
+    [[ "$(printf '%s' "$j" | jq -r '[.agents[] | select(.pid == 603 or .pid == 605) | "\(.pid) \(.herdr_pane) \(.session_id)"] | join(",")')" == "603 w3:p1 codex-thread-603,605 null null" ]] \
+        || fail "json herdr_pane and session_id: $(printf '%s' "$j" | jq -c '[.agents[] | {pid, herdr_pane, session_id}]')"
+fi
+pass "join key: ident PID PANE SESSION per agent row (Claude Code's record, Herdr's, a resume on the command line); herdr_pane and session_id in json"
+
+# A record whose procStart is missing or doesn't parse can't say it is this
+# process's: a reused pid would take a dead session's id.
+printf '{"pid":608,"sessionId":"aaaaaaaa-1111-4111-8111-000000000608"}\n' > "$ccd/sessions/608.json"
+printf '{"pid":609,"sessionId":"aaaaaaaa-1111-4111-8111-000000000609","procStart":"yesterday"}\n' > "$ccd/sessions/609.json"
+printf '{"pid":610,"sessionId":"aaaaaaaa-1111-4111-8111-000000000610","procStart":1792174396}\n' > "$ccd/sessions/610.json"
+# A resume id counts only as an option's own argument (--resume ID, -r ID,
+# --session-id ID, --resume=ID) or as codex's resume subcommand right after
+# the executable; never words in a prompt.
+u6=ffffffff-6666-4666-8666-0000000006
+irecs="$(irec 608 claude 60 claude; irec 609 claude 60 claude; irec 610 claude 60 claude
+    irec 611 claude 60 "claude -p please resume ${u6}11 now"; irec 612 codex 60 "codex exec summarize then resume ${u6}12"
+    irec 613 claude 60 "claude --model x --resume=${u6}13"; irec 614 claude 60 "claude -r ${u6}14 --model x"
+    irec 615 codex 60 "node /x/@openai/codex/bin/codex.js resume ${u6}15"; irec 616 claude 60 "claude -p fix-it-r ${u6}16"
+    irec 617 claude 60 "claude --session-id ${u6}17"; irec 618 codex 60 "/opt/codex/codex resume --last ${u6}18")"
+out="$(printf '%s\n' "$irecs" | AGENTS_TESTING=1 AGENTS_NOW=1792174456 CLAUDE_CONFIG_DIR="$ccd" agents_enrich "" "" "" "")"
+[[ "$(printf '%s\n' "$out" | grep '^ident' | sort)" == "$(printf 'ident\t%s\t-\t%s\n' 608 - 609 - 610 - 611 - 612 - \
+        613 "${u6}13" 614 "${u6}14" 615 "${u6}15" 616 - 617 "${u6}17" 618 -)" ]] \
+    || fail "ident: an unverifiable record or a resume in a prompt: $(printf '%s\n' "$out" | grep '^ident')"
+pass "join key: a record without a procStart that parses is not trusted; a resume id only from its option or codex's subcommand"
+
+# Herdr's answer: its agent's session id is the sixth column (agent_session,
+# an object in Herdr's API, read as a plain string too).
+if command -v jq >/dev/null 2>&1; then
+    # shellcheck disable=SC2329  # the stub herdr _agents_herdr_query runs
+    # shellcheck disable=SC2317,SC2329  # stub herdr, called by the query
+    hq_out="$( herdr() { printf '%s\n' '{"result":{"agents":[{"agent":"claude","agent_status":"idle","cwd":"/w","pane_id":"w1:p1","terminal_title_stripped":"T","agent_session":{"value":"s-1"}},{"agent":"codex","pane_id":"w2:p1","agent_session":"s-2"},{"agent":"pi"}]}}'; }
+        _agents_herdr_query )"
+    [[ "$hq_out" == $'claude\tidle\t/w\tw1:p1\tT\ts-1\ncodex\t-\t-\tw2:p1\t-\ts-2\npi\t-\t-\t-\t-\t-' ]] || fail "Herdr query columns: $(printf "%s" "$hq_out" | cat -vet)"
+    pass "Herdr's query: kind, status, cwd, pane, title and the agent's session id"
+else
+    echo "SKIP: no jq: the Herdr query test not run"
+fi
+
 # HERDR_PANE_ID from a process's environment (one ps -E, or /proc on Linux).
 [[ "$(printf '%s\n' "  42 /usr/bin/claude --x HERDR_PANE_ID=fake HOME=/h HERDR_PANE_ID=w1R:p1 TERM=x" "43 claude" "44 node HERDR_PANE_ID=bad\$id" | _agents_pane_env_parse)" == $'42\tw1R:p1' ]] \
     || fail "pane id parse: $(printf '%s\n' "  42 claude HERDR_PANE_ID=w1R:p1" | _agents_pane_env_parse)"
@@ -535,13 +632,20 @@ sub_all() {   # TEXT FROM TO — every FROM replaced (variables: the same in bas
     local t="$1" from="$2" to="$3"
     printf '%s' "${t//"$from"/$to}"
 }
+# The guard it starts reads the battery and thermal pressure through the
+# stubs, not this Mac's: on battery under 20%, or with the machine hot
+# (thermal pressure heavy, as a loaded test run can make it), the real guard
+# restores at once, and the live runs below failed for that, not for a bug.
 lid_test_cmd() {   # LOG CMD — the root command, made harmless and runnable as you
     local c="$2"
     c="$(sub_all "$c" "/usr/bin/pmset -a disablesleep 1" "/usr/bin/true")"
     c="$(sub_all "$c" "/usr/bin/pmset -a disablesleep 0" "/bin/echo restored >> $1")"
+    c="$(sub_all "$c" "/usr/bin/pmset -g batt" "$lidbin/pmset -g batt")"
+    c="$(sub_all "$c" "/usr/bin/notifyutil" "$lidbin/notifyutil")"
     c="$(sub_all "$c" "-eq 0 2>/dev/null" "-eq $(id -u) 2>/dev/null")"
     c="$(sub_all "$c" "/bin/sleep 60" "/bin/sleep 1")"
     [[ "$c" != *"pmset -a"* ]] || fail "a pmset write is left in the test command"
+    [[ "$c" != *"/usr/bin/pmset"* && "$c" != *"/usr/bin/notifyutil"* ]] || fail "the test guard reads this Mac's battery or heat"
     printf '%s' "$c"
 }
 # The command uses macOS's absolute paths (/usr/bin/true, /usr/bin/false), so
@@ -788,7 +892,7 @@ order="$(printf '%s\n' \
     $'agent\t2\tclaude\t0\t0\t0\t0\t0\ts\t-\tme\tidle\t/p/a\ta' \
     $'agent\t3\tclaude\t0\t0\t0\t0\t0\ts\t-\tme\t-\t/p/b\ta' \
     $'agent\t4\tcodex\t0\t0\t0\t0\t0\ts\t-\tme\tworking\t/p/c\ta' \
-    $'agent\t5\tclaude\t0\t0\t0\t0\t0\ts\t-\tme\tblocked\t/p/d\ta' | agents_enrich "" "" | cut -f2 | tr '\n' ' ')"
+    $'agent\t5\tclaude\t0\t0\t0\t0\t0\ts\t-\tme\tblocked\t/p/d\ta' | agents_enrich "" "" | awk -F '\t' '$1 == "agent" { printf "%s ", $2 }')"
 [[ "$order" == "5 4 2 3 1 " ]] || fail "agent order (blocked, working, idle, unknown, daemon): $order"
 pass "project names (worktrees as repo/name) agree in bash and awk; blocked sessions sort first"
 
@@ -835,9 +939,9 @@ menu="$(plugin "$mine_recs" "$sys_line"$'\nawake\tagents\t8800\t0\nthermal\t2\th
 title="$(printf '%s\n' "$menu" | head -1)"
 [[ "$title" == ":terminal: 2 :cup.and.saucer.fill: | sfcolor=#FF453A" ]] || fail "default title, heavy thermal: $title"
 [[ "$menu" == *"Agents (2) | size=12"* ]] || fail "Agents header does not count sessions only"
-[[ "$menu" == *$'\n'"app · claude · working · 102.4% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="*" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"* ]] \
+[[ "$menu" == *$'\n'"app · claude · working · 102% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="*" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"* ]] \
     || fail "agent row: project · kind · status · CPU · MEM with a green dot"
-[[ "$menu" == *$'\n'"codex daemon · 0.0% · 70M | sfimage=gearshape refresh=true symbolize=false"* ]] || fail "daemon not its own (enabled) row"
+[[ "$menu" == *$'\n'"codex daemon · 0% · 70M | sfimage=gearshape refresh=true symbolize=false"* ]] || fail "daemon not its own (enabled) row"
 [[ "$menu" != *" color="* ]] || fail "menu text colored with a fixed color"
 [[ "$menu" == *"--Kill session… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=90419@Wed_Oct_14_07:31:08_2026"* ]] \
     || fail "killing a live session does not ask in a dialog"
@@ -947,7 +1051,7 @@ reap_line="$(printf '%s\n' "$menu" | grep '^Reap all stale')"
 [[ "$menu" != *"param1=reap"* ]] || fail "Reap all stale re-collects at click time"
 [[ "$(printf '%s\n' "$menu" | grep -A2 '^yes · ' | grep -c 'Terminate (SIGTERM) | .*param3=--notify')" == 1 ]] || fail "a hog lost Terminate"
 # System: two lines, the busiest processes as plain lines in the CPU submenu.
-[[ "$menu" == *$'\n'"CPU 23% · Mem 34% · Load 7.8/14 | sfimage=cpu bash="*" param1=open-term terminal=false param2=watch"$'\n'"--Busiest processes | size=11"$'\n'"--web.test · 102.1% · 180M | bash="*" terminal=false param1=activity-monitor symbolize=false"* ]] \
+[[ "$menu" == *$'\n'"CPU 23% · Mem 34% · Load 7.8/14 | sfimage=cpu bash="*" param1=open-term terminal=false param2=watch"$'\n'"--Busiest processes | size=11"$'\n'"--web.test · 102% · 180M | bash="*" terminal=false param1=activity-monitor symbolize=false"* ]] \
     || fail "system CPU line with busiest processes in its submenu"
 [[ "$menu" == *$'\n'"Battery 85% · Thermal heavy · Energy automatic | sfimage=battery.75percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" terminal=false param1=battery-settings"* ]] || fail "system battery/thermal line"
 [[ "$(printf '%s\n' "$menu" | grep -A3 '^--web.test · ' | grep -c Terminate)" == 0 ]] || fail "a top process offers Terminate"
@@ -962,7 +1066,7 @@ pass "SwiftBar menu: sessions first (project rows, dialog-confirmed kill), then 
 # A process named "---evil" must not become a separator or a submenu.
 evil=$'hog\t9200\t---evil\t60\t95.0\t95.0\t1000\t0\tWed_Oct_14_09:13:30_2026\t-\tme\t-\t-\t---evil'
 menu_evil="$(plugin "$evil" "")"
-printf '%s\n' "$menu_evil" | grep -q '^evil · 95.0% now' || fail "leading dashes not stripped from a process name"
+printf '%s\n' "$menu_evil" | grep -q '^evil · 95% now' || fail "leading dashes not stripped from a process name"
 ! printf '%s\n' "$menu_evil" | grep -qE '^-+evil' || fail "a process name starts a menu line with dashes"
 
 # Needs you: a blocked session leads the title and the menu.
@@ -978,7 +1082,7 @@ title="$(printf '%s\n' "$menu" | head -1)"
 check_actions "$(plugin "$blocked_recs" "$sys_line"$'\nawake\ttimed\t8800\t9999999999')"
 pass "SwiftBar: blocked sessions lead (title count, Needs you section, first in Agents)"
 
-# Finished sessions (Herdr's done, not yet looked at) and Herdr's health:
+# Finished sessions (Herdr's done, not yet looked at):
 # calm items in Needs you, after the blocked ones, counted in its header,
 # never tinting the icon; Herdr's task title names the session.
 done_recs="$(printf '%s\n' "$records" | agents_enrich "$(printf '84091\t%s/code/shop\n90419\t%s/work/app\n' "$HOME" "$HOME")" \
@@ -989,24 +1093,36 @@ menu="$(plugin "$done_recs" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
 [[ "$menu" == *$'\n'"Needs you (2) | size=12"$'\n'"shop · claude · waiting for you | "* ]] || fail "Needs you header counts the done session; blocked first"
 [[ "$menu" == *$'\n'"Herdr fleet smart notifications · claude · finished, to review | sfimage=checkmark.circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMEE4NEZGIl19 bash="*" param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"$'\n'"--Jump to session | "* ]] \
     || fail "done item: $(printf '%s\n' "$menu" | grep 'finished, to review')"
-[[ "$menu" == *$'\n'"Herdr fleet smart notifications · app · claude · done · 102.4% · "* ]] || fail "session row led by Herdr's title: $(printf '%s\n' "$menu" | grep '· done ·')"
+[[ "$menu" == *$'\n'"Herdr fleet smart notifications · app · claude · done · 102% · "* ]] || fail "session row led by Herdr's title: $(printf '%s\n' "$menu" | grep '· done ·')"
 [[ $(line_no '· waiting for you') -lt $(line_no 'finished, to review') ]] || fail "done before blocked in Needs you"
 check_actions "$menu"
 done_only="$(printf '%s\n' "$done_recs" | awk -F '\t' -v OFS='\t' '$1 == "agent" && $12 == "blocked" { $12 = "working" } { print }')"
 menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2 · 1 done" ]] || fail "a done session tinted the icon: $(printf '%s\n' "$menu" | head -1)"
 [[ "$menu" == *$'\n'"Needs you (1) | size=12"$'\n'"Herdr fleet smart notifications · claude · finished, to review | "* ]] || fail "Needs you with only a done session"
-# Herdr's health: calm items whose submenus give the commands.
-menu="$(plugin "$calm" $'awake\toff\t-\t0\nthermal\t0\tnominal\nhhealth\tserver\tstale\nhhealth\toutdated\tclaude letta bad$(x)')"
+# Herdr's health is maintenance: a version mismatch is fine and a server
+# restart restarts every Herdr session, so never Needs you, the tint or the
+# title; one gray line at the bottom, its submenu holding the rest. The
+# restart commands only while no Herdr session works or waits for you.
+GRAY_DOT="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19"
+idle_calm="$(printf '%s\n' "$calm" | awk -F '\t' -v OFS='\t' '$12 == "working" { $12 = "idle" } { print }')"
+menu="$(plugin "$idle_calm" $'awake\toff\t-\t0\nthermal\t0\tnominal\nhhealth\tserver\tstale\t0.9.4\t0.9.5\nhhealth\toutdated\tclaude letta bad$(x)')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2" ]] || fail "Herdr's health tinted the icon: $(printf '%s\n' "$menu" | head -1)"
-[[ "$menu" == *$'\n'"Needs you (2) | size=12"$'\n'"Herdr server is older than the client · restart when idle | sfimage=arrow.triangle.2.circlepath "*$'\n'"--Once its agents are idle, in a terminal outside Herdr: | size=11"$'\n'"--herdr server stop | "*$'\n'"--then: herdr | "* ]] \
-    || fail "stale Herdr server item: $(printf '%s\n' "$menu" | grep -A4 'Herdr server')"
-[[ "$menu" == *$'\n'"Herdr integrations outdated: claude letta | "*$'\n'"--Reinstall each, in a terminal: | size=11"$'\n'"--herdr integration install claude | "*$'\n'"--herdr integration install letta | "* ]] \
-    || fail "outdated integrations item: $(printf '%s\n' "$menu" | grep -A4 'integrations outdated')"
-[[ "$menu" != *'$(x)'* ]] || fail "an odd integration name reached the menu"
+[[ "$menu" != *"Needs you"* ]] || fail "Herdr's health in Needs you"
+[[ "$menu" == *$'\n'"---"$'\n'"Maintenance (2) | size=12 sfimage=wrench.and.screwdriver $GRAY_DOT refresh=true"$'\n'"--Herdr server 0.9.4 → 0.9.5 on next restart | sfimage=arrow.triangle.2.circlepath $GRAY_DOT refresh=true symbolize=false"$'\n'"----The version difference is fine; restarting the server restarts every Herdr session | size=11"$'\n'"----Its agents are idle: restart now (it also stops shells and servers in its panes) | "*$'\n'"------In a terminal outside Herdr: | size=11"$'\n'"------herdr server stop | "*$'\n'"------then: herdr | "*$'\n'"--Herdr integrations outdated: claude letta | "*$'\n'"----Reinstall each, in a terminal: | size=11"$'\n'"----herdr integration install claude | "*$'\n'"----herdr integration install letta | "*$'\n'"Open agents watch | "* ]] \
+    || fail "Maintenance: $(printf '%s\n' "$menu" | awk '/^Maintenance/ { on = 1 } on && /^Open agents/ { exit } on')"
+[[ "$menu" != *"restart when idle"* && "$menu" != *'$(x)'* ]] || fail "a nag, or an odd integration name reached the menu"
 [[ "$menu" != *"eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19"* ]] || fail "Herdr's health shown in orange"
 check_actions "$menu"
-pass "SwiftBar: finished sessions and Herdr's health are calm Needs-you items (counted, untinted); Herdr's title names a session"
+# A Herdr session working: no restart commands; without versions, no numbers.
+menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal\nhhealth\tserver\tstale')"
+[[ "$menu" == *$'\n'"Maintenance (1) | "*$'\n'"--Herdr server update on next restart | "*$'\n'"----The version difference is fine; "*" | size=11"$'\n'"Open agents watch | "* ]] \
+    || fail "Maintenance with a Herdr session working: $(printf '%s\n' "$menu" | awk '/^Maintenance/ { on = 1 } on && /^Open agents/ { exit } on')"
+[[ "$menu" != *"restart now"* && "$menu" == *$'\n'"Needs you (1) | size=12"$'\n'* ]] || fail "restart offered while a Herdr session works, or Herdr counted in Needs you"
+# No Herdr session at all: safe, and says so.
+menu="$(plugin "" $'hhealth\tserver\tstale')"
+[[ "$menu" == *$'\n'"----No agents running: restart now (it also stops shells and servers in its panes) | "* ]] || fail "no Herdr session: $(printf '%s\n' "$menu" | grep 'restart now')"
+pass "SwiftBar: finished sessions are calm Needs-you items (counted, untinted); Herdr's health is a gray Maintenance line at the bottom, the restart commands only while no Herdr session works; Herdr's title names a session"
 
 # An MCP server in several sessions, every copy an mcp-lazy proxy whose
 # server never started: proxies, not copies.
@@ -1311,7 +1427,7 @@ pass "variables before non-ASCII text are braced (bash 3.2)"
 act_menu_recs="$(printf '%s\n' "$act_enr" | awk -F '\t' '$1 == "agent" || $1 == "act"')"
 menu="$(plugin "$act_menu_recs" "")"
 [[ "$(printf '%s\n' "$menu" | head -1)" == *"sfcolor=#FF9F0A" ]] || fail "duplicate/long commands do not tint the title"
-[[ "$menu" == *$'\n'"repo · claude · 107.0% (tools 102%) · 1.4G | "* ]] || fail "session row CPU split hint: $(printf '%s\n' "$menu" | grep "^repo")"
+[[ "$menu" == *$'\n'"repo · claude · 107% (tools 102%) · 1.4G | "* ]] || fail "session row CPU split hint: $(printf '%s\n' "$menu" | grep "^repo")"
 [[ "$menu" == *$'\n'"--Running (6) | size=11"$'\n'* ]] || fail "Running list"
 [[ "$menu" == *$'\n'"--until [ -s /tmp/x ]; do sleep 5; done · 52m · 0% · main · waiting | refresh=true sfimage=hourglass "* ]] \
     || fail "a polling loop is not marked as waiting"
@@ -1570,7 +1686,7 @@ cat > "$hh_dir/bin/herdr" <<'EOF'
 #!/bin/sh
 echo "herdr $*" >> "${HH_LOG:?}"
 case "$1 $2" in
-    "status ") printf 'server:\n  status: running\n\nupdate:\n  restart_needed: no\n  server_binary_stale: yes\n' ;;
+    "status ") printf 'client:\n  version: 0.9.5\n  channel: stable\n\nserver:\n  status: running\n  version: 0.9.4\n  socket: /h/herdr.sock\n\nupdate:\n  restart_needed: no\n  server_binary_stale: yes\n' ;;
     "integration status")
         printf 'pi: not installed (/h/.pi/x.ts)\nclaude: outdated (v10 < v11) (/h/.claude/hooks/x.sh)\ncodex: current (v10) (/h/.codex/x.sh)\n'
         printf 'letta (experimental): outdated (v1 < v2) (/h/.letta/x.sh)\n' ;;
@@ -1579,24 +1695,56 @@ EOF
 chmod +x "$hh_dir/bin/herdr"
 export HH_LOG="$hh_dir/log"
 recs="$(PATH="$hh_dir/bin:$PATH" _agents_herdr_health_check)"
-[[ "$recs" == $'hhealth\tserver\tstale\nhhealth\toutdated\tclaude letta' ]] || fail "health check records: $recs"
+[[ "$recs" == $'hhealth\tserver\tstale\t0.9.4\t0.9.5\nhhealth\toutdated\tclaude letta' ]] || fail "health check records: $recs"
+# No versions, or one that is not a plain version: "-" in its place.
+# shellcheck disable=SC2329  # the stub herdr _agents_herdr_health_check runs
+# shellcheck disable=SC2317,SC2329  # stub herdr, called by the health check
+hh_status() { ( herdr() { [[ "$1" == status ]] && printf '%b' "$HH_STATUS"; }; _agents_herdr_health_check ); }
+[[ "$(HH_STATUS='server:\n  status: running\n\nupdate:\n  server_binary_stale: yes\n' hh_status)" == $'hhealth\tserver\tstale\t-\t-' ]] \
+    || fail "stale server without versions: $(HH_STATUS='server:\n  server_binary_stale: yes\n' hh_status)"
+[[ "$(HH_STATUS='client:\n  version: 1.0\n\nserver:\n  version: $(id)\n\nupdate:\n  server_binary_stale: yes\n' hh_status)" == $'hhealth\tserver\tstale\t-\t1.0' ]] \
+    || fail "a server version that is not one passed through"
+[[ -z "$(HH_STATUS='client:\n  version: 1.0\n\nserver:\n  version: 0.9\n\nupdate:\n  server_binary_stale: no\n' hh_status)" ]] || fail "a current server reported stale"
 # Under the harness the menu path is silent and asks nobody.
 [[ -z "$(AGENTS_TESTING=1 AGENTS_RUN_DIR="$hh_dir/run" PATH="$hh_dir/bin:$PATH" _agents_herdr_health)" && ! -e "$hh_dir/run" ]] \
     || fail "Herdr's health was checked under AGENTS_TESTING"
 # Outside it: the first call answers nothing and starts the check; the
-# next serves its records; within the hour no check runs again.
+# next serves its records; within the minute no check runs again.
 ( unset AGENTS_TESTING
-  export AGENTS_RUN_DIR="$hh_dir/run" PATH="$hh_dir/bin:$PATH"
+  export AGENTS_RUN_DIR="$hh_dir/run" PATH="$hh_dir/bin:$PATH" HERDR_SOCKET_PATH="$hh_dir/herdr.sock"
   [[ -z "$(_agents_herdr_health)" ]] || fail "the first health call waited for the check"
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
       [[ -s "$AGENTS_RUN_DIR/herdr.health" ]] && break; sleep 0.2
   done
-  [[ "$(_agents_herdr_health)" == $'hhealth\tserver\tstale\nhhealth\toutdated\tclaude letta' ]] || fail "health records from the cache: $(_agents_herdr_health)"
+  [[ "$(_agents_herdr_health)" == $'hhealth\tserver\tstale\t0.9.4\t0.9.5\nhhealth\toutdated\tclaude letta' ]] || fail "health records from the cache: $(_agents_herdr_health)"
   : > "$HH_LOG"; _agents_herdr_health >/dev/null; sleep 0.5
-  [[ ! -s "$HH_LOG" ]] || fail "Herdr's health was checked again within the hour: $(cat "$HH_LOG")"
+  [[ ! -s "$HH_LOG" ]] || fail "Herdr's health was checked again within the minute: $(cat "$HH_LOG")"
+  # Self-healing: a problem is checked again after a minute, a clean cache
+  # only after an hour, and either at once when the server restarted (its
+  # socket is newer than the cache).
+  hh_cache="$AGENTS_RUN_DIR/herdr.health" hh_now="$(date +%s)"
+  hh_wait() {   # the check ran (or, with "none", did not) in the background
+      local _
+      for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+          [[ -s "$HH_LOG" ]] && break; [[ "${1:-}" == none && $_ -ge 3 ]] && break; sleep 0.2
+      done
+  }
+  : > "$HH_LOG"; printf '%s\nhhealth\tserver\tstale\n' "$((hh_now - 120))" > "$hh_cache"
+  [[ "$(_agents_herdr_health)" == $'hhealth\tserver\tstale' ]] || fail "a problem row not served while it is rechecked"
+  hh_wait; [[ -s "$HH_LOG" ]] || fail "a 2-minute-old problem row was not checked again"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -d "$AGENTS_RUN_DIR/herdr-health.lock" ]] || break; sleep 0.2; done
+  : > "$HH_LOG"; printf '%s\n' "$((hh_now - 120))" > "$hh_cache"
+  [[ -z "$(_agents_herdr_health)" ]] || fail "a clean cache served a row"
+  hh_wait none; [[ ! -s "$HH_LOG" ]] || fail "a 2-minute-old clean cache was checked again within the hour"
+  touch -t 202001010000 "$hh_cache"; : > "$HERDR_SOCKET_PATH"
+  _agents_herdr_health >/dev/null
+  hh_wait; [[ -s "$HH_LOG" ]] || fail "a server restarted after the last check (newer socket) did not trigger a check"
+  [[ "$(head -1 "$hh_cache")" -ge "$hh_now" ]] || fail "the restart's check did not rewrite the cache"
+  : > "$HH_LOG"; _agents_herdr_health >/dev/null; hh_wait none
+  [[ ! -s "$HH_LOG" ]] || fail "checked again although the cache is newer than the socket now"
   [[ -z "$(AGENTS_NO_HERDR=1 _agents_herdr_health)" ]] || fail "AGENTS_NO_HERDR=1 still reports Herdr's health"
   [[ -z "$(PATH=/usr/bin:/bin _agents_herdr_health)" ]] || fail "Herdr's health reported without herdr installed" ) || exit 1
-pass "Herdr health: server_binary_stale and outdated integrations, from an hourly background check; silent without herdr"
+pass "Herdr health: server_binary_stale (with server and client versions) and outdated integrations, from a background check (hourly; every minute while it reports a problem; at once after a server restart); silent without herdr"
 
 # Probe parsers (one sysctl, memory_pressure, pmset -g batt), without forks.
 cores="" level="" load=""

@@ -454,11 +454,13 @@ printf 'hist\tok\t3600\ttest\t1800\ntokens\t2637000\t91\ninsight\ttokens\tapp: a
 printf '#!/bin/bash\ncase "$1" in tsv) cat "%s" ;; esac\n' "$tmp/tsv" > "$tmp/agents-stub"
 chmod +x "$tmp/agents-stub"
 tokrow="2.6M tokens today · 91% cached | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
-# By default it heads Usage, and Where the CPU goes leaves it out.
+# By default it leads Usage's Today line, and Where the CPU goes leaves it out.
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
 section="$(printf '%s\n' "$menu" | awk '/^Usage \|/ { on = 1 } on && /^---$/ { exit } on')"
-[[ "$section" == "Usage | size=12"$'\n'"$tokrow" ]] || fail "menu tokens row in Usage:"$'\n'"$section"
-[[ "$(printf '%s\n' "$menu" | grep -c 'tokens today')" == 1 ]] || fail "the tokens row shown twice"
+tview="bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
+[[ "$section" == "Usage | size=12"$'\n'"Today: 2.6M tokens · 91% cached | $tview"$'\n'"--2.6M tokens · 91% read from the prompt cache | $tview" ]] \
+    || fail "menu tokens in Usage's Today line:"$'\n'"$section"
+[[ "$(printf '%s\n' "$menu" | grep -c '2.6M tokens')" == 2 && "$menu" != *"tokens today"* ]] || fail "the tokens row shown twice"
 # Without a Usage section, under Today.
 printf 'conf\tAGENTS_BAR_SECTIONS\tagents jobs\n' >> "$tmp/tsv"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
@@ -469,15 +471,15 @@ app: a session compacted ×3 | bash=\"$tmp/agents-stub\" param1=open-term termin
 [[ "$section" == *"$want"* ]] || fail "menu tokens row:"$'\n'"$section"
 for n in 0 950:950 64249:64.2k 99949:99.9k 99950:100k 640000:640k 999499:999k 999500:1M 12449999:12.4M 99950000:100M 1234567890:1.2B; do
     printf 'hist\tok\t0\t-\t0\ntokens\t%s\t90\n' "${n%%:*}" > "$tmp/tsv"
-    line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'tokens today' || true)"
+    line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep '^Today: .* tokens · ' || true)"
     if [[ "$n" == 0 ]]; then [[ -z "$line" ]] || fail "a tokens row for 0 tokens"; continue; fi
-    [[ "$line" == "${n#*:} tokens today · 90% cached | "* ]] || fail "menu: ${n%%:*} tokens as '${n#*:}': $line"
+    [[ "$line" == "Today: ${n#*:} tokens · 90% cached | "* ]] || fail "menu: ${n%%:*} tokens as '${n#*:}': $line"
     [[ "$(_agents_awk_eval "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_waits report_insights report_views" 'BEGIN { print tk(x) }' -v x="${n%%:*}")" == "${n#*:}" ]] \
         || fail "report and menu disagree on ${n%%:*}"
 done
 printf 'hist\toff\t0\t-\t0\n' > "$tmp/tsv"
-[[ "$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")" != *"tokens today"* ]] || fail "a tokens row without the tsv line"
-pass "menu: '2.6M tokens today · 91% cached' in Usage (under Today without it; k/M/B as the report writes them), opening today's tokens view"
+[[ "$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")" != *" tokens · "* ]] || fail "a tokens row without the tsv line"
+pass "menu: today's tokens lead Usage's Today line (a row under Where the CPU goes' Today without it; k/M/B as the report writes them), opening today's tokens view"
 
 # 11. The daily rollup (the prune, once a day): tokens.tsv's rows before
 # local midnight yesterday become one row per day and name, and every

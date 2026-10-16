@@ -1,6 +1,6 @@
 #!/bin/bash
 # <xbar.title>agents</xbar.title>
-# <xbar.version>v1.3</xbar.version>
+# <xbar.version>v1.4</xbar.version>
 # <xbar.desc>Agentic-coding sessions (blocked first), where their CPU goes, stale helpers, CPU hogs, keep-awake and a compact system view, from tuidev's `agents` command.</xbar.desc>
 # <xbar.dependencies>bash,agents</xbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
@@ -130,6 +130,16 @@ humanize() {
     else REPLY="$(( (n + u / 2) / u ))"; fi
     REPLY+="$s"
 }
+# pctv PCPU — a %cpu for people, whole like Where the CPU goes, in REPLY:
+# 102.4 -> 102, 6.8 -> 7, 0.3 -> <1, 0.0 -> 0 (anything else as it came).
+pctv() {
+    local i="${1%%.*}" f=0
+    [[ "$1" == *.* ]] && { f="${1#*.}"; f="${f:0:1}"; f="${f:-0}"; }
+    if ! num "$i" || ! num "$f" || [[ ${#i} -gt 9 ]]; then REPLY="$1"; return 0; fi
+    if [[ $i -eq 0 && $f -gt 0 && $f -lt 5 ]]; then REPLY="<1"; return 0; fi
+    [[ $f -ge 5 ]] && i=$((10#$i + 1))
+    REPLY="$((10#$i))"
+}
 charging() { [[ "$1" == charging || "$1" == charged || "$1" == "AC attached" || "$1" == "finishing charge" ]]; }
 # battery_symbol PERCENT STATE — its SF Symbol, in REPLY.
 battery_symbol() {
@@ -151,12 +161,16 @@ awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents usage jobs stale hogs awake system" BAR_ICON=terminal CONF=""
-# Calm items in Needs you (finished sessions, Herdr's health): counted in its
-# header, never in the title's tint.
-n_done=0 calm_menu="" herdr_stale="" herdr_outdated=""
+# Calm items in Needs you (finished sessions): counted in its header, never
+# in the title's tint. Herdr's health (hhealth rows) is maintenance, at the
+# bottom: never in Needs you, the tint or the title.
+n_done=0 calm_menu="" herdr_stale="" herdr_vers="" herdr_outdated=""
+# Herdr sessions (in a Herdr pane), and whether one works or waits for you:
+# a server restart restarts them all.
+n_in_herdr=0 herdr_busy=""
 job_rows="" mcp_cfg="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text="" tok_total=0 tok_cache=0
-# Usage: each CLI's limit windows ("name<TAB>window<TAB>pct<TAB>resets"
-# lines), the highest %, and today's denials and compactions.
+# Usage: each CLI's limit windows ("name<TAB>window<TAB>pct<TAB>resets<TAB>
+# cli<TAB>age" lines), the highest %, and today's denials and compactions.
 usage_rows="" limit_max=-1 n_denials=0 denials_top=- n_compacts=0
 
 # Per-session activity, gathered from the act rows into variables named after
@@ -381,9 +395,13 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         herdr)  # herdr PID PANE TITLE: the session's Herdr pane and task title
             num "$pid" || continue
             [[ "$age_s" == - ]] || printf -v "H_title_$pid" '%s' "$age_s" ;;
-        hhealth)   # hhealth server stale | hhealth outdated NAME…
+        hhealth)   # hhealth server stale [SERVER_VERSION CLIENT_VERSION] | hhealth outdated NAME…
             case "$pid" in
-                server)   [[ "$kind" == stale ]] && herdr_stale=1 ;;
+                server)   if [[ "$kind" == stale ]]; then
+                              herdr_stale=1
+                              [[ "$age_s" =~ ^[0-9][0-9A-Za-z.+-]{0,30}$ && "$pcpu" =~ ^[0-9][0-9A-Za-z.+-]{0,30}$ ]] \
+                                  && herdr_vers="$age_s → $pcpu"
+                          fi ;;
                 outdated) herdr_outdated="$kind" ;;
             esac ;;
         stale)
@@ -406,7 +424,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             ;;
         hog)
             n_hogs=$((n_hogs + 1))
-            cl "$kind"; hogs_menu+="$REPLY · ${pcpu}% now · ${avg}% avg | $ROW symbolize=false sfimage=flame"$'\n'
+            cl "$kind"; c="$REPLY"; pctv "$pcpu"; a="$REPLY"; pctv "$avg"
+            hogs_menu+="$c · $a% now · $REPLY% avg | $ROW symbolize=false sfimage=flame"$'\n'
             cl "$user"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
             hogs_menu+="--pid $pid · $c · up $a · $REPLY | symbolize=false"$'\n'
             if [[ "$user" == "$me" ]] && tok "$pid" "$start"; then
@@ -415,8 +434,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                 hogs_menu+="--Owned by $c: run sudo kill $pid in a terminal | symbolize=false"$'\n'
             fi
             ;;
-        top)     cl "$kind"; c="$REPLY"; memv "$rss"
-                 top_menu+="--$c · ${pcpu}% · $REPLY | $CALLBACK param1=activity-monitor symbolize=false"$'\n' ;;
+        top)     cl "$kind"; c="$REPLY"; pctv "$pcpu"; a="$REPLY"; memv "$rss"
+                 top_menu+="--$c · $a% · $REPLY | $CALLBACK param1=activity-monitor symbolize=false"$'\n' ;;
         sys)     cpu="$pid"; load="$kind"; cores="$age_s"; memfree="$pcpu"; mempress="$avg"; batt="$rss"; bstate="$kids" ;;
         awake)   awake_mode="$pid"; awake_until="$age_s" ;;   # awake MODE PID UNTIL
         thermal) thermal="$pid"; thermal_name="$kind" ;;
@@ -432,7 +451,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         tokens)  tok_total="$pid"; tok_cache="$kind" ;;         # tokens TOTAL CACHE_PCT (today)
         # limit NAME WINDOW PCT RESETS CLI AGE · denials COUNT TOP · compacts COUNT (Usage)
         limit)   if num "$age_s"; then
-                     usage_rows+="$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\n'
+                     usage_rows+="$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$avg"$'\t'"$rss"$'\n'
                      [[ $age_s -le $limit_max ]] || limit_max="$age_s"
                  fi ;;
         denials)  num "$pid" && { n_denials="$pid"; denials_top="$kind"; } ;;
@@ -471,13 +490,20 @@ n_attn=0
 for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     IFS=$'\t' read -r pid kind age_s pcpu rss kids start ports herdr cwd project <<<"$row"
     if [[ "$kind" == daemon ]]; then
-        memv "$rss"
-        daemon_menu+="codex daemon · ${pcpu}% · $REPLY | sfimage=gearshape $ROW symbolize=false"$'\n'
+        pctv "$pcpu"; pc="$REPLY"; memv "$rss"
+        daemon_menu+="codex daemon · $pc% · $REPLY | sfimage=gearshape $ROW symbolize=false"$'\n'
         session_submenu "$pid" "$start" daemon "$age_s" "$kids" "$ports" -
         daemon_menu+="$SUB"
         continue
     fi
     n_agents=$((n_agents + 1))
+    # In Herdr and not idle or done (or its state unknown): not a time to
+    # restart Herdr's server.
+    v="W_how_$pid"
+    if [[ "$herdr" != - || "${!v-}" == herdr ]]; then
+        n_in_herdr=$((n_in_herdr + 1))
+        [[ "$herdr" == idle || "$herdr" == "done" ]] || herdr_busy=1
+    fi
     cl "${project:--}"; name="$REPLY"; [[ "$name" == - || -z "$name" ]] && name="$kind"
     cl "$kind"; ckind="$REPLY"
     # Herdr's task title for the pane, when it has one: it leads the row
@@ -500,8 +526,8 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     click="$ROW"
     tok "$pid" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
     session_submenu "$pid" "$start" "$kind" "$age_s" "$kids" "$ports" "$cwd" "$herdr"; sub="$SUB"
-    memv "$rss"
-    agents_menu+="$label · $ckind$status · ${pcpu}%$hint · $REPLY | $look $click symbolize=false"$'\n'"$sub"
+    pctv "$pcpu"; pc="$REPLY"; memv "$rss"
+    agents_menu+="$label · $ckind$status · $pc%$hint · $REPLY | $look $click symbolize=false"$'\n'"$sub"
     if [[ "$herdr" == blocked ]]; then
         n_blocked=$((n_blocked + 1)); n_attn=$((n_attn + 1))
         needs_menu+="$who · $ckind · waiting for you | sfimage=exclamationmark.circle.fill $DOT_ORANGE $click symbolize=false"$'\n'"$sub"
@@ -543,23 +569,35 @@ if [[ "$lid_state" == stale ]]; then
     needs_menu="Restore lid sleep (disabled, nothing restores it)… | sfimage=exclamationmark.triangle.fill $DOT_RED $ACT param1=awake param2=restore param3=--notify symbolize=false"$'\n'"$needs_menu"
 fi
 
-# Herdr after an upgrade (an hourly check, hhealth rows): a server still
-# running the old binary, integrations older than the client. Calm items
-# whose submenus give the commands to run; nothing is run from here.
-n_herdr=0
+# Maintenance: Herdr after an upgrade (an hourly check, hhealth rows). A
+# server older than its client is fine (Herdr supports the mismatch) and
+# restarting it restarts every Herdr session, losing their context: so it
+# waits for the next restart, never nags, and offers the commands only
+# while no Herdr session works or waits for you. Integrations older than
+# the client reinstall without a restart. One dim line near the bottom,
+# its submenu holding the rest; never Needs you, the tint or the title.
+# Nothing is run from here.
+maint_menu="" n_maint=0
 if [[ -n "$herdr_stale" ]]; then
-    n_herdr=$((n_herdr + 1))
-    calm_menu+="Herdr server is older than the client · restart when idle | sfimage=arrow.triangle.2.circlepath $DOT_GRAY $ROW symbolize=false"$'\n'
-    calm_menu+="--Once its agents are idle, in a terminal outside Herdr: | size=11"$'\n'
-    calm_menu+="--herdr server stop | $ROW sfimage=terminal symbolize=false"$'\n'"--then: herdr | $ROW sfimage=terminal symbolize=false"$'\n'
+    n_maint=$((n_maint + 1))
+    if [[ -n "$herdr_vers" ]]; then cl "$herdr_vers"; v="Herdr server $REPLY on next restart"
+    else v="Herdr server update on next restart"; fi
+    maint_menu+="--$v | sfimage=arrow.triangle.2.circlepath $DOT_GRAY $ROW symbolize=false"$'\n'
+    maint_menu+="----The version difference is fine; restarting the server restarts every Herdr session | size=11"$'\n'
+    if [[ -z "$herdr_busy" ]]; then
+        v="No agents running"; [[ $n_in_herdr -eq 0 ]] || v="Its agents are idle"
+        maint_menu+="----$v: restart now (it also stops shells and servers in its panes) | sfimage=checkmark.circle $DOT_GRAY $ROW symbolize=false"$'\n'
+        maint_menu+="------In a terminal outside Herdr: | size=11"$'\n'
+        maint_menu+="------herdr server stop | $ROW sfimage=terminal symbolize=false"$'\n'"------then: herdr | $ROW sfimage=terminal symbolize=false"$'\n'
+    fi
 fi
 herdr_names=""
 for v in $herdr_outdated; do [[ "$v" =~ ^[A-Za-z0-9_.-]+$ ]] && herdr_names+=" $v"; done
 if [[ -n "$herdr_names" ]]; then
-    n_herdr=$((n_herdr + 1))
-    calm_menu+="Herdr integrations outdated:$herdr_names | sfimage=puzzlepiece.extension $DOT_GRAY $ROW symbolize=false"$'\n'
-    calm_menu+="--Reinstall each, in a terminal: | size=11"$'\n'
-    for v in $herdr_names; do calm_menu+="--herdr integration install $v | $ROW sfimage=terminal symbolize=false"$'\n'; done
+    n_maint=$((n_maint + 1))
+    maint_menu+="--Herdr integrations outdated:$herdr_names | sfimage=puzzlepiece.extension $DOT_GRAY $ROW symbolize=false"$'\n'
+    maint_menu+="----Reinstall each, in a terminal: | size=11"$'\n'
+    for v in $herdr_names; do maint_menu+="----herdr integration install $v | $ROW sfimage=terminal symbolize=false"$'\n'; done
 fi
 
 # --- Title -------------------------------------------------------------------------
@@ -576,7 +614,7 @@ if { num "$thermal" && [[ $thermal -ge 2 ]]; } || [[ "$mempress" == critical || 
 if [[ -z "$attention" && $limit_max -ge 95 ]]; then attention="$ORANGE"; fi
 
 bar_title() {
-    local t=":$BAR_ICON:" tok
+    local t=":$BAR_ICON:" tok g
     for tok in $BAR_TITLE; do
         case "$tok" in
             count)   [[ $n_agents -gt 0 ]] && t+=" $n_agents"
@@ -589,7 +627,7 @@ bar_title() {
             thermal) num "$thermal" && [[ $thermal -ge 1 ]] && t+=" :thermometer.medium: $thermal_name" ;;
             awake)   [[ "$awake_mode" != off ]] && t+=" :cup.and.saucer.fill:" ;;
             warn)    [[ -n "$attention" ]] && t+=" :exclamationmark.triangle.fill:" ;;
-            limit)   [[ $limit_max -ge 0 ]] && t+=" :gauge.with.needle: ${limit_max}%" ;;
+            limit)   [[ $limit_max -ge 0 ]] && { gauge "$limit_max"; g="${REPLY%% *}"; t+=" :${g#sfimage=}: ${limit_max}%"; } ;;
         esac
     done
     printf '%s' "$t"
@@ -604,9 +642,9 @@ bar_title() {
 put() { OUT+="$1"$'\n'; }
 
 # Needs you: what needs a look now (the orange items, n_attn), then the calm
-# ones (finished sessions, Herdr's health), all counted in its header.
+# ones (finished sessions to review), all counted in its header.
 section_needs() {
-    local n=$((n_attn + n_done + n_herdr))
+    local n=$((n_attn + n_done))
     [[ $n -gt 0 ]] || return 0
     put "Needs you ($n) | size=12"
     OUT+="$needs_menu$calm_menu"
@@ -860,40 +898,167 @@ section_jobs() {
 }
 
 # --- Usage ---------------------------------------------------------------------------
-# Each CLI's usage limits (limit rows: `agents limits` has them all, with
-# how old each reading is), today's tokens, and what today's denials and
-# compactions say. A window at 80% gets an orange dot, at 95% a red one
-# (and the icon turns orange: bar_title).
+# One line per CLI, its limit windows side by side and shortest first
+# (`Claude: 5h 57% · wk 27%`), from the limit rows (`agents limits` has them
+# all, with how old each reading is). Each account is a line of its own
+# (Claude, then Claude (work): cli claude:work), and a CLI whose quotas go
+# by model (USAGE_BY_MODEL) is one line with each window's highest model.
+# A gauge shows the line's highest window: orange from 80%, red from 95%
+# (and the icon turns orange: bar_title), gray while nothing is used; from
+# 80% the line also says when that window resets. The submenu has every
+# window (by model), its reset and the reading's age; each opens agents
+# limits. Then one Today line: tokens, denials and compactions, each in its
+# submenu opening its view of today's report.
+
+# CLIs (limits.tsv's family, the cli before its ":") whose cli FAMILY:NAME
+# rows are quotas per model, not accounts.
+USAGE_BY_MODEL="agy"
+LIMITS="$TERM_OPEN param2=--hold param3=limits"
+TODAY_VIEW="$TERM_OPEN param2=--hold param3=report param4=--view"
+
+# wmin WINDOW — REPLY: a window's length in minutes (5h, day, week, month,
+# 3d, 2h, 90m), to order a line's windows; anything else sorts last.
+wmin() {
+    local n="${1%?}" u=0
+    case "$1" in
+        day)   REPLY=1440; return ;;
+        week)  REPLY=10080; return ;;
+        month) REPLY=43200; return ;;
+        *d) u=1440 ;; *h) u=60 ;; *m) u=1 ;;
+    esac
+    if [[ $u -gt 0 && ${#n} -le 6 ]] && num "$n"; then REPLY=$((n * u)); else REPLY=99999999; fi
+}
+# wshort WINDOW — REPLY: the window as a CLI's line names it (wk, mo).
+wshort() { case "$1" in week) REPLY=wk ;; month) REPLY=mo ;; *) REPLY="$1" ;; esac; }
+# gauge PCT — REPLY: the gauge for a share used, as item params: its needle
+# (the nearest of 0, 33, 50, 67 and 100%), tinted orange from 80%, red from
+# 95%, gray at 0%.
+gauge() {
+    local p="$1" s=0
+    if [[ $p -ge 84 ]]; then s=100
+    elif [[ $p -ge 59 ]]; then s=67
+    elif [[ $p -ge 42 ]]; then s=50
+    elif [[ $p -ge 17 ]]; then s=33; fi
+    REPLY="sfimage=gauge.with.dots.needle.${s}percent"
+    if [[ $p -ge 95 ]]; then REPLY+=" $DOT_RED"
+    elif [[ $p -ge 80 ]]; then REPLY+=" $DOT_ORANGE"
+    elif [[ $p -eq 0 ]]; then REPLY+=" $DOT_GRAY"; fi
+}
+
+# usage_lines — the CLI lines. Groups go by index (U*_N: key, title, how
+# many windows, the highest %, the oldest reading, the submenu), each
+# window by group and index (UW/UP/UR_N_M: its name, highest %, that
+# one's reset); bash 3.2 has no associative arrays. One pass over the
+# rows, then one over the groups: no subshell, no fork.
+usage_lines() {
+    local name win pct rst cli age fam key title model i j k n x ng=0 v p seg line used best bm
+    while IFS=$'\t' read -r name win pct rst cli age; do
+        num "$pct" || continue
+        [[ -n "$win" ]] || continue
+        fam="${cli%%:*}" key="$cli"
+        [[ -n "$cli" && "$cli" != - ]] || { fam="$name" key="$name"; }
+        case " $USAGE_BY_MODEL " in *" $fam "*) key="$fam" ;; esac
+        # A model's quota (agy:gemini, named "Antigravity · Gemini").
+        model=""
+        [[ "$key" != "$cli" && "$name" == *" · "* ]] && model="${name#* · }"
+        i=0
+        for ((j = 1; j <= ng; j++)); do v="UK_$j"; [[ "${!v}" == "$key" ]] && { i=$j; break; }; done
+        if [[ $i -eq 0 ]]; then
+            ng=$((ng + 1)); i=$ng
+            # Claude · work (cli claude:work) reads Claude (work).
+            title="$name"
+            if [[ "$key" != "$cli" ]]; then title="${name%% · *}"
+            elif [[ "$key" == *:* && "$name" == *" · "* ]]; then title="${name%% · *} (${name#* · })"; fi
+            cl "$title"
+            printf -v "UK_$i" '%s' "$key"; printf -v "UT_$i" '%s' "$REPLY"
+            printf -v "UN_$i" '%d' 0; printf -v "UM_$i" '%d' 0; printf -v "UA_$i" '%d' 0; printf -v "US_$i" '%s' ""
+        fi
+        v="UN_$i"; n="${!v}"; k=0
+        for ((j = 1; j <= n; j++)); do v="UW_${i}_$j"; [[ "${!v}" == "$win" ]] && { k=$j; break; }; done
+        if [[ $k -eq 0 ]]; then
+            n=$((n + 1)); k=$n
+            printf -v "UN_$i" '%d' "$n"; printf -v "UW_${i}_$k" '%s' "$win"; printf -v "UP_${i}_$k" '%d' -1
+        fi
+        v="UP_${i}_$k"
+        if [[ $pct -gt ${!v} ]]; then printf -v "$v" '%d' "$pct"; printf -v "UR_${i}_$k" '%s' "$rst"; fi
+        v="UM_$i"; [[ $pct -le ${!v} ]] || printf -v "$v" '%d' "$pct"
+        v="UA_$i"; if num "$age" && [[ $age -gt ${!v} ]]; then printf -v "$v" '%d' "$age"; fi
+        # Its submenu line: the window (by model), its share and reset.
+        cl "$win"; line="$REPLY $pct%"
+        [[ -z "$model" ]] || { cl "$model"; line="$REPLY · $line"; }
+        [[ "$rst" == - || -z "$rst" ]] || { cl "$rst"; line+=" · resets $REPLY"; }
+        gauge "$pct"; v="US_$i"
+        printf -v "$v" '%s%s' "${!v}" "--$line | $REPLY $LIMITS symbolize=false"$'\n'
+    done <<<"$usage_rows"
+    for ((i = 1; i <= ng; i++)); do
+        v="UN_$i"; n="${!v}"; line="" used=" "
+        for ((x = 1; x <= n; x++)); do   # its windows, shortest first
+            best=0 bm=0
+            for ((j = 1; j <= n; j++)); do
+                [[ "$used" == *" $j "* ]] && continue
+                v="UW_${i}_$j"; wmin "${!v}"
+                if [[ $best -eq 0 || $REPLY -lt $bm ]]; then best=$j bm=$REPLY; fi
+            done
+            used+="$best "
+            v="UW_${i}_$best"; wshort "${!v}"; cl "$REPLY"; seg="$REPLY"
+            v="UP_${i}_$best"; p="${!v}"; seg+=" $p%"
+            if [[ $p -ge 80 ]]; then
+                v="UR_${i}_$best"
+                [[ "${!v}" == - || -z "${!v}" ]] || { cl "${!v}"; seg+=" (resets $REPLY)"; }
+            fi
+            line+="${line:+ · }$seg"
+        done
+        v="UM_$i"; gauge "${!v}"
+        v="UT_$i"; put "${!v}: $line | $REPLY $LIMITS symbolize=false"
+        v="US_$i"; OUT+="${!v}"
+        v="UA_$i"
+        if [[ ${!v} -lt 60 ]]; then put "--updated just now | size=11"
+        else agev "${!v}"; put "--updated $REPLY ago | size=11"; fi
+    done
+}
 
 # tokens_row — today's tokens (from tokens.today, which `agents sample`
 # writes) and the share read from the prompt cache; opens today's token
-# report. Nothing before the first token.
+# report. Nothing before the first token. Where the CPU goes shows it when
+# the menu has no Usage section (whose Today line has it).
 tokens_row() {
     if ! { num "$tok_total" && num "$tok_cache" && [[ $tok_total -gt 0 ]]; }; then return 0; fi
     humanize "$tok_total"
-    put "$REPLY tokens today · ${tok_cache}% cached | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
+    put "$REPLY tokens today · ${tok_cache}% cached | $TODAY_VIEW param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
+}
+
+# today_line — Today: tokens, denials and compactions on one line, each
+# in its submenu, opening its view of today's report (the line itself
+# the first of those). Nothing when there is none of them.
+today_line() {
+    local line="" sub="" view="" s top=""
+    if num "$tok_total" && num "$tok_cache" && [[ $tok_total -gt 0 ]]; then
+        humanize "$tok_total"
+        line="$REPLY tokens · ${tok_cache}% cached" view=tokens
+        sub+="--$REPLY tokens · ${tok_cache}% read from the prompt cache | $TODAY_VIEW param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"$'\n'
+    fi
+    if [[ $n_denials -gt 0 ]]; then
+        s=s; [[ $n_denials -eq 1 ]] && s=""
+        line+="${line:+ · }$n_denials denial$s" view="${view:-denials}"
+        [[ "$denials_top" == - || -z "$denials_top" ]] || { cl "$denials_top"; top=" · top: $REPLY"; }
+        sub+="--$n_denials denial$s$top | $TODAY_VIEW param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false"$'\n'
+    fi
+    if [[ $n_compacts -gt 0 ]]; then
+        s=s; [[ $n_compacts -eq 1 ]] && s=""
+        line+="${line:+ · }$n_compacts compaction$s" view="${view:-tokens}"
+        sub+="--$n_compacts context compaction$s | $TODAY_VIEW param5=tokens param6=--since param7=today sfimage=arrow.down.right.and.arrow.up.left symbolize=false"$'\n'
+    fi
+    [[ -n "$line" ]] || return 0
+    s=text.bubble; [[ "$view" == denials ]] && s=hand.raised
+    put "Today: $line | $TODAY_VIEW param5=$view param6=--since param7=today sfimage=$s symbolize=false"
+    OUT+="$sub"
 }
 
 section_usage() {
-    local name win pct rst line look top=""
     [[ -n "$usage_rows" || $n_denials -gt 0 || $n_compacts -gt 0 ]] || { num "$tok_total" && [[ $tok_total -gt 0 ]]; } || return 0
     put "Usage | size=12"
-    while IFS=$'\t' read -r name win pct rst; do
-        num "$pct" || continue
-        cl "$name"; line="$REPLY · "; cl "$win"; line+="$REPLY $pct%"
-        [[ "$rst" == - ]] || { cl "$rst"; line+=" · resets $REPLY"; }
-        look="sfimage=gauge.with.needle"
-        if [[ $pct -ge 95 ]]; then look+=" $DOT_RED"; elif [[ $pct -ge 80 ]]; then look+=" $DOT_ORANGE"; fi
-        put "$line | $look $TERM_OPEN param2=--hold param3=limits symbolize=false"
-    done <<<"$usage_rows"
-    tokens_row
-    if [[ $n_denials -gt 0 ]]; then
-        [[ "$denials_top" == - || -z "$denials_top" ]] || { cl "$denials_top"; top=" (top: $REPLY)"; }
-        put "Denials today: $n_denials$top | $TERM_OPEN param2=--hold param3=report param4=--view param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false"
-    fi
-    if [[ $n_compacts -gt 0 ]]; then
-        put "Compactions today: $n_compacts | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=arrow.down.right.and.arrow.up.left symbolize=false"
-    fi
+    usage_lines
+    today_line
 }
 
 section_stale() {
@@ -1001,6 +1166,11 @@ for section in $BAR_SECTIONS; do
     printf '%s\n' "$OUT"
 done
 echo "---"
+# Maintenance first in the footer: small and gray, everything in its submenu.
+if [[ $n_maint -gt 0 ]]; then
+    echo "Maintenance ($n_maint) | size=12 sfimage=wrench.and.screwdriver $DOT_GRAY $ROW"
+    printf '%s' "$maint_menu"
+fi
 echo "Open agents watch | $TERM_OPEN param2=watch sfimage=rectangle.and.text.magnifyingglass"
 [[ -n "$CONF" && -f "$CONF" ]] && echo "Edit settings… | $NOREF param1=config param2=--edit sfimage=slider.horizontal.3"
 echo "Refresh | refresh=true sfimage=arrow.clockwise"

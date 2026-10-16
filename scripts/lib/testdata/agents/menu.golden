@@ -122,7 +122,7 @@ myapp: while [ -f @TMP@/w/build.log ]; do sleep 5;... · stuck 3h0m · check fir
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5090@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
 ---
 Agents (6) | size=12
-app · claude · working · 102.4% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+app · claude · working · 102% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
 --~/work/app | symbolize=false
 --claude · pid 90419 · up 1h42m · 4 children · ports 41234,41235 | symbolize=false
@@ -135,7 +135,7 @@ app · claude · working · 102.4% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=90419@Wed_Oct_14_07:31:08_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=90419 sfimage=number
-shop/fix-cart · claude · 6.8% · 632M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
+shop/fix-cart · claude · 7% · 632M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=84091@Wed_Oct_14_08:40:22_2026 sfimage=arrow.up.forward.app
 --~/work/shop/.claude/worktrees/fix-cart | symbolize=false
 --claude · pid 84091 · up 33m · 1 children | symbolize=false
@@ -149,7 +149,7 @@ shop/fix-cart · claude · 6.8% · 632M | sfimage=circle bash="@TMP@/menu-agents
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=84091@Wed_Oct_14_08:40:22_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=84091 sfimage=number
-repo · claude · 107.0% (tools 102%) · 1.4G | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+repo · claude · 107% (tools 102%) · 1.4G | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --claude · pid 1000 · up 1h0m · 16 children | symbolize=false
@@ -177,7 +177,7 @@ repo · claude · 107.0% (tools 102%) · 1.4G | sfimage=circle bash="@TMP@/menu-
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=1000@Wed_Oct_14_08:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=1000 sfimage=number
-repo · codex · 1.0% · 298M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
+repo · codex · 1% · 298M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=2000@Wed_Oct_14_08:30:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --codex · pid 2000 · up 30m · 2 children | symbolize=false
@@ -194,7 +194,7 @@ repo · codex · 1.0% · 298M | sfimage=circle bash="@TMP@/menu-agents" terminal
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=2000@Wed_Oct_14_08:30:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=2000 sfimage=number
-myapp · claude · 13.6% · 512M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
+myapp · claude · 14% · 512M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
 --~/work/myapp | symbolize=false
 --claude · pid 5000 · up 6h0m · 11 children · ports 3000 | symbolize=false
@@ -224,7 +224,7 @@ myapp · claude · 13.6% · 512M | sfimage=circle bash="@TMP@/menu-agents" termi
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=5000@Wed_Oct_14_03:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=5000 sfimage=number
-repo · codex · 146.0% (tools 141%) · 1.0G | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
+repo · codex · 146% (tools 141%) · 1.0G | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --codex · pid 100 · up 1h0m · 9 children | symbolize=false
@@ -246,7 +246,7 @@ repo · codex · 146.0% (tools 141%) · 1.0G | sfimage=circle bash="@TMP@/menu-a
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=100@Wed_Oct_14_08:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=100 sfimage=number
-codex daemon · 0.0% · 70M | sfimage=gearshape refresh=true symbolize=false
+codex daemon · 0% · 70M | sfimage=gearshape refresh=true symbolize=false
 --daemon · pid 61904 · up 18h20m · 1 children | symbolize=false
 -----
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=61904@Tue_Oct_13_14:53:18_2026 sfimage=info.circle
@@ -508,10 +508,10 @@ npm exec @playwright/mcp@latest · 50m · 312M · safe to stop | refresh=true sy
 Reap all stale | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026 param5=60831@Wed_Oct_14_08:23:56_2026 param6=27681@Wed_Oct_14_09:13:19_2026 param7=4100@Wed_Oct_14_06:00:00_2026 param8=6000@Wed_Oct_14_08:10:00_2026 param9=6100@Wed_Oct_14_06:00:00_2026 param10=200@Wed_Oct_14_08:10:00_2026 sfimage=trash
 ---
 Hogs (2) | size=12
-Messages · 116.0% now · 117.0% avg | refresh=true symbolize=false sfimage=flame
+Messages · 116% now · 117% avg | refresh=true symbolize=false sfimage=flame
 --pid 41198 · me · up 13d16h · 38M | symbolize=false
 --Terminate (SIGTERM) | bash="@TMP@/menu-agents" terminal=false refresh=true param1=term param2=-y param3=--notify param4=41198@Wed_Sep_30_16:57:15_2026 sfimage=xmark.octagon
-yes · 95.0% now · 75.0% avg | refresh=true symbolize=false sfimage=flame
+yes · 95% now · 75% avg | refresh=true symbolize=false sfimage=flame
 --pid 9100 · me · up 0m · 19M | symbolize=false
 --Terminate (SIGTERM) | bash="@TMP@/menu-agents" terminal=false refresh=true param1=term param2=-y param3=--notify param4=9100@Wed_Oct_14_09:13:30_2026 sfimage=xmark.octagon
 ---
@@ -531,9 +531,9 @@ Awake: <1m left | sfimage=cup.and.saucer refresh=true
 ---
 CPU 84% · Mem 58% · Load 1.50/8 | sfimage=cpu bash="@TMP@/menu-agents" param1=open-term terminal=false param2=watch
 --Busiest processes | size=11
---web.test · 102.1% · 180M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
---web.test · 99.0% · 175M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
---appstoreagent · 77.0% · 32M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
+--web.test · 102% · 180M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
+--web.test · 99% · 175M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
+--appstoreagent · 77% · 32M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
 Battery 87% · Thermal nominal · Energy automatic | sfimage=battery.75percent bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=battery-settings
 ---
 Open agents watch | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=watch sfimage=rectangle.and.text.magnifyingglass
