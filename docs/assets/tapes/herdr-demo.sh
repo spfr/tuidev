@@ -1,9 +1,10 @@
 #!/bin/bash
 # The Herdr screenshot's fleet (docs/assets/tapes/README.md): a Herdr server on
-# this Mac and two Linux machines, devbox and workbox, each a container
-# (Apple `container`) running sshd and Herdr, saved in the Mac's Herdr as SSH
-# machines. Each machine runs a few scripted agent stand-ins (herdr/demo-agent.sh)
-# that report their state through Herdr's hook API.
+# this Mac and two Linux machines, devbox and workbox, each a container running
+# sshd and Herdr, saved in the Mac's Herdr as SSH machines. The runtime is Apple
+# `container` or podman (TUIDEV_CONTAINER_RUNTIME; detection is
+# scripts/lib/container.sh). Each machine runs a few scripted agent stand-ins
+# (herdr/demo-agent.sh) that report their state through Herdr's hook API.
 #
 #   herdr-demo.sh up HOME     build the image if needed, start everything
 #   herdr-demo.sh env HOME    print the environment for a Herdr client (eval it)
@@ -23,6 +24,55 @@ MACHINES=(devbox workbox)
 PREFIX=tuidev-demo-
 
 die() { echo "herdr-demo: $*" >&2; exit 1; }
+
+# The runtime is scripts/lib/container.sh's choice: TUIDEV_CONTAINER_RUNTIME,
+# else Apple `container` on macOS, then podman. This tape runs those two. On
+# some Macs an Apple container VM has no outbound network, so the image build's
+# apt-get times out; TUIDEV_CONTAINER_RUNTIME=podman builds the same Containerfile.
+demo_runtime=""
+# shellcheck source=../../../scripts/lib/container.sh disable=SC1091
+. "$repo/scripts/lib/container.sh"
+
+need_runtime() {
+    local rt
+    if ! rt="$(tuidev_container_runtime)"; then
+        if [[ -n "${TUIDEV_CONTAINER_RUNTIME:-}" ]]; then
+            die "TUIDEV_CONTAINER_RUNTIME=${TUIDEV_CONTAINER_RUNTIME} is not on PATH (container or podman)"
+        fi
+        die "needs Apple's container CLI (brew install container; container system start) or podman (brew install podman; on macOS, podman machine start). Set TUIDEV_CONTAINER_RUNTIME=container|podman to choose"
+    fi
+    case "$rt" in
+        container|podman) demo_runtime="$rt" ;;
+        *) die "needs Apple's container CLI or podman (TUIDEV_CONTAINER_RUNTIME=container|podman); found $rt" ;;
+    esac
+}
+
+# ctr VERB ARGS — one mapping onto the chosen runtime.
+#   inspect IMAGE
+#   build IMAGE --build-arg ... CONTEXT
+#   run NAME PORT IMAGE
+#   exec NAME CMD...
+#   rm NAME
+# Apple `container` keeps today's flags. Podman is `build -t`,
+# `run -d --name --cpus 2 -m 1g -p 127.0.0.1:PORT:22`, `exec -i`, `rm -f`,
+# `image inspect`.
+ctr() {
+    local verb="$1"; shift
+    case "$demo_runtime:$verb" in
+        container:inspect) container image inspect "$@" ;;
+        podman:inspect)    podman image inspect "$@" ;;
+        # `--progress plain`: `-q` can hang when its output is not a terminal.
+        container:build)   container build --progress plain -t "$@" ;;
+        podman:build)      podman build -t "$@" ;;
+        container:run)     container run -d --name "$1" -c 2 -m 1G -p "127.0.0.1:$2:22" "$3" ;;
+        podman:run)        podman run -d --name "$1" --cpus 2 -m 1g -p "127.0.0.1:$2:22" "$3" ;;
+        container:exec)    container exec -i "$@" ;;
+        podman:exec)       podman exec -i "$@" ;;
+        container:rm)      container rm -f "$@" ;;
+        podman:rm)         podman rm -f "$@" ;;
+        *) die "no container command for ${demo_runtime:-unset} $verb" ;;
+    esac
+}
 
 # The real path (/tmp is /private/tmp on macOS), so a pane's $PWD starts with
 # $HOME and prints as ~.
@@ -50,8 +100,8 @@ free_port() {
 }
 
 up() {
-    command -v container >/dev/null 2>&1 || die "needs Apple's container CLI (brew install container; container system start)"
-    command -v herdr >/dev/null 2>&1 || die "needs herdr (brew install herdr)"
+    need_runtime
+    command -v herdr >/dev/null 2>&1 || die "needs herdr (./install.sh --pack herdr)"
     command -v jq >/dev/null 2>&1 || die "needs jq"
     local version image port m key
     version="$(herdr --version | awk '{ print $2 }')"
@@ -61,12 +111,11 @@ up() {
     [[ ! -e "$home/.config/herdr/herdr.sock" ]] || die "a demo Herdr may already run in $home; run: herdr-demo.sh down $home"
 
     mkdir -p "$home/.demo"
-    if ! container image inspect "$image" >/dev/null 2>&1; then
-        echo "herdr-demo: building $image (Debian, OpenSSH, Herdr $version)"
-        # (--progress plain: `-q` can hang when its output is not a terminal.)
-        container build --progress plain -t "$image" --build-arg HERDR_VERSION="$version" "$tapes/herdr" \
+    if ! ctr inspect "$image" >/dev/null 2>&1; then
+        echo "herdr-demo: building $image with $demo_runtime (Debian, OpenSSH, Herdr $version)"
+        ctr build "$image" --build-arg HERDR_VERSION="$version" "$tapes/herdr" \
             > "$home/.demo/build.log" 2>&1 \
-            || { tail -20 "$home/.demo/build.log" >&2; die "container build failed"; }
+            || { tail -20 "$home/.demo/build.log" >&2; die "$demo_runtime build failed"; }
     fi
 
     mkdir -p "$home/.ssh" "$home/.demo/bin" "$home/.config/herdr" "$home/myapp" "$home/web"
@@ -77,12 +126,12 @@ up() {
     : > "$home/.ssh/known_hosts"
 
     for m in "${MACHINES[@]}"; do
-        container rm -f "$PREFIX$m" >/dev/null 2>&1 || true
+        ctr rm "$PREFIX$m" >/dev/null 2>&1 || true
         port="$(free_port)"
-        container run -d --name "$PREFIX$m" -c 2 -m 1G -p "127.0.0.1:$port:22" "$image" > "$home/.demo/run-$m.out" 2>&1 \
+        ctr run "$PREFIX$m" "$port" "$image" > "$home/.demo/run-$m.out" 2>&1 \
             || { cat "$home/.demo/run-$m.out" >&2; die "could not start $PREFIX$m"; }
-        container exec -i "$PREFIX$m" sh -c 'cat >> ~dev/.ssh/authorized_keys && chown dev:dev ~dev/.ssh/authorized_keys && chmod 600 ~dev/.ssh/authorized_keys' < "$key.pub"
-        container exec -i "$PREFIX$m" sh -c 'cat > /usr/local/bin/demo-agent && chmod 755 /usr/local/bin/demo-agent' < "$tapes/herdr/demo-agent.sh"
+        ctr exec "$PREFIX$m" sh -c 'cat >> ~dev/.ssh/authorized_keys && chown dev:dev ~dev/.ssh/authorized_keys && chmod 600 ~dev/.ssh/authorized_keys' < "$key.pub"
+        ctr exec "$PREFIX$m" sh -c 'cat > /usr/local/bin/demo-agent && chmod 755 /usr/local/bin/demo-agent' < "$tapes/herdr/demo-agent.sh"
         cat >> "$home/.ssh/config" <<EOF
 Host $PREFIX$m
   HostName 127.0.0.1
@@ -175,15 +224,23 @@ populate() {
 }
 
 down() {
-    local m tmpd=/nonexistent
+    local m tmpd=/nonexistent rt=""
     # Only a directory inside the temp dirs, compared as real paths (macOS's
     # TMPDIR ends in a slash and lives under a symlink).
     [[ -z "${TMPDIR:-}" ]] || tmpd="$(cd "$TMPDIR" 2>/dev/null && pwd -P)" || tmpd=/nonexistent
     # The machines' servers end with their containers; their profiles live in HOME.
     [[ -S "$home/.config/herdr/herdr.sock" ]] && { herdr_demo server stop >/dev/null 2>&1 || true; }
-    for m in "${MACHINES[@]}"; do
-        container rm -f "$PREFIX$m" >/dev/null 2>&1 || true
-    done
+    # HOME is removed below even when this tape has no runtime to stop.
+    if rt="$(tuidev_container_runtime)"; then
+        case "$rt" in
+            container|podman)
+                demo_runtime="$rt"
+                for m in "${MACHINES[@]}"; do
+                    ctr rm "$PREFIX$m" >/dev/null 2>&1 || true
+                done
+                ;;
+        esac
+    fi
     case "$home" in
         /tmp/?*|/private/tmp/?*|"${tmpd:-/nonexistent}"/?*) rm -rf "$home" ;;
         *) echo "herdr-demo: left $home in place (not under /tmp)" >&2 ;;

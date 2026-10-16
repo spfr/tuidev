@@ -36,7 +36,16 @@ cd "$REPO_DIR"
 
 # The herdr tape needs a container runtime and Herdr; without them it is
 # skipped when every tape runs, and an error when asked for by name.
-herdr_ready() { command_exists container && command_exists herdr && container system status >/dev/null 2>&1; }
+# shellcheck source=lib/container.sh disable=SC1091
+. "$SCRIPT_DIR/lib/container.sh"
+herdr_ready() {
+    command_exists herdr || return 1
+    case "$(tuidev_container_runtime)" in
+        container) container system status >/dev/null 2>&1 ;;
+        podman) podman info >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
+}
 
 tapes=() menu=0
 if [[ $# -gt 0 ]]; then
@@ -44,7 +53,7 @@ if [[ $# -gt 0 ]]; then
         name="${name%.tape}"; name="${name##*/}"
         if [[ "$name" == menu ]]; then menu=1; continue; fi
         [[ -f "$TAPES_DIR/$name.tape" ]] || die "no tape $TAPES_DIR/$name.tape (or: menu)"
-        [[ "$name" != herdr ]] || herdr_ready || die "the herdr tape needs Apple's container CLI, running (container system start), and herdr"
+        [[ "$name" != herdr ]] || herdr_ready || die "the herdr tape needs herdr and a running Apple container (container system start) or podman (podman machine start; TUIDEV_CONTAINER_RUNTIME=podman picks it)"
         tapes+=("$TAPES_DIR/$name.tape")
     done
 else
@@ -52,7 +61,7 @@ else
     for tape in "$TAPES_DIR"/*.tape; do
         [[ "$(basename "$tape")" == theme.tape ]] && continue   # shared settings, not a shot
         if [[ "$(basename "$tape")" == herdr.tape ]] && ! herdr_ready; then
-            print_warning "skipping herdr.tape: it needs Apple's container CLI, running (container system start), and herdr"
+            print_warning "skipping herdr.tape: it needs herdr and a running Apple container or podman (TUIDEV_CONTAINER_RUNTIME)"
             continue
         fi
         tapes+=("$tape")

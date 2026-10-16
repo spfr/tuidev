@@ -20,7 +20,7 @@ make screenshots TAPES="agents menu"     # some, by name (menu = scripts/render_
 | `theme.tape` | | Shared settings: the Tokyo Night palette and the Ghostty font, sourced by the others |
 | [`scripts/render_menu.sh`](../../../scripts/render_menu.sh) | `menu-light.webp`, `menu-dark.webp`, `menu.gif` | The SwiftBar menu: the plugin's real output over the fixtures, drawn as a macOS menu ([below](#the-swiftbar-menu)) |
 
-Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https://github.com/ryanoasis/nerd-fonts) (`brew install --cask font-symbols-only-nerd-font`): `theme.tape` lists it after JetBrains Mono as a fallback, so the file icons `eza` draws render as they do in Ghostty. Without it they show as blanks, and `make screenshots` warns. The `herdr` tape also needs Herdr and Apple's [`container`](https://github.com/apple/container) CLI, running (`container system start`); without them `make screenshots` skips it with a warning. The menu needs Google Chrome or Chromium and Swift (the Xcode command-line tools). With `gifsicle` installed, the GIFs are optimized after rendering.
+Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https://github.com/ryanoasis/nerd-fonts) (`brew install --cask font-symbols-only-nerd-font`): `theme.tape` lists it after JetBrains Mono as a fallback, so the file icons `eza` draws render as they do in Ghostty. Without it they show as blanks, and `make screenshots` warns. The `herdr` tape also needs Herdr and a container runtime: Apple's [`container`](https://github.com/apple/container) CLI (`container system start`) or podman. `herdr-demo.sh` reads `TUIDEV_CONTAINER_RUNTIME=container|podman` (see [The Herdr fleet](#the-herdr-fleet)). `make screenshots` skips the tape unless Herdr is installed and the runtime is running (Apple's `container system start`, or `podman machine start`). The menu needs Google Chrome or Chromium and Swift (the Xcode command-line tools). With `gifsicle` installed, the GIFs are optimized after rendering.
 
 ## The demo environment
 
@@ -74,17 +74,19 @@ To change a shot, edit the fixtures or the tape, run `make screenshots`, and loo
 A Herdr picture is only honest if Herdr is real and really talks to more than one machine, so `herdr.tape` runs on a small fleet that `herdr-demo.sh` starts before the tape and removes after it:
 
 - **Local** is a Herdr server on this Mac, in a throwaway home under `/tmp` (short, because Herdr's sockets live there). Its config is the shipped `configs/herdr/config.toml` plus demo-only settings: no onboarding, update checks or sounds, and `remote.manage_ssh_config = false`.
-- **devbox** and **workbox** are two Linux containers (Apple `container`) built from `herdr/Containerfile`: Debian with OpenSSH, Herdr at the same version as this Mac's (its release binary, checked against the digest the release lists), and a user `dev`. Each publishes its sshd on a loopback port, which macOS's Local Network privacy can't block, and the Mac's Herdr saves them with `herdr machine add` under those labels, as you would a real node.
+- **devbox** and **workbox** are two Linux containers (Apple `container` or podman) built from `herdr/Containerfile`: Debian with OpenSSH, Herdr at the same version as this Mac's (its release binary, checked against the digest the release lists), and a user `dev`. The runtime comes from [`scripts/lib/container.sh`](../../../scripts/lib/container.sh): `TUIDEV_CONTAINER_RUNTIME=container|podman` when that command is on PATH, otherwise Apple `container` on macOS, then podman. herdr-demo.sh runs `container` and podman. On some Macs an Apple container VM has no outbound network, so `apt-get` in the Containerfile times out; `TUIDEV_CONTAINER_RUNTIME=podman` builds the same file. Each publishes its sshd on a loopback port, which macOS's Local Network privacy can't block, and the Mac's Herdr saves them with `herdr machine add` under those labels, as you would a real node.
 - **ssh never reads your own setup.** Every demo process runs with `env -i`, the throwaway `HOME` and an `ssh` wrapper first on `PATH` that passes `-F` with the demo's own config, key (made for the demo), `known_hosts`, `IdentitiesOnly` and no agent. Nothing from a Herdr pane the script runs in (`HERDR_ENV`, `HERDR_SOCKET_PATH`, …) reaches the demo, so it is a separate Herdr, not one nested in yours.
 - **The agents are stand-ins.** `herdr/demo-agent.sh` prints a short scripted transcript and reports its state through Herdr's hook API (`herdr pane report-agent`), the call an agent integration makes: working, blocked on a yes/no question, then done when answered. No model runs, and each pane says so in its first line. Real Claude Code or Codex sessions would need accounts and would show their owners' conversations.
 
-The first run builds the image (`tuidev-demo-node:VERSION-HASH`, about a minute); `container image delete` removes it. To look around by hand:
+The first run builds the image (`tuidev-demo-node:VERSION-HASH`, about a minute). Remove it with `container image delete` or `podman rmi`, for the runtime that built it. To look around by hand:
 
 ```bash
 bash docs/assets/tapes/herdr-demo.sh up /tmp/hd/NAME
 eval "$(bash docs/assets/tapes/herdr-demo.sh env /tmp/hd/NAME)" && herdr   # Ctrl+b q detaches
 bash docs/assets/tapes/herdr-demo.sh down /tmp/hd/NAME
 ```
+
+Export `TUIDEV_CONTAINER_RUNTIME` for both `up` and `down` when podman should own the containers, so `down` removes the ones `up` started.
 
 Don't run that client inside a Herdr pane of your own: open a plain terminal.
 
