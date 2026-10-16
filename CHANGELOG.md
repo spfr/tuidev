@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] - 2026-10-16
+
+One alert when you're at your desk. When an agent in Herdr needed you, its
+toast and sound were followed by a macOS banner with a sound of its own.
+Now the banner comes only when you might miss the toast.
+
+### Changed
+
+- **The banner waits until you're away.** Inside Herdr on a Mac,
+  `notify.sh` skips the macOS banner while you're at the Mac looking at the
+  session's terminal: the screen is unlocked, a key or the mouse moved in
+  the last 2 minutes, and the terminal app that the session's Herdr client
+  runs in is in front. It checks once, when the
+  hook fires, with `ioreg` and `lsappinfo` (about 10 to 20 ms each, no
+  permission prompt, no daemon). A check that fails counts as away, so you
+  get the banner as before. `TUIDEV_NOTIFY_PRESENT_IDLE` sets the idle limit
+  (seconds), and `TUIDEV_NOTIFY_BANNER=always` keeps the old behavior. A
+  detached Herdr session, tmux (whose status-line message is silent and
+  brief) and a plain terminal tab still get the banner.
+- **Notifications say what they are about.** Claude Code's Notification
+  hook passes JSON on stdin, so with `jq` installed, the toast and banner
+  show its message (for example "Claude needs your permission to use
+  Bash") instead of the hook's fixed text.
+- **`make check` follows Herdr upgrades.** With `--pack herdr`, it lists
+  the agent integrations that `herdr integration status` reports as
+  `outdated`, with the `herdr integration install NAME` command for each,
+  and warns while the running server is still on the old binary. Herdr 0.9.5
+  needs both: it no longer installs Codex turn hooks, and until you
+  reinstall, Codex sessions start with a "clamping Interrupt hook timeout"
+  warning.
+- **Herdr 0.9.4 and 0.9.5 in the docs.** Closing the shell that started
+  Herdr no longer stops its server (stop it with `herdr server stop` or
+  `SIGTERM`, not `SIGHUP`), and a Mac restart keeps your agents' sessions.
+  A Ghostty `text:` keybind can send the prefix and a key in one press:
+  `keybind = cmd+shift+o=text:\x02o` opens the last notification's pane.
+  The pack's hints mention Codex alongside Claude Code.
+- **Phone pushes are documented as an escalation.** ntfy only fires when
+  nothing on the machine could show the notification. If another service
+  already pushes to your phone when an agent waits, leave `NTFY_URL` unset.
+- **Codex 0.163:** `/daemon` can restart the background server.
+
 ## [3.10.1] - 2026-10-15
 
 Numbers you can quote: token costs that match the official price list, a

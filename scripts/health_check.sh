@@ -373,6 +373,36 @@ check_packs() {
             is_macos && check_optional "SwiftBar agents plugin" swiftbar_plugin_present
             is_macos && check_optional "terminal-notifier (a click on a notification jumps to its session)" "have_cmd terminal-notifier" ;;
     esac
+    case " ${packs[*]} " in
+        *" herdr "*) have_cmd herdr && check_herdr_upgrade ;;
+    esac
+    return 0
+}
+
+# After a Herdr upgrade: agent integrations the new binary would install
+# differently (`herdr integration status` says `outdated`, e.g. 0.9.5 stopped
+# installing Codex turn hooks), and a running server still on the old
+# binary. Both are warnings with the command that fixes them.
+check_herdr_upgrade() {
+    local status outdated fix="" name
+    # Captured first: under pipefail, a reader that stops early would fail
+    # the pipe. An integration's name is its first word ("letta (experimental)").
+    status="$(herdr integration status 2>/dev/null)" || status=""
+    outdated="$(printf '%s\n' "$status" | awk -F: '$2 ~ /^ outdated/ { split($1, w, " "); print w[1] }')"
+    if [[ -z "$status" ]]; then
+        :   # nothing to judge by
+    elif [[ -z "$outdated" ]]; then
+        print_success "herdr integrations current"
+    else
+        for name in $outdated; do fix="${fix:+$fix; }herdr integration install $name"; done
+        print_warning "herdr integrations outdated: ${outdated//$'\n'/ } (run: $fix)"
+        OPT_WARN=$((OPT_WARN + 1))
+    fi
+    status="$(herdr status 2>/dev/null)" || status=""
+    if [[ "$status" == *"server_binary_stale: yes"* ]]; then
+        print_warning "herdr server runs an older binary than the client (restart it when its agents are idle: herdr server stop, then herdr)"
+        OPT_WARN=$((OPT_WARN + 1))
+    fi
     return 0
 }
 

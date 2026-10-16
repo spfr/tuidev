@@ -16,7 +16,12 @@
 # The first of 1 and 2 that works shows it in the terminal. On a Mac the
 # banner (3) shows it too, because a toast or a status line can't be seen
 # from another app, unless the session is one you reach over ssh
-# (is_remote). Otherwise the first of 3 to 5 that works does.
+# (is_remote) or, inside Herdr, you are at the Mac looking at the terminal
+# its client runs in (at_terminal): then the toast, with Herdr's own sound,
+# is the one alert. tmux's status line is silent and brief, so tmux keeps
+# the banner. Otherwise the
+# first of 3 to 5 that works does. Pushing to a phone when nobody reacts is
+# left to whatever escalates for you; ntfy (5) is for setups without one.
 #
 # Clicking the banner takes you to the session that asked. When this runs
 # under a claude or codex process and the `agents` command is installed
@@ -36,6 +41,11 @@
 # Usage:
 #   notify.sh <title> <message> [subtitle] [sound]
 #
+# Under a Claude Code hook (CLAUDE_PROJECT_DIR is set), the hook's JSON on
+# stdin replaces <message> with its own "message" when jq can read one, so
+# the banner says what the session is waiting for. Any other caller's stdin
+# is left alone.
+#
 # Examples:
 #   notify.sh "Claude Code" "Task completed"
 #   notify.sh "Claude Code" "Needs your approval" "Permission"
@@ -46,6 +56,10 @@
 #
 # Environment: TUIDEV_TERMINAL_NOTIFIER names the terminal-notifier to use
 # (empty: none); it is otherwise Homebrew's, then the one on PATH.
+# TUIDEV_NOTIFY_PRESENT_IDLE (seconds, default 120) is how long since the
+# last key or mouse move you still count as at the Mac; 0 or
+# TUIDEV_NOTIFY_BANNER=always shows the banner inside Herdr whether you are
+# there or not.
 # ============================================================================
 
 TITLE="${1:-}"
@@ -55,11 +69,10 @@ SOUND="${4:-Glass}"
 
 [[ -n "$TITLE" && -n "$MESSAGE" ]] || exit 0
 
-# Message with the subtitle folded in, for channels that have no subtitle field.
-BODY="$MESSAGE"
-[[ -n "$SUBTITLE" ]] && BODY="$SUBTITLE: $MESSAGE"
-
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# Message with the subtitle folded in, for channels that have no subtitle field.
+BODY=""
 
 # with_timeout SECS CMD... — CMD (stdin from /dev/null), killed after SECS
 # seconds with every process it started: 124 then. Job control gives CMD
@@ -81,6 +94,19 @@ with_timeout() {
     )
 }
 
+# hook_message — the "message" of a Claude Code hook's JSON on stdin, when
+# there is one (read for at most 2 s) and jq can read it, cut to 200
+# characters.
+hook_message() {
+    local input="" msg
+    [[ -n "${CLAUDE_PROJECT_DIR:-}" && ! -t 0 ]] && have jq || return 0
+    IFS= read -r -d '' -t 2 input || true
+    [[ "$input" == *'"message"'* ]] || return 0
+    # shellcheck disable=SC2016  # jq's own $in
+    msg="$(with_timeout 2 jq -rn --arg in "$input" '$in | fromjson? | .message? | strings' 2>/dev/null)"
+    [[ -n "$msg" ]] && printf '%s' "${msg:0:200}"
+}
+
 notify_herdr() {
     [[ "${HERDR_ENV:-}" == 1 ]] && have herdr || return 1
     with_timeout 3 herdr notification show "$TITLE" --body "$BODY"
@@ -95,6 +121,28 @@ notify_tmux() {
 }
 
 is_macos() { [[ "$(uname -s 2>/dev/null)" == Darwin ]]; }
+
+# at_terminal — true when you are at this Mac looking at the session's
+# terminal: the screen is unlocked, a key or the mouse moved within
+# TUIDEV_NOTIFY_PRESENT_IDLE seconds, and the app in front is the one that
+# shows the session, as agents names it (a Herdr session no client shows,
+# or one whose clients run in different apps, has none). Asked once, at
+# notify time, each probe bounded (they take about 10-20 ms): ioreg and
+# lsappinfo need no permission prompt. A probe that fails or can't tell
+# says no, so the banner shows as it always did.
+at_terminal() {
+    local idle="${TUIDEV_NOTIFY_PRESENT_IDLE:-120}" v front
+    [[ "${TUIDEV_NOTIFY_BANNER:-}" != always && "$idle" =~ ^[0-9]+$ && $idle -gt 0 ]] || return 1
+    have ioreg && have lsappinfo && session && [[ -n "$BUNDLE" && "$BUNDLE" != - ]] || return 1
+    v="$(with_timeout 2 ioreg -n Root -d1 -k IOConsoleLocked | awk -F' = ' '/"IOConsoleLocked" = / { print $2; exit }')"
+    [[ "$v" == No ]] || return 1
+    v="$(with_timeout 2 ioreg -c IOHIDSystem -r -k HIDIdleTime | awk '/"HIDIdleTime" = / { print $NF; exit }')"
+    [[ "$v" =~ ^[0-9]+$ ]] && (( v / 1000000000 < idle )) || return 1
+    v="$(with_timeout 2 lsappinfo front)"
+    [[ "$v" == ASN:* ]] || return 1
+    front="$(with_timeout 2 lsappinfo info -only bundleid "$v" | sed -n 's/.*[bB]undle[iI][dD][a-zA-Z]*"*="\([^"]*\)".*/\1/p' | head -1)"
+    [[ -n "$front" && "$front" == "$BUNDLE" ]]
+}
 
 # terminal-notifier's path: Homebrew's before PATH's (an older Ruby gem of
 # the same name can come first on PATH).
@@ -203,17 +251,24 @@ notify_linux_desktop() {
 
 notify_ntfy() {
     [[ -n "${NTFY_URL:-}" ]] && have curl || return 1
-    curl -fsS --max-time 5 -H "Title: $TITLE" -d "$BODY" "$NTFY_URL"
+    curl -fsS --max-time 5 -H "Title: $TITLE" --data-raw "$BODY" "$NTFY_URL"
 }
 
 main() {
-    local in_term=false
-    if notify_herdr || notify_tmux; then in_term=true; fi
-    if is_macos && { [[ "$in_term" == false ]] || ! is_remote; }; then
+    local in_term=false in_herdr=false
+    [[ -z "$HOOK_MESSAGE" ]] || MESSAGE="$HOOK_MESSAGE"
+    BODY="$MESSAGE"
+    [[ -z "$SUBTITLE" ]] || BODY="$SUBTITLE: $MESSAGE"
+    if notify_herdr; then in_term=true in_herdr=true; elif notify_tmux; then in_term=true; fi
+    if is_macos; then
+        # Shown in the terminal: the banner is for when you can't see it.
+        if [[ "$in_term" == true ]] && is_remote; then return 0; fi
+        if [[ "$in_herdr" == true ]] && at_terminal; then return 0; fi
         notify_macos && return 0
     fi
     [[ "$in_term" == true ]] || notify_linux_desktop || notify_ntfy
 }
 
+HOOK_MESSAGE="$(hook_message 2>/dev/null)"
 main >/dev/null 2>&1 </dev/null
 exit 0

@@ -54,7 +54,7 @@ _herdr_upgrade_hint() {
     else
         print_info "Upgrade: herdr update (direct install; --handoff keeps panes alive)."
     fi
-    print_info "After an upgrade: herdr integration status → reinstall anything 'outdated'."
+    print_info "After an upgrade: make check names outdated integrations and a stale server."
 }
 
 herdr_install() {
@@ -83,7 +83,7 @@ herdr_install() {
         _herdr_install_config
         print_info "Run 'herdr' to attach."
         print_info "Prefix is ctrl+b (tmux is ctrl+a). See docs/agent-workflows.md."
-        print_info "Optional: herdr integration install claude  (agent state hooks)."
+        print_info "Optional: herdr integration install claude (and codex): agent state hooks."
         print_info "Agents under sbx strict cannot reach herdr's socket;"
         print_info "  sbx --allow-herdr opens it for agents you trust (herdr panes run unsandboxed)."
         print_info "Remote nodes: herdr machine add HOST (saved sidebar entry; pick its session)."

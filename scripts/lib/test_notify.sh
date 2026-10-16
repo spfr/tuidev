@@ -3,8 +3,10 @@
 # hooks (and, opt-in, Codex) call.
 # Run: bash scripts/lib/test_notify.sh  -> exit 0 on pass.
 #
-# Stub uname, terminal-notifier, osascript, agents, herdr, tmux, notify-send
-# and curl on PATH record their arguments, one per line: nothing is shown.
+# Stub uname, terminal-notifier, osascript, agents, herdr, tmux, notify-send,
+# curl, ioreg and lsappinfo on PATH record their arguments, one per line:
+# nothing is shown, and this Mac's own lock, idle time and front app never
+# reach a test (ioreg and lsappinfo say "away" unless a test sets them).
 # The timeout and escaping helpers notify.sh shares with lib/agents (it
 # stands alone, so it carries its own copies) are run side by side. The last
 # test runs the real agents under a fake claude process; it is skipped where
@@ -27,7 +29,8 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$tmp/bin" "$tmp/log" "$tmp/home"
 # Only what a test sets reaches notify.sh (run passes these through).
-unset TMUX HERDR_ENV SSH_CONNECTION NTFY_URL TN TN_FAIL TN_HANG AGENTS_OUT STUB_UNAME
+unset TMUX HERDR_ENV SSH_CONNECTION NTFY_URL TN TN_FAIL TN_HANG AGENTS_OUT STUB_UNAME \
+    STUB_LOCKED STUB_IDLE STUB_FRONT STUB_PROBE_FAIL TUIDEV_NOTIFY_BANNER TUIDEV_NOTIFY_PRESENT_IDLE STDIN CLAUDE_PROJECT_DIR
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
@@ -45,6 +48,21 @@ stub herdr 'exit 0'
 stub tmux 'exit 0'
 stub notify-send 'exit 0'
 stub curl 'exit 0'
+# ioreg: the lock state (STUB_LOCKED, default No) and the seconds since the
+# last input (STUB_IDLE, default 600: away). lsappinfo: the app in front
+# (STUB_FRONT, a bundle id). STUB_PROBE_FAIL makes both fail.
+stub ioreg '[[ -z "$STUB_PROBE_FAIL" ]] || exit 1
+case "$*" in
+    *IOConsoleLocked*) echo "  \"IOConsoleLocked\" = ${STUB_LOCKED:-No}" ;;
+    *HIDIdleTime*) echo "    | |   \"HIDIdleTime\" = ${STUB_IDLE:-600}000000000" ;;
+esac'
+stub lsappinfo '[[ -z "$STUB_PROBE_FAIL" ]] || exit 1
+case "$1" in
+    front) echo "ASN:0x0-0x1a2b:" ;;
+    info) printf "%s\n" "[ NULL ]  ASN:0x0-0x1a2b: (in front) " "    bundleID=\"${STUB_FRONT:-com.mitchellh.ghostty}\"" ;;
+esac'
+JQ="$(command -v jq || true)"
+[[ -z "$JQ" ]] || ln -s "$JQ" "$tmp/bin/jq"
 
 TOK="4242@Wed_Oct_14_08:00:00_2026"
 # What agents root-of prints: the session, its app, the app's bundle id and
@@ -64,7 +82,12 @@ run() {
         ${AGENTS_OUT+AGENTS_OUT="$AGENTS_OUT"} ${STUB_UNAME:+STUB_UNAME="$STUB_UNAME"} \
         ${TN_FAIL:+TN_FAIL=1} ${TN_HANG:+TN_HANG=1} ${TMUX:+TMUX="$TMUX"} ${HERDR_ENV:+HERDR_ENV="$HERDR_ENV"} \
         ${SSH_CONNECTION:+SSH_CONNECTION="$SSH_CONNECTION"} ${NTFY_URL:+NTFY_URL="$NTFY_URL"} \
-        /bin/bash "$NOTIFY" "$@" > "$tmp/out" 2>&1
+        ${STUB_LOCKED:+STUB_LOCKED="$STUB_LOCKED"} ${STUB_IDLE:+STUB_IDLE="$STUB_IDLE"} \
+        ${STUB_FRONT:+STUB_FRONT="$STUB_FRONT"} ${STUB_PROBE_FAIL:+STUB_PROBE_FAIL=1} \
+        ${TUIDEV_NOTIFY_BANNER:+TUIDEV_NOTIFY_BANNER="$TUIDEV_NOTIFY_BANNER"} \
+        ${TUIDEV_NOTIFY_PRESENT_IDLE:+TUIDEV_NOTIFY_PRESENT_IDLE="$TUIDEV_NOTIFY_PRESENT_IDLE"} \
+        ${CLAUDE_PROJECT_DIR:+CLAUDE_PROJECT_DIR="$CLAUDE_PROJECT_DIR"} \
+        /bin/bash "$NOTIFY" "$@" < "${STDIN:-/dev/null}" > "$tmp/out" 2>&1
     echo $? > "$tmp/rc"
     set -e
 }
@@ -159,7 +182,61 @@ HERDR_ENV=1 SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" AGENTS_OUT="$TOK"$'\t-\t-\t'
 if called terminal-notifier || called osascript; then fail "a banner for an ssh session agents finds in no app here"; fi
 SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" run "T" "M"
 called terminal-notifier || fail "over ssh with no toast or status line, the Mac's banner is the only channel"
-pass "on a Mac, the banner fires inside Herdr and tmux too (not over ssh, where the toast or status line is enough)"
+pass "on a Mac, away from it, the banner fires inside Herdr and tmux too (not over ssh, where the toast or status line is enough)"
+
+# --- At the Mac: the toast is the one alert ----------------------------------------------
+HERDR_ENV=1 STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
+quiet "present in Herdr"
+if ! called herdr || called terminal-notifier || called osascript; then fail "a banner while at the Mac with Ghostty in front: $(log terminal-notifier)"; fi
+TMUX=/tmp/x,1,0 STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
+if ! called tmux || ! called terminal-notifier; then fail "tmux at the Mac: its status line is silent and brief, the banner stays"; fi
+STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "a plain Ghostty tab, at the Mac: the banner is its only alert"
+pass "at the Mac (unlocked, input within 2 min, the session's terminal in front): inside Herdr, no banner; tmux and a plain tab keep it"
+
+HERDR_ENV=1 STUB_IDLE=5 STUB_FRONT=com.google.Chrome AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "another app in front: no banner"
+HERDR_ENV=1 STUB_IDLE=5 STUB_FRONT=com.googlecode.iterm2 AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "another terminal than the session's in front: no banner"
+HERDR_ENV=1 STUB_IDLE=5 AGENTS_OUT="" run "T" "M"
+called terminal-notifier || fail "the session unknown to agents: no banner"
+HERDR_ENV=1 STUB_IDLE=5 AGENTS_OUT="$TOK"$'\t-\t-\t'"$CLICK" run "T" "M"
+called terminal-notifier || fail "a Herdr session no client shows (detached): no banner"
+HERDR_ENV=1 STUB_IDLE=5 STUB_LOCKED=Yes AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "screen locked: no banner"
+HERDR_ENV=1 STUB_IDLE=120 AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "idle 2 min: no banner"
+HERDR_ENV=1 STUB_IDLE=5 STUB_PROBE_FAIL=1 AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "a failed probe: no banner"
+pass "another app in front, a session agents can't place (detached Herdr), a locked screen, 2 min idle or a failed probe: the banner, as before"
+
+HERDR_ENV=1 STUB_IDLE=5 TUIDEV_NOTIFY_BANNER=always AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "TUIDEV_NOTIFY_BANNER=always: no banner"
+HERDR_ENV=1 STUB_IDLE=5 TUIDEV_NOTIFY_PRESENT_IDLE=0 AGENTS_OUT="$GHOSTTY" run "T" "M"
+called terminal-notifier || fail "TUIDEV_NOTIFY_PRESENT_IDLE=0: no banner"
+HERDR_ENV=1 STUB_IDLE=200 TUIDEV_NOTIFY_PRESENT_IDLE=300 AGENTS_OUT="$GHOSTTY" run "T" "M"
+! called terminal-notifier || fail "TUIDEV_NOTIFY_PRESENT_IDLE=300, idle 200 s: a banner"
+pass "TUIDEV_NOTIFY_BANNER=always and TUIDEV_NOTIFY_PRESENT_IDLE=0 keep the banner; the idle limit is configurable"
+
+# --- The hook's own message ----------------------------------------------------------------
+if [[ -n "$JQ" ]]; then
+    printf '%s' '{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs your permission to use Bash"}' > "$tmp/hook.json"
+    STDIN="$tmp/hook.json" CLAUDE_PROJECT_DIR=/p HERDR_ENV=1 AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
+    quiet "hook message"
+    [[ "$(log herdr)" == $'notification\nshow\nClaude Code\n--body\nPermission: Claude needs your permission to use Bash' ]] || fail "toast body: $(log herdr)"
+    [[ "$(arg -message)" == "Claude needs your permission to use Bash" ]] || fail "banner message: $(arg -message)"
+    STDIN="$tmp/hook.json" AGENTS_OUT="$GHOSTTY" run "T" "M"
+    [[ "$(arg -message)" == M ]] || fail "stdin read outside a Claude Code hook: $(arg -message)"
+    printf '%s' '{"message": 42}' > "$tmp/hook.json"
+    STDIN="$tmp/hook.json" CLAUDE_PROJECT_DIR=/p AGENTS_OUT="$GHOSTTY" run "T" "M"
+    [[ "$(arg -message)" == M ]] || fail "a non-string message: $(arg -message)"
+    printf '%s' 'not json "message"' > "$tmp/hook.json"
+    STDIN="$tmp/hook.json" CLAUDE_PROJECT_DIR=/p AGENTS_OUT="$GHOSTTY" run "T" "M"
+    [[ "$(arg -message)" == M ]] || fail "not JSON: $(arg -message)"
+    pass "under a Claude Code hook, its JSON message replaces the fixed one (toast and banner); any other stdin, or anything else, keeps it"
+else
+    echo "SKIP: no jq: the hook-message test not run"
+fi
 
 # A tmux server started over ssh keeps SSH_CONNECTION in its panes after you
 # attach at the Mac: agents finding the session in a terminal app here wins.
@@ -174,7 +251,7 @@ STUB_UNAME=Linux run "T" "M" "S"
 if [[ "$(log notify-send)" != $'--app-name=T\nT\nS: M' ]] || called terminal-notifier; then fail "Linux desktop: $(log notify-send)"; fi
 rm "$tmp/bin/notify-send"
 STUB_UNAME=Linux NTFY_URL=https://ntfy.example/topic run "T" "M"
-[[ "$(log curl)" == *"Title: T"*"https://ntfy.example/topic" ]] || fail "ntfy: $(log curl)"
+[[ "$(log curl)" == *"Title: T"$'\n--data-raw\nM\n'"https://ntfy.example/topic" ]] || fail "ntfy: $(log curl)"
 stub notify-send 'exit 0'
 pass "Linux unchanged: Herdr or tmux, else notify-send, else ntfy"
 

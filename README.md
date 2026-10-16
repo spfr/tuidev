@@ -102,7 +102,7 @@ Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever 
 More for agent work:
 
 - **Parallel work:** `claude -w NAME` starts a session in its own worktree, and subagents can too.
-- **Know when you're needed:** Claude Code hooks call `notify.sh`, which shows a Herdr toast or a tmux message in your terminal, a macOS banner or a Linux desktop notification, and falls back to a push through [ntfy](https://ntfy.sh) when nothing local can show it (set `NTFY_URL`). With the `monitoring` pack on a Mac, clicking the banner takes you straight to the session that asked: its Herdr or tmux pane, or its Ghostty tab.
+- **Know when you're needed:** Claude Code hooks call `notify.sh`, which shows a Herdr toast or a tmux message in your terminal, a macOS banner or a Linux desktop notification, and falls back to a push through [ntfy](https://ntfy.sh) when nothing local can show it (set `NTFY_URL`). In Herdr at your desk, with its terminal in front, you get one alert: the toast, not a toast plus a banner. With the `monitoring` pack on a Mac, clicking the banner takes you straight to the session that asked: its Herdr or tmux pane, or its Ghostty tab.
 - **Sessions that outlive your laptop:** on an always-on machine you reach over Tailscale, SSH or mosh, tmux or Herdr keeps an agent running while you're away, and `t NAME` re-attaches. Blink Shell and Moshi on iOS are covered too.
 - **Review first:** `hunk` for review-first diffs, and a starter [`AGENTS.md`](templates/AGENTS_TEMPLATE.md) for your own projects.
 
