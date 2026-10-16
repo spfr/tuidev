@@ -39,6 +39,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib/packs.sh"
 # shellcheck source=lib/pkg.sh disable=SC1091
 . "$SCRIPT_DIR/lib/pkg.sh"
+# shellcheck source=lib/herdr.sh disable=SC1091
+. "$SCRIPT_DIR/lib/herdr.sh"
 
 # Cache uname once. Probes run dozens of times across the suite.
 TUIDEV_OS="$(uname -s)"
@@ -382,15 +384,19 @@ check_packs() {
 # After a Herdr upgrade: agent integrations the new binary would install
 # differently (`herdr integration status` says `outdated`, e.g. 0.9.5 stopped
 # installing Codex turn hooks), and a running server still on the old
-# binary. Both are warnings with the command that fixes them.
+# binary. Both are warnings with the command that fixes them. A stale server
+# never needs a restart: `herdr update --handoff` moves it live, or it picks
+# up the new binary whenever it next starts. Homebrew's herdr can't do the
+# former, so it points at the commands that switch it to the release binary.
 check_herdr_upgrade() {
-    local status outdated fix="" name
+    local status outdated fix="" name kind hint pid why
     # A wedged server is what this looks for: never wait on it for long.
     herdr_bounded() { if command -v timeout >/dev/null 2>&1; then timeout 5 herdr "$@"; else herdr "$@"; fi; }
     # Captured first: under pipefail, a reader that stops early would fail
-    # the pipe. An integration's name is its first word ("letta (experimental)").
+    # the pipe. An integration's name is its first word ("letta (experimental)"),
+    # kept only when it is a plain name (it goes into a command to run).
     status="$(herdr_bounded integration status 2>/dev/null)" || status=""
-    outdated="$(printf '%s\n' "$status" | awk -F: '$2 ~ /^ outdated/ { split($1, w, " "); print w[1] }')"
+    outdated="$(printf '%s\n' "$status" | awk -F: '$2 ~ /^ outdated/ { split($1, w, " "); if (w[1] ~ /^[A-Za-z0-9_.-]+$/) print w[1] }')"
     if [[ -z "$status" ]]; then
         :   # nothing to judge by
     elif [[ -z "$outdated" ]]; then
@@ -400,12 +406,47 @@ check_herdr_upgrade() {
         print_warning "herdr integrations outdated: ${outdated//$'\n'/ } (run: $fix)"
         OPT_WARN=$((OPT_WARN + 1))
     fi
-    status="$(herdr_bounded status 2>/dev/null)" || status=""
-    if [[ "$status" == *"server_binary_stale: yes"* ]]; then
-        print_warning "herdr server runs an older binary than the client (restart it when its agents are idle: herdr server stop, then herdr)"
+    kind="$(herdr_install_kind)"
+    if [[ "$kind" == brew ]]; then
+        print_warning "herdr is Homebrew's, which can't hand a running server over to a new binary (run: ./install.sh --pack herdr or ./scripts/update.sh --packages, which install the release binary)"
         OPT_WARN=$((OPT_WARN + 1))
     fi
+    status="$(herdr_bounded status 2>/dev/null)" || status=""
+    if [[ "$status" == *"server_binary_stale: yes"* ]]; then
+        hint="it picks up the new binary whenever it next starts"
+        if [[ "$kind" == direct ]]; then
+            hint="herdr update --handoff, from a shell outside Herdr, moves it live; else $hint"
+            for pid in $(herdr_server_pids); do
+                if why="$(herdr_handoff_blocker "$pid")"; then hint="$hint. Before a handoff: $why"; break; fi
+            done
+        fi
+        print_warning "herdr server runs an older binary than the client ($hint)"
+        OPT_WARN=$((OPT_WARN + 1))
+    fi
+    [[ "$kind" == direct ]] && herdr_cutover_hint
+    check_herdr_logs
     return 0
+}
+
+# Herdr's logs (~/.config/herdr/herdr-{server,client}.log) grow for as long as
+# the server lives; 0.9.5 leaves no rotated siblings behind. The running server
+# holds its log open, so they are trimmed while it is stopped: the next time
+# it restarts anyway, never as a reason to restart it. HERDR_LOG_WARN_MB
+# (default 50) sets the bar.
+check_herdr_logs() {
+    local dir="${HERDR_CONFIG_DIR:-$HOME/.config/herdr}" limit f kb big=""
+    limit="${HERDR_LOG_WARN_MB:-50}"
+    [[ "$limit" =~ ^[0-9]+$ ]] || limit=50   # "50MB" or "abc" must not abort make check
+    limit=$(( 10#$limit * 1024 ))
+    for f in "$dir"/herdr-server.log "$dir"/herdr-client.log "$dir"/herdr.log; do
+        [[ -f "$f" ]] || continue
+        kb="$(du -k "$f" 2>/dev/null | awk '{ print $1 }')"
+        [[ "$kb" =~ ^[0-9]+$ ]] || continue
+        if (( kb > limit )); then big="${big:+$big, }${f##*/} $(( kb / 1024 ))M"; fi
+    done
+    [[ -n "$big" ]] || return 0
+    print_warning "herdr logs are large: $big (trim them the next time the server is stopped anyway, before it starts again: in $dir: for f in herdr*.log; do tail -n 2000 \"\$f\" > \"\$f.tmp\" && mv \"\$f.tmp\" \"\$f\"; done)"
+    OPT_WARN=$((OPT_WARN + 1))
 }
 
 # Probe: agents finds and loads its modules (when not, `agents --help` names

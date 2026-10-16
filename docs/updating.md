@@ -124,6 +124,7 @@ formula ripgrep
 cask ghostty
 block tuidev-zshrc /Users/NAME/.zshrc
 file /Users/NAME/.local/bin/notify.sh
+tool /Users/NAME/.local/bin/herdr
 dir /Users/NAME/.config/nvim
 ```
 
@@ -155,6 +156,12 @@ It removes only what the manifest records:
   and session state (`~/.claude/…`, `~/.codex/auth.json`) always survive;
 - optionally, the Homebrew formulae and casks tuidev installed. apt, dnf and
   pacman packages are listed for you to remove, not removed;
+- optionally, in a step of its own, the tools tuidev downloaded: Herdr's
+  release binary (`~/.local/bin/herdr`, a `tool` record; installs that
+  recorded it as a `file` are treated the same). It stays while a Herdr server
+  runs from it, or when uninstall can't tell which binary a running server
+  uses: then it prints `rm ~/.local/bin/herdr` for after you have stopped the
+  server. Say no and it is kept, with the same command;
 - tuidev's state dir, except `backups/`;
 - the [agents history](agent-workflows.md#history-and-agents-report) (`~/.local/state/tuidev/agents`, or under `$XDG_STATE_HOME`), only when you say so. In a terminal, uninstall asks and the default is to keep it (no answer is no). `--purge-history` deletes it without asking; `--all` keeps it and never asks. It never asks when stdin isn't a terminal. Only that one directory goes, only inside `$HOME`, and never through a symlink. `--dry-run` shows the removal.
 
@@ -200,6 +207,29 @@ pacman is checked against the local sync database, and the fix is always
 `sudo pacman -Syu`: Arch doesn't support upgrading a subset of packages, so
 tuidev prints that command instead of upgrading them one by one, and never
 runs a bare `pacman -Sy`.
+
+### Herdr
+
+The herdr pack installs Herdr's release binary, not Homebrew's, because only
+that one can update itself. With the pack active, `--packages` (after asking)
+runs `~/.local/bin/herdr update` with stdin closed, outside any Herdr pane:
+
+- with a server running, `herdr update --handoff`, which moves the server's
+  panes onto the new binary while their processes keep running;
+- without one, plain `herdr update`;
+- when launchd or systemd supervises the server in a way a handoff would
+  upset, plain `herdr update` and the change to make (see
+  [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr)).
+
+It never stops a server: with stdin closed, Herdr answers each "stop the old
+server?" prompt no. A server it couldn't hand over keeps running and picks up
+the new binary at its next start; a release that needs a server restart is
+then not installed at all, and Herdr says so.
+
+A Homebrew herdr is switched instead (after asking): `--packages` installs the
+release binary in its place, as the `202610161843_herdr_direct_install`
+migration does, and prints what is left by hand. A failed download is retried
+on the next `--packages`, or by `./install.sh --pack herdr`.
 
 ### Shipped configs you may have edited
 

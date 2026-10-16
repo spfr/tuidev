@@ -10,7 +10,7 @@
 # Usage:
 #   ./scripts/update.sh                    # interactive menu
 #   ./scripts/update.sh --check            # preview only
-#   ./scripts/update.sh --packages         # upgrade packages for active packs
+#   ./scripts/update.sh --packages         # upgrade packages for active packs (and herdr)
 #   ./scripts/update.sh --configs          # re-apply managed blocks + pack configs
 #   ./scripts/update.sh --migrations       # run pending one-shot migrations
 #   ./scripts/update.sh --repo             # git pull the repo
@@ -46,6 +46,8 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/gitconfig.sh"
 # shellcheck source=lib/pkg.sh disable=SC1091
 . "$SCRIPT_DIR/lib/pkg.sh"
+# shellcheck source=lib/herdr.sh disable=SC1091
+. "$SCRIPT_DIR/lib/herdr.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -71,7 +73,8 @@ Usage: $(basename "$0") [OPTIONS]
 
 Modes (pick one; default is an interactive menu):
   --check             Preview outdated packages and config drift; mutate nothing
-  --packages          upgrade packages (brew, apt, dnf, pacman) of active packs
+  --packages          upgrade packages (brew, apt, dnf, pacman) of active packs,
+                      and Herdr's release binary (herdr update --handoff)
   --configs           Re-apply repo managed blocks and pack-owned configs
                       (runs pending migrations first)
   --migrations        Run pending one-shot migrations only
@@ -548,12 +551,50 @@ report_apple_container() {
     print_info "upgrade from a real terminal (needs sudo): container system stop && update-container.sh, then make sandbox-up"
 }
 
+# Herdr updates itself (scripts/lib/herdr.sh): the release binary gets
+# `herdr update`, with --handoff while a server runs and no supervisor would
+# fight it; never brew. A Homebrew herdr (HERDR_FORMULAE is gone) is switched
+# to the release binary, retried on every run until that succeeds.
+report_herdr_update() {
+    case " $(tuidev_active_packs | tr '\n' ' ') " in *" herdr "*) ;; *) return 0 ;; esac
+    local kind ver
+    kind="$(herdr_install_kind)"
+    echo ""
+    case "$kind" in
+        direct)
+            ver="$("$(herdr_direct_path)" --version 2>/dev/null | awk '{ print $2 }')" || ver=""
+            echo -e "  ${BOLD}herdr${NC} (${ver:-unknown}, release binary, updates itself):"
+            if [[ "$MODE" == "check" ]]; then
+                print_info "--packages runs herdr update (--handoff while a server runs: its panes keep running)"
+                return 0
+            fi
+            confirm "Update herdr?" || return 0
+            herdr_self_update ;;
+        brew)
+            echo -e "  ${BOLD}herdr${NC} (Homebrew, which can't update itself or hand a running server over):"
+            if [[ "$MODE" == "check" ]]; then
+                print_info "--packages installs the release binary in $(herdr_direct_path) in its place"
+                return 0
+            fi
+            confirm "Switch herdr to its release binary?" || return 0
+            tuidev_manifest_enable
+            herdr_switch_to_direct \
+                || print_warning "herdr: the release binary is not installed yet; ./scripts/update.sh --packages (or ./install.sh --pack herdr) tries again"
+            tuidev_manifest_disable ;;
+        other)
+            echo -e "  ${BOLD}herdr${NC} ($(command -v herdr), installed another way): update it the way it was installed" ;;
+        none)
+            echo -e "  ${BOLD}herdr${NC}: not installed (./install.sh --pack herdr)" ;;
+    esac
+}
+
 run_packages_mode() {
     print_section "Checking pack-scoped package updates"
 
     local mgr
     if ! mgr="$(pkg_manager)"; then
         print_warning "no supported package manager (brew, apt-get, dnf, pacman) — skipping package updates"
+        report_herdr_update
         return 0
     fi
 
@@ -583,6 +624,7 @@ run_packages_mode() {
     fi
 
     report_apple_container
+    report_herdr_update
 
     if [[ "$MODE" != "check" && ${#NATIVE_OUTDATED[@]} -gt 0 ]]; then
         echo ""

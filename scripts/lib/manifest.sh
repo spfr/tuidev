@@ -57,6 +57,9 @@ _TUIDEV_MANIFEST_LOADED=1
 #            prints the removal command — it never runs sudo on its own
 #   block    a managed block we wrote: `block <id> <path>`
 #   file     a whole file we placed (helper scripts, adopted configs)
+#   tool     a third-party binary we downloaded (Herdr's release binary);
+#            uninstall removes it only in its own optional step, and never
+#            while a server runs from it
 #   dir      a directory tree we placed (nvim config, …)
 #   gitconfig  a global git key we set: `gitconfig <key> <value>`; uninstall
 #            unsets it only while it still holds that value
@@ -92,7 +95,7 @@ tuidev_manifest_record() {
         {
             echo "# tuidev install manifest — one record per line: <kind> <value>"
             echo "# Written by install.sh; read by uninstall.sh. Append-only."
-            echo "# Kinds: profile pack formula cask apt dnf pacman block file dir gitconfig"
+            echo "# Kinds: profile pack formula cask apt dnf pacman block file tool dir gitconfig"
         } > "$TUIDEV_MANIFEST_FILE"
     fi
 

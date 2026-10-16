@@ -16,6 +16,8 @@
 #     ~/.claude/…) always survive. Each removal is backed up first;
 #   - optionally, Homebrew formulae and casks tuidev installed (never one you
 #     already had). apt/dnf/pacman packages are listed, not removed;
+#   - optionally, tools tuidev downloaded (Herdr's release binary), but never
+#     one a running server uses: then it prints the command instead;
 #   - tuidev's own state dir, except its backups/;
 #   - the agents history (${XDG_STATE_HOME:-~/.local/state}/tuidev/agents)
 #     only when you say so: a prompt that defaults to keep (never asked with
@@ -42,6 +44,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/scripts/lib/manifest.sh"
 # shellcheck source=scripts/lib/packs.sh disable=SC1091
 . "$SCRIPT_DIR/scripts/lib/packs.sh"
+# shellcheck source=scripts/lib/herdr.sh disable=SC1091
+. "$SCRIPT_DIR/scripts/lib/herdr.sh"
 
 ALL=false
 PURGE_HISTORY=false
@@ -50,7 +54,7 @@ while [[ $# -gt 0 ]]; do
         --all)     ALL=true; shift ;;
         --dry-run) export DRY_RUN=true; shift ;;
         --purge-history) PURGE_HISTORY=true; shift ;;
-        -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
         *)         die "unknown flag: $1" ;;
     esac
 done
@@ -107,6 +111,11 @@ M_DIRS="$(tuidev_manifest_values dir)"
 M_GIT="$(tuidev_manifest_values gitconfig)"
 M_FORMULAE="$(tuidev_manifest_values formula)"
 M_CASKS="$(tuidev_manifest_values cask)"
+# Herdr's binary is a `tool`: removed only in its own optional step. Installs
+# from before that recorded it as a `file`, so those records move over.
+M_TOOLS="$(printf '%s\n%s\n' "$(tuidev_manifest_values tool)" \
+    "$(printf '%s\n' "$M_FILES" | grep -x '.*/bin/herdr' || true)" | awk 'NF && !seen[$0]++')"
+M_FILES="$(printf '%s\n' "$M_FILES" | grep -vx '.*/bin/herdr' || true)"
 
 ask "continue?"
 [[ "$ANSWER" == "y" ]] || { echo "cancelled."; exit 0; }
@@ -234,13 +243,13 @@ fi
 # 3. Optional: config files tuidev created (backed up first).
 # ---------------------------------------------------------------------------
 
-# Backups go to TUIDEV_BACKUP_DIR, which step 5 keeps. The prefix encodes the
+# Backups go to TUIDEV_BACKUP_DIR, which step 6 keeps. The prefix encodes the
 # full path so two same-named files (~/.codex/config.toml,
 # ~/.config/herdr/config.toml) never share a backup slot.
 _remove_config_path() {
     local path="$1"
     case "$path" in
-        "$HOME/.local/bin/"*|"$TUIDEV_LIB_DIR/"*|"$TUIDEV_STATE_DIR"/*) return 0 ;;   # steps 2 and 5
+        "$HOME/.local/bin/"*|"$TUIDEV_LIB_DIR/"*|"$TUIDEV_STATE_DIR"/*) return 0 ;;   # steps 2 and 6
     esac
     [[ -e "$path" ]] || return 0
     local rel="${path#"$HOME"/}"
@@ -336,7 +345,38 @@ if [[ "$ANSWER" == "y" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 5. tuidev's own state — everything but backups/.
+# 5. Optional: tools tuidev downloaded (Herdr's release binary).
+# ---------------------------------------------------------------------------
+
+# Never one a Herdr server runs from (or one that can't be told apart from
+# it): removing it would leave that server's next start, and every client,
+# without a binary. Then only the command is printed.
+_remove_tool() {
+    local path="$1"
+    [[ -f "$path" && ! -L "$path" ]] || return 0
+    if [[ "${path##*/}" == herdr ]] && herdr_server_uses "$path"; then
+        print_warning "kept $path: a Herdr server runs from it. Once you have stopped it (herdr server stop ends its panes): rm $path"
+        return 0
+    fi
+    run_cmd rm -f "$path"
+    done_msg "removed $path"
+}
+_print_kept_tool() {
+    [[ -f "$1" && ! -L "$1" ]] && print_info "kept $1 (rm $1 removes it)"
+    return 0
+}
+
+if [[ -n "$M_TOOLS" ]]; then
+    ask "also remove the tools tuidev downloaded ($(printf '%s\n' "$M_TOOLS" | tr '\n' ' ' | sed 's/ $//'))?"
+    if [[ "$ANSWER" == "y" ]]; then
+        each_line "$M_TOOLS" _remove_tool
+    else
+        each_line "$M_TOOLS" _print_kept_tool
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 6. tuidev's own state — everything but backups/.
 # ---------------------------------------------------------------------------
 
 if [[ -d "$TUIDEV_STATE_DIR" ]]; then
@@ -349,7 +389,7 @@ if [[ -d "$TUIDEV_STATE_DIR" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Optional: the agents history (data, so kept unless you say otherwise).
+# 7. Optional: the agents history (data, so kept unless you say otherwise).
 # ---------------------------------------------------------------------------
 
 # Only this one directory, only inside $HOME, and never through a symlink.
@@ -388,7 +428,8 @@ printf '%b\n' "${GREEN}What was removed:${NC}
   - tuidev managed blocks and the global git keys tuidev set (if unchanged)
   - tuidev helpers under ~/.local/bin, and the agents modules in ~/.local/lib/tuidev
   - $TUIDEV_STATE_DIR (profile, manifest, env, theme state)
-  - (optional) config files tuidev created, and the brew packages it installed
+  - (optional) config files tuidev created, the brew packages it installed,
+    and the tools it downloaded (Herdr's binary, unless a server runs from it)
 
 ${CYAN}What was preserved:${NC}
   - Backups of everything removed or overwritten: $TUIDEV_BACKUP_DIR
