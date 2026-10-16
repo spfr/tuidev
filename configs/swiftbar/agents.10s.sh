@@ -789,7 +789,7 @@ section_jobs() {
     # tooltip; a click opens its view of the report (one of the fixed views),
     # for today, as the insight is.
     case "$insight_view" in
-        summary|runs|waste|trends|agents|tokens|denials)
+        summary|runs|waste|trends|agents|tokens|denials|waits)
             if [[ -n "$insight_text" ]]; then
                 cl "${insight_text//\`/}"
                 tip="${REPLY//\"/$q}" line="${REPLY%% — *}"

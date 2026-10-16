@@ -4,7 +4,7 @@ TOP INSIGHTS
   1. api: 40 CPU-min in 24h, ↑200% on the 24h before (build +27 CPU-min) — see what changed: agents report --view trends
   2. app: `go` test runs ×10 in 24h, 5m30s median, 3 duplicates (20 CPU-min) — consider a shared test cache or serializing them
   3. Explore subagents left 3 polling loops running in 24h (2.1 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
-  more: agents report --view runs|waste|trends|agents|tokens|denials
+  more: agents report --view runs|waste|trends|agents|tokens|denials|waits
 
 CPU 2.14 CPU-h of agent work
 

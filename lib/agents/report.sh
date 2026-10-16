@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # lib/agents/report.sh — `agents report`: where the CPU and the tokens went,
-# what was denied or cleaned up, what the sessions load and use, and what is
-# worth changing.
+# what was denied or cleaned up, what the sessions load and use, how long
+# they waited on you, and what is worth changing.
 #
 # Owns: the report's views, insight.txt (the menu's top
 #   insight: "EPOCH<TAB>UNTIL<TAB>VIEW<TAB>TEXT", or just "EPOCH<TAB>UNTIL"
@@ -14,20 +14,21 @@
 #   events.sh (_agents_data_dir), render.sh (colors), tokens.sh
 #   (_agents_tokens_raw_since), context.sh (the context view's inventory);
 #   awk/report.awk and its parts (report_fmt, report_runs, report_tokens,
-#   report_denials, report_context, report_insights, report_views),
-#   awk/lib_price.awk, awk/tokens_session.awk.
+#   report_denials, report_context, report_waits, report_insights,
+#   report_views), awk/lib_price.awk, awk/tokens_session.awk.
 # Public: agents_report, agents_insight_write, agents_session_tokens,
 #   _agents_insight_line, _agents_tokens_line, _agents_prices_files.
 
-_AGENTS_REPORT_VIEWS="summary runs waste trends agents tokens context denials"
+_AGENTS_REPORT_VIEWS="summary runs waste trends agents tokens context denials waits"
 
 # agents_report [--view VIEW] [--since 24h|7d|30d|today] [--json] — the
 # summary (default): where the CPU went (by job, project, session and hour of
-# day, from history.tsv), the tokens and denials, what was cleaned up
+# day, from history.tsv), the tokens, denials and waits, what was cleaned up
 # (events.tsv), and the top insights; or one of the ledger's views: runs,
 # waste, trends (default --since 7d), agents; or tokens (tokens.tsv,
 # compacts.tsv, limits.tsv, the price files), context (uses.tsv and what is
-# configured; default --since 7d), denials (denials.tsv).
+# configured; default --since 7d), denials (denials.tsv), waits (waits.tsv
+# and notify.tsv: how long sessions waited on you, the notifications).
 agents_report() {
     local view=summary since="" json="" start now off period
     while [[ $# -gt 0 ]]; do
@@ -51,7 +52,7 @@ agents_report() {
     _agents_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
     _agents_report_awk "$view" "$since" "$json"
 }
-_agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents|tokens|context|denials] [--since 24h|7d|30d|today] [--json]" >&2; }
+_agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents|tokens|context|denials|waits] [--since 24h|7d|30d|today] [--json]" >&2; }
 
 # _agents_report_awk VIEW LABEL JSON — report.awk over the data directory,
 # for the window the caller's _agents_window set; the context view also
@@ -60,12 +61,13 @@ _agents_report_awk() {
     local d="$AGENTS_DATA_DIR" inv=""
     [[ "$1" != context ]] || inv="$(_agents_context_inventory)"
     B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" \
-    _agents_awk "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_context report_insights report_views report" -F '\t' \
+    _agents_awk "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_context report_waits report_insights report_views report" -F '\t' \
         -v view="$1" -v label="$2" -v json="$3" -v start="$start" -v now="$now" -v off="$off" \
         -v pstart="$((start - period))" -v pend="$((now - period))" -v hist="$AGENTS_HISTORY" \
         -v rawb="$(_agents_tokens_raw_since "$now" "$off")" \
         -v hf="$d/history.tsv" -v ef="$d/events.tsv" -v rf="$d/runs.tsv" \
         -v tf="$d/tokens.tsv" -v cf="$d/compacts.tsv" -v df="$d/denials.tsv" -v lf="$d/limits.tsv" -v uf="$d/uses.tsv" \
+        -v waf="$d/waits.tsv" -v ntf="$d/notify.tsv" \
         -v pfs="$(_agents_prices_files)" -v invf=/dev/fd/3 3<<<"$inv"
 }
 
@@ -102,11 +104,12 @@ agents_session_tokens() {
 }
 
 # agents_insight_write — refresh insight.txt with today's top insight (the
-# summary's first, from runs.tsv and the token files), for the menu. At most
-# every 5 minutes (it reads all of runs.tsv, tokens.tsv and denials.tsv, so
-# not every sample), and again once the last one expires (an hour after it
-# was written, or at midnight); a no-op with AGENTS_HISTORY=0. Runs at the
-# end of each `agents sample` (history.sh), under its lock; it never prints.
+# summary's first, from runs.tsv, the token files and the waits), for the
+# menu. At most every 5 minutes (it reads all of runs.tsv, tokens.tsv,
+# denials.tsv, waits.tsv and notify.tsv, so not every sample), and again
+# once the last one expires (an hour after it was written, or at midnight);
+# a no-op with AGENTS_HISTORY=0. Runs at the end of each `agents sample`
+# (history.sh), under its lock; it never prints.
 agents_insight_write() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 0
     local f="$AGENTS_DATA_DIR/insight.txt" was="" until="" top start now off period

@@ -1,6 +1,6 @@
 # lib/agents/awk/report_insights.awk — the findings worth acting on, from the
 # run ledger, for the summary's Top insights and the menu (insight.txt). Part
-# of report.awk's program; needs report_runs and report_fmt.
+# of report.awk's program; needs report_runs, report_waits and report_fmt.
 #
 # Each finding has an impact, in CPU seconds, and the findings are ranked by
 # it (ties: the order they were found in). Only those of INSIGHT_MIN or more
@@ -28,6 +28,9 @@
 #               those compactions (a /compact you ran is not a finding);
 #   denied      a command or tool you denied DENY_MANY times or more: DENY_S
 #               a denial.
+# Waits (report_waits) count past their own threshold too:
+#   waited      sessions waited on you (blocked or done, in Herdr) half an
+#               hour or more: a sixth of those seconds (an hour = 10 CPU-min).
 
 # wword / pword: this window and the one before it, in a sentence.
 function wword() { return label == "today" ? "today" : "in " label }
@@ -89,6 +92,7 @@ function insights(   i, k, a, p, j, n, wd, wn, c, q, bj, bd, x, dash, x2) {
             (bj != "-" ? " (" bj " +" cpuw(bd) ")" : "") dash "see what changed: agents report --view trends")
     }
     token_insights(dash, x2)
+    wait_insight(dash)
     for (i = 1; i <= IC; i++) if (II[i] >= INSIGHT_MIN) { IO[++IN] = i; IR[i] = II[i] + (IC - i) / (IC + 1) / 1000 }
     sortk(IR, IO, IN)
 }
@@ -141,9 +145,9 @@ function tok_impact(t) { t = t / TOKENS_PER_S; return t < INSIGHT_MIN ? INSIGHT_
 # insights_text LIM — the summary's block: the top LIM, numbered.
 function insights_text(lim,   i) {
     printf "%sTOP INSIGHTS%s\n", b, e
-    if (!IN) { printf "  nothing stands out %s(agents report --view runs|waste|trends|agents|tokens|denials)%s\n\n", dim, e; return }
+    if (!IN) { printf "  nothing stands out %s(agents report --view runs|waste|trends|agents|tokens|denials|waits)%s\n\n", dim, e; return }
     for (i = 1; i <= IN && i <= lim; i++) printf "  %d. %s\n", i, IT[IO[i]]
-    printf "  %smore: agents report --view runs|waste|trends|agents|tokens|denials%s\n\n", dim, e
+    printf "  %smore: agents report --view runs|waste|trends|agents|tokens|denials|waits%s\n\n", dim, e
 }
 
 # insights_json LIM — the top LIM as a JSON array.

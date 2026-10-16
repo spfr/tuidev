@@ -27,6 +27,8 @@ mkdir -p "$HOME"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
+# perm FILE — its mode bits, as 700 or 600.
+perm() { if [[ "$(uname)" == Darwin ]]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi; }
 # The fixtures' user is uid 501 ("me"); this process is pid 9999, outside them.
 AGENTS_UID=501 AGENTS_SELF=9999
 
@@ -223,6 +225,44 @@ agents_sample || fail "third sample failed"
 [[ "$(head -1 "$AGENTS_DATA_DIR/today.tsv")" == "2026-10-15"$'\t0' ]] || fail "today.tsv not reset on a new day: $(head -1 "$AGENTS_DATA_DIR/today.tsv")"
 pass "today.tsv: today's totals, busiest job first, reset at midnight"
 
+# Waits: each sample appends the sessions Herdr shows blocked or done,
+# credited the time since the last sample, at most 5 minutes.
+(
+    AGENTS_DATA_DIR="$tmp/waits" herdr_out=""
+    # shellcheck disable=SC2317,SC2329  # called by the functions under test
+    agents_snapshot() { cat "$tmp/snap.w"; }
+    # shellcheck disable=SC2317,SC2329
+    _agents_herdr() { [[ "$1" == sync ]] && printf '%s' "$herdr_out"; }
+    {
+        psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd
+        psl 290 1 0.0 3000 0:00.10 05:00:00 04:00:00 -zsh
+        psl 300 290 5.0 600000 1:00.00 01:00:00 08:00:00 claude
+        psl 400 290 1.0 300000 0:30.00 30:00 08:30:00 codex
+        psl 500 1 0.0 50000 0:01.00 50:00 08:10:00 "npx -y some-mcp"
+    } > "$tmp/snap.w"
+    herdr_out=$'claude\tblocked\t/Users/NAME/code/app\ncodex\tdone\t/Users/NAME/code/svc\n'
+    agents_sample || fail "waits: first sample"
+    FAKE_NOW=$((FAKE_NOW + 90)); agents_sample || fail "waits: second sample"
+    FAKE_NOW=$((FAKE_NOW + 7200)); agents_sample || fail "waits: a sample after a sleep"
+    herdr_out=$'claude\tworking\t/Users/NAME/code/app\ncodex\tidle\t/Users/NAME/code/svc\n'
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "waits: a sample with nobody waiting"
+    t0=$((FAKE_NOW - 7350))
+    want="$(printf '%s\n' \
+        "$t0"$'\tapp\tclaude\tblocked\t300@Wed_Oct_14_08:00:00_2026\t60' \
+        "$t0"$'\tsvc\tcodex\tdone\t400@Wed_Oct_14_08:30:00_2026\t60' \
+        "$((t0 + 90))"$'\tapp\tclaude\tblocked\t300@Wed_Oct_14_08:00:00_2026\t90' \
+        "$((t0 + 90))"$'\tsvc\tcodex\tdone\t400@Wed_Oct_14_08:30:00_2026\t90' \
+        "$((t0 + 7290))"$'\tapp\tclaude\tblocked\t300@Wed_Oct_14_08:00:00_2026\t300' \
+        "$((t0 + 7290))"$'\tsvc\tcodex\tdone\t400@Wed_Oct_14_08:30:00_2026\t300')"
+    [[ "$(cat "$AGENTS_DATA_DIR/waits.tsv")" == "$want" ]] || fail "waits.tsv:"$'\n'"$(cat "$AGENTS_DATA_DIR/waits.tsv")"$'\n'"want:"$'\n'"$want"
+    [[ "$(perm "$AGENTS_DATA_DIR/waits.tsv")" == 600 ]] || fail "waits.tsv mode $(perm "$AGENTS_DATA_DIR/waits.tsv")"
+    # A sample in the same second credits nothing; a clock that went back, nothing.
+    herdr_out=$'claude\tblocked\t/Users/NAME/code/app\n'
+    agents_sample; FAKE_NOW=$((FAKE_NOW - 30)); agents_sample
+    [[ "$(grep -c . "$AGENTS_DATA_DIR/waits.tsv")" == 6 ]] || fail "waits credited with no time passed: $(tail -2 "$AGENTS_DATA_DIR/waits.tsv")"
+)
+pass "sample: waits.tsv gets each session Herdr shows blocked or done, credited the time since the last sample (60 s for the first, at most 5 min)"
+
 # The lock: a sample while another one runs returns at once, writing nothing.
 mkdir "$AGENTS_DATA_DIR/sample.lock"
 before="$(cat "$AGENTS_DATA_DIR/sample.stamp")"
@@ -260,7 +300,6 @@ pass "sample.state: pid@start seen under an agent stays marked after it is orpha
 
 # Private: the data dir is 700 and its files 600, and an older, open one is
 # made private on the next write.
-perm() { if [[ "$(uname)" == Darwin ]]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi; }
 [[ "$(perm "$AGENTS_DATA_DIR")" == 700 ]] || fail "data dir mode $(perm "$AGENTS_DATA_DIR")"
 for f in history.tsv sample.state today.tsv sample.stamp; do
     [[ "$(perm "$AGENTS_DATA_DIR/$f")" == 600 ]] || fail "$f mode $(perm "$AGENTS_DATA_DIR/$f")"
@@ -324,11 +363,14 @@ old=$((FAKE_NOW - 31 * 86400)) new=$((FAKE_NOW - 86400))
 printf '%s\ttest\tapp\tclaude\t5\t1\t1\n%s\ttest\tapp\tclaude\t7\t1\t1\n' "$old" "$new" > "$pd/history.tsv"
 printf '%s\treap\tstale\t1\tnpx\tapp\t-\n%s\treap\tstale\t2\tnpx\tapp\t-\n' "$old" "$new" > "$pd/events.tsv"
 printf '%s\tsubagent-stop\ta\tyes\t1\t1\tfalse\n%s\tsubagent-stop\tb\tno\t0\t0\tfalse\n' "$old" "$new" > "$pd/hooks.log"
+printf '%s\tapp\tclaude\tblocked\t1@x\t60\n%s\tapp\tclaude\tdone\t1@x\t60\n' "$old" "$new" > "$pd/waits.tsv"
+printf '%s\t-\tapp\tIdle\tbanner\t-\n%s\t-\tapp\tPermission\therdr\tpresent\n' "$old" "$new" > "$pd/notify.tsv"
 (
     AGENTS_DATA_DIR="$pd"
     _agents_history_prune "$FAKE_NOW" 2026-10-15
     [[ "$(cut -f1 "$pd/history.tsv")" == "$new" && "$(cut -f1 "$pd/events.tsv")" == "$new" ]] || fail "prune: $(cat "$pd/history.tsv" "$pd/events.tsv")"
     [[ "$(cut -f1 "$pd/hooks.log")" == "$new" ]] || fail "prune kept an old hooks.log line: $(cat "$pd/hooks.log")"
+    [[ "$(cut -f1 "$pd/waits.tsv")/$(cut -f1 "$pd/notify.tsv")" == "$new/$new" ]] || fail "prune kept an old wait or notification: $(cat "$pd/waits.tsv" "$pd/notify.tsv")"
     [[ "$(cat "$pd/prune.stamp")" == 2026-10-15 ]] || fail "prune stamp"
     printf '%s\tkill\tmanual\t3\tx\tapp\t-\n' "$old" >> "$pd/events.tsv"
     _agents_history_prune "$FAKE_NOW" 2026-10-15

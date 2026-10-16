@@ -1,0 +1,14 @@
+agents report · waits · last 24h
+
+WAITED ON YOU  63 min · blocked 43 min · done, unseen 20 min · 2 sessions
+NOTIFICATIONS  10 · Permission 8 · other 1 · Idle 1 · 6 banners skipped (5 while you were at the Mac, 1 for ssh sessions)
+
+  PROJECT                    WAITED  BLOCKED     DONE  NOTIFIED  SKIPPED
+  sentula                    45 min   25 min   20 min         8        5
+  app                        18 min   18 min        -         1        1
+  notes                           -        -        -         1        0
+
+BY AGENT     claude 45 min · codex 18 min
+
+blocked: waiting for your answer; done: finished, not yet looked at. Counted for sessions in Herdr panes, once a minute while the menu runs.
+[rc=0]

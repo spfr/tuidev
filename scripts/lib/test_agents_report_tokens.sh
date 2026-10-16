@@ -324,7 +324,7 @@ pass "summary: Tokens (total, cache hits, polling, API-equivalent \$ when priced
 ins="$(printf '%s\n' "$out" | sed -n '/^TOP INSIGHTS$/,/^$/p')"
 want="TOP INSIGHTS
   1. \`npm install\` denied ×3 by you in 24h — consider an allow rule, or an instruction not to try it
-  more: agents report --view runs|waste|trends|agents|tokens|denials"
+  more: agents report --view runs|waste|trends|agents|tokens|denials|waits"
 [[ "$ins" == "$want" ]] || fail "insights:"$'\n'"$ins"
 jqt "$(rep --json)" '[.insights[] | [.kind, .view, .impact_s]] == [["denied","denials",300]] and .insights[0].cmd == "npm install"' "insights json" '.insights'
 w="$tmp/w"; fixture "$w"
@@ -464,7 +464,7 @@ for n in 0 950:950 64249:64.2k 99949:99.9k 99950:100k 640000:640k 999499:999k 99
     line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'tokens today' || true)"
     if [[ "$n" == 0 ]]; then [[ -z "$line" ]] || fail "a tokens row for 0 tokens"; continue; fi
     [[ "$line" == "${n#*:} tokens today · 90% cached | "* ]] || fail "menu: ${n%%:*} tokens as '${n#*:}': $line"
-    [[ "$(_agents_awk_eval "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_insights report_views" 'BEGIN { print tk(x) }' -v x="${n%%:*}")" == "${n#*:}" ]] \
+    [[ "$(_agents_awk_eval "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_waits report_insights report_views" 'BEGIN { print tk(x) }' -v x="${n%%:*}")" == "${n#*:}" ]] \
         || fail "report and menu disagree on ${n%%:*}"
 done
 printf 'hist\toff\t0\t-\t0\n' > "$tmp/tsv"

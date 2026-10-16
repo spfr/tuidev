@@ -34,6 +34,19 @@
 # older one. Without terminal-notifier the banner is osascript's, which a
 # click can't take anywhere; without agents it is a plain banner.
 #
+# With the monitoring pack (its data directory, AGENTS_DATA_DIR, already
+# exists; this never creates it), each notification is logged for `agents
+# report --view waits`, one line appended to notify.tsv there:
+#   epoch session project kind channels banner_skipped
+# session: the agent session's PID@START, "-" when agents knows none;
+# project: the session's directory as agents names it (CLAUDE_PROJECT_DIR,
+# else the working directory); kind: the subtitle (Permission, Idle…) or
+# "-"; channels: those that showed it (herdr, tmux, banner, osascript,
+# notify-send, ntfy) or none; banner_skipped: present (you were at the Mac,
+# in front of the session) or remote (a session reached over ssh), else "-".
+# Never the message. AGENTS_HISTORY=0, in the environment or agents.conf,
+# logs nothing; `agents sample` drops lines older than AGENTS_HISTORY_DAYS.
+#
 # It never prints and always exits 0: hook stdout is parsed by the calling CLI,
 # and a failed notification must not surface as a hook error. Every outside
 # command it waits for is bounded by a timeout, with every process it starts.
@@ -240,8 +253,8 @@ notify_osascript() {
 notify_macos() {
     local rc=0
     notify_terminal_notifier || rc=$?
-    [[ $rc -ne 0 && $rc -ne 124 ]] || return 0
-    notify_osascript
+    if [[ $rc -eq 0 || $rc -eq 124 ]]; then used banner; return 0; fi
+    notify_osascript && used osascript
 }
 
 notify_linux_desktop() {
@@ -254,21 +267,83 @@ notify_ntfy() {
     curl -fsS --max-time 5 -H "Title: $TITLE" --data-raw "$BODY" "$NTFY_URL"
 }
 
+# What main did, for the log: the channels that showed it (comma list) and
+# why the banner was skipped (present, remote, or -).
+CHANNELS="" SKIPPED="-"
+used() { CHANNELS="${CHANNELS:+$CHANNELS,}$1"; }
+
 main() {
     local in_term=false in_herdr=false
     [[ -z "$HOOK_MESSAGE" ]] || MESSAGE="$HOOK_MESSAGE"
     BODY="$MESSAGE"
     [[ -z "$SUBTITLE" ]] || BODY="$SUBTITLE: $MESSAGE"
-    if notify_herdr; then in_term=true in_herdr=true; elif notify_tmux; then in_term=true; fi
+    if notify_herdr; then in_term=true in_herdr=true; used herdr
+    elif notify_tmux; then in_term=true; used tmux; fi
     if is_macos; then
         # Shown in the terminal: the banner is for when you can't see it.
-        if [[ "$in_term" == true ]] && is_remote; then return 0; fi
-        if [[ "$in_herdr" == true ]] && at_terminal; then return 0; fi
+        if [[ "$in_term" == true ]] && is_remote; then SKIPPED=remote; return 0; fi
+        if [[ "$in_herdr" == true ]] && at_terminal; then SKIPPED=present; return 0; fi
         notify_macos && return 0
     fi
-    [[ "$in_term" == true ]] || notify_linux_desktop || notify_ntfy
+    [[ "$in_term" != true ]] || return 0
+    if notify_linux_desktop; then used notify-send; elif notify_ntfy; then used ntfy; fi
+}
+
+# field VAR TEXT — TEXT as one notify.tsv field in VAR: control characters
+# (tabs, newlines) as spaces, at most 80 characters, "-" when blank.
+field() {
+    local v="${2//[[:cntrl:]]/ }"
+    v="${v:0:80}"
+    [[ -n "${v// /}" ]] || v=-
+    printf -v "$1" '%s' "$v"
+}
+
+# project_of DIR — the name agents gives a session in DIR (lib/agents/awk/
+# lib_proc.awk's projname): REPO/NAME for a worktree under
+# REPO/.claude/worktrees/NAME, "~" for $HOME, else the directory's name;
+# "-" for none.
+project_of() {
+    local d="$1" r w p
+    case "$d" in
+        "$HOME") p='~' ;;
+        */.claude/worktrees/*)
+            r="${d%%/.claude/worktrees/*}"; w="${d#*/.claude/worktrees/}"
+            p="${r##*/}/${w%%/*}" ;;
+        *)  d="${d%/}"; p="${d##*/}" ;;
+    esac
+    printf '%s' "${p:--}"
+}
+
+# history_on — false when AGENTS_HISTORY=0, from the environment, else the
+# first AGENTS_HISTORY line of agents.conf (where lib/agents/config.sh
+# reads it).
+history_on() {
+    local v="${AGENTS_HISTORY-}" line conf="${AGENTS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/agents.conf}"
+    local re='^[[:space:]]*AGENTS_HISTORY=["'\'']?([01]?)["'\'']?([[:space:]]|#|$)'
+    if [[ -z "${AGENTS_HISTORY+set}" && -r "$conf" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" =~ $re ]]; then v="${BASH_REMATCH[1]}"; break; fi
+        done < "$conf"
+    fi
+    [[ "$v" != 0 ]]
+}
+
+# log_notify — one line in the monitoring pack's notify.tsv (see the top),
+# only when its data directory already exists and history is on.
+log_notify() {
+    local dir="${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}"
+    local now tok=- proj kind
+    [[ -d "$dir" && -w "$dir" ]] && history_on || return 0
+    now="$(date +%s)"
+    [[ "$now" =~ ^[0-9]+$ ]] || return 0
+    if session && [[ "$TOKEN" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]]; then tok="$TOKEN"; fi
+    field proj "$(project_of "${CLAUDE_PROJECT_DIR:-$PWD}")"
+    field kind "$SUBTITLE"
+    umask 077
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$now" "$tok" "$proj" "$kind" "${CHANNELS:-none}" "$SKIPPED" >> "$dir/notify.tsv"
 }
 
 HOOK_MESSAGE="$(hook_message 2>/dev/null)"
 main >/dev/null 2>&1 </dev/null
+log_notify >/dev/null 2>&1 </dev/null
 exit 0

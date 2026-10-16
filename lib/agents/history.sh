@@ -18,14 +18,15 @@
 # stale one; agent is 1 once a sample has seen it under an agent (kept while
 # it lives, so an orphan keeps it): the provenance auto-reap needs before it
 # stops a stale tree. Once those files are in place (and the feed it counted
-# removed), each sample also scans the transcripts for tokens (tokens.sh; a
-# failure there never stops the sample), updates the run ledger (runs.sh; a
-# failure there never makes the next sample count history twice) and then
-# the menu's top insight (report.sh: insight.txt).
+# removed), each sample appends to waits.tsv the sessions Herdr shows
+# blocked or done (_agents_waits_rows), scans the transcripts for tokens
+# (tokens.sh; a failure there never stops the sample), updates the run
+# ledger (runs.sh; a failure there never makes the next sample count history
+# twice) and then the menu's top insight (report.sh: insight.txt).
 #
-# Uses: config.sh, util.sh, snapshot.sh, classify.sh, events.sh (the data
-#   directory and the events lock), runs.sh (the run ledger), tokens.sh
-#   (_agents_tokens_scan, _agents_tokens_prune), report.sh
+# Uses: config.sh, util.sh, snapshot.sh (_agents_herdr), classify.sh,
+#   events.sh (the data directory and the events lock), runs.sh (the run
+#   ledger), tokens.sh (_agents_tokens_scan, _agents_tokens_prune), report.sh
 #   (agents_insight_write); awk/sample.awk.
 # Public: agents_sample, _agents_sample_kick, _agents_hist_line,
 #   _agents_prune_file.
@@ -46,8 +47,10 @@ agents_sample() {
 }
 
 _agents_sample_locked() {
-    local dir="$AGENTS_DATA_DIR" now day ps recs type pid kind rest paths enr feed=""
+    local dir="$AGENTS_DATA_DIR" now day ps recs type pid kind rest paths enr feed="" prev=""
     read -r now day <<<"$(date '+%s %Y-%m-%d')"
+    # The last sample that counted (sample.state's epoch): what waits credit.
+    [[ ! -r "$dir/sample.state" ]] || read -r prev < "$dir/sample.state"
     # The stamp first: a failing sample is retried a minute later, not at once.
     _agents_replace "$dir/sample.stamp" "$now"
     ps="$(agents_snapshot)"
@@ -61,7 +64,8 @@ _agents_sample_locked() {
         esac
     done <<<"$recs"
     paths="$(_agents_cwds --stdout "$@")"
-    enr="$(printf '%s\n' "$recs" | agents_enrich "$paths" "" "")"
+    # Herdr's status (blocked, done…) as the terminal sees it: what waits count.
+    enr="$(printf '%s\n' "$recs" | agents_enrich "$paths" "$(_agents_herdr sync)" "")"
     # What the menu saw since the last sample (runs.sh), oldest first.
     _agents_runs_take "$now"
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || feed="$(cat "${_AGENTS_RUNS_FED[@]}" 2>/dev/null)"
@@ -72,6 +76,10 @@ _agents_sample_locked() {
     # next sample count this interval again.
     mv -f "$dir/sample.state.new" "$dir/sample.state" && mv -f "$dir/today.tsv.new" "$dir/today.tsv" || return 1
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || rm -f "${_AGENTS_RUNS_FED[@]}"
+    # The sessions waiting on you, once the interval they are credited is
+    # committed (a sample that fails before this credits nothing twice).
+    printf '%s\n' "$enr" | _agents_waits_rows "$now" "$prev" >> "$dir/waits.tsv" \
+        || echo "agents: waits.tsv was not updated" >&2
     # Where the tokens went (tokens.sh), in a subshell: nothing it does can
     # stop the sample. Before the ledger: the task ids it indexes name the
     # agent of each background command that just ended.
@@ -91,12 +99,34 @@ _agents_sample_rows() {
     _agents_awk "lib_sort sample" -F '\t' -v now="$1" -v day="$2" -v sf="$3/sample.state" -v tf="$3/today.tsv"
 }
 
-# _agents_history_prune NOW DAY — drop history, runs, token rows (tokens.sh:
+# _AGENTS_WAIT_CAP — the most seconds one sample credits a wait: the menu
+# samples about once a minute, so a longer gap is the Mac asleep (or no
+# menu), not a session waiting all along.
+_AGENTS_WAIT_CAP=300
+
+# _agents_waits_rows NOW PREV < ENRICHED_RECORDS — waits.tsv's rows (stdout):
+#   epoch project agent status session secs
+# one per agent session whose Herdr status is blocked (waiting for your
+# answer) or done (finished, not yet looked at); session is its PID@START,
+# secs the time since PREV, the last sample's epoch, at most
+# _AGENTS_WAIT_CAP (60 without one; nothing when no time passed). The Codex
+# daemon is never one.
+_agents_waits_rows() {
+    LC_ALL=C awk -F '\t' -v now="$1" -v prev="$2" -v cap="$_AGENTS_WAIT_CAP" '
+        BEGIN { s = prev ~ /^[0-9]+$/ ? now - prev : 60; if (s > cap) s = cap; if (s < 0) s = 0 }
+        s > 0 && $1 == "agent" && NF >= 15 && ($12 == "blocked" || $12 == "done") && $3 != "daemon" {
+            print now "\t" $15 "\t" $3 "\t" $12 "\t" $2 "@" $9 "\t" s
+        }'
+}
+
+# _agents_history_prune NOW DAY — drop history, runs, waits, notification
+# (notify.tsv, which scripts/notify.sh appends to) and token rows (tokens.sh:
 # _agents_tokens_prune, which also rolls tokens.tsv up by day) and events
-# older than AGENTS_HISTORY_DAYS, at most once a day. history.tsv, runs.tsv
-# and the token files have one writer (the sample this runs in, under
-# sample.lock); events.tsv is rewritten under the events lock, or left for
-# tomorrow when that can't be had.
+# older than AGENTS_HISTORY_DAYS, at most once a day. history.tsv, runs.tsv,
+# waits.tsv and the token files have one writer (the sample this runs in,
+# under sample.lock); notify.tsv's lines that arrive while it is rewritten
+# are carried over (_agents_prune_file); events.tsv is rewritten under the
+# events lock, or left for tomorrow when that can't be had.
 _agents_history_prune() {
     local stamp="" cut=$(( $1 - AGENTS_HISTORY_DAYS * 86400 ))
     [[ -r "$AGENTS_DATA_DIR/prune.stamp" ]] && read -r stamp < "$AGENTS_DATA_DIR/prune.stamp"
@@ -104,6 +134,8 @@ _agents_history_prune() {
     _agents_prune_file "$AGENTS_DATA_DIR/history.tsv" "$cut"
     _agents_prune_file "$AGENTS_DATA_DIR/hooks.log" "$cut"
     _agents_prune_file "$AGENTS_DATA_DIR/runs.tsv" "$cut"
+    _agents_prune_file "$AGENTS_DATA_DIR/waits.tsv" "$cut"
+    _agents_prune_file "$AGENTS_DATA_DIR/notify.tsv" "$cut"
     _agents_tokens_prune "$1" "$cut" || echo "agents: the token files were not pruned" >&2
     if _agents_events_lock; then
         _agents_prune_file "$AGENTS_DATA_DIR/events.tsv" "$cut"

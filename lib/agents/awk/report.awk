@@ -1,20 +1,22 @@
 # lib/agents/awk/report.awk — `agents report`, as text or JSON, from
 # history.tsv (hf), events.tsv (ef), the run ledger runs.tsv (rf), and the
 # token files: tokens.tsv (tf), compacts.tsv (cf), denials.tsv (df),
-# limits.tsv (lf), uses.tsv (uf), the price files (pfs, "|"-separated, ""
-# for none) and, for the context view, the configured inventory (invf);
-# rawb: where tokens.tsv's rows stop being kept by day. Runs in BEGIN: it
-# reads no input. Needs lib_json, lib_sort, lib_fmt, lib_price, report_fmt,
-# report_runs, report_tokens, report_denials, report_context,
-# report_insights and report_views.
+# limits.tsv (lf), uses.tsv (uf), waits.tsv (waf), notify.tsv (ntf), the
+# price files (pfs, "|"-separated, "" for none) and, for the context view,
+# the configured inventory (invf); rawb: where tokens.tsv's rows stop being
+# kept by day. Runs in BEGIN: it reads no input. Needs lib_json, lib_sort,
+# lib_fmt, lib_price, report_fmt, report_runs, report_tokens,
+# report_denials, report_context, report_waits, report_insights and
+# report_views.
 #
-# view: summary (history, events, tokens, denials and the top insights), runs,
-# waste, trends, agents (the ledger: report_views.awk), tokens
-# (report_tokens.awk), context (report_context.awk), denials
-# (report_denials.awk), or insight (one line for the menu: VIEW<TAB>TEXT, or
-# nothing). Without a ledger, a ledger view falls back to the summary, with
-# a note; its JSON keeps its own shape, with "ledger":false. The tokens and
-# denials views say when they have no data.
+# view: summary (history, events, tokens, denials, waits and the top
+# insights), runs, waste, trends, agents (the ledger: report_views.awk),
+# tokens (report_tokens.awk), context (report_context.awk), denials
+# (report_denials.awk), waits (report_waits.awk), or insight (one line for
+# the menu: VIEW<TAB>TEXT, or nothing). Without a ledger, a ledger view
+# falls back to the summary, with a note; its JSON keeps its own shape, with
+# "ledger":false. The tokens, denials and waits views say when they have no
+# data.
 
 BEGIN {
     b = ENVIRON["B"]; dim = ENVIRON["DIM"]; e = ENVIRON["N"]
@@ -24,6 +26,7 @@ BEGIN {
     if (view == "summary" || view == "insight" || view == "tokens" || view == "context")
         tokens_load(tf, cf, lf, pfs, start, view == "tokens" ? "model cli agent project session origin" : view == "context" ? "cli agent" : "cli")
     if (view == "summary" || view == "insight" || view == "denials") denials_load(df, start)
+    if (view == "summary" || view == "insight" || view == "waits") waits_load(waf, ntf, start)
     if (view == "insight") {
         insights()
         if (IN) print IV[IO[1]] "\t" IT[IO[1]]
@@ -32,6 +35,7 @@ BEGIN {
     if (view == "tokens") { view_tokens(); exit }
     if (view == "context") { view_context(); exit }
     if (view == "denials") { view_denials(); exit }
+    if (view == "waits") { view_waits(); exit }
     if (view != "summary" && (RL || json)) {
         if (view == "runs") view_runs()
         else if (view == "waste") view_waste()
@@ -89,11 +93,11 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
         o = o sprintf("],\"cleanups\":{\"total\":%d,\"by_reason\":", ev) jlist(ro, nr, er, "reason", "count") ",\"by_kind\":" jlist(ko, nk, ek, "kind", "count") ",\"projects\":" jlist(eo, ne, ep, "project", "count") "}"
         o = o ",\"view\":\"summary\",\"ledger\":" jb(RL)
         o = o sprintf(",\"runs\":{\"count\":%d,\"failed\":%d,\"dup\":%d,\"cleaned\":%d}", RN, RFAIL, RDUP, RCLN)
-        o = o ",\"tokens\":" tokens_json() ",\"denials\":" denials_json()
+        o = o ",\"tokens\":" tokens_json() ",\"denials\":" denials_json() ",\"waits\":" waits_json()
         print o ",\"insights\":" insights_json(3) "}"
         return
     }
-    if (!any && !RL && !TL && !DL) {
+    if (!any && !RL && !TL && !DL && !WaL) {
         if (hist != 1) print "agents report: history is off (AGENTS_HISTORY=0 in agents.conf); nothing is recorded"
         else print "agents report: no history yet; it starts within a minute of the menu running (or of agents watch; agents sample takes one now)"
         return
@@ -126,6 +130,7 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
     print ""
     tokens_text()
     denials_text()
+    waits_text()
     printf "%sCLEANUPS (%d)%s\n", b, ev, e
     if (ev) {
         printf "  why          %s\n", line(ro, nr, er, "n", 8)

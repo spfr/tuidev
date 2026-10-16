@@ -30,7 +30,8 @@ trap cleanup EXIT
 mkdir -p "$tmp/bin" "$tmp/log" "$tmp/home"
 # Only what a test sets reaches notify.sh (run passes these through).
 unset TMUX HERDR_ENV SSH_CONNECTION NTFY_URL TN TN_FAIL TN_HANG AGENTS_OUT STUB_UNAME \
-    STUB_LOCKED STUB_IDLE STUB_FRONT STUB_PROBE_FAIL TUIDEV_NOTIFY_BANNER TUIDEV_NOTIFY_PRESENT_IDLE STDIN CLAUDE_PROJECT_DIR
+    STUB_LOCKED STUB_IDLE STUB_FRONT STUB_PROBE_FAIL TUIDEV_NOTIFY_BANNER TUIDEV_NOTIFY_PRESENT_IDLE STDIN CLAUDE_PROJECT_DIR \
+    AGENTS_DATA_DIR XDG_STATE_HOME AGENTS_HISTORY AGENTS_CONF
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
@@ -87,6 +88,8 @@ run() {
         ${TUIDEV_NOTIFY_BANNER:+TUIDEV_NOTIFY_BANNER="$TUIDEV_NOTIFY_BANNER"} \
         ${TUIDEV_NOTIFY_PRESENT_IDLE:+TUIDEV_NOTIFY_PRESENT_IDLE="$TUIDEV_NOTIFY_PRESENT_IDLE"} \
         ${CLAUDE_PROJECT_DIR:+CLAUDE_PROJECT_DIR="$CLAUDE_PROJECT_DIR"} \
+        ${AGENTS_DATA_DIR:+AGENTS_DATA_DIR="$AGENTS_DATA_DIR"} ${XDG_STATE_HOME:+XDG_STATE_HOME="$XDG_STATE_HOME"} \
+        ${AGENTS_HISTORY+AGENTS_HISTORY="$AGENTS_HISTORY"} ${AGENTS_CONF:+AGENTS_CONF="$AGENTS_CONF"} \
         /bin/bash "$NOTIFY" "$@" < "${STDIN:-/dev/null}" > "$tmp/out" 2>&1
     echo $? > "$tmp/rc"
     set -e
@@ -275,6 +278,74 @@ quiet "terminal-notifier hangs"
 ! called osascript || fail "osascript after terminal-notifier timed out: a second banner"
 pass "prints nothing and exits 0 whatever fails; a hung notifier is cut off after 5 s, with no second banner"
 
+# --- The notification log (notify.tsv, for agents report --view waits) -------------------
+for s in herdr tmux notify-send curl; do stub "$s" 'exit 0'; done   # working again
+state="$tmp/home/.local/state"
+ntsv="$state/tuidev/agents/notify.tsv"
+# nlast — the log's last line; nlines — how many it has.
+nlast() { tail -1 "$ntsv" 2>/dev/null; }
+nlines() { if [[ -f "$ntsv" ]]; then grep -c . "$ntsv"; else echo 0; fi; }
+CLAUDE_PROJECT_DIR=/Users/NAME/code/sentula AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
+quiet "no data directory"
+[[ ! -e "$state" ]] || fail "notify.sh created $(find "$state" | tr '\n' ' ')without the monitoring pack's data directory"
+mkdir -p "$state/tuidev/agents"
+before=$(date +%s)
+CLAUDE_PROJECT_DIR=/Users/NAME/code/sentula AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
+quiet "a logged notification"
+IFS=$'\t' read -r ts tok proj kind chans skip extra <<<"$(nlast)"
+[[ "$ts" =~ ^[0-9]+$ && $ts -ge $before && $ts -le $(( $(date +%s) + 1 )) ]] || fail "log epoch: $(nlast)"
+[[ "$tok|$proj|$kind|$chans|$skip|${extra:-}" == "$TOK|sentula|Permission|banner|-|" ]] || fail "log line: $(nlast)"
+if [[ "$(uname)" == Darwin ]]; then m="$(stat -f %Lp "$ntsv")"; else m="$(stat -c %a "$ntsv")"; fi
+[[ "$m" == 600 ]] || fail "notify.tsv mode $m"
+HERDR_ENV=1 STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "Claude Code" "M" "Idle"
+[[ "$(nlast | cut -f2,4-6)" == "$TOK"$'\tIdle\therdr\tpresent' ]] || fail "at the Mac in Herdr: $(nlast)"
+HERDR_ENV=1 SSH_CONNECTION="10.0.0.1 1 10.0.0.2 22" run "T" "M"
+[[ "$(nlast | cut -f2,4-6)" == $'-\t-\therdr\tremote' ]] || fail "over ssh, no session, no subtitle: $(nlast)"
+TMUX=/tmp/x,1,0 AGENTS_OUT="$GHOSTTY" run "T" "M" "Agent Teams"
+[[ "$(nlast | cut -f4-6)" == $'Agent Teams\ttmux,banner\t-' ]] || fail "tmux and a banner: $(nlast)"
+TN="" run "T" "M"
+[[ "$(nlast | cut -f5)" == osascript ]] || fail "osascript: $(nlast)"
+STUB_UNAME=Linux run "T" "M"
+[[ "$(nlast | cut -f5)" == notify-send ]] || fail "Linux desktop: $(nlast)"
+stub osascript 'exit 3'; rm "$tmp/bin/notify-send"
+TN_FAIL=1 run "T" "M"
+[[ "$(nlast | cut -f5,6)" == $'none\t-' ]] || fail "nothing worked: $(nlast)"
+stub osascript 'exit 0'; stub notify-send 'exit 0'
+[[ "$(nlines)" == 7 ]] || fail "one line per notification: $(nlines)"
+pass "notify.tsv: one line per notification (session, project, kind, channels, why the banner was skipped), only once the data directory exists"
+
+CLAUDE_PROJECT_DIR=$'/Users/NAME/code/repo/.claude/worktrees/feat\tx' run "T" "M" $'Perm\tis\nsion'
+IFS=$'\t' read -r _ _ proj kind chans skip extra <<<"$(nlast)"
+[[ "$proj|$kind|${extra:-}" == "repo/feat x|Perm is sion|" && "$(grep -c . "$ntsv")" == 8 ]] || fail "control characters in a field: $(tail -2 "$ntsv")"
+CLAUDE_PROJECT_DIR=/Users/NAME/code/app/ run "T" "M" "$(printf 'x%.0s' $(seq 1 120))"
+[[ "$(nlast | cut -f3)" == app && "$(nlast | cut -f4)" == "$(printf 'x%.0s' $(seq 1 80))" ]] || fail "a long subtitle, a trailing slash: $(nlast)"
+run "T" "M" "   "
+[[ "$(nlast | cut -f4)" == - ]] || fail "a blank subtitle: $(nlast)"
+run; run "T"
+[[ "$(nlines)" == 10 ]] || fail "logged a call that showed nothing"
+pass "notify.tsv fields: control characters as spaces, at most 80 characters, blank as -"
+
+AGENTS_HISTORY=0 run "T" "M"
+mkdir -p "$tmp/home/.config"
+printf '# history\n  AGENTS_HISTORY="0"  # off\n' > "$tmp/home/.config/agents.conf"
+run "T" "M"
+[[ "$(nlines)" == 10 ]] || fail "logged with AGENTS_HISTORY=0: $(nlast)"
+AGENTS_HISTORY=1 run "T" "M"
+[[ "$(nlines)" == 11 ]] || fail "the environment's AGENTS_HISTORY=1 does not win over agents.conf"
+printf 'AGENTS_HISTORY=1\nAGENTS_HISTORY=0\n' > "$tmp/conf"
+AGENTS_CONF="$tmp/conf" run "T" "M"
+[[ "$(nlines)" == 12 ]] || fail "AGENTS_CONF: the first AGENTS_HISTORY line wins, as agents reads it"
+rm "$tmp/home/.config/agents.conf"
+mkdir -p "$tmp/xdg/tuidev/agents" "$tmp/own"
+XDG_STATE_HOME="$tmp/xdg" run "T" "M"
+AGENTS_DATA_DIR="$tmp/own" run "T" "M"
+[[ "$(nlines)" == 12 && -s "$tmp/xdg/tuidev/agents/notify.tsv" && -s "$tmp/own/notify.tsv" ]] || fail "XDG_STATE_HOME or AGENTS_DATA_DIR not followed"
+chmod 500 "$state/tuidev/agents"
+run "T" "M"; quiet "a data directory it can't write"
+chmod 700 "$state/tuidev/agents"
+rm -rf "$state" "$tmp/xdg" "$tmp/own"
+pass "notify.tsv: off with AGENTS_HISTORY=0 (environment, then agents.conf); XDG_STATE_HOME and AGENTS_DATA_DIR as agents resolves them; silent when it can't write"
+
 # --- The helpers notify.sh shares with lib/agents -----------------------------------------
 # helper FILE NAME — define the function NAME as FILE has it.
 helper() {
@@ -315,6 +386,12 @@ for m in '[x' '(x' '{x' '<x' '"x' "'x" '-x' 'x [y' '' 'plain'; do
     [[ "$(tn_text "$m")" == "$(_agents_tn_text "$m")" ]] || fail "notify.sh and lib/agents escape '$m' differently"
 done
 pass "notify.sh and lib/agents escape terminal-notifier text the same way"
+helper "$NOTIFY" project_of
+for d in /Users/NAME/code/app /Users/NAME/code/app/ /x/repo/.claude/worktrees/feat /x/repo/.claude/worktrees/feat/sub "$tmp/home" / ""; do
+    want="$(HOME="$tmp/home" AGENTS_CONF=/nonexistent bash -c '. "$1"; agents_project "$2"' _ "$REPO_DIR/bin/agents" "$d")"
+    [[ "$(HOME="$tmp/home" project_of "$d")" == "$want" ]] || fail "project of '$d': $(HOME="$tmp/home" project_of "$d"), agents says $want"
+done
+pass "notify.sh names a project as agents does (a worktree as REPO/NAME, \$HOME as ~)"
 
 # --- Live: the real agents under a fake claude -------------------------------------------
 if ps -o lstart= -p $$ >/dev/null 2>&1; then

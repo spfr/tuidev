@@ -1,0 +1,16 @@
+agents report · today
+
+TOP INSIGHTS
+  1. Agents waited on you 63 min today (top: sentula 45 min; 10 notifications, 5 banners skipped while you were at the Mac) — allow what you always approve, so they ask less
+  more: agents report --view runs|waste|trends|agents|tokens|denials|waits
+
+no runs recorded yet (runs.tsv): insights and the runs, waste, trends and agents views start with the first finished run
+
+no CPU samples in this window
+
+WAITS  63 min waited on you · 10 notifications · 6 banners skipped (5 while you were at the Mac, 1 for ssh sessions)
+  by project and kind: agents report --view waits
+
+CLEANUPS (0)
+  none
+[rc=0]

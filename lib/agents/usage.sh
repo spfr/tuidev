@@ -67,7 +67,9 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
                                prices), context (MCP servers, skills and subagents
                                used and loaded, plugins, what is unused; default
                                7d), denials (tool calls denied, by command, with
-                               what to try)
+                               what to try), waits (how long sessions in Herdr
+                               waited on you, blocked or done, and the
+                               notifications, by project and kind)
   agents runs [--since 24h|7d|30d|today] [--json]
                                finished commands, newest first: when, how long, CPU,
                                peak memory, exit code, project, session, the agent
