@@ -285,16 +285,16 @@ ntsv="$state/tuidev/agents/notify.tsv"
 # nlast — the log's last line; nlines — how many it has.
 nlast() { tail -1 "$ntsv" 2>/dev/null; }
 nlines() { if [[ -f "$ntsv" ]]; then grep -c . "$ntsv"; else echo 0; fi; }
-CLAUDE_PROJECT_DIR=/Users/NAME/code/sentula AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
+CLAUDE_PROJECT_DIR=/Users/NAME/code/billing AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
 quiet "no data directory"
 [[ ! -e "$state" ]] || fail "notify.sh created $(find "$state" | tr '\n' ' ')without the monitoring pack's data directory"
 mkdir -p "$state/tuidev/agents"
 before=$(date +%s)
-CLAUDE_PROJECT_DIR=/Users/NAME/code/sentula AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
+CLAUDE_PROJECT_DIR=/Users/NAME/code/billing AGENTS_OUT="$GHOSTTY" run "Claude Code" "Needs your approval" "Permission"
 quiet "a logged notification"
 IFS=$'\t' read -r ts tok proj kind chans skip extra <<<"$(nlast)"
 [[ "$ts" =~ ^[0-9]+$ && $ts -ge $before && $ts -le $(( $(date +%s) + 1 )) ]] || fail "log epoch: $(nlast)"
-[[ "$tok|$proj|$kind|$chans|$skip|${extra:-}" == "$TOK|sentula|Permission|banner|-|" ]] || fail "log line: $(nlast)"
+[[ "$tok|$proj|$kind|$chans|$skip|${extra:-}" == "$TOK|billing|Permission|banner|-|" ]] || fail "log line: $(nlast)"
 if [[ "$(uname)" == Darwin ]]; then m="$(stat -f %Lp "$ntsv")"; else m="$(stat -c %a "$ntsv")"; fi
 [[ "$m" == 600 ]] || fail "notify.tsv mode $m"
 HERDR_ENV=1 STUB_IDLE=5 AGENTS_OUT="$GHOSTTY" run "Claude Code" "M" "Idle"

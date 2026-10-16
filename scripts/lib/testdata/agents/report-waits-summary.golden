@@ -1,7 +1,7 @@
 agents report · today
 
 TOP INSIGHTS
-  1. Agents waited on you 63 min today (top: sentula 45 min; 10 notifications, 5 banners skipped while you were at the Mac) — allow what you always approve, so they ask less
+  1. Agents waited on you 63 min today (top: billing 45 min; 10 notifications, 5 banners skipped while you were at the Mac) — allow what you always approve, so they ask less
   more: agents report --view runs|waste|trends|agents|tokens|denials|waits
 
 no runs recorded yet (runs.tsv): insights and the runs, waste, trends and agents views start with the first finished run

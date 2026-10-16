@@ -400,16 +400,16 @@ awk -F '\t' -v OFS='\t' -v n="$FAKE_NOW" '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { $
 mkdir -p "$tmp/waits"
 awk -v n="$FAKE_NOW" 'BEGIN {
     OFS = "\t"
-    for (i = 1; i <= 25; i++) print n - i * 60, "sentula", "claude", "blocked", "4100@Wed_Oct_14_08:00:00_2026", 60
-    for (i = 1; i <= 4; i++) print n - i * 300, "sentula", "claude", "done", "4100@Wed_Oct_14_08:00:00_2026", 300
+    for (i = 1; i <= 25; i++) print n - i * 60, "billing", "claude", "blocked", "4100@Wed_Oct_14_08:00:00_2026", 60
+    for (i = 1; i <= 4; i++) print n - i * 300, "billing", "claude", "done", "4100@Wed_Oct_14_08:00:00_2026", 300
     for (i = 1; i <= 9; i++) print n - i * 120, "app/agent-a1", "codex", "blocked", "4200@Wed_Oct_14_09:00:00_2026", 120
     print n - 3 * 86400, "old", "claude", "blocked", "4300@Mon_Oct_12_09:00:00_2026", 300
     print n - 60, "app", "claude", "working", "4400@Wed_Oct_14_09:00:00_2026", 60
 }' > "$tmp/waits/waits.tsv"
 awk -v n="$FAKE_NOW" 'BEGIN {
     OFS = "\t"
-    for (i = 1; i <= 7; i++) print n - i * 200, "4100@Wed_Oct_14_08:00:00_2026", "sentula", "Permission", "herdr", (i <= 5 ? "present" : "-")
-    print n - 90, "4100@Wed_Oct_14_08:00:00_2026", "sentula", "Idle", "herdr,banner", "-"
+    for (i = 1; i <= 7; i++) print n - i * 200, "4100@Wed_Oct_14_08:00:00_2026", "billing", "Permission", "herdr", (i <= 5 ? "present" : "-")
+    print n - 90, "4100@Wed_Oct_14_08:00:00_2026", "billing", "Idle", "herdr,banner", "-"
     print n - 80, "-", "app", "Permission", "tmux", "remote"
     print n - 70, "-", "notes", "-", "banner", "-"
     print n - 2 * 86400, "-", "old", "Idle", "banner", "-"

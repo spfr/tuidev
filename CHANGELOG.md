@@ -7,44 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.11.0] - 2026-10-16
 
-One alert when you're at your desk. When an agent in Herdr needed you, its
-toast and sound were followed by a macOS banner with a sound of its own.
-Now the banner comes only when you might miss the toast.
+Know where every agent stands, and how much plan you have left. The menu
+matches each session to its exact Herdr pane and names it by its task,
+lists finished work beside the questions waiting for you, shows every CLI's
+usage limits, and measures how long agents wait on you. And when you're at
+your desk, an agent that needs you rings once, not twice.
+
+### Added
+
+- **Usage limits for every CLI.** A new Usage section in the menu and a
+  new `agents limits` command show how much of each plan window is used and
+  when it resets: Claude Code's 5-hour and weekly limits, Codex's plan
+  windows, and Antigravity's quotas per model group. A window turns orange
+  at 80% and red at 95%, which also tints the icon. The section also shows
+  today's tokens, denials (with the top reason) and compactions, and a
+  `limit` title token can show the highest share.
+  - Claude Code reports its limits only to its status line, so the shipped
+    settings run `agents statusline`, which records them and prints a
+    compact line (`Opus 5.5 · ctx 42% · 5h 24% · wk 41%`). A status line of
+    your own is kept; set `AGENTS_STATUSLINE_CMD` to run it behind ours.
+  - Codex readings come from its logs, and Antigravity's from
+    `agy -p /quota` (no tokens), at most every 10 minutes and only after
+    you used Antigravity. Grok and
+    Cursor's CLIs don't expose their limits locally.
+- **More CLIs.** Antigravity (`agy`), Grok and Cursor's CLI sessions count
+  in `agents` and the menu, and Grok's tokens join the token report.
+- **How long agents wait on you.** `agents report --view waits` shows how
+  long sessions in Herdr panes waited for your answer (blocked) or sat
+  finished and unseen (done), by project, beside the notifications they
+  sent and the banners skipped. Half an hour or more of waiting becomes an
+  insight the menu can show: "Agents waited on you 47 min today (top:
+  billing 20 min; 12 notifications)". `notify.sh` logs each notification
+  to `notify.tsv` (session, project, kind and channels, never the message).
+  Both files are private, pruned with the history, and off with
+  `AGENTS_HISTORY=0`.
 
 ### Changed
 
+- **Every session in its exact Herdr pane.** An agent started in Herdr
+  carries `HERDR_PANE_ID`, which `agents` reads in one `ps` (or from
+  `/proc` on Linux), so two sessions in one directory no longer swap
+  statuses, and `agents jump` and `peek` go straight to the pane. Rows show
+  Herdr's task title ("Fix the login flow · app · claude · working").
+- **Finished sessions in Needs you.** Sessions Herdr marks done ("finished,
+  to review") follow the blocked ones, with `· N done` in the title. They
+  never tint the icon.
+- **The menu keeps up with Herdr.** It asks Herdr again when its 10-second
+  cache is stale, waiting at most a second, instead of showing what Herdr
+  said a minute ago.
 - **The banner waits until you're away.** Inside Herdr on a Mac,
   `notify.sh` skips the macOS banner while you're at the Mac looking at the
   session's terminal: the screen is unlocked, a key or the mouse moved in
-  the last 2 minutes, and the terminal app that the session's Herdr client
-  runs in is in front. It checks once, when the
-  hook fires, with `ioreg` and `lsappinfo` (about 10 to 20 ms each, no
-  permission prompt, no daemon). A check that fails counts as away, so you
-  get the banner as before. `TUIDEV_NOTIFY_PRESENT_IDLE` sets the idle limit
-  (seconds), and `TUIDEV_NOTIFY_BANNER=always` keeps the old behavior. A
-  detached Herdr session, tmux (whose status-line message is silent and
-  brief) and a plain terminal tab still get the banner.
-- **Notifications say what they are about.** Claude Code's Notification
-  hook passes JSON on stdin, so with `jq` installed, the toast and banner
-  show its message (for example "Claude needs your permission to use
-  Bash") instead of the hook's fixed text.
-- **`make check` follows Herdr upgrades.** With `--pack herdr`, it lists
-  the agent integrations that `herdr integration status` reports as
-  `outdated`, with the `herdr integration install NAME` command for each,
-  and warns while the running server is still on the old binary. Herdr 0.9.5
-  needs both: it no longer installs Codex turn hooks, and until you
-  reinstall, Codex sessions start with a "clamping Interrupt hook timeout"
-  warning.
+  the last 2 minutes, and the terminal app the session's Herdr client runs
+  in is in front. The toast and Herdr's own sound are the one alert. Checks
+  run once, when the hook fires (`ioreg`, `lsappinfo`: no daemon, no
+  permission prompt); one that fails counts as away, so the banner shows as
+  before. `TUIDEV_NOTIFY_PRESENT_IDLE` sets the idle limit and
+  `TUIDEV_NOTIFY_BANNER=always` keeps the old behavior. A detached Herdr
+  session, tmux and a plain terminal tab keep the banner.
+- **Notifications say what they are about.** With `jq` installed, the
+  toast and banner show Claude Code's own message ("Claude needs your
+  permission to use Bash") instead of the hook's fixed text.
+- **Herdr upgrades are followed through.** `make check` and the menu (an
+  hourly background check) name the integrations `herdr integration
+  status` reports as outdated, with the command for each, and a running
+  server older than its client. Herdr 0.9.5 needs both: it no longer
+  installs Codex turn hooks, and until you reinstall, Codex sessions start
+  with a "clamping Interrupt hook timeout" warning.
 - **Herdr 0.9.4 and 0.9.5 in the docs.** Closing the shell that started
   Herdr no longer stops its server (stop it with `herdr server stop` or
   `SIGTERM`, not `SIGHUP`), and a Mac restart keeps your agents' sessions.
   A Ghostty `text:` keybind can send the prefix and a key in one press:
   `keybind = cmd+shift+o=text:\x02o` opens the last notification's pane.
-  The pack's hints mention Codex alongside Claude Code.
-- **Phone pushes are documented as an escalation.** ntfy only fires when
-  nothing on the machine could show the notification. If another service
-  already pushes to your phone when an agent waits, leave `NTFY_URL` unset.
-- **Codex 0.163:** `/daemon` can restart the background server.
+- **Phone pushes are an escalation.** ntfy fires only when nothing on the
+  machine could show the notification. If another service already pushes
+  to your phone when an agent waits, leave `NTFY_URL` unset.
+- MCP servers whose copies are all idle `mcp-lazy` proxies read "4 lazy
+  proxies · server not started", not "4 copies".
+- Codex 0.163: `/daemon` can restart the background server.
 
 ## [3.10.1] - 2026-10-15
 

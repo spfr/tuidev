@@ -385,9 +385,11 @@ check_packs() {
 # binary. Both are warnings with the command that fixes them.
 check_herdr_upgrade() {
     local status outdated fix="" name
+    # A wedged server is what this looks for: never wait on it for long.
+    herdr_bounded() { if command -v timeout >/dev/null 2>&1; then timeout 5 herdr "$@"; else herdr "$@"; fi; }
     # Captured first: under pipefail, a reader that stops early would fail
     # the pipe. An integration's name is its first word ("letta (experimental)").
-    status="$(herdr integration status 2>/dev/null)" || status=""
+    status="$(herdr_bounded integration status 2>/dev/null)" || status=""
     outdated="$(printf '%s\n' "$status" | awk -F: '$2 ~ /^ outdated/ { split($1, w, " "); print w[1] }')"
     if [[ -z "$status" ]]; then
         :   # nothing to judge by
@@ -398,7 +400,7 @@ check_herdr_upgrade() {
         print_warning "herdr integrations outdated: ${outdated//$'\n'/ } (run: $fix)"
         OPT_WARN=$((OPT_WARN + 1))
     fi
-    status="$(herdr status 2>/dev/null)" || status=""
+    status="$(herdr_bounded status 2>/dev/null)" || status=""
     if [[ "$status" == *"server_binary_stale: yes"* ]]; then
         print_warning "herdr server runs an older binary than the client (restart it when its agents are idle: herdr server stop, then herdr)"
         OPT_WARN=$((OPT_WARN + 1))

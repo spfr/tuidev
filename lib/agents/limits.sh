@@ -124,6 +124,7 @@ _agents_limits_prune() {
     local f="$AGENTS_DATA_DIR/limits.tsv"
     [[ -f "$f" ]] || return 0
     (
+        umask 077
         lock="$AGENTS_DATA_DIR/limits.lock"
         _agents_lock "$lock" 20 0.05 || exit 1
         out="$(LC_ALL=C awk -F '\t' -v cut="$1" '$1 ~ /^[0-9]+$/ && $1 + 0 >= cut' "$f")" || { _agents_unlock "$lock"; exit 1; }
@@ -147,6 +148,11 @@ _agents_limits_probe() {
         command -v "$p" >/dev/null 2>&1 || continue
         _agents_stamp_age age "$AGENTS_RUN_DIR/limits.$p.stamp" "$now"
         [[ $age -ge $_AGENTS_LIMITS_EVERY ]] || continue
+        # Only when the CLI was used since its last reading (else the quota
+        # can't have moved): a probe has a cost of its own.
+        if [[ -f "$AGENTS_RUN_DIR/limits.$p.stamp" ]] && declare -F "_agents_limits_used_$p" >/dev/null; then
+            "_agents_limits_used_$p" "$AGENTS_RUN_DIR/limits.$p.stamp" || continue
+        fi
         { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$AGENTS_RUN_DIR/limits.$p.stamp" "$now"; } 2>/dev/null || continue
         rows="$("_agents_limits_probe_$p" "$now" 2>/dev/null)" || continue
         [[ -z "$rows" ]] || _agents_limits_put "$p" "$rows" || true
@@ -162,6 +168,14 @@ _agents_limits_probe() {
 # nothing is used: it is then just now + the window), label: the group's
 # name ("Gemini Models" → Gemini). It runs as "agents-probe-agy" (exec -a),
 # so a refresh that catches it never lists it as a session. Needs jq.
+# _agents_limits_used_agy STAMP — Antigravity was used since STAMP: a
+# conversation of it changed. (Its quota probe writes a log, no conversation.)
+_AGENTS_AGY_CONVERSATIONS="${_AGENTS_AGY_CONVERSATIONS:-$HOME/.gemini/antigravity-cli/conversations}"
+_agents_limits_used_agy() {
+    [[ -d "$_AGENTS_AGY_CONVERSATIONS" ]] || return 1
+    [[ -n "$(find "$_AGENTS_AGY_CONVERSATIONS" -type f -newer "$1" 2>/dev/null | head -1)" ]]
+}
+
 _agents_limits_probe_agy() {
     local bin out
     bin="$(command -v agy)" && command -v jq >/dev/null 2>&1 || return 1

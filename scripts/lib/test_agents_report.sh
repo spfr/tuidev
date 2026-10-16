@@ -283,8 +283,8 @@ wt="$tmp/waits"; mkdir -p "$wt"
 wrow() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' $((FAKE_NOW - $1)) "${@:2}"; }
 nrow() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' $((FAKE_NOW - $1)) "${@:2}"; }
 {
-    for i in $(seq 1 20); do wrow $((i * 60)) sentula claude blocked 41@S 60; done      # 20 min blocked
-    for i in 1 2; do wrow $((i * 300)) sentula claude "done" 41@S 300; done              # 10 min done
+    for i in $(seq 1 20); do wrow $((i * 60)) billing claude blocked 41@S 60; done      # 20 min blocked
+    for i in 1 2; do wrow $((i * 300)) billing claude "done" 41@S 300; done              # 10 min done
     wrow 400 app/agent-a1b2 codex blocked 42@S 300                                     # folds into app
     wrow 500 app codex "done" 43@S 240
     wrow 600 app claude working 44@S 60                                                # not a wait
@@ -293,8 +293,8 @@ nrow() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' $((FAKE_NOW - $1)) "${@:2}"; }
     wrow 700 app claude blocked 46@S x                                                 # no seconds
 } > "$wt/waits.tsv"
 {
-    for i in 1 2 3 4; do nrow $((i * 100)) 41@S sentula Permission herdr present; done
-    nrow 450 41@S sentula Idle herdr,banner -
+    for i in 1 2 3 4; do nrow $((i * 100)) 41@S billing Permission herdr present; done
+    nrow 450 41@S billing Idle herdr,banner -
     nrow 460 - app/agent-a1b2 Permission tmux remote
     nrow 470 - notes - banner -
     nrow $((2 * 86400)) - old Idle banner -
@@ -302,14 +302,14 @@ nrow() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' $((FAKE_NOW - $1)) "${@:2}"; }
 out="$(AGENTS_DATA_DIR="$wt" agents_report --view waits)"
 [[ "$out" == "agents report · waits · last 24h"$'\n\n'"WAITED ON YOU  39 min · blocked 25 min · done, unseen 14 min · 3 sessions"$'\n'"NOTIFICATIONS  7 · Permission 5 · other 1 · Idle 1 · 5 banners skipped (4 while you were at the Mac, 1 for ssh sessions)"* ]] \
     || fail "waits header:"$'\n'"$out"
-row "$out" " sentula 30 min 20 min 10 min 5 4" || fail "waits: sentula:"$'\n'"$out"
+row "$out" " billing 30 min 20 min 10 min 5 4" || fail "waits: billing:"$'\n'"$out"
 row "$out" " app 9 min 5 min 4 min 1 1" || fail "waits: app (a subagent's worktree folded in):"$'\n'"$out"
 row "$out" " notes - - - 1 0" || fail "waits: a project that only notified:"$'\n'"$out"
 [[ "$out" == *"BY AGENT     claude 30 min · codex 9 min"* ]] || fail "waits by agent:"$'\n'"$out"
 [[ "$out" != *old* && "$out" != *working* && "$out" != *garbage* ]] || fail "waits counts rows outside the window, other statuses or bad rows:"$'\n'"$out"
 json="$(AGENTS_DATA_DIR="$wt" agents_report --view waits --json)"
 jqt "$json" '.view == "waits" and .data and .waited_s == 2340 and .blocked_s == 1500 and .done_s == 840 and .sessions == 3 and .notifications == 7 and .banners_skipped == {"present":4,"remote":1}' "waits json totals"
-jqt "$json" '.projects[0] == {"project":"sentula","waited_s":1800,"blocked_s":1200,"done_s":600,"notifications":5,"banners_skipped":4}' "waits json: sentula" '.projects'
+jqt "$json" '.projects[0] == {"project":"billing","waited_s":1800,"blocked_s":1200,"done_s":600,"notifications":5,"banners_skipped":4}' "waits json: billing" '.projects'
 jqt "$json" '.kinds == [{"kind":"Permission","count":5},{"kind":null,"count":1},{"kind":"Idle","count":1}] and [.agents[].agent] == ["claude","codex"]' "waits json kinds and agents" '{kinds, agents}'
 json="$(AGENTS_DATA_DIR="$wt" agents_report --view waits --since 7d --json)"
 jqt "$json" '.waited_s == 2640 and .notifications == 8 and (.projects | map(.project) | index("old") != null)' "waits --since 7d" '{waited_s, notifications}'
@@ -318,12 +318,12 @@ pass "waits: blocked and done minutes, notifications by kind and banners skipped
 out="$(AGENTS_DATA_DIR="$wt" agents_report --since today)"
 [[ "$out" == *"WAITS  39 min waited on you · 7 notifications · 5 banners skipped (4 while you were at the Mac, 1 for ssh sessions)"$'\n'"  by project and kind: agents report --view waits"* ]] \
     || fail "summary: the waits line:"$'\n'"$out"
-[[ "$out" == *"  1. Agents waited on you 39 min today (top: sentula 30 min; 7 notifications, 4 banners skipped while you were at the Mac) — allow what you always approve, so they ask less"* ]] \
+[[ "$out" == *"  1. Agents waited on you 39 min today (top: billing 30 min; 7 notifications, 4 banners skipped while you were at the Mac) — allow what you always approve, so they ask less"* ]] \
     || fail "summary: the waits insight:"$'\n'"$out"
-jqt "$(AGENTS_DATA_DIR="$wt" agents_report --json)" '.waits == {"waited_s":2340,"blocked_s":1500,"done_s":840,"notifications":7,"banners_skipped":{"present":4,"remote":1}} and .insights[0].kind == "waited" and .insights[0].view == "waits" and .insights[0].impact_s == 390 and .insights[0].project == "sentula"' "summary json waits" '{waits, insights}'
+jqt "$(AGENTS_DATA_DIR="$wt" agents_report --json)" '.waits == {"waited_s":2340,"blocked_s":1500,"done_s":840,"notifications":7,"banners_skipped":{"present":4,"remote":1}} and .insights[0].kind == "waited" and .insights[0].view == "waits" and .insights[0].impact_s == 390 and .insights[0].project == "billing"' "summary json waits" '{waits, insights}'
 jqt "$(rep --json)" '.waits == null' "summary json without waits"
 # Under half an hour is not worth a line; mostly done says so.
-mkdir -p "$tmp/w2"; grep -v sentula "$wt/waits.tsv" > "$tmp/w2/waits.tsv"
+mkdir -p "$tmp/w2"; grep -v billing "$wt/waits.tsv" > "$tmp/w2/waits.tsv"
 jqt "$(AGENTS_DATA_DIR="$tmp/w2" agents_report --json)" '.insights == [] and .waits.waited_s == 540' "a wait under 30 min: no insight" '.insights'
 for i in $(seq 1 7); do wrow $((i * 300)) shop codex "done" 50@S 300; done > "$tmp/w2/waits.tsv"
 out="$(AGENTS_DATA_DIR="$tmp/w2" agents_report)"
@@ -331,7 +331,7 @@ out="$(AGENTS_DATA_DIR="$tmp/w2" agents_report)"
     || fail "a mostly-done wait:"$'\n'"$out"
 w3="$tmp/w3"; mkdir -p "$w3"; cp "$wt/waits.tsv" "$wt/notify.tsv" "$w3/"
 AGENTS_DATA_DIR="$w3" agents_insight_write
-[[ "$(AGENTS_DATA_DIR="$w3" _agents_insight_line)" == "insight"$'\t'"waits"$'\t'"Agents waited on you 39 min today (top: sentula 30 min; "* ]] \
+[[ "$(AGENTS_DATA_DIR="$w3" _agents_insight_line)" == "insight"$'\t'"waits"$'\t'"Agents waited on you 39 min today (top: billing 30 min; "* ]] \
     || fail "the menu's insight row for waits: $(AGENTS_DATA_DIR="$w3" _agents_insight_line)"
 pass "waits in the summary (a line, JSON, an insight from 30 min on: advice by blocked or done) and in the menu's insight row"
 
@@ -341,9 +341,9 @@ e2="$tmp/w-empty"; mkdir -p "$e2"
 [[ "$(AGENTS_DATA_DIR="$wt" agents_report --view waits --since 1h --json)" == *'"waited_s":2340,'* ]] || fail "waits --since 1h"
 ( FAKE_NOW=$((FAKE_NOW + 3 * 86400)); [[ "$(AGENTS_DATA_DIR="$wt" agents_report --view waits)" == *$'\n\n'"no waits or notifications in this window" ]] ) || fail "waits with nothing in the window"
 jqt "$(AGENTS_DATA_DIR="$e2" agents_report --view waits --json)" '.data == false and .waited_s == 0 and .projects == []' "waits json without data"
-printf 'hist\tok\t3600\ttest\t1800\ninsight\twaits\tAgents waited on you 47 min today (top: sentula 20 min) — allow what you always approve, so they ask less\n' > "$tmp/tsv"
+printf 'hist\tok\t3600\ttest\t1800\ninsight\twaits\tAgents waited on you 47 min today (top: billing 20 min) — allow what you always approve, so they ask less\n' > "$tmp/tsv"
 line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'sfimage=lightbulb')"
-[[ "$line" == "Agents waited on you 47 min today (top: sentula 20 min) | "*" param4=--view param5=waits param6=--since param7=today "* ]] || fail "menu: a waits insight:"$'\n'"$line"
+[[ "$line" == "Agents waited on you 47 min today (top: billing 20 min) | "*" param4=--view param5=waits param6=--since param7=today "* ]] || fail "menu: a waits insight:"$'\n'"$line"
 pass "waits: no data, history off, nothing in the window; the menu opens a waits insight's view"
 
 echo "All agents report tests passed."

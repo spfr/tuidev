@@ -142,7 +142,12 @@ denials${T}3${T}Production Deploy
 compacts${T}1"
 got="$(_agents_limits_lines)"
 [[ "$got" == "$want" ]] || fail "tsv records:"$'\n'"$got"$'\n'"want:"$'\n'"$want"
-[[ "$(agents_tsv 2>/dev/null | grep -c '^limit	')" == 4 ]] || fail "agents tsv has no limit records"
+# agents tsv reads the process table first (BusyBox ps can't: it stops there).
+if [[ -n "$(agents_snapshot 2>/dev/null)" ]]; then
+    [[ "$(agents_tsv 2>/dev/null | grep -c '^limit	')" == 4 ]] || fail "agents tsv has no limit records"
+else
+    echo "SKIP: ps can't read the process table here (BusyBox? sandbox?): agents tsv's limit records not checked"
+fi
 [[ -z "$(AGENTS_HISTORY=0 _agents_limits_lines)" ]] || fail "records with history off"
 pass "agents tsv: a limit record per window not reset yet (stale ones and day-old unknown resets hidden), today's denials with the top reason, compactions"
 
@@ -180,15 +185,21 @@ $NOW${T}agy:3p${T}0${T}10080${T}0${T}Claude and GPT
 $NOW${T}agy:3p${T}50${T}300${T}1792185836${T}Claude and GPT
 $NOW${T}agy:gemini-argon-wtu${T}2${T}10080${T}1792738849${T}Gemini 4 Argon"
     [[ "$(cat "$L")" == "$want" ]] || fail "agy rows:"$'\n'"$(cat "$L")"$'\n'"want:"$'\n'"$want"
-    # Within 10 minutes it doesn't run again; after, it does.
-    ( export PATH="$tmp/bin:$PATH" AGENTS_TEST_PROBES=1; _agents_limits_probe "$((NOW + 300))"; _agents_limits_probe "$((NOW + 700))" )
+    # Within 10 minutes it doesn't run again; after, only once Antigravity
+    # was used (a conversation changed) since the last reading.
+    conv="$tmp/agy-conversations"; mkdir -p "$conv"
+    ( export PATH="$tmp/bin:$PATH" AGENTS_TEST_PROBES=1 _AGENTS_AGY_CONVERSATIONS="$conv"; _agents_limits_probe "$((NOW + 300))"; _agents_limits_probe "$((NOW + 700))" )
+    [[ "$(wc -l < "$tmp/agy.runs" | tr -d ' ')" == 1 ]] || fail "the probe ran with Antigravity unused: $(wc -l < "$tmp/agy.runs") runs"
+    sleep 1; : > "$conv/c.db"
+    ( export PATH="$tmp/bin:$PATH" AGENTS_TEST_PROBES=1 _AGENTS_AGY_CONVERSATIONS="$conv"; _agents_limits_probe "$((NOW + 700))" )
     [[ "$(wc -l < "$tmp/agy.runs" | tr -d ' ')" == 2 ]] || fail "the probe's throttle: $(wc -l < "$tmp/agy.runs") runs"
     # A failing or hanging agy writes nothing and never holds up the sample.
     printf '#!/bin/bash\nsleep 30\n' > "$tmp/bin/agy"
     before="$(cat "$L")"; t0=$(date +%s)
-    ( export PATH="$tmp/bin:$PATH" AGENTS_TEST_PROBES=1 _AGENTS_LIMITS_TIMEOUT=1; _agents_limits_probe "$((NOW + 2000))" )
+    sleep 1; : > "$conv/c.db"
+    ( export PATH="$tmp/bin:$PATH" AGENTS_TEST_PROBES=1 _AGENTS_LIMITS_TIMEOUT=1 _AGENTS_AGY_CONVERSATIONS="$conv"; _agents_limits_probe "$((NOW + 2000))" )
     [[ $(( $(date +%s) - t0 )) -lt 10 && "$(cat "$L")" == "$before" ]] || fail "a hanging agy"
-    pass "agy -p /quota: a row per bucket (agy:GROUP, used %, 5h or weekly, reset epoch from Z or an offset, none at 0% used), every 10 minutes, bounded"
+    pass "agy -p /quota: a row per bucket (agy:GROUP, used %, 5h or weekly, reset epoch from Z or an offset, none at 0% used), at most every 10 minutes and only after Antigravity was used, bounded"
 else
     echo "SKIP: no jq: the Antigravity probe needs it"
 fi
