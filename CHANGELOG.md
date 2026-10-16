@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.0] - 2026-10-16
+
+Upgrade Herdr without stopping a single agent, and read the menu at a glance.
+Herdr now installs as its own verified release binary and upgrades live with
+a handoff, so running agents keep their context. The menu shows one line per
+CLI for usage, alerts only for the pane you aren't looking at, and keeps Herdr
+upkeep out of the way. Waits are measured for every Claude session, in Herdr
+or not, from the moment the dialog appears, and tools that run agents get a
+key to match them.
+
+### Added
+
+- **A join key for fleet tools.** `agents json` gives each agent `herdr_pane` and `session_id`, and `agents tsv` adds one `ident PID PANE SESSION` record per agent, so tools that run agents can match their own records to ours. The session id comes from Claude Code's own record, Herdr, or a resume on the command line.
+- **Waits outside Herdr.** `agents report --view waits` now counts Claude Code sessions in tmux or a plain tab too: new shipped hooks time each permission and idle prompt until your next prompt, turn end or the approved tool's start (its `duration_ms` taken off, so a long `make test` you approved doesn't count as waiting). A permission wait starts the moment the dialog shows (a `PermissionRequest` hook that prints nothing, so it never answers the dialog), not when the notification comes about six seconds later; calls approved without you count nothing. The hooks start `agents` only when a wait could open or end for that session. A session Herdr shows is counted once, by Herdr.
+- **Usage limits per Claude account.** A second `CLAUDE_CONFIG_DIR` (work and personal) no longer overwrites the first: each account's 5h and weekly limits are kept under its directory's name (`.claude-work` is `work`), and `agents limits`, `--json` and the menu list them side by side, the plain `~/.claude` account first. A directory named just `claude` (`/work/.claude`) takes its parent's name and a short checksum of its path (`work-87c58`), so it never shares a row with `.claude-work`. Existing `limits.tsv` files keep working; their old shared reading leaves the menu once an account's own reading of that window supersedes it.
+- **`make check` watches Herdr's logs.** Herdr doesn't rotate them and its server keeps its log open, so the health check warns once the server or client log passes 50 MB (`HERDR_LOG_WARN_MB`) and gives the command that trims them, to run the next time the server is stopped anyway (never a reason to restart it).
+
+### Changed
+
+- **A calmer, denser menu.** Usage is one line per CLI with its windows side by side (`Claude: 5h 57% · wk 27%`); each Claude account gets its own line, Antigravity's models collapse to each window's highest, and a gauge turns orange at 80% and red at 95%, with the reset time inline only then. Resets, per-model rows and the reading's age move to the line's submenu. Today's tokens, denials and compactions share one `Today:` line, and CPU shows as whole percents.
+- **Herdr upkeep is no longer an alarm.** A newer Herdr waiting for the next server restart leaves Needs you, the icon and the title; a gray Maintenance line names the versions and offers the restart commands only while no Herdr session is working.
+- **Alerts know which Herdr pane you're looking at.** Inside Herdr the banner is skipped only when Herdr's focused pane is the agent's own; a session in another pane or tab still alerts you. When Herdr can't answer, the banner shows.
+- **Herdr installs directly and upgrades live.** The herdr pack installs Herdr's release binary in `~/.local/bin` (macOS and Linux), checked against the sha256 its GitHub release lists (`scripts/lib/release.sh`), instead of Homebrew's, which refuses to update itself. `update.sh --packages` runs `herdr update --handoff` while a server runs, so a new release reaches the server without stopping its panes, and never upgrades Herdr through brew; a Homebrew herdr it switches to the release binary, retrying on every run until that succeeds. It skips the handoff, and says what to change, when launchd's `KeepAlive` or systemd's default `KillMode` supervises the server, since either would fight the old server's exit. `make check` no longer advises a restart: a stale server is handed over or picks up the new binary at its next start, and large logs are trimmed the next time it is down anyway. `uninstall.sh` removes the binary only in an optional step of its own, and never while a Herdr server runs from it.
+- **Migration from Homebrew's Herdr** (`202610161843_herdr_direct_install`): on machines with the herdr pack it installs the release binary, then prints what is left: a LaunchAgent or systemd unit that names Homebrew's binary or would upset a handoff (the file is yours, so it is never edited), and `brew uninstall herdr` once no server runs Homebrew's binary. It never stops a server or uninstalls anything.
+
+### Fixed
+
+- **Herdr status goes to the right session when two CLIs share a pane.** The agent Herdr sees in a pane now matches only the session of its own kind, so a `codex` started beside `claude` never takes its status. A kind agents doesn't know, or one of your own `AGENTS_NAMES`, still matches the pane's only session.
+- **Herdr notices clear themselves.** A stale-server or outdated-integration item is rechecked every minute, and at once after the server restarts, instead of lingering up to an hour.
+- **The Herdr screenshot renders with podman.** `make screenshots` and its Herdr demo fleet run on Apple `container` or podman (`TUIDEV_CONTAINER_RUNTIME=podman`), so a Mac whose Apple container VMs have no network can still render it.
+- **Tests no longer flake on a busy machine.** The agents hook and needs tests wait for the outcome they check, with generous ceilings, instead of a tight wall-clock bound.
+
 ## [3.11.0] - 2026-10-16
 
 Know where every agent stands, and how much plan you have left. The menu
