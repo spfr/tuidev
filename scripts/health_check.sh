@@ -385,9 +385,10 @@ check_packs() {
 # differently (`herdr integration status` says `outdated`, e.g. 0.9.5 stopped
 # installing Codex turn hooks), and a running server still on the old
 # binary. Both are warnings with the command that fixes them. A stale server
-# never needs a restart: `herdr update --handoff` moves it live, or it picks
-# up the new binary whenever it next starts. Homebrew's herdr can't do the
-# former, so it points at the commands that switch it to the release binary.
+# never needs a restart: `herdr update --handoff` moves it live (a systemd
+# unit's own reload, for a server systemd runs), or it picks up the new
+# binary whenever it next starts. Homebrew's herdr can't do the former, so
+# it points at the commands that switch it to the release binary.
 check_herdr_upgrade() {
     local status outdated fix="" name kind hint pid why
     # A wedged server is what this looks for: never wait on it for long.
@@ -415,10 +416,14 @@ check_herdr_upgrade() {
     if [[ "$status" == *"server_binary_stale: yes"* ]]; then
         hint="it picks up the new binary whenever it next starts"
         if [[ "$kind" == direct ]]; then
-            hint="herdr update --handoff, from a shell outside Herdr, moves it live; else $hint"
+            why=""
             for pid in $(herdr_server_pids); do
-                if why="$(herdr_handoff_blocker "$pid")"; then hint="$hint. Before a handoff: $why"; break; fi
+                why="$(herdr_handoff_blocker "$pid")" && break
+                why=""
             done
+            if [[ -n "$why" ]]; then hint="no herdr update --handoff: $why; else $hint"
+            else hint="herdr update --handoff, from a shell outside Herdr, moves it live; else $hint"
+            fi
         fi
         print_warning "herdr server runs an older binary than the client ($hint)"
         OPT_WARN=$((OPT_WARN + 1))

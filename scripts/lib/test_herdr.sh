@@ -66,8 +66,18 @@ case "$flat" in
 esac
 [[ "$3" == xml1 ]] && v="<plist>$v</plist>"
 printf "%s\n" "$v"'
+# systemctl --user: list-units prints STUB_UNITS; `show -p PROP --value UNIT`
+# reads $tmp/units/UNIT/PROP (else systemd's default); `reload UNIT` exits
+# with $tmp/units/UNIT/reload_rc (else 0). STUB_NO_SYSTEMD: no user manager.
 # shellcheck disable=SC2016
-stub systemctl 'case "$4" in KillMode) echo "${STUB_KILLMODE:-control-group}" ;; Restart) echo on-failure ;; esac'
+stub systemctl '[[ -n "${STUB_NO_SYSTEMD:-}" ]] && { echo "Failed to connect to bus" >&2; exit 1; }
+u="'"$tmp"'/units"
+case "$2" in
+    list-units) [[ -n "${STUB_UNITS:-}" ]] && printf "%s\n" "$STUB_UNITS" ;;
+    show) if [[ -f "$u/$6/$4" ]]; then cat "$u/$6/$4"
+          else case "$4" in KillMode) echo control-group ;; Restart) echo on-failure ;; NotifyAccess) echo none ;; MainPID) echo 0 ;; esac; fi ;;
+    reload) exit "$(cat "$u/$3/reload_rc" 2>/dev/null || echo 0)" ;;
+esac'
 export PATH="$tmp/bin:/usr/bin:/bin"
 
 printf 'herdr 0.9.6 release binary\n' > "$tmp/fix/asset"
@@ -77,7 +87,8 @@ release_fixture() {  # release_fixture DIGEST [URL]
     cat > "$tmp/fix/release.json" <<EOF
 {"tag_name": "v0.9.6", "assets": [
   {"name": "herdr-linux-x86_64", "digest": "sha256:$(printf '0%.0s' {1..64})", "browser_download_url": "https://github.com/herdrdev/herdr/releases/download/v0.9.6/herdr-linux-x86_64"},
-  {"name": "herdr-macos-aarch64", "digest": $1, "browser_download_url": "$url"}
+  {"name": "herdr-macos-aarch64", "digest": $1, "browser_download_url": "$url"},
+  {"name": "herdr-linux-aarch64", "digest": $1, "browser_download_url": "https://github.com/herdrdev/herdr/releases/download/v0.9.6/herdr-linux-aarch64"}
 ]}
 EOF
 }
@@ -271,15 +282,124 @@ done
 printf '%s\n' "$safe_plist" > "$plist"
 pass "a launchd KeepAlive dictionary is safe only with SuccessfulExit false; false or no KeepAlive is; the note agrees"
 
-# systemd: the default KillMode would take the panes down with the old server.
-mkdir -p "$tmp/proc/700"; export _HERDR_PROC="$tmp/proc"
+# --- systemd user units: the unit's reload hands over ------------------------
+# Any systemd unit blocks `herdr update --handoff`: KillMode=control-group (the
+# default) stops the new server and its panes once the old one exits, and
+# KillMode=process leaves the new server unsupervised.
+mkdir -p "$tmp/proc/700" "$tmp/units"; export _HERDR_PROC="$tmp/proc"
 printf '0::/user.slice/user-1000.slice/user@1000.service/app.slice/herdr.service\n' > "$tmp/proc/700/cgroup"
+unit_set() {  # unit_set UNIT PROP VALUE: what `systemctl show -p PROP` reports
+    mkdir -p "$tmp/units/$1"; printf '%s\n' "$3" > "$tmp/units/$1/$2"
+}
+handoff_reload='{ path=/home/NAME/.local/bin/herdr-handoff ; argv[]=/home/NAME/.local/bin/herdr-handoff herdr.service ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }'
 why="$(STUB_OS=Linux herdr_handoff_blocker 700)" || fail "control-group KillMode should block"
-[[ "$why" == *"herdr.service"*"KillMode=process"* ]] || fail "systemd message: $why"
-STUB_OS=Linux STUB_KILLMODE=process herdr_handoff_blocker 700 >/dev/null && fail "KillMode=process is safe"
+[[ "$why" == *"herdr.service"*"ExecReload"*"herdr-handoff"*"NotifyAccess=exec"* && "$why" != *"add KillMode=process"* ]] \
+    || fail "systemd message: $why"
+unit_set herdr.service KillMode process
+STUB_OS=Linux herdr_handoff_blocker 700 >/dev/null || fail "KillMode=process must block too (systemd loses the new server)"
+unit_set herdr.service ExecReload "$handoff_reload"; unit_set herdr.service NotifyAccess all
+why="$(STUB_OS=Linux herdr_handoff_blocker 700)" || fail "a unit with a handoff reload should block herdr update --handoff"
+[[ "$why" == *"systemctl --user reload herdr.service"* ]] || fail "handoff-reload message: $why"
 printf '0::/user.slice/user-1000.slice/session-3.scope\n' > "$tmp/proc/700/cgroup"
 STUB_OS=Linux herdr_handoff_blocker 700 >/dev/null && fail "a server in a login session is not supervised"
-pass "a systemd unit blocks the handoff unless KillMode=process; a login-session server doesn't"
+pass "every systemd unit blocks herdr update --handoff (KillMode=process too); a login-session server doesn't"
+
+# What counts as a reload that hands over: a program named herdr-handoff, with
+# NotifyAccess=all so systemd takes the new MAINPID.
+# shellcheck disable=SC2016  # literal $ for the stub or the unit
+for r in '{ path=/bin/kill ; argv[]=/bin/kill -HUP $MAINPID ; }' '{ path=/opt/herdr-handoff-old ; argv[]=/opt/herdr-handoff-old ; }' ''; do
+    unit_set x.service ExecReload "$r"; unit_set x.service NotifyAccess all
+    [[ "$(_herdr_unit_reload x.service)" == none ]] || fail "ExecReload '$r' is no handoff reload"
+done
+unit_set x.service ExecReload '{ path=/usr/local/bin/herdr-handoff ; argv[]=herdr-handoff %n ; }'
+[[ "$(_herdr_unit_reload x.service)" == handoff ]] || fail "herdr-handoff with NotifyAccess=all"
+unit_set x.service NotifyAccess exec
+[[ "$(_herdr_unit_reload x.service)" == handoff ]] || fail "herdr-handoff with NotifyAccess=exec (the reload process itself notifies)"
+unit_set x.service NotifyAccess main
+[[ "$(_herdr_unit_reload x.service)" == nonotify ]] || fail "herdr-handoff without NotifyAccess=all"
+pass "a handoff reload is an ExecReload running herdr-handoff, with NotifyAccess=exec or all"
+
+# The upgrade: the release binary first (no herdr update at all), then a
+# reload of each unit that hands over; the others are skipped with a hint.
+herdr_bin() {  # herdr_bin VERSION: the direct binary, logging every other call
+# shellcheck disable=SC2016  # literal $ for the stub or the unit
+    printf '#!/bin/bash\n[[ "$1" == --version ]] && { echo "herdr %s"; exit 0; }\necho "herdr $*" >> "%s"\n' "$1" "$log" > "$DEST"
+    chmod +x "$DEST"
+}
+printf '0::/user.slice/user-1000.slice/user@1000.service/app.slice/herdr.service\n' > "$tmp/proc/700/cgroup"
+units=$'herdr.service loaded active running Herdr agent runtime\nherdr-session@work.service loaded active running Herdr session work'
+sysd() { STUB_OS=Linux STUB_UNITS="$units" STUB_PS="$server
+  702 herdr --session solo server" "$@"; }
+release_fixture "\"sha256:$good\""
+herdr_bin 0.9.5
+: > "$log"; out="$(sysd herdr_self_update 2>&1)" || fail "systemd update: $out"
+cmp -s "$DEST" "$tmp/fix/asset" || fail "the release binary was not put in place: $out"
+grep -qx 'systemctl --user reload herdr.service' "$log" || fail "herdr.service not reloaded: $(cat "$log")"
+grep -q 'reload herdr-session@work' "$log" && fail "a unit without a handoff reload was reloaded"
+grep -q '^herdr update' "$log" && fail "ran herdr update on a systemd host: $(cat "$log")"
+[[ "$(grep -c 'reload herdr.service' "$log")" == 1 ]] || fail "herdr.service (listed and in a cgroup) reloaded twice"
+[[ "$out" == *"herdr.service handed over"* ]] || fail "no success line: $out"
+[[ "$out" == *"herdr-session@work.service keeps the old binary"*"ExecReload"*"herdr-handoff"*"MAINPID"* ]] || fail "no hint for the unit without a reload: $out"
+[[ "$out" == *"server 702 runs outside systemd"* ]] || fail "no note for the server outside systemd: $out"
+pass "systemd: release binary installed, the handoff unit reloaded, the other skipped with a hint, never herdr update"
+
+# A failed reload warns with the journal command and goes on to the next unit.
+unit_set herdr-session@work.service ExecReload "$handoff_reload"; unit_set herdr-session@work.service NotifyAccess all
+unit_set herdr.service reload_rc 1
+herdr_bin 0.9.5
+: > "$log"; out="$(sysd herdr_self_update 2>&1)" || fail "a failed reload aborted: $out"
+grep -qx 'systemctl --user reload herdr-session@work.service' "$log" || fail "stopped after the failed reload: $(cat "$log")"
+[[ "$out" == *"reload herdr.service failed (status 1)"*"journalctl --user -u herdr.service"* ]] || fail "failed-reload warning: $out"
+[[ "$out" == *"herdr-session@work.service handed over"* ]] || fail "second unit: $out"
+grep -q '^herdr update' "$log" && fail "fell back to herdr update after a failed reload"
+rm -f "$tmp/units/herdr.service/reload_rc"
+pass "systemd: a failed reload warns (journalctl hint) and the next unit still reloads"
+
+# Up to date: nothing downloaded, nothing reloaded, unless a unit's server
+# still runs a replaced binary (an earlier reload failed).
+herdr_bin 0.9.6
+: > "$log"; out="$(sysd herdr_self_update 2>&1)"
+grep -q 'curl .*releases/download' "$log" && fail "downloaded the release already installed"
+grep -q 'reload' "$log" && fail "reloaded with nothing new: $(cat "$log")"
+unit_set herdr.service MainPID 700; ln -sfn "$DEST (deleted)" "$tmp/proc/700/exe"
+: > "$log"; out="$(sysd herdr_self_update 2>&1)"
+grep -qx 'systemctl --user reload herdr.service' "$log" && ! grep -q 'reload herdr-session' "$log" || fail "stale server not reloaded alone: $(cat "$log")"
+rm -f "$tmp/proc/700/exe"
+pass "systemd: up to date means no download and no reload, except for a server on a replaced binary"
+
+# NotifyAccess missing: not reloaded. Inside a pane, or a dry run: no change.
+unit_set herdr.service NotifyAccess main; herdr_bin 0.9.5
+: > "$log"; out="$(sysd herdr_self_update 2>&1)"
+grep -q 'reload herdr.service' "$log" && fail "reloaded without NotifyAccess=all"
+[[ "$out" == *"NotifyAccess=exec"* ]] || fail "no NotifyAccess warning: $out"
+unit_set herdr.service NotifyAccess all; herdr_bin 0.9.5
+: > "$log"; out="$(HERDR_ENV=1 sysd herdr_self_update 2>&1)"
+grep -q 'reload\|^herdr\|^curl' "$log" && fail "acted inside a Herdr pane: $(cat "$log")"
+[[ "$out" == *"update.sh --packages from a plain shell"* ]] || fail "pane message: $out"
+: > "$log"; out="$(DRY_RUN=true sysd herdr_self_update 2>&1)"
+[[ "$out" == *"[DRY RUN] systemctl --user reload herdr.service"* && "$out" != *"$DEST update"* ]] || fail "dry run: $out"
+grep -q 'reload\|^herdr update\|^curl' "$log" && fail "dry run changed something: $(cat "$log")"
+pass "systemd: no reload without NotifyAccess=all, nothing inside a pane, a dry run only prints"
+
+# No systemd (no units, or no user manager): herdr update --handoff as before.
+printf '0::/user.slice/user-1000.slice/session-3.scope\n' > "$tmp/proc/700/cgroup"
+: > "$log"; STUB_OS=Linux STUB_PS="$server" herdr_self_update >/dev/null 2>&1
+grep -qx 'herdr update --handoff' "$log" || fail "no units: $(cat "$log")"
+: > "$log"; STUB_NO_SYSTEMD=1 STUB_OS=Linux STUB_PS="$server" herdr_self_update >/dev/null 2>&1
+grep -qx 'herdr update --handoff' "$log" && ! grep -q 'reload' "$log" || fail "no user manager: $(cat "$log")"
+pass "no systemd units: herdr update --handoff as before"
+
+# The service note: a unit file without a handoff reload gets the hint; one
+# with it in a drop-in doesn't, and neither is told to add KillMode=process.
+svc="$HOME/.config/systemd/user/herdr.service"; mkdir -p "$(dirname "$svc")"
+# shellcheck disable=SC2016  # literal $ for the stub or the unit
+printf '[Service]\nExecStart=/bin/bash -lc '"'"'exec "$HOME/.local/bin/herdr" server'"'"'\nRestart=on-failure\n' > "$svc"
+out="$(herdr_service_note "$svc" 2>&1)"
+[[ "$out" == *"never herdr update --handoff"*"herdr-handoff"* && "$out" != *KillMode* ]] || fail "unit note: $out"
+mkdir -p "$svc.d"; printf '[Service]\nNotifyAccess=all\nExecReload=%%h/.local/bin/herdr-handoff %%n\n' > "$svc.d/handoff.conf"
+[[ "$(herdr_service_note "$svc" 2>&1)" != *"herdr-handoff"* ]] || fail "a note despite the handoff drop-in"
+rm -rf "$HOME/.config/systemd"
+pass "herdr_service_note: hint for a unit without a handoff reload (drop-ins read), never KillMode=process"
 
 # --- the migration ----------------------------------------------------------
 run_migration() { HOMEBREW_PREFIX="$tmp/brew" STUB_PS="$server" bash "$MIGRATION" 2>&1; }
@@ -320,6 +440,17 @@ chmod +x "$DEST"
 grep -qx 'herdr update --handoff' "$log" || fail "--packages did not hand off: $(cat "$log") $out"
 grep -q '^brew' "$log" && fail "--packages ran brew"
 pass "update.sh: --check reports the release binary, --packages runs herdr update --handoff"
+
+# On a host whose server a systemd unit runs: --check says so; --packages
+# installs the release binary and reloads, never herdr update.
+printf '0::/user.slice/user-1000.slice/user@1000.service/app.slice/herdr.service\n' > "$tmp/proc/700/cgroup"
+sed -i.bak 's/0\.9\.6/0.9.5/' "$DEST" && rm -f "$DEST.bak"
+: > "$log"; out="$(STUB_PS="$server" STUB_OS=Linux bash "$LIB_DIR/../update.sh" --check < /dev/null 2>&1)" || fail "update --check (systemd): $out"
+[[ "$out" == *"systemctl --user reload"* ]] && ! grep -q 'reload\|^herdr update' "$log" || fail "--check (systemd): $out"
+: > "$log"; out="$(STUB_PS="$server" STUB_OS=Linux bash "$LIB_DIR/../update.sh" --packages --yes < /dev/null 2>&1)" || fail "update --packages (systemd): $out"
+grep -qx 'systemctl --user reload herdr.service' "$log" && ! grep -q '^herdr update' "$log" || fail "--packages (systemd): $(cat "$log") $out"
+printf '0::/user.slice/user-1000.slice/session-3.scope\n' > "$tmp/proc/700/cgroup"
+pass "update.sh on a systemd host: --check names the reload, --packages installs and reloads, never herdr update"
 
 # A Homebrew herdr: --check names the switch, --packages makes it (retryable).
 mkdir -p "$keg"; printf 'brew herdr\n' > "$keg/herdr"; chmod +x "$keg/herdr"
@@ -370,6 +501,19 @@ out="$(cd "$tmp/hc/cwd" && OPT_WARN=0 PATH="$tmp/hc/bin:$PATH" HERDR_CONFIG_DIR=
 [[ "$out" == *"herdr integrations outdated: claude pi (run: herdr integration install claude; herdr integration install pi)"* \
     && "$out" != *"\$("* && "$out" != *GLOBBED* ]] || fail "outdated integration names: $out"
 pass "check_herdr_upgrade: only plain integration names reach the suggested command"
+
+# A stale server a systemd unit runs: the hint is the unit's reload, not
+# herdr update --handoff.
+# shellcheck disable=SC2016  # literal $ for the stub or the unit
+printf '#!/bin/bash\n[[ "$1" == status ]] && echo "server_binary_stale: yes"\nexit 0\n' > "$tmp/hc/bin/herdr"
+printf '0::/user.slice/user-1000.slice/user@1000.service/app.slice/herdr.service\n' > "$tmp/proc/700/cgroup"
+out="$(OPT_WARN=0 STUB_OS=Linux STUB_PS="$server" PATH="$tmp/hc/bin:$PATH" HERDR_CONFIG_DIR="$tmp/hc" check_herdr_upgrade 2>&1)"
+[[ "$out" == *"no herdr update --handoff: the server is systemd unit herdr.service, which hands it over itself: systemctl --user reload herdr.service"* ]] \
+    || fail "stale server under systemd: $out"
+printf '0::/user.slice/user-1000.slice/session-3.scope\n' > "$tmp/proc/700/cgroup"
+out="$(OPT_WARN=0 STUB_OS=Linux STUB_PS="$server" PATH="$tmp/hc/bin:$PATH" HERDR_CONFIG_DIR="$tmp/hc" check_herdr_upgrade 2>&1)"
+[[ "$out" == *"herdr update --handoff, from a shell outside Herdr, moves it live"* ]] || fail "stale server outside systemd: $out"
+pass "check_herdr_upgrade: a stale server systemd runs points at the unit's reload, others at herdr update --handoff"
 
 # --- uninstall.sh -----------------------------------------------------------
 # The binary is a tool: never removed in the helpers step, only when asked,

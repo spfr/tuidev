@@ -19,9 +19,12 @@
 # exits. A supervisor that watches the old process reacts to that exit:
 # launchd's KeepAlive starts `herdr server` again (it fails, "already
 # running", every 10 s), and a systemd unit with the default KillMode stops
-# every process left in it, the new server and the panes included. So an
-# automatic handoff happens only when no such supervisor runs the server
-# (herdr_handoff_blocker).
+# every process left in it, the new server and the panes included. (With
+# KillMode=process systemd keeps the panes but loses the server: it runs on,
+# unsupervised, in the cgroup of a unit systemd thinks has stopped.) So
+# `herdr update --handoff` runs only when no such supervisor runs the server
+# (herdr_handoff_blocker). A systemd user unit hands its server over itself,
+# through its own reload (herdr_systemd_update).
 #
 # Exposes:
 #   herdr_direct_path        where the release binary lives
@@ -33,8 +36,10 @@
 #   herdr_server_pids        running `herdr server` processes
 #   herdr_server_on_brew     a running server uses Homebrew's binary (or can't tell)
 #   herdr_server_uses P      a running server uses binary P (or can't tell)
-#   herdr_handoff_blocker P  why a handoff of server P is unsafe (status 0), or status 1
-#   herdr_self_update        herdr update, with --handoff while a server runs
+#   herdr_handoff_blocker P  why `herdr update --handoff` of server P is unsafe (status 0), or status 1
+#   herdr_systemd_units      the running systemd user units that run a herdr server
+#   herdr_systemd_update U   the release binary, then a reload of each unit that hands over
+#   herdr_self_update        either of: herdr update (--handoff while a server runs), or the above
 #   herdr_service_files      the user's LaunchAgents / systemd units that run herdr server
 #   herdr_service_note F     what to change in one of them
 #   herdr_path_note          when PATH doesn't find the release binary first
@@ -54,6 +59,8 @@ _TUIDEV_HERDR_LOADED=1
 . "$(dirname "${BASH_SOURCE[0]}")/release.sh"
 
 HERDR_REPO="herdrdev/herdr"
+# What a systemd unit needs before its server can be upgraded live.
+HERDR_RELOAD_HINT="for live upgrades give the unit an ExecReload that runs a herdr-handoff wrapper, which hands the panes to a new server and reports it with systemd-notify MAINPID= (NotifyAccess=exec), see docs/agent-workflows.md (Herdr, practice 5)"
 : "${_HERDR_PROC:=/proc}"   # tests point it at a fixture
 # shellcheck disable=SC2034  # read by the herdr pack
 HERDR_INSTALLED_NOW=false   # set by herdr_install_direct
@@ -236,7 +243,7 @@ _herdr_launchd_safe() {
 }
 
 herdr_handoff_blocker() {
-    local pid="$1" label plist unit kill restart
+    local pid="$1" label plist unit
     if is_macos; then
         label="$(launchctl list 2>/dev/null | awk -v p="$pid" '$1 == p { print $3; exit }')"
         [[ -n "$label" ]] || return 1
@@ -245,12 +252,129 @@ herdr_handoff_blocker() {
         echo "the server is launchd job $label, which restarts it once the old server exits; in ${plist/#"$HOME"/\~} set KeepAlive to {SuccessfulExit: false} and AbandonProcessGroup to true (launchd reads it at your next login)"
         return 0
     fi
-    unit="$(awk -F/ '{ print $NF }' "$_HERDR_PROC/$pid/cgroup" 2>/dev/null | grep '\.service$' | grep -v '^user@' | head -n 1)"
+    # Every systemd unit blocks: whatever its KillMode, systemd keeps
+    # watching the old server, which exits.
+    unit="$(_herdr_server_unit "$pid")"
     [[ -n "$unit" ]] || return 1
-    kill="$(systemctl --user show -p KillMode --value "$unit" 2>/dev/null)" || kill=""
-    restart="$(systemctl --user show -p Restart --value "$unit" 2>/dev/null)" || restart=""
-    case "$kill" in process|none) [[ "$restart" != always ]] && return 1 ;; esac
-    echo "the server is systemd unit $unit, which stops every process left in it (panes included) once the old server exits; add KillMode=process to it (Restart=on-failure, not always), then systemctl --user daemon-reload"
+    if [[ "$(_herdr_unit_reload "$unit")" == handoff ]]; then
+        echo "the server is systemd unit $unit, which hands it over itself: systemctl --user reload $unit (update.sh --packages runs it)"
+    else
+        echo "the server is systemd unit $unit, which would stop the new server and its panes once the old one exits (or, with KillMode=process, lose track of it); $HERDR_RELOAD_HINT"
+    fi
+    return 0
+}
+
+# The systemd unit a server runs in, read from its cgroup; empty when it runs
+# in a login session (session-N.scope) or /proc can't say.
+_herdr_server_unit() {
+    awk -F/ '$NF ~ /\.service$/ && $NF !~ /^user@/ { print $NF; exit }' "$_HERDR_PROC/$1/cgroup" 2>/dev/null || true
+}
+
+# _herdr_unit_reload UNIT — handoff: its ExecReload runs a program named
+# herdr-handoff, and NotifyAccess=exec or all lets that wrapper's
+# systemd-notify (run by the reload itself) name the new server as the unit's
+# main process (with main or none systemd ignores the message, keeps watching
+# the old server, and stops the new one with it). nonotify: that wrapper
+# without NotifyAccess=exec or all. none: no such reload. The
+# program's name is the contract: a reload can't otherwise be told to hand
+# over (an ExecReload that sends a signal looks just the same).
+_herdr_unit_reload() {
+    local reload notify re='(^|[/[:space:]=])herdr-handoff([[:space:];]|$)'
+    reload="$(systemctl --user show -p ExecReload --value "$1" 2>/dev/null)" || reload=""
+    if ! [[ "$reload" =~ $re ]]; then echo none; return 0; fi
+    notify="$(systemctl --user show -p NotifyAccess --value "$1" 2>/dev/null)" || notify=""
+    case "$notify" in exec|all) echo handoff ;; *) echo nonotify ;; esac
+}
+
+# herdr.service and herdr-session@NAME.service, plus any other unit a running
+# server's cgroup names; one per line. Nothing on macOS or without systemctl.
+herdr_systemd_units() {
+    local pid
+    is_macos && return 0
+    command_exists systemctl || return 0
+    {
+        systemctl --user list-units --plain --no-legend --state=running \
+            herdr.service 'herdr-session@*.service' 2>/dev/null | awk '{ print $1 }'
+        for pid in $(herdr_server_pids); do _herdr_server_unit "$pid"; done
+    } | awk 'NF && !seen[$0]++'
+}
+
+# _herdr_unit_stale UNIT — its main process runs a binary that has since been
+# replaced (/proc shows it "(deleted)"): an earlier install whose reload
+# failed or was skipped. Status 1 otherwise, or when /proc can't say.
+_herdr_unit_stale() {
+    local pid exe
+    pid="$(systemctl --user show -p MainPID --value "$1" 2>/dev/null)" || return 1
+    [[ "$pid" =~ ^[0-9]+$ && "$pid" != 0 ]] || return 1
+    exe="$(readlink "$_HERDR_PROC/$pid/exe" 2>/dev/null)" || return 1
+    [[ "$exe" == *" (deleted)" ]]
+}
+
+# The release binary is put in place by tuidev's own verified download
+# (release.sh: one rename, so each running server keeps the inode it runs)
+# when it isn't the release asked for, never by `herdr update`, which, with
+# stdin closed, installs nothing a running server would need a restart for.
+# Then each unit whose server runs an older binary is reloaded, if its reload
+# hands over (status 0 of systemctl: systemd follows the new server; anything
+# else: the old server runs on, panes and all). The other units keep the old
+# binary until their next start. Never runs `herdr update --handoff`.
+herdr_systemd_update() {
+    local units="$1" bin cur tag json unit kind rc installed=false
+    bin="$(herdr_direct_path)"
+    if [[ "$DRY_RUN" == true ]]; then
+        herdr_install_direct
+        for unit in $units; do
+            case "$(_herdr_unit_reload "$unit")" in
+                handoff) echo -e "${YELLOW}[DRY RUN]${NC} systemctl --user reload $unit (if its server runs an older binary)" ;;
+                *) print_info "herdr: $unit would not be reloaded (no herdr-handoff ExecReload with NotifyAccess=exec or all); it keeps the old binary until its next start" ;;
+            esac
+        done
+        return 0
+    fi
+    if ! command_exists curl || ! command_exists jq; then
+        print_warning "herdr: installing a release needs curl and jq; nothing installed or reloaded"
+        return 0
+    fi
+    cur="$("$bin" --version 2>/dev/null | awk '{ print $2 }')" || cur=""
+    tag="${TUIDEV_HERDR_VERSION:-latest}"
+    case "$tag" in latest|v*) ;; *) tag="v$tag" ;; esac
+    if [[ "$tag" == latest ]]; then
+        json="$(release_json "$HERDR_REPO" latest 2>/dev/null)" || json=""
+        tag="$(printf '%s' "$json" | jq -r '.tag_name // empty' 2>/dev/null)" || tag=""
+        if [[ -z "$tag" ]]; then
+            print_warning "herdr: could not read the latest release from the GitHub API; nothing installed or reloaded"
+            return 0
+        fi
+    fi
+    if [[ -n "$cur" && "v$cur" == "$tag" ]]; then
+        print_info "herdr $cur is the release asked for"
+    else
+        print_step "herdr: installing $tag to $bin (no handoff: systemd units hand over through their reload)"
+        if ! TUIDEV_HERDR_VERSION="$tag" herdr_install_direct; then
+            print_warning "herdr: $tag not installed; nothing reloaded (update.sh --packages tries again)"
+            return 0
+        fi
+        installed=true
+    fi
+    for unit in $units; do
+        [[ "$installed" == true ]] || _herdr_unit_stale "$unit" || continue
+        kind="$(_herdr_unit_reload "$unit")"
+        case "$kind" in
+            handoff)
+                print_step "herdr: handing $unit over to the new binary (systemctl --user reload $unit)"
+                rc=0
+                _herdr_timeout 300 systemctl --user reload "$unit" < /dev/null || rc=$?
+                if [[ $rc -eq 0 ]]; then
+                    print_success "herdr: $unit handed over; systemd follows the new server"
+                else
+                    print_warning "herdr: systemctl --user reload $unit failed (status $rc); its old server keeps running with its panes. Details: journalctl --user -u $unit -n 50 --no-pager"
+                fi ;;
+            nonotify)
+                print_warning "herdr: $unit reloads through herdr-handoff, but without NotifyAccess=exec (or all) systemd can't follow the new server; not reloaded. Add NotifyAccess=exec to it, then systemctl --user daemon-reload" ;;
+            *)
+                print_info "herdr: $unit keeps the old binary until its next start (a restart stops its panes); $HERDR_RELOAD_HINT" ;;
+        esac
+    done
     return 0
 }
 
@@ -259,11 +383,27 @@ herdr_handoff_blocker() {
 # need a server restart installs nothing and says so; a handoff the old
 # server can't take ends with an error, and a failed one keeps the old
 # server and prints its stop command.
+# A server a systemd user unit runs takes herdr_systemd_update instead, and
+# then no server is handed over by `herdr update --handoff`, which would take
+# every running session, the units' included.
 herdr_self_update() {
-    local bin pid why handoff=false args
+    local bin pid why handoff=false args units
     bin="$(herdr_direct_path)"
+    units="$(herdr_systemd_units)"
     if [[ "${HERDR_ENV:-}" == 1 ]]; then
-        print_warning "herdr update refuses to run inside a Herdr pane: detach (Ctrl+b q), then run herdr update --handoff from a plain shell"
+        if [[ -n "$units" ]]; then
+            print_warning "herdr: not upgraded from inside a Herdr pane: detach (Ctrl+b q), then run ./scripts/update.sh --packages from a plain shell (it reloads the systemd units)"
+        else
+            print_warning "herdr update refuses to run inside a Herdr pane: detach (Ctrl+b q), then run herdr update --handoff from a plain shell"
+        fi
+        return 0
+    fi
+    if [[ -n "$units" ]]; then
+        herdr_systemd_update "$units"
+        for pid in $(herdr_server_pids); do
+            [[ -z "$(_herdr_server_unit "$pid")" ]] || continue
+            print_info "herdr: server $pid runs outside systemd; it picks up the new binary at its next start (herdr update --handoff would hand the units' servers over too)"
+        done
         return 0
     fi
     for pid in $(herdr_server_pids); do
@@ -312,8 +452,8 @@ herdr_service_note() {
             _herdr_launchd_safe "$f" \
                 || print_info "$short: before a live handoff, set KeepAlive to {SuccessfulExit: false} and AbandonProcessGroup to true, or launchd restarts the old server's job once it exits" ;;
         *.service)
-            grep -qE '^KillMode=(process|none)' "$f" \
-                || print_info "$short: before a live handoff, add KillMode=process, or systemd stops the new server and its panes once the old one exits" ;;
+            cat "$f" "$f.d"/*.conf 2>/dev/null | grep -qE '^ExecReload=.*herdr-handoff' \
+                || print_info "$short: never herdr update --handoff its server; $HERDR_RELOAD_HINT" ;;
     esac
     return 0
 }

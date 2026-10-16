@@ -553,7 +553,8 @@ report_apple_container() {
 
 # Herdr updates itself (scripts/lib/herdr.sh): the release binary gets
 # `herdr update`, with --handoff while a server runs and no supervisor would
-# fight it; never brew. A Homebrew herdr (HERDR_FORMULAE is gone) is switched
+# fight it; a server a systemd user unit runs is handed over by the unit's own
+# reload instead, after the release binary is put in place; never brew. A Homebrew herdr (HERDR_FORMULAE is gone) is switched
 # to the release binary, retried on every run until that succeeds.
 report_herdr_update() {
     case " $(tuidev_active_packs | tr '\n' ' ') " in *" herdr "*) ;; *) return 0 ;; esac
@@ -565,7 +566,11 @@ report_herdr_update() {
             ver="$("$(herdr_direct_path)" --version 2>/dev/null | awk '{ print $2 }')" || ver=""
             echo -e "  ${BOLD}herdr${NC} (${ver:-unknown}, release binary, updates itself):"
             if [[ "$MODE" == "check" ]]; then
-                print_info "--packages runs herdr update (--handoff while a server runs: its panes keep running)"
+                if [[ -n "$(herdr_systemd_units)" ]]; then
+                    print_info "--packages installs the new release, then runs systemctl --user reload for each herdr unit whose reload hands over (never herdr update --handoff)"
+                else
+                    print_info "--packages runs herdr update (--handoff while a server runs: its panes keep running)"
+                fi
                 return 0
             fi
             confirm "Update herdr?" || return 0

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.1] - 2026-10-16
+
+A Herdr server that systemd runs now upgrades live through its unit's own reload and never through `herdr update --handoff`, which can stop every pane.
+
+### Changed
+
+- **systemd units hand Herdr over through their reload.** On Linux, when a systemd user unit runs a Herdr server (`herdr.service`, `herdr-session@NAME.service`, or any unit a server's cgroup names), `update.sh --packages` installs the new release binary itself (sha256 checked, renamed into place, no `herdr update`). It then runs `systemctl --user reload` (300 s at most) for each unit whose server is on an older binary and whose `ExecReload` runs a `herdr-handoff` wrapper with `NotifyAccess=exec` (or `all`). A failed reload is a warning with the `journalctl` command, and the next unit still goes. A unit without that reload is skipped with a hint. `update.sh --check`, the herdr pack and `make check` point at the reload on such hosts. macOS and hosts without systemd units behave as before.
+- **No more `KillMode=process` advice.** It keeps the panes but leaves the new server unsupervised in a unit systemd thinks has stopped. The docs and the service-file notes recommend an `ExecReload` that hands over and reports the new `MAINPID` instead ([agent-workflows.md](docs/agent-workflows.md#fleet-attention--herdr---pack-herdr), practice 5).
+
+### Fixed
+
+- **`herdr update --handoff` never runs against a systemd-supervised server.** Every systemd unit now blocks it. Before, a unit with `KillMode=process` (and `Restart` other than `always`) let it through.
+
 ## [3.12.0] - 2026-10-16
 
 Upgrade Herdr without stopping a single agent, and read the menu at a glance.

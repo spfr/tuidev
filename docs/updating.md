@@ -217,14 +217,35 @@ runs `~/.local/bin/herdr update` with stdin closed, outside any Herdr pane:
 - with a server running, `herdr update --handoff`, which moves the server's
   panes onto the new binary while their processes keep running;
 - without one, plain `herdr update`;
-- when launchd or systemd supervises the server in a way a handoff would
-  upset, plain `herdr update` and the change to make (see
+- when a LaunchAgent supervises the server in a way a handoff would upset,
+  plain `herdr update` and the change to make (see
   [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr)).
 
 It never stops a server: with stdin closed, Herdr answers each "stop the old
 server?" prompt no. A server it couldn't hand over keeps running and picks up
 the new binary at its next start; a release that needs a server restart is
 then not installed at all, and Herdr says so.
+
+On Linux, when a systemd user unit runs a server (`herdr.service`,
+`herdr-session@NAME.service`, or any unit a running server sits in),
+`herdr update --handoff` never runs: systemd would stop the new server and
+its panes, or lose track of it. Instead `--packages`:
+
+1. installs the new release binary itself, checked against the release's
+   sha256 and renamed into place, when `~/.local/bin/herdr` isn't it
+   (`TUIDEV_HERDR_VERSION` pins one);
+2. runs `systemctl --user reload UNIT` (300 s at most) for each unit whose
+   `ExecReload` runs a `herdr-handoff` wrapper and which has
+   `NotifyAccess=exec` (or `all`), once its server is on an older binary. Exit 0 means the
+   panes are on the new server and systemd follows it; a failure is a warning
+   with the `journalctl --user -u UNIT` to read, and the old server keeps
+   running;
+3. skips every other unit with a hint: it keeps the old binary until its
+   next start.
+
+The unit pattern is in
+[agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr)
+(practice 5, and the unit example under Sessions and devices).
 
 A Homebrew herdr is switched instead (after asking): `--packages` installs the
 release binary in its place, as the `202610161843_herdr_direct_install`

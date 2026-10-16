@@ -63,7 +63,11 @@ herdr_install() {
     _herdr_install_config
     print_info "Run 'herdr' to attach."
     [[ "$HERDR_INSTALLED_NOW" == true ]] && _herdr_first_run_hints
-    print_info "Upgrade: herdr update --handoff from a shell outside Herdr (or ./scripts/update.sh --packages)."
+    if [[ -n "$(herdr_systemd_units)" ]]; then
+        print_info "Upgrade: ./scripts/update.sh --packages (it reloads the systemd units that hand over; never herdr update --handoff here)."
+    else
+        print_info "Upgrade: herdr update --handoff from a shell outside Herdr (or ./scripts/update.sh --packages)."
+    fi
     print_info "After an upgrade: make check names outdated integrations and a stale server."
     herdr_path_note
     herdr_cutover_hint
