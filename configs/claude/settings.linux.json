@@ -76,6 +76,10 @@
     }
   },
   "teammateMode": "auto",
+  "statusLine": {
+    "type": "command",
+    "command": "[ -x \"$HOME/.local/bin/agents\" ] && exec \"$HOME/.local/bin/agents\" statusline; cat >/dev/null; exit 0"
+  },
   "attribution": {
     "commit": "",
     "pr": "",

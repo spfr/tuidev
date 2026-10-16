@@ -11,8 +11,8 @@
 # recorded), and before them, for the days before yesterday, one row per
 # day and name: the same, then calls (14 columns, epoch the local midnight).
 # compacts.tsv: epoch cli project session agent trigger pre_tokens post_tokens
-# limits.tsv, the latest Codex reading: epoch cli used_percent window_minutes
-#   resets_at
+# limits.tsv (limits.sh), whose Codex rows say the plan: epoch cli used_percent window_minutes
+#   resets_at [label]
 #
 # A row counts in the window it was written in (epoch >= start); a window
 # that starts before rawb (local midnight yesterday: before it, rows are
@@ -128,14 +128,15 @@ function compacts_load(cf, start,   ln, f, k) {
     close(cf)
 }
 
-# limits_load FILE — LIM 1 with the latest Codex reading: Lat (when it was
+# limits_load FILE — LIM 1 with the latest Codex reading (its shortest window): Lat (when it was
 # read), Lused (%), Lwin (minutes), Lreset (epoch).
 function limits_load(lf,   ln, f) {
     LIM = 0
     while ((getline ln < lf) > 0) {
         if (split(ln, f, "\t") < 5 || f[1] !~ /^[0-9]+$/ || f[2] != "codex" || f[3] !~ /^[0-9]+([.][0-9]+)?$/) continue
         if (f[4] !~ /^[0-9]+$/ || f[5] !~ /^[0-9]+$/) continue
-        if (LIM && f[1] + 0 < Lat) continue
+        # The newest reading; of its windows, the shortest (Codex's primary).
+        if (LIM && (f[1] + 0 < Lat || (f[1] + 0 == Lat && f[4] + 0 >= Lwin))) continue
         LIM = 1; Lat = f[1] + 0; Lused = f[3] + 0; Lwin = f[4] + 0; Lreset = f[5] + 0
     }
     close(lf)

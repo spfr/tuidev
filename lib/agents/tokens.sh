@@ -82,8 +82,10 @@
 #                 transcript of the session names ("backgroundTaskId"):
 #                 source main, or the subagent's agent id; type: its agent
 #                 type when the scan knew it, else "-" (runs.sh reads it).
-#   limits.tsv    epoch cli used_percent window_minutes resets_at: Codex's
-#                 latest primary rate limit (one line, replaced).
+#   limits.tsv    epoch cli used_percent window_minutes resets_at [label]:
+#                 each CLI's latest reading per limit window (limits.sh owns
+#                 it); the scan writes Codex's windows, from the rate_limits
+#                 of its newest token_count event.
 #   tokens.today  day total in cache_write cache_read out: today's sums (local
 #                 day), rewritten after each scan, for the menu.
 #   tokens.stamp, tokens.full
@@ -119,7 +121,10 @@
 #
 # Uses: config.sh, util.sh (_agents_awk, _agents_window, _agents_replace),
 #   history.sh (_agents_prune_file), transcript.sh (_agents_tx_find,
-#   _agents_tx_session_of, _agents_tx_agent_types, _agents_tx_fork_parents);
+#   _agents_tx_session_of, _agents_tx_agent_types, _agents_tx_fork_parents),
+#   limits.sh (_agents_limits_put, _agents_limits_prune, _agents_limits_probe),
+#   grok.sh (_agents_grok_scan, _agents_grok_prune: Grok's turns, which it
+#   appends to tokens.tsv and tokens.today);
 #   awk/tokens_plan.awk, awk/tokens.awk, awk/tokens_state.awk,
 #   awk/tokens_rollup.awk.
 # Public: _agents_tokens_scan, _agents_tokens_prune, _agents_tokens_raw_since,
@@ -192,9 +197,13 @@ _agents_tokens_scan() {
         [[ ! -s "$dir/tokens.add.$f" ]] || cat "$dir/tokens.add.$f" >> "$dir/$f.tsv"
     done
     [[ ! -s "$dir/tokens.add.tasks" ]] || cat "$dir/tokens.add.tasks" >> "$dir/tasks.idx"
-    [[ ! -f "$dir/tokens.add.limits" ]] || mv -f "$dir/tokens.add.limits" "$dir/limits.tsv"
+    [[ ! -s "$dir/tokens.add.limits" ]] || _agents_limits_put codex "$(cat "$dir/tokens.add.limits")" || true
     rm -f "$dir"/tokens.add.* 2>/dev/null
     _agents_replace "$dir/tokens.today" "$today"
+    # Grok's turns (grok.sh), then the CLIs a probe asks for their limits
+    # (limits.sh: at most every 10 minutes each).
+    _agents_grok_scan "$now" "$day" "$start" || true
+    _agents_limits_probe "$now"
     [[ ! "$cold" =~ ^[0-9]+$ || $cold -lt $_AGENTS_TOKENS_COLD_BATCH ]] || _agents_tokens_compact "$now" 0
     return 0
 }
@@ -244,7 +253,9 @@ _agents_tokens_prune() {
     # shellcheck disable=SC2034  # _agents_window sets start and period too
     local dir="$AGENTS_DATA_DIR" f start now off period tmp seen
     _agents_window today "$1" || return 1
-    for f in compacts.tsv denials.tsv limits.tsv uses.tsv tasks.idx; do _agents_prune_file "$dir/$f" "$2"; done
+    for f in compacts.tsv denials.tsv uses.tsv tasks.idx; do _agents_prune_file "$dir/$f" "$2"; done
+    _agents_limits_prune "$2" || true
+    _agents_grok_prune
     if [[ -f "$dir/tokens.tsv" ]]; then
         tmp="$dir/tokens.tsv.prune.$$"
         seen="$(_agents_awk "lib_sort tokens_rollup" -F '\t' -v OFS='\t' -v raw="$(_agents_tokens_raw_since "$1" "$off")" -v cut="$2" \

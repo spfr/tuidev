@@ -45,7 +45,11 @@ function agent_kind(a,   b, k) {
     if (b in names) k = b
     else if (index(a, "claude-code/cli.") && a ~ /claude-code\/cli\.m?js/) k = "claude"
     else if (index(a, "@openai/codex/bin/codex")) k = "codex"
+    # Cursor's launcher runs node under the name it was called by, which
+    # may be the generic "agent": Cursor's only when its own files follow.
+    else if (b == "agent" && index(a, "/cursor-agent/")) k = "cursor-agent"
     else return ""
+    if (k == "agy" && index(a, " --bg-updater")) return ""     # Antigravity's updater, not a session
     return index(a, "--chrome-native-host") ? "" : k     # a browser bridge, not a session
 }
 # An interactive or login shell: "-zsh", "zsh", "/bin/bash -l", but not

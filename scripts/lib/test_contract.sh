@@ -146,6 +146,17 @@ env_rule='^[[:space:]]*"(Read|Edit)\((\*\*|\.)/\.env[^"]*\)",?$'
     || fail "configs/claude/settings.linux.json drifted from settings.json beyond the .env rules"
 pass "configs/claude/settings.linux.json mirrors settings.json apart from the .env rules"
 
+# The shipped statusLine runs `agents statusline` only when agents is
+# installed (else it shows nothing and never fails), and agents has it.
+# shellcheck disable=SC2016  # the command as the JSON spells it
+sl='[ -x "$HOME/.local/bin/agents" ] && exec "$HOME/.local/bin/agents" statusline; cat >/dev/null; exit 0'
+sl_json="${sl//\"/\\\"}"
+[[ "$(grep -A3 '"statusLine": {' "$REPO_DIR/configs/claude/settings.json")" == *'"type": "command",'*"\"command\": \"$sl_json\""* ]] \
+    || fail "configs/claude/settings.json: statusLine must run agents statusline only when agents is installed"
+grep -qE '^        statusline\)' "$REPO_DIR/lib/agents/cli.sh" || fail "agents has no statusline subcommand for the shipped statusLine"
+[[ "$(echo '{}' | HOME=/nonexistent sh -c "$sl"; echo "rc=$?")" == "rc=0" ]] || fail "the shipped statusLine fails or prints without agents"
+pass "the shipped statusLine runs agents statusline, and shows nothing without agents"
+
 # Credential lockout: every copy denies exactly configs/sandbox/credential-paths.txt.
 # Structured copies keep the dir/file distinction (trailing /); prose copies
 # are compared without it.

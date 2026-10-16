@@ -22,10 +22,10 @@ _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_B
 _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
-_AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG"
+_AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
-_AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn"
-_AGENTS_BAR_SECTION_NAMES="needs agents jobs stale hogs awake system"
+_AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn limit"
+_AGENTS_BAR_SECTION_NAMES="needs agents usage jobs stale hogs awake system"
 
 # _agents_ere_ok VALUE — empty, or a printable extended regex that compiles in
 # the awk that will use it, read the same way (ENVIRON, LC_ALL=C). Some awks
@@ -58,6 +58,7 @@ _agents_conf_valid() {
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
         AGENTS_PRICES)      [[ -z "$2" || "$2" == off || "$2" =~ ^(/|~/)[^[:cntrl:]]+$ ]] ;;
         AGENTS_HOOK_REAP|AGENTS_HOOK_LOG) [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_STATUSLINE_CMD) [[ -z "$2" || "$2" =~ ^[[:print:]]+$ ]] ;;
         AGENTS_JOB_TEST|AGENTS_JOB_BUILD|AGENTS_JOB_SERVER|AGENTS_JOB_BROWSER|AGENTS_JOB_MCP) _agents_ere_ok "$2" ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
         AGENTS_LID_MIN_BATTERY) [[ "$2" =~ ^([0-9]|[1-9][0-9]|100)$ ]] ;;
@@ -172,13 +173,13 @@ _agents_job_env() {
     export AGENTS_JRE_MCP="$_AGENTS_JOB_MCP_RE${AGENTS_JOB_MCP:+|$AGENTS_JOB_MCP}"
 }
 _agents_job_env
-AGENTS_NAMES="${AGENTS_NAMES:-claude codex}"  # argv[0] basenames that are agents
+AGENTS_NAMES="${AGENTS_NAMES:-claude codex agy grok cursor-agent}"  # argv[0] basenames that are agents
 AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
 # Menu bar (SwiftBar plugin): what the title shows, which sections the menu
 # has (in this order), its icon, how many top CPU processes the System
 # section lists, and the refresh interval the pack names the plugin file with.
 AGENTS_BAR_TITLE="${AGENTS_BAR_TITLE-count awake}"
-AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs agents jobs stale hogs awake system}"
+AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs agents usage jobs stale hogs awake system}"
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"
@@ -243,6 +244,10 @@ _agents_env_check AGENTS_HOOK_REAP 1
 # check on your machine when the hooks fire; off by default.
 AGENTS_HOOK_LOG="${AGENTS_HOOK_LOG:-0}"
 _agents_env_check AGENTS_HOOK_LOG 0
+# Your own Claude Code status line, run by `agents statusline` (with the same
+# JSON on stdin, its output shown as is) once that has recorded Claude's
+# limits: /bin/sh runs it. Empty: agents prints a compact one.
+AGENTS_STATUSLINE_CMD="${AGENTS_STATUSLINE_CMD:-}"
 # agents_main resets AGENTS_DRY_RUN, so the hook reads the caller's value here.
 _AGENTS_HOOK_DRY="${AGENTS_DRY_RUN:-false}"
 

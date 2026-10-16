@@ -474,6 +474,14 @@ function denial(s, ts, p, k,   q, t, rest, seg, i, id, by, reason, r) {
     if (id != "") dseen[id] = 1
     printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", ts, cli, proj, sess, agent, (id in tun) ? tun[id] : "-", dby[by], reason, (id in tus) ? tus[id] : "-" > df
 }
+# limwin(ts, t, k): the limits.tsv row of rate-limit window k ("primary",
+# "secondary") in t, when it is an object with a window; "" otherwise.
+function limwin(ts, t, k,   p, w) {
+    if (!(p = at(t, k, 1)) || substr(t, p + length(k) + 3, 1) != "{") return ""
+    t = substr(t, p, 256); w = sprintf("%.0f", num(t, "window_minutes", 1))
+    if (w + 0 <= 0) return ""
+    return ts "\tcodex\t" num(t, "used_percent", 1) "\t" w "\t" sprintf("%.0f", num(t, "resets_at", 1)) "\t-\n"
+}
 function codex(s,   ts, p, cwd, t, i, c, o) {
     ts = iso(str(s, "timestamp", 1, 64))
     if (index(s, "\"type\":\"session_meta\"")) {
@@ -505,9 +513,15 @@ function codex(s,   ts, p, cwd, t, i, c, o) {
         return
     }
     if (!index(s, "\"type\":\"token_count\"")) return
-    if ((p = at(s, "primary", 1)) && substr(s, p + 10, 1) == "{" && ts >= lim_ep && ts >= cut) {
-        t = substr(s, p, 256)
-        lim_ep = ts; lim_row = ts "\tcodex\t" num(t, "used_percent", 1) "\t" sprintf("%.0f", num(t, "window_minutes", 1)) "\t" sprintf("%.0f", num(t, "resets_at", 1))
+    # Its rate limits: every window of the newest event (primary, and the
+    # secondary when the plan has one), of Codex's own limit (limit_id
+    # codex, or none: older Codex), for limits.tsv.
+    if ((p = at(s, "rate_limits", 1)) && ts >= lim_ep && ts >= cut) {
+        t = substr(s, p, 1024); c = str(t, "limit_id", 1, 64)
+        if (c == "" || c == "codex") {
+            o = limwin(ts, t, "primary") limwin(ts, t, "secondary")
+            if (o != "") { lim_ep = ts; lim_row = o }
+        }
     }
     if (index(s, "\"info\":null")) return
     p = at(s, "total_token_usage", 1); t = p ? sprintf("%.0f", num(s, "total_tokens", p)) : "-"
@@ -608,8 +622,10 @@ BEGIN {
         close(d "/tokens.tsv")
     }
     close(yf)
+    # The newest Codex reading limits.tsv holds: only a newer one is written.
     lim_ep = 0
-    if ((getline line < (d "/limits.tsv")) > 0) lim_ep = line + 0
+    while ((getline line < (d "/limits.tsv")) > 0)
+        if (split(line, f, "\t") >= 5 && f[2] == "codex" && f[1] + 0 > lim_ep) lim_ep = f[1] + 0
     close(d "/limits.tsv")
     lim_old = lim_ep; lim_row = ""
 }
@@ -640,5 +656,5 @@ END {
     }
     printf "%s\t%.0f\t%.0f\t%.0f\t%.0f\t%.0f\n", day, si + sw + sr + so, si, sw, sr, so
     printf "hot\t%d\t%d\t%d\n", nnew, ncold, nleft
-    if (lim_row != "" && lim_ep > lim_old) print lim_row > (d "/tokens.add.limits")
+    if (lim_row != "" && lim_ep > lim_old) printf "%s", lim_row > (d "/tokens.add.limits")
 }

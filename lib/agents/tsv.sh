@@ -19,6 +19,9 @@
 #   hist state today_cpu_s top_job top_job_cpu_s  (_agents_hist_line)
 #   insight view text  today's top insight, while current (_agents_insight_line)
 #   tokens total cache_pct  today's tokens and cache hit %, from tokens.today
+#   limit name window pct resets cli age  each CLI limit window not reset yet
+#     (limits.tsv: _agents_limits_lines)
+#   denials count top_reason · compacts count  today's, when there are any
 #   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar, every few seconds: Herdr is read from its cache
@@ -52,6 +55,9 @@ agents_tsv() {
     _agents_hist_line
     _agents_insight_line
     _agents_tokens_line
+    # Usage (limits.sh): each CLI's limit windows, today's denials and
+    # compactions, from the state files alone.
+    _agents_limits_lines
     printf '%s\n' "$lid"
     # Herdr: "hhealth server stale" and "hhealth outdated NAME…" while
     # Herdr's server or integrations need an update (an hourly check, never

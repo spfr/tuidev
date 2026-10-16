@@ -275,7 +275,7 @@ power	automatic
 hist	ok	5400	test	3000
 lid	off	-	0	28800
 conf	AGENTS_BAR_TITLE	count awake
-conf	AGENTS_BAR_SECTIONS	needs agents jobs stale hogs awake system
+conf	AGENTS_BAR_SECTIONS	needs agents usage jobs stale hogs awake system
 conf	AGENTS_BAR_ICON	terminal
 conf	AGENTS_BAR_TOP	3
 conf	AGENTS_BAR_REFRESH	10s

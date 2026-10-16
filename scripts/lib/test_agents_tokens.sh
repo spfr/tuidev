@@ -159,10 +159,10 @@ got="$(LC_ALL=C sort "$D/denials.tsv")"
 ! grep -qE 'force|origin|main$|private|token|pw|/work' <(cut -f9 "$D/denials.tsv") || fail "a denial's subject holds arguments: $(cut -f9 "$D/denials.tsv")"
 pass "compacts.tsv; denials.tsv: classifier tag, safety, user; Bash program and subcommand, WebFetch host only, never arguments; a quoted denial is not one"
 
-[[ "$(cat "$D/limits.tsv")" == "$((B + 36))	codex	12.5	300	$((NOW + 7200))" ]] || fail "limits.tsv: $(cat "$D/limits.tsv")"
+[[ "$(cat "$D/limits.tsv")" == "$((B + 36))	codex	12.5	300	$((NOW + 7200))	-"$'\n'"$((B + 36))	codex	40	10080	1	-" ]] || fail "limits.tsv: $(cat "$D/limits.tsv")"
 sum="$(LC_ALL=C awk -F '\t' -v m="$MID" '$1 >= m { i += $7; w += $8; r += $9; o += $10 } END { printf "%d\t%d\t%d\t%d\t%d", i + w + r + o, i, w, r, o }' "$D/tokens.tsv")"
 [[ "$(cat "$D/tokens.today")" == "$DAY	$sum" ]] || fail "tokens.today: $(cat "$D/tokens.today") want $DAY $sum"
-pass "limits.tsv holds Codex's latest primary limit; tokens.today today's sums"
+pass "limits.tsv holds Codex's latest windows, primary and secondary, one line each; tokens.today today's sums"
 
 # 2. Nothing new: nothing added; the state stays.
 st="$(state)"
@@ -643,5 +643,28 @@ pass "a catch-up reads more every scan, however many transcripts it holds, until
     [[ "$(cut -f6,7,8 "$D/uses.tsv")" == "listed	srv	2" ]] || fail "R1: uses.tsv: $(cat "$D/uses.tsv")"
 )
 pass "a pending message read again takes its task ids and tool lists once"
+
+# Codex's limit windows: the newest event's, Codex's own limit only (another
+# limit_id is passed over), and a window the plan no longer has goes.
+(
+    export AGENTS_DATA_DIR="$tmp/lim" CODEX_HOME="$tmp/lim-codex" CLAUDE_CONFIG_DIR="$tmp/lim-claude"
+    D="$AGENTS_DATA_DIR"; mkdir -p "$CLAUDE_CONFIG_DIR/projects"
+    cx="$CODEX_HOME/sessions/2026/10/14"; mkdir -p "$cx"; rf="$cx/rollout-2026-10-14T09-00-00-$U.jsonl"
+    rl() {   # SECS ID SECONDARY — a token_count event with only rate limits
+        printf '{"timestamp":"%s","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{%s"primary":{"used_percent":%s,"window_minutes":300,"resets_at":%s},"secondary":%s,"plan_type":"plus"}}}\n' \
+            "$(iso $((B + $1)))" "${2:+\"limit_id\":\"$2\",}" "$1" $((NOW + 3600)) "$3"
+    }
+    printf '%s\tclaude\t50\t300\t%s\t-\n' $((B + 1)) $((NOW + 60)) > "$tmp/lim-claude.tsv"
+    mkdir -p "$D"; cp "$tmp/lim-claude.tsv" "$D/limits.tsv"
+    { rl 10 codex '{"used_percent":40.0,"window_minutes":10080,"resets_at":99}'; rl 20 "" '{"used_percent":41.5,"window_minutes":10080,"resets_at":99}'
+      rl 30 codex_other '{"used_percent":90.0,"window_minutes":10080,"resets_at":99}'; } > "$rf"
+    old "$rf" 10; scan
+    [[ "$(grep codex "$D/limits.tsv")" == "$((B + 20))	codex	20	300	$((NOW + 3600))	-"$'\n'"$((B + 20))	codex	41.5	10080	99	-" ]] \
+        || fail "codex windows: $(cat "$D/limits.tsv")"
+    rl 40 codex null >> "$rf"; old "$rf" 5; scan
+    [[ "$(grep codex "$D/limits.tsv")" == "$((B + 40))	codex	40	300	$((NOW + 3600))	-" ]] || fail "a window gone: $(cat "$D/limits.tsv")"
+    [[ "$(grep claude "$D/limits.tsv")" == "$(cat "$tmp/lim-claude.tsv")" ]] || fail "the scan touched Claude's line: $(cat "$D/limits.tsv")"
+)
+pass "limits.tsv: Codex's primary and secondary windows from its newest event (its own limit_id), a dropped window gone, other CLIs' lines kept"
 
 echo "All agents tokens tests passed."

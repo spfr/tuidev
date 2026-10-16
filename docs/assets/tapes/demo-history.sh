@@ -127,7 +127,9 @@ BEGIN {
         printf "%d\tclaude\tapi\t22222222-bbbb\tmain\tclassifier\tGit Destructive\tgit push\n", b + 16 * 3600 > (dir "/denials.tsv")
     }
     printf "%d\tclaude\tmyapp\t11111111-aaaa\timplementor-complex\tBash\tuser\t-\tnpm install\n", now - 7200 > (dir "/denials.tsv")
-    printf "%d\tcodex\t31.0\t300\t%d\n", now - 900, now + 7800 > (dir "/limits.tsv")
+    printf "%d\tclaude\t46.5\t300\t%d\t-\n", now - 120, now + 8400 > (dir "/limits.tsv")
+    printf "%d\tclaude\t83.0\t10080\t%d\t-\n", now - 120, now + 2 * 86400 + 5400 > (dir "/limits.tsv")
+    printf "%d\tcodex\t31.0\t300\t%d\t-\n", now - 900, now + 7800 > (dir "/limits.tsv")
     printf "%s\t%d\t%d\t%d\t%d\t%d\n", day, ti + tcw + tcr + to, ti, tcw, tcr, to > (dir "/tokens.today")
 }'
 chmod 600 "$dir"/*.tsv "$dir/tokens.today"

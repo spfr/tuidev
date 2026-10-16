@@ -11,6 +11,7 @@
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`;
+  - a `statusLine` that runs `~/.local/bin/agents statusline` (it records Claude's usage limits, then prints a compact line or `AGENTS_STATUSLINE_CMD`'s; nothing without the `monitoring` pack, and a user's own `statusLine` survives the merge);
   - `SubagentStop` and `SessionEnd` (`clear|resume`) hooks that run `~/.local/bin/agents hook` to stop the background commands a finished subagent or cleared session left running (a no-op without the `monitoring` pack; `AGENTS_HOOK_REAP=0` turns them off).
 
   The credential paths live in `configs/sandbox/credential-paths.txt`; `test_contract.sh` fails until `bin/sbx`, the `.sb` profiles, those deny rules and the docs match it.

@@ -150,11 +150,14 @@ needs_menu="" agents_menu="" daemon_menu="" stale_menu="" hogs_menu="" top_menu=
 awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
-BAR_TITLE="count awake" BAR_SECTIONS="needs agents jobs stale hogs awake system" BAR_ICON=terminal CONF=""
+BAR_TITLE="count awake" BAR_SECTIONS="needs agents usage jobs stale hogs awake system" BAR_ICON=terminal CONF=""
 # Calm items in Needs you (finished sessions, Herdr's health): counted in its
 # header, never in the title's tint.
 n_done=0 calm_menu="" herdr_stale="" herdr_outdated=""
 job_rows="" mcp_cfg="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insight_view="" insight_text="" tok_total=0 tok_cache=0
+# Usage: each CLI's limit windows ("name<TAB>window<TAB>pct<TAB>resets"
+# lines), the highest %, and today's denials and compactions.
+usage_rows="" limit_max=-1 n_denials=0 denials_top=- n_compacts=0
 
 # Per-session activity, gathered from the act rows into variables named after
 # the session's pid (bash 3.2 has no associative arrays): A_<what>_<pid>.
@@ -427,6 +430,13 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         hist)    hist_state="$pid"; hist_total="$kind"; hist_top="$age_s"; hist_top_s="$pcpu" ;;   # hist STATE TODAY_S TOP TOP_S
         insight) insight_view="$pid"; insight_text="$kind" ;;   # insight VIEW TEXT
         tokens)  tok_total="$pid"; tok_cache="$kind" ;;         # tokens TOTAL CACHE_PCT (today)
+        # limit NAME WINDOW PCT RESETS CLI AGE · denials COUNT TOP · compacts COUNT (Usage)
+        limit)   if num "$age_s"; then
+                     usage_rows+="$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\n'
+                     [[ $age_s -le $limit_max ]] || limit_max="$age_s"
+                 fi ;;
+        denials)  num "$pid" && { n_denials="$pid"; denials_top="$kind"; } ;;
+        compacts) num "$pid" && n_compacts="$pid" ;;
         conf)
             [[ "$kind" == - ]] && kind=""
             case "$pid" in
@@ -562,6 +572,8 @@ fi
 attention=""
 if [[ $n_attn -gt 0 || $n_stale -gt 0 || $n_hogs -gt 0 || "$mempress" == warn ]]; then attention="$ORANGE"; fi
 if { num "$thermal" && [[ $thermal -ge 2 ]]; } || [[ "$mempress" == critical || "$lid_state" == stale ]]; then attention="$RED"; fi
+# A usage limit at 95% or more is about to stop a CLI: orange.
+if [[ -z "$attention" && $limit_max -ge 95 ]]; then attention="$ORANGE"; fi
 
 bar_title() {
     local t=":$BAR_ICON:" tok
@@ -577,6 +589,7 @@ bar_title() {
             thermal) num "$thermal" && [[ $thermal -ge 1 ]] && t+=" :thermometer.medium: $thermal_name" ;;
             awake)   [[ "$awake_mode" != off ]] && t+=" :cup.and.saucer.fill:" ;;
             warn)    [[ -n "$attention" ]] && t+=" :exclamationmark.triangle.fill:" ;;
+            limit)   [[ $limit_max -ge 0 ]] && t+=" :gauge.with.needle: ${limit_max}%" ;;
         esac
     done
     printf '%s' "$t"
@@ -826,12 +839,8 @@ section_jobs() {
         line="Today: nothing recorded yet (a sample a minute)"
     fi
     put "$line | sfimage=chart.bar.xaxis $ROW symbolize=false"
-    # Today's tokens (from tokens.today, which `agents sample` writes) and the
-    # share read from the prompt cache; opens today's token report.
-    if num "$tok_total" && num "$tok_cache" && [[ $tok_total -gt 0 ]]; then
-        humanize "$tok_total"
-        put "$REPLY tokens today · ${tok_cache}% cached | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
-    fi
+    # Today's tokens, here only when the menu has no Usage section.
+    [[ " $BAR_SECTIONS " == *" usage "* ]] || tokens_row
     # Today's top insight (from insight.txt, which `agents sample` refreshes):
     # what it found as the label (the text before " — ", at most 70
     # characters, cut at a word), the whole sentence with its advice as the
@@ -848,6 +857,43 @@ section_jobs() {
     esac
     # Today's, like the rows above it (agents report alone covers the last 24h).
     put "Open report | $TERM_OPEN param2=--hold param3=report param4=--since param5=today sfimage=doc.text.magnifyingglass"
+}
+
+# --- Usage ---------------------------------------------------------------------------
+# Each CLI's usage limits (limit rows: `agents limits` has them all, with
+# how old each reading is), today's tokens, and what today's denials and
+# compactions say. A window at 80% gets an orange dot, at 95% a red one
+# (and the icon turns orange: bar_title).
+
+# tokens_row — today's tokens (from tokens.today, which `agents sample`
+# writes) and the share read from the prompt cache; opens today's token
+# report. Nothing before the first token.
+tokens_row() {
+    if ! { num "$tok_total" && num "$tok_cache" && [[ $tok_total -gt 0 ]]; }; then return 0; fi
+    humanize "$tok_total"
+    put "$REPLY tokens today · ${tok_cache}% cached | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false"
+}
+
+section_usage() {
+    local name win pct rst line look top=""
+    [[ -n "$usage_rows" || $n_denials -gt 0 || $n_compacts -gt 0 ]] || { num "$tok_total" && [[ $tok_total -gt 0 ]]; } || return 0
+    put "Usage | size=12"
+    while IFS=$'\t' read -r name win pct rst; do
+        num "$pct" || continue
+        cl "$name"; line="$REPLY · "; cl "$win"; line+="$REPLY $pct%"
+        [[ "$rst" == - ]] || { cl "$rst"; line+=" · resets $REPLY"; }
+        look="sfimage=gauge.with.needle"
+        if [[ $pct -ge 95 ]]; then look+=" $DOT_RED"; elif [[ $pct -ge 80 ]]; then look+=" $DOT_ORANGE"; fi
+        put "$line | $look $TERM_OPEN param2=--hold param3=limits symbolize=false"
+    done <<<"$usage_rows"
+    tokens_row
+    if [[ $n_denials -gt 0 ]]; then
+        [[ "$denials_top" == - || -z "$denials_top" ]] || { cl "$denials_top"; top=" (top: $REPLY)"; }
+        put "Denials today: $n_denials$top | $TERM_OPEN param2=--hold param3=report param4=--view param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false"
+    fi
+    if [[ $n_compacts -gt 0 ]]; then
+        put "Compactions today: $n_compacts | $TERM_OPEN param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=arrow.down.right.and.arrow.up.left symbolize=false"
+    fi
 }
 
 section_stale() {
@@ -947,7 +993,7 @@ bar_title
 for section in $BAR_SECTIONS; do
     OUT=""
     case "$section" in
-        needs|agents|jobs|stale|hogs|awake|system) "section_$section" ;;
+        needs|agents|usage|jobs|stale|hogs|awake|system) "section_$section" ;;
     esac
     while [[ "$OUT" == *$'\n' ]]; do OUT="${OUT%$'\n'}"; done
     [[ -n "$OUT" ]] || continue

@@ -55,12 +55,13 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
   ```
 
 - **Where the tokens go.** `agents report --view tokens` reads the Claude Code and Codex transcripts already on disk: tokens by model, CLI, subagent type, project, session and who drove them (you, a headless run, a subagent), the cache hit rate, what polling cost, context compactions and the Codex plan's headroom, and what it all would cost at API list prices. `--view context` shows which MCP servers, skills and plugins your sessions load but never use, and `--view denials` which commands you or auto mode keep denying, each with what to change. All local; nothing is sent anywhere.
+- **How close to the limit.** `agents limits` and the menu's Usage section show every CLI's usage limits with when each resets: Claude Code's 5-hour and weekly windows (from its status line, which the ai-clis pack points at `agents statusline`; yours keeps working through `AGENTS_STATUSLINE_CMD`), Codex's plan windows from its logs, and Antigravity's quotas from `agy -p /quota`, which costs no tokens. A window turns orange at 80% and red at 95%. Sessions of Claude Code, Codex, Antigravity, Grok and Cursor's CLI all count, and Grok's tokens join the token report.
 
 [Local processes: `agents`](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 
 ## In your menu bar
 
-On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu. Sessions waiting for you come first (with Herdr), then each flagged command with its verdict; every submenu starts with Jump to session, then Stop, Copy details, Peek and Details. Below them: every session, the CPU by job with today's CPU-hours, tokens (`12.4M tokens today · 94% cached`) and top insight, stale processes and hogs, and CPU, memory, battery and thermal pressure. It keeps the Mac awake while agents run, and with the lid closed too: each time it asks for your password, it is always time-boxed, and a guard turns lid sleep back on at timeout, on low battery or when the Mac runs hot.
+On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu. Sessions waiting for you come first (with Herdr), then each flagged command with its verdict; every submenu starts with Jump to session, then Stop, Copy details, Peek and Details. Below them: every session, each CLI's usage limits (`Claude · 5h 23% · resets 14:05`) with today's tokens (`12.4M tokens today · 94% cached`), denials and compactions, the CPU by job with today's CPU-hours and top insight, stale processes and hogs, and CPU, memory, battery and thermal pressure. It keeps the Mac awake while agents run, and with the lid closed too: each time it asks for your password, it is always time-boxed, and a guard turns lid sleep back on at timeout, on low battery or when the Mac runs hot.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/menu-dark.webp">

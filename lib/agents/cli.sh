@@ -97,6 +97,8 @@ agents_main() {
         tsv)      agents_tsv ;;
         report)   agents_report "$@" ;;
         runs)     agents_runs "$@" ;;
+        limits)   agents_limits "$@" ;;
+        statusline) agents_statusline ;;   # Claude Code's statusLine: JSON on stdin
         sample)   agents_sample ;;
         config)   agents_config "$@" ;;
         cwd)      agents_token_cwd "$@" ;;

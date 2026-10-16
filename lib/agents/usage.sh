@@ -6,7 +6,7 @@
 
 agents_usage() {
     cat <<EOF
-agents — see and control local agentic-coding processes (claude, codex)
+agents — see and control local agentic-coding processes (claude, codex, agy, grok, cursor-agent)
 
 LOOK
   agents [ls]                  sessions (blocked first), then stale processes and
@@ -74,6 +74,9 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
                                finished commands, newest first: when, how long, CPU,
                                peak memory, exit code, project, session, the agent
                                that started it, dup, and whether agents stopped it
+  agents limits [--json]       each CLI's usage limits (Claude Code, Codex,
+                               Antigravity): used % per window, when it resets,
+                               and how old the reading is
   agents sample                record one sample; the menu bar and 'agents watch'
                                do it every minute (cron it where neither runs)
 
@@ -103,7 +106,7 @@ KEEP AWAKE
   agents awake [status]        keep-awake state, and who else holds the Mac awake
   agents awake on [DURATION]   hold system and display awake (30m, 2h, 1h30m);
                                no DURATION = until 'agents awake off'
-  agents awake agents          hold while any claude/codex runs, then release
+  agents awake agents          hold while any agent session runs, then release
   agents awake lid DURATION    macOS: also keep awake with the lid closed, for at
                                most AGENTS_LID_MAX ($AGENTS_LID_MAX). Asks for an admin
                                password each time; a root guard restores lid sleep
@@ -114,7 +117,7 @@ KEEP AWAKE
                                e.g. after a reboot killed the guard
     --notify                   report lid mode's results as macOS notifications
 
-CLAUDE CODE HOOKS (shipped in ~/.claude/settings.json; hook JSON on stdin)
+CLAUDE CODE HOOKS AND STATUS LINE (shipped in ~/.claude/settings.json; JSON on stdin)
   agents hook subagent-stop    stop the background commands a subagent left
                                running once it handed back its final report
   agents hook session-end      on /clear or /resume: stop the session's polling
@@ -123,6 +126,10 @@ CLAUDE CODE HOOKS (shipped in ~/.claude/settings.json; hook JSON on stdin)
   Only tasks matched to their own process (its stdout is the task's output
   file) under the claude that runs the hook. AGENTS_HOOK_REAP=0 turns it off;
   AGENTS_HOOK_LOG=1 logs each run to $AGENTS_DATA_DIR/hooks.log
+  agents statusline            Claude Code's status line (statusLine): records
+                               Claude's 5-hour and weekly limits (Pro and Max),
+                               then prints AGENTS_STATUSLINE_CMD's line for the
+                               same JSON, or "Opus · ctx 42% · 5h 23% · wk 41%"
 
 SETTINGS
   agents config [--edit]       effective settings, and the file they came from;
@@ -136,8 +143,8 @@ SETTINGS
   names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
   AGENTS_ORPHAN_PATTERNS in $_AGENTS_LIB/config.sh. History: AGENTS_HISTORY
   AGENTS_HISTORY_DAYS AGENTS_PRICES; extra job patterns (EREs): AGENTS_JOB_TEST
-  AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Data:
-  $AGENTS_DATA_DIR
+  AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Your status line:
+  AGENTS_STATUSLINE_CMD. Data: $AGENTS_DATA_DIR
 
 SAFETY
   Never signals pid 1, this shell or its parents, another user's process

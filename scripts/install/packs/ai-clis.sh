@@ -82,6 +82,11 @@ ai_clis_install() {
     if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && is_linux && grep -q '\*\*/\.env' "$settings"; then
         print_warning "$settings still has **/.env rules: on Linux they make Claude Code's sandbox rescan the whole project and stall the TUI. Use the literal rules from configs/claude/settings.linux.json (docs/sandboxing.md)."
     fi
+    # A status line of the user's own is kept, and Claude's usage limits then
+    # never reach `agents` (they come only through the status line).
+    if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && grep -q '"statusLine"' "$settings" && ! grep -q 'agents\\*"* statusline' "$settings"; then
+        print_info "$settings keeps your own statusLine, so the menu and 'agents limits' get no Claude limits. To have both: set AGENTS_STATUSLINE_CMD in ~/.config/agents.conf to your command, and statusLine's command to the one in configs/claude/settings.json (docs/agent-workflows.md)."
+    fi
     print_success "ai-clis pack complete"
 }
 
