@@ -1189,11 +1189,12 @@ section_fans() {
         off)  line+=" · macOS" ;;
     esac
     put "$line | sfimage=fan $ROW"
-    cool_ck cool;  put "--Cool: palms first (from 55 °C)$REPLY | $ACT param1=cool param2=cool param3=--notify"
-    cool_ck auto;  put "--Balanced (from 60 °C)$REPLY | $ACT param1=cool param2=auto param3=--notify"
-    cool_ck quiet; put "--Quiet (from 70 °C)$REPLY | $ACT param1=cool param2=quiet param3=--notify"
-    cool_ck max;   put "--Max: full speed$REPLY | $ACT param1=cool param2=max param3=--notify"
-    cool_ck off;   put "--Off: macOS runs them$REPLY | $ACT param1=cool param2=off param3=--notify"
+    # checked=true is a parameter (after the |): SwiftBar draws the checkmark.
+    cool_ck cool;  put "--Cool: palms first (from 55 °C) | $ACT param1=cool param2=cool param3=--notify$REPLY"
+    cool_ck auto;  put "--Balanced (from 60 °C) | $ACT param1=cool param2=auto param3=--notify$REPLY"
+    cool_ck quiet; put "--Quiet (from 70 °C) | $ACT param1=cool param2=quiet param3=--notify$REPLY"
+    cool_ck max;   put "--Max: full speed | $ACT param1=cool param2=max param3=--notify$REPLY"
+    cool_ck off;   put "--Off: macOS runs them | $ACT param1=cool param2=off param3=--notify$REPLY"
     put "--Fans follow the chip's temperature averaged over minutes, as your palms feel it | size=11"
     case "$cool_mode" in cool|auto|quiet) put "--Now: minimum at ${cool_low} °C, full speed at ${cool_high} °C | size=11" ;; esac
     put "-----"

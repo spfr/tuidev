@@ -92,7 +92,10 @@ printf '%s\n' "$sys" "thermal${T}0${T}nominal" "cool${T}on${T}auto${T}78${T}tuid
     "conf${T}AGENTS_BAR_TITLE${T}count temp" > "$tmp/tsv"
 m="$(menu)"
 [[ "$m" == *"Fans 3610 rpm · SoC 78 °C · balanced | sfimage=fan"* ]] || fail "menu Fans line: $(printf '%s\n' "$m" | grep -i fan)"
-[[ "$m" == *"--Balanced (from 60 °C) checked=true | "*"param1=cool param2=auto"* ]] || fail "Balanced not checked: $m"
+[[ "$m" == *"--Balanced (from 60 °C) | "*"param1=cool param2=auto param3=--notify checked=true"* ]] || fail "Balanced not checked: $m"
+# checked=true is a parameter, never part of an item's text.
+[[ "$(printf '%s\n' "$m" | grep -c 'checked=true |')" == 0 ]] || fail "checked=true in an item's text"
+[[ "$(printf '%s\n' "$m" | grep 'param1=cool' | grep -c 'checked=true')" == 1 ]] || fail "not exactly one fan mode checked"
 [[ "$m" == *"--Now: minimum at 60 °C, full speed at 95 °C"* ]] || fail "range line"
 [[ "$m" == *"--Cool: palms first (from 55 °C) | "*"param2=cool param3=--notify"* && "$m" == *"--Quiet (from 70 °C) | "*"param2=quiet"* ]] || fail "Cool/Quiet items: $m"
 [[ "$m" == *"--Max: full speed | "*"param1=cool param2=max param3=--notify"* ]] || fail "Max item: $m"
