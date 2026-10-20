@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.0] - 2026-10-20
+
+One command installs the whole agent setup on a Mac: `./install.sh --profile full`.
+
+### Added
+
+- **`--profile full`: the whole setup on a Mac in one command.** `./install.sh --profile full` is `desktop` plus `--extras` and the agent packs (`ai-clis`, `orchestration`, `monitoring`, `cooling`, `herdr`, `tmux`; `TUIDEV_FULL_PACKS` in `scripts/lib/profile.sh`). Each pack skips what its platform lacks. `make check` treats it like `desktop`, and CI dry-runs it on macOS's bash 3.2 ([profiles.md](docs/profiles.md#profiles)).
+
 ## [3.13.1] - 2026-10-20
 
 The menu marks the active fan mode with a checkmark, and the README leads with one command for the whole setup on a Mac.

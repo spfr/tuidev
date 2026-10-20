@@ -134,11 +134,10 @@ claude                             # Claude Code, sandboxed by its own settings
 codex                              # Codex, sandboxed by its own settings
 ```
 
-**The whole lab on a Mac, in one command:** sandboxed agents, tiered subagents, `agents` and the menu bar, fans that keep an Apple Silicon MacBook cool to the touch, Herdr's sidebar across machines, and tmux. Add `--dry-run` to see every change first; `cooling` asks for your password once.
+**The whole lab on a Mac, in one command:** sandboxed agents, tiered subagents, `agents` and the menu bar, fans that keep an Apple Silicon MacBook cool to the touch, Herdr's sidebar across machines, tmux and the extra CLI tools. Add `--dry-run` to see every change first; `cooling` asks for your password once.
 
 ```bash
-./install.sh --profile desktop --extras \
-  --pack ai-clis --pack orchestration --pack monitoring --pack cooling --pack herdr --pack tmux
+./install.sh --profile full
 ```
 
 Or add packs one at a time: `--pack monitoring` for `agents` and the menu bar, `--pack cooling` for the fans, `--pack herdr` for the sidebar across machines, `--pack orchestration` for tiered subagents. Installs are additive, so re-running with more packs is safe. The first-run walkthrough is [docs/QUICK_START_GUIDE.md](docs/QUICK_START_GUIDE.md).

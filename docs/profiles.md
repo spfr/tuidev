@@ -20,17 +20,21 @@ With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `m
 | `minimal` | `--core`                                    | Servers, VMs, CI runners, anyone who wants only the terminal layer |
 | `desktop` | `--core --ui --sandbox`                     | A Mac with a display: the daily driver |
 | `remote`  | `--core --remote --sandbox --pack tmux`     | A headless machine or Tailscale node you SSH into |
+| `full`    | `--core --ui --sandbox --extras --pack ai-clis --pack orchestration --pack monitoring --pack cooling --pack herdr --pack tmux` | The whole agent setup on a Mac, in one command |
 
-| Component | minimal | desktop | remote |
-|-----------|:-------:|:-------:|:------:|
-| Shell, prompt, CLI tools (core) | ✓ | ✓ | ✓ |
-| Ghostty config, Rectangle, Maccy (ui) | | ✓ | |
-| `sbx` + Seatbelt profiles (sandbox, macOS) | | ✓ | ✓ |
-| Tailscale, mosh, SSH client and sshd config (remote) | | | ✓ |
-| tmux, the `tuidev-tmux` block, TPM (`--pack tmux`) | | | ✓ |
-| Neovim, LazyVim config (`--pack nvim`) | | | |
-| Vim, zero-plugin vimrc (`--pack vim`) | | | |
-| Optional packs (`--pack NAME`) | + | + | + |
+| Component | minimal | desktop | remote | full |
+|-----------|:-------:|:-------:|:------:|:----:|
+| Shell, prompt, CLI tools (core) | ✓ | ✓ | ✓ | ✓ |
+| Ghostty config, Rectangle, Maccy (ui) | | ✓ | | ✓ |
+| `sbx` + Seatbelt profiles (sandbox, macOS) | | ✓ | ✓ | ✓ |
+| lazygit, uv, atuin and the other extras (`--extras`) | | | | ✓ |
+| Tailscale, mosh, SSH client and sshd config (remote) | | | ✓ | |
+| tmux, the `tuidev-tmux` block, TPM (`--pack tmux`) | | | ✓ | ✓ |
+| Claude Code and Codex settings, tiered subagents (`ai-clis`, `orchestration`) | | | | ✓ |
+| `agents`, its menu bar, cooling fans, Herdr (`monitoring`, `cooling`, `herdr`) | | | | ✓ |
+| Neovim, LazyVim config (`--pack nvim`) | | | | |
+| Vim, zero-plugin vimrc (`--pack vim`) | | | | |
+| Optional packs (`--pack NAME`) | + | + | + | + |
 
 Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pack tmux` and/or `--pack nvim` yourself. An existing install that already had them keeps them: see [updating.md](updating.md#migrations) for the migration that carries them into your profile.
 
