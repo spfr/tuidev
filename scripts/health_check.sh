@@ -13,8 +13,8 @@
 #   core     — shell/CLI staples (required in every profile; on Linux
 #              without Homebrew, tools the distro may not package are optional)
 #   remote   — tailscale, mosh (required only in the `remote` profile)
-#   sandbox  — Seatbelt (macOS only; required in desktop & remote)
-#   ui       — Ghostty + macOS GUI apps (required only in `desktop`, macOS)
+#   sandbox  — Seatbelt (macOS only; required in desktop, full & remote)
+#   ui       — Ghostty + macOS GUI apps (required in `desktop` and `full`, macOS)
 #   extras   — optional quality-of-life tools (never required)
 #   packs    — optional packs listed in the profile manifest (never required)
 #
@@ -61,7 +61,7 @@ PROFILE="auto"
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--profile minimal|desktop|remote|auto]
+Usage: $(basename "$0") [--profile minimal|desktop|remote|full|auto]
 
   --profile P   Force a specific profile.
                 Default: 'auto' (reads the tuidev profile, else
@@ -500,15 +500,15 @@ run_checks() {
         *)       check_remote optional ;;
     esac
 
-    # Sandbox: required in desktop + remote (macOS only); optional in minimal.
+    # Sandbox: required in desktop, full and remote (macOS only); optional in minimal.
     case "$PROFILE" in
-        desktop|remote) check_sandbox required ;;
+        desktop|full|remote) check_sandbox required ;;
         *)              check_sandbox optional ;;
     esac
 
-    # UI: required only in desktop profile (macOS only); skipped entirely on Linux.
+    # UI: required in desktop and full (macOS only); skipped entirely on Linux.
     case "$PROFILE" in
-        desktop) check_ui required ;;
+        desktop|full) check_ui required ;;
         *)       check_ui optional ;;
     esac
 

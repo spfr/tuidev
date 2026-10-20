@@ -4,7 +4,7 @@
 # ============================================================================
 #
 # Usage:
-#   ./install.sh [--profile minimal|desktop|remote]
+#   ./install.sh [--profile minimal|desktop|remote|full]
 #                [--core] [--remote] [--sandbox] [--ui] [--extras]
 #                [--pack NAME ...]
 #                [--no-overwrite] [--adopt-existing]
@@ -14,6 +14,8 @@
 #   minimal   → core
 #   desktop   → core + ui + sandbox          (macOS laptop/desktop default)
 #   remote    → core + remote + sandbox + --pack tmux   (headless/Tailscale node)
+#   full      → desktop + extras + the agent packs: ai-clis orchestration
+#               monitoring cooling herdr tmux   (the whole setup on a Mac)
 #
 # Packs (compose your own):
 #   --core       the shell for agent CLIs (ripgrep, fd, fzf, starship, delta, ...)
@@ -113,6 +115,15 @@ case "$PROFILE" in
              # Durable sessions are what a remote node is for (--pack tmux).
              case " ${EXTRA_PACKS[*]} " in *" tmux "*) ;; *) EXTRA_PACKS+=(tmux) ;; esac
              ;;
+    full)    # Everything for agent work on a Mac: desktop, extras and these
+             # packs (each skips what its platform lacks, e.g. cooling off
+             # Apple Silicon). Recorded as extra_packs like any --pack.
+             PACKS_CORE=true; PACKS_UI=true; PACKS_SANDBOX=true; PACKS_EXTRAS=true
+             for _p in $TUIDEV_FULL_PACKS; do
+                 case " ${EXTRA_PACKS[*]-} " in *" $_p "*) ;; *) EXTRA_PACKS+=("$_p") ;; esac
+             done
+             unset _p
+             ;;
     "")      # no profile — require at least one explicit pack flag
              if ! $PACKS_CORE && ! $PACKS_REMOTE && ! $PACKS_SANDBOX \
                 && ! $PACKS_UI && ! $PACKS_EXTRAS && [[ ${#EXTRA_PACKS[@]} -eq 0 ]]; then
@@ -127,7 +138,7 @@ case "$PROFILE" in
                  fi
              fi
              ;;
-    *) die "unknown profile: $PROFILE  (use minimal|desktop|remote)" ;;
+    *) die "unknown profile: $PROFILE  (use minimal|desktop|remote|full)" ;;
 esac
 
 # Reject a mistyped pack name up front, not halfway through the install.

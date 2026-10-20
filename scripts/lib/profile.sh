@@ -56,7 +56,9 @@ TUIDEV_PROFILE_FILE_DEFAULT="$TUIDEV_STATE_DIR/profile"
 TUIDEV_ENV_FILE_DEFAULT="$TUIDEV_STATE_DIR/env"
 
 # Valid profile names — shared across install/update/health/test. One place.
-TUIDEV_VALID_PROFILES=(minimal desktop remote)
+TUIDEV_VALID_PROFILES=(minimal desktop remote full)
+# The optional packs --profile full adds to desktop + extras.
+TUIDEV_FULL_PACKS="ai-clis orchestration monitoring cooling herdr tmux"
 
 # Valid pack names (non-profile packs exposed via --pack NAME).
 TUIDEV_VALID_PACKS=(ai-clis orchestration nvim vim tmux herdr sandbox-container fnm hunk monitoring cooling)

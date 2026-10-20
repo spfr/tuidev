@@ -145,6 +145,10 @@ jobs:
         run: |
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
           /bin/bash ./install.sh --profile desktop --dry-run < /dev/null
+      - name: install dry-run (full)
+        run: |
+          export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
+          /bin/bash ./install.sh --profile full --dry-run < /dev/null
 
   # ---------------------------------------------------------------------------
   # scripts/lib/ unit tests + cross-file contract checks.

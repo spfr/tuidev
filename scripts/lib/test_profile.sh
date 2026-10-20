@@ -160,5 +160,15 @@ set +e; tuidev_profile_add_pack x "$tmp/missing"; rc=$?; set -e
 [[ $rc == 2 ]] || fail "missing profile should return 2, got $rc"
 pass "tuidev_profile_add_pack / remove_pack are surgical"
 
+# --profile full names packs that exist, once each.
+tuidev_is_valid_profile full || fail "full is not a valid profile"
+seen=" "
+for p in $TUIDEV_FULL_PACKS; do
+    tuidev_is_valid_pack "$p" || fail "full names an unknown pack: $p"
+    case "$seen" in *" $p "*) fail "full names $p twice" ;; esac
+    seen+="$p "
+done
+pass "--profile full: registered packs, each once"
+
 echo ""
 echo "All profile-lib tests passed."
