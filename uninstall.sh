@@ -176,6 +176,17 @@ if [[ -x "$HOME/.local/bin/agents" ]]; then
     fi
 fi
 
+# The cooling pack's fan daemon runs as root: its own root-owned binary
+# stops it (handing the fans back to macOS) and removes it, with one sudo.
+if [[ -f /Library/LaunchDaemons/dev.tuidev.fan.plist && -x /Library/PrivilegedHelperTools/dev.tuidev.fan ]]; then
+    if sudo -n true 2>/dev/null || [[ -t 0 ]]; then
+        run_cmd sudo /Library/PrivilegedHelperTools/dev.tuidev.fan uninstall \
+            || print_warning "the fan daemon is still installed: sudo /Library/PrivilegedHelperTools/dev.tuidev.fan uninstall"
+    else
+        print_warning "the fan daemon needs root to remove: sudo /Library/PrivilegedHelperTools/dev.tuidev.fan uninstall"
+    fi
+fi
+
 _remove_helper() {
     case "$1" in "$HOME/.local/bin/"*|"$TUIDEV_LIB_DIR/"*) ;; *) return 0 ;; esac
     [[ -e "$1" || -L "$1" ]] || return 0
@@ -187,7 +198,7 @@ _remove_helper() {
 _remove_lib_dirs() {
     local d
     [[ "$DRY_RUN" != true ]] || return 0
-    for d in "$TUIDEV_LIB_DIR/agents/awk" "$TUIDEV_LIB_DIR/agents" "$TUIDEV_LIB_DIR"; do
+    for d in "$TUIDEV_LIB_DIR/agents/awk" "$TUIDEV_LIB_DIR/agents" "$TUIDEV_LIB_DIR/fan" "$TUIDEV_LIB_DIR"; do
         [[ -d "$d" ]] && rmdir "$d" 2>/dev/null && done_msg "removed $d"
     done
     return 0

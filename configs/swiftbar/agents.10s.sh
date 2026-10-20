@@ -1,7 +1,7 @@
 #!/bin/bash
 # <xbar.title>agents</xbar.title>
 # <xbar.version>v1.4</xbar.version>
-# <xbar.desc>Agentic-coding sessions (blocked first), where their CPU goes, stale helpers, CPU hogs, keep-awake and a compact system view, from tuidev's `agents` command.</xbar.desc>
+# <xbar.desc>Agentic-coding sessions (blocked first), where their CPU goes, stale helpers, CPU hogs, keep-awake, fans and a compact system view, from tuidev's `agents` command.</xbar.desc>
 # <xbar.dependencies>bash,agents</xbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
@@ -159,6 +159,8 @@ n_agents=0 n_blocked=0 n_stale=0 n_hogs=0
 needs_menu="" agents_menu="" daemon_menu="" stale_menu="" hogs_menu="" top_menu="" stale_tokens=""
 awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
+# Fan control (--pack cooling): absent until the cool row says otherwise.
+cool_state=absent cool_mode=- cool_soc=- cool_ctl=- cool_rpms=- cool_low=- cool_high=-
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents usage jobs stale hogs awake system" BAR_ICON=terminal CONF=""
 # Calm items in Needs you (finished sessions): counted in its header, never
@@ -441,6 +443,9 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         thermal) thermal="$pid"; thermal_name="$kind" ;;
         power)   power="$pid" ;;
         lid)     lid_state="$pid"; lid_until="$age_s"; lid_max="$pcpu" ;;   # lid STATE PID UNTIL MAX
+        # cool STATE MODE SOC CONTROL RPMS LOW HIGH PRESSURE (fan control)
+        cool)    cool_state="$pid"; cool_mode="$kind"; cool_soc="$age_s"; cool_ctl="$pcpu"
+                 cool_rpms="$avg"; cool_low="$rss"; cool_high="$kids" ;;
         # job ROOT JOB 0 CPU 0 RSS PROCS START own|sub UNIT KIND CWD NAME PROJECT VIA
         # (NAME and VIA: the MCP server's name and launcher for the mcp job, else "-")
         job)     job_rows+="$kind"$'\t'"$pcpu"$'\t'"$rss"$'\t'"$kids"$'\t'"$herdr"$'\t'"$project"$'\t'"$pid"$'\t'"$start"$'\t'"$cwd"$'\t'"$args"$'\t'"$user"$'\t'"${aflags:--}"$'\n' ;;
@@ -625,6 +630,7 @@ bar_title() {
             load)    [[ "$load" != - ]] && t+=" :gauge.medium: $load" ;;
             battery) num "$batt" && { battery_symbol "$batt" "$bstate"; t+=" :$REPLY: ${batt}%"; } ;;
             thermal) num "$thermal" && [[ $thermal -ge 1 ]] && t+=" :thermometer.medium: $thermal_name" ;;
+            temp)    num "$cool_soc" && t+=" :thermometer.medium: ${cool_soc}°" ;;
             awake)   [[ "$awake_mode" != off ]] && t+=" :cup.and.saucer.fill:" ;;
             warn)    [[ -n "$attention" ]] && t+=" :exclamationmark.triangle.fill:" ;;
             limit)   [[ $limit_max -ge 0 ]] && { gauge "$limit_max"; g="${REPLY%% *}"; t+=" :${g#sfimage=}: ${limit_max}%"; } ;;
@@ -1152,6 +1158,46 @@ section_system() {
     else
         put "Thermal $thermal_name · Energy $power | sfimage=thermometer.medium$hot $CALLBACK param1=battery-settings"
     fi
+    section_fans
+}
+
+# Fans (--pack cooling only): the speed, the SoC's temperature and the mode,
+# with Cool, Balanced, Quiet, Max and Off. Changing the mode needs no password: the root
+# daemon reads a file you can write, and clamps what it holds.
+cool_ck() { REPLY=""; [[ "$cool_mode" == "$1" ]] && REPLY=" checked=true"; return 0; }
+section_fans() {
+    local line rpm="" r m
+    case "$cool_state" in
+        on) ;;
+        stale) put "Fan control stopped (the daemon isn't running) | sfimage=fan $DOT_ORANGE $ROW"
+               put "--Start it: sudo launchctl bootstrap system /Library/LaunchDaemons/dev.tuidev.fan.plist | size=11"
+               put "--Its log: /var/log/tuidev-fan.log | size=11"
+               return ;;
+        *)  return ;;
+    esac
+    # The fastest fan stands for them all (a MacBook Pro's two run together).
+    IFS=, read -r -a r <<<"$cool_rpms"
+    for m in ${r[@]+"${r[@]}"}; do num "$m" && { [[ -z "$rpm" || $m -gt $rpm ]] && rpm="$m"; }; done
+    line="Fans ${rpm:-?} rpm"
+    num "$cool_soc" && line+=" · SoC ${cool_soc} °C"
+    local name
+    case "$cool_mode" in
+        cool|auto|quiet)
+              name="$cool_mode"; [[ "$name" == auto ]] && name=balanced
+              if [[ "$cool_ctl" == tuidev ]]; then line+=" · $name"; else line+=" · $name (macOS below ${cool_low} °C)"; fi ;;
+        max)  line+=" · max" ;;
+        off)  line+=" · macOS" ;;
+    esac
+    put "$line | sfimage=fan $ROW"
+    cool_ck cool;  put "--Cool: palms first (from 55 °C)$REPLY | $ACT param1=cool param2=cool param3=--notify"
+    cool_ck auto;  put "--Balanced (from 60 °C)$REPLY | $ACT param1=cool param2=auto param3=--notify"
+    cool_ck quiet; put "--Quiet (from 70 °C)$REPLY | $ACT param1=cool param2=quiet param3=--notify"
+    cool_ck max;   put "--Max: full speed$REPLY | $ACT param1=cool param2=max param3=--notify"
+    cool_ck off;   put "--Off: macOS runs them$REPLY | $ACT param1=cool param2=off param3=--notify"
+    put "--Fans follow the chip's temperature averaged over minutes, as your palms feel it | size=11"
+    case "$cool_mode" in cool|auto|quiet) put "--Now: minimum at ${cool_low} °C, full speed at ${cool_high} °C | size=11" ;; esac
+    put "-----"
+    put "--Fan status | $TERM_OPEN param2=--hold param3=cool param4=status"
 }
 
 bar_title

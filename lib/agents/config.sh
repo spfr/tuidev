@@ -24,7 +24,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
-_AGENTS_BAR_TOKENS="count cpu mem load battery thermal awake warn limit"
+_AGENTS_BAR_TOKENS="count cpu mem load battery thermal temp awake warn limit"
 _AGENTS_BAR_SECTION_NAMES="needs agents usage jobs stale hogs awake system"
 
 # _agents_ere_ok VALUE — empty, or a printable extended regex that compiles in

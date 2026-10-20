@@ -27,7 +27,7 @@
 #                configs, native sandboxes on), orchestration, nvim
 #                (Neovim + LazyVim), vim (plain Vim, zero-plugin vimrc), tmux
 #                (durable sessions + TPM), herdr, sandbox-container,
-#                fnm, hunk, monitoring
+#                fnm, hunk, monitoring, cooling (Apple Silicon fan control)
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files

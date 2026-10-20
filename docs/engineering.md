@@ -39,6 +39,7 @@ bin/sbx                 Seatbelt wrapper
 bin/agents              agent process monitor (monitoring pack): the entrypoint, sourceable for tests
 bin/mcp-lazy            stands in for a stdio MCP server until its first tool call (Perl, core modules only)
 lib/agents/             its modules and awk programs (map below); installed beside it, so it runs without the repo
+lib/fan/                tuidev-fan.swift: fan control (cooling pack), built at install, run as a root LaunchDaemon
 configs/                everything installed into $HOME (table above)
 scripts/lib/            shared libraries + test_*.sh unit harnesses
 scripts/install/        built-in packs (core remote sandbox ui extras); packs/ = optional packs (includes nvim.sh, tmux.sh)
@@ -66,6 +67,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `system.sh` | thermal pressure, energy mode, sleep disabled, load, memory, battery, machine CPU% |
 | `awake.sh` | the keep-awake holder and `agents awake` |
 | `lid.sh` | `awake lid`: the root guard, the admin dialog, the lid state |
+| `cool.sh` | `agents cool`: the fan daemon's status file and mode file (`--pack cooling`), the tsv's cool row |
 | `kill.sh` | refusals, PID@START plans, SIGTERM then SIGKILL (`kill`, `term`, and every other stop) |
 | `reap.sh` | what `agents reap` stops, by hand or with `--auto` |
 | `events.sh` | the private data dir and `events.tsv` |

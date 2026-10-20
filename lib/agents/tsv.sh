@@ -6,7 +6,8 @@
 #   _agents_herdr_health),
 #   assess.sh (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
 #   (_agents_hist_line), report.sh (_agents_insight_line,
-#   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv).
+#   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv), cool.sh
+#   (_agents_cool_row).
 # Public: agents_tsv.
 
 # agents_tsv — agents_assess's need/evid rows (first, so the menu knows an
@@ -23,6 +24,8 @@
 #     (limits.tsv: _agents_limits_lines)
 #   denials count top_reason · compacts count  today's, when there are any
 #   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
+#   cool state mode soc control rpms low high pressure  (fan control, only
+#     with the cooling pack: cool.sh)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar, every few seconds: Herdr is read from its cache
 # (never waited on), the keep-awake state is read once, and the machine's
@@ -32,7 +35,7 @@
 # _AGENTS_FEED, runs.sh), so commands shorter than the minute between
 # samples are recorded too.
 agents_tsv() {
-    local recs state pid="-" mode="off" until=0 sys thermal power lid key val cores mach _AGENTS_MCP_HAVE=1
+    local recs state pid="-" mode="off" until=0 sys thermal power lid cool key val cores mach _AGENTS_MCP_HAVE=1
     # One clock for the whole refresh: every _agents_now under it reads this.
     local _AGENTS_CLOCK=""
     _agents_now _AGENTS_CLOCK
@@ -46,7 +49,7 @@ agents_tsv() {
     _agents_with_needs "$recs"
     [[ "$recs" != *$'\tmcp\t'* ]] || agents_mcp_tsv
     _agents_bg_wait mach 6 || true
-    { IFS= read -r sys; IFS= read -r thermal; IFS= read -r power; IFS= read -r lid; } <<<"$mach"
+    { IFS= read -r sys; IFS= read -r thermal; IFS= read -r power; IFS= read -r lid; IFS= read -r cool; } <<<"$mach"
     cores="${sys#*$'\t'}"; cores="${cores%%$'\t'*}"
     printf 'sys\t%s\t%s\n' "$(_agents_cpu_pct "$cores" "$recs")" "$sys"
     _agents_awake_now state && read -r pid mode until _ <<<"$state"
@@ -59,6 +62,7 @@ agents_tsv() {
     # compactions, from the state files alone.
     _agents_limits_lines
     printf '%s\n' "$lid"
+    [[ -z "$cool" ]] || printf '%s\n' "$cool"
     # Herdr: "hhealth server stale" and "hhealth outdated NAME…" while
     # Herdr's server or integrations need an update (an hourly check, never
     # waited on: _agents_herdr_health). Each session's Herdr pane and task
@@ -73,7 +77,7 @@ agents_tsv() {
 
 # _agents_tsv_machine — the machine's part of agents_tsv, which nothing in the
 # process table changes: agents_system's line (sys without its CPU%), then
-# the thermal, power and lid rows.
+# the thermal, power, lid and cool rows.
 _agents_tsv_machine() {
     local lvl state lpid luntil lmax
     agents_system
@@ -88,4 +92,5 @@ _agents_tsv_machine() {
     else
         printf 'lid\toff\t-\t0\t%s\n' "$lmax"
     fi
+    _agents_cool_row
 }

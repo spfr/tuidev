@@ -82,6 +82,7 @@ agents_main() {
         awake)    local aw=() a
                   for a in "$@"; do if [[ "$a" == --notify ]]; then AGENTS_NOTIFY=true; else aw+=("$a"); fi; done
                   agents_awake ${aw[@]+"${aw[@]}"} ;;
+        cool)     agents_cool "$@" ;;
         thermal)  local lvl; lvl="$(agents_thermal_level)"
                   echo "thermal pressure: $(agents_thermal_name "${lvl:--}")${lvl:+ ($lvl)}"
                   echo "energy mode: $(agents_powermode)" ;;

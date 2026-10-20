@@ -21,6 +21,12 @@ LOOK
   agents hogs                  top $AGENTS_HOG_TOP CPU hogs, any owner: lifetime average
                                >= ${AGENTS_HOG_PCT}% after ${AGENTS_HOG_MIN}m, or >= ${AGENTS_HOG_NOW}% now outside agent trees
   agents thermal               thermal pressure and energy mode (display only)
+  agents cool [cool|auto|quiet|max|off]
+                               fan control (--pack cooling, Apple Silicon): the fans,
+                               the SoC's temperature and who runs them; cool, auto
+                               (balanced) and quiet raise them with the temperature
+                               from 55, 60 or 70 °C, max runs them flat out, off
+                               hands them to macOS
   agents show [--json] [--watch] PID[@START]
                                one process in detail: what and whose it is, its
                                verdict, session (id, model, what it is doing now),
