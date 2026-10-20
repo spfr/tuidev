@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.1] - 2026-10-20
+
+The menu marks the active fan mode with a checkmark, and the README leads with one command for the whole setup on a Mac.
+
+### Changed
+
+- **One command for everything.** The README's quick start and the Quick Start guide now show the full Mac setup in one line: `./install.sh --profile desktop --extras --pack ai-clis --pack orchestration --pack monitoring --pack cooling --pack herdr --pack tmux`.
+
+### Fixed
+
+- **The menu's fan modes show a checkmark.** The active mode under Fans read `Balanced (from 60 °C) checked=true` instead of carrying a checkmark: the flag sat in the item's text, not among its SwiftBar parameters.
+
 ## [3.13.0] - 2026-10-20
 
 A MacBook running agents all day no longer cooks your palms. The new

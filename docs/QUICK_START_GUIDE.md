@@ -22,7 +22,14 @@ exec zsh -l
 | `desktop` | core + ui + sandbox     | Your Mac (recommended)           |
 | `remote`  | core + remote + sandbox + `--pack tmux` | A headless box you SSH into |
 
-Add optional packs at any time: `./install.sh --pack monitoring` (the `agents` command and, on macOS, its menu bar) or `--pack orchestration` (tiered subagents). Re-running is safe. See [profiles.md](profiles.md) for every pack.
+Add optional packs at any time: `./install.sh --pack monitoring` (the `agents` command and, on macOS, its menu bar), `--pack cooling` (fans that keep an Apple Silicon MacBook cool to the touch) or `--pack orchestration` (tiered subagents). Re-running is safe. See [profiles.md](profiles.md) for every pack.
+
+Everything at once on a Mac (`--dry-run` first if you like; `cooling` asks for your password once):
+
+```bash
+./install.sh --profile desktop --extras \
+  --pack ai-clis --pack orchestration --pack monitoring --pack cooling --pack herdr --pack tmux
+```
 
 Check the result:
 
