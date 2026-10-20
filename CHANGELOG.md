@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.0] - 2026-10-20
+
+A MacBook running agents all day no longer cooks your palms. The new
+`cooling` pack gives Apple Silicon Macs the fan curve macOS leaves out: it
+follows the chip's temperature the way the palm rest feels it, settles the
+fans at a steady speed, and lets you pick Cool, Balanced or Quiet from the
+menu.
+
+### Added
+
+- **Fans that keep a MacBook cool to the touch (`--pack cooling`, Apple Silicon).** macOS holds the fans near their minimum while agent workloads keep the SoC at 75–85 °C, so the palm rest takes the heat. `tuidev-fan` ([`lib/fan/tuidev-fan.swift`](lib/fan/tuidev-fan.swift)), built at install with the Command Line Tools, runs as the root LaunchDaemon `dev.tuidev.fan` and raises the fans with the hottest CPU or GPU core averaged over minutes, the way the palm rest and keyboard take the heat in, from their minimum at 60 °C to their maximum at 95 °C, switching to a prompt average when the chip itself needs air, full speed at heavy thermal pressure. It takes a fan only for more air than macOS gives it, changes speed in steady steps rather than surges, polls every 2 s only while it matters (10 s otherwise; mode changes and thermal pressure are events), and hands the fans back to macOS on any error, exit and system sleep. One `sudo` prompt installs it, and again only when its source changes. `agents cool [cool|auto|quiet|max|off]` shows and switches it without a password (cool starts the fans at 55 °C for palms first, quiet at 70 °C), the menu's System section gets a Fans line with those modes, and a `temp` title token shows the SoC's °C ([agent-workflows.md](docs/agent-workflows.md#fans---pack-cooling)).
+
 ## [3.12.1] - 2026-10-16
 
 A Herdr server that systemd runs now upgrades live through its unit's own reload and never through `herdr update --handoff`, which can stop every pane.

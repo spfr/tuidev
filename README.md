@@ -23,6 +23,7 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal 
 - **[Every agent, on every machine, in one sidebar](#every-agent-on-every-machine-in-one-sidebar):** Herdr shows which agent needs you, here or on your always-on box.
 - **[Cleanup with evidence](#cleanup-with-evidence):** `agents` finds what sessions left behind, says whether it is safe to stop and why, and shows where the CPU and the tokens went.
 - **[In your menu bar](#in-your-menu-bar):** the same on macOS, one click away, with keep-awake and a system view.
+- **[Cool to the touch](#cool-to-the-touch):** on Apple Silicon MacBooks, fans that follow what your palms feel, not just what the chip can survive.
 - **[Sandboxed by default](#sandboxed-by-default):** Claude Code's and Codex's own sandboxes on, and `sbx` for everything else.
 - **[A modern shell in one command](#a-modern-shell-in-one-command):** Ghostty, zsh and the CLI tools you and your agents both reach for.
 - **[Subagents on the cheapest tier that works](#subagents-on-the-cheapest-tier-that-works)** and **[an install you can preview and undo](#an-install-you-can-preview-and-undo)**.
@@ -70,6 +71,10 @@ On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu. Sessions w
 </picture>
 
 <sub>The plugin's actual output over the demo fixtures, drawn as a macOS menu by `scripts/render_menu.sh`; it is not a screenshot of a real menu bar. [More submenus, animated](docs/assets/menu.gif).</sub>
+
+## Cool to the touch
+
+Agents keep a MacBook's chip at 75–85 °C for hours, and macOS keeps its fans near their minimum until the chip nears its own limit, so the palm rest and keyboard soak up the heat. `--pack cooling` adds the fan curve macOS leaves out: a small Swift daemon you build from the repo ([`lib/fan/tuidev-fan.swift`](lib/fan/tuidev-fan.swift), one readable file, no network) follows the chip's temperature averaged over minutes, the way the chassis takes it in, so the fans settle at a steady speed instead of chasing every burst. Pick Cool (palms first), Balanced or Quiet in the menu or with `agents cool`. It only ever adds air to what macOS runs, hands the fans back on any error, exit or sleep, and switches modes without a password. [Fans](docs/agent-workflows.md#fans---pack-cooling)
 
 ## Sandboxed by default
 
@@ -129,7 +134,7 @@ claude                             # Claude Code, sandboxed by its own settings
 codex                              # Codex, sandboxed by its own settings
 ```
 
-Add `--pack monitoring` for `agents` and the menu bar, `--pack herdr` for the sidebar across machines, and `--pack orchestration` for tiered subagents. The first-run walkthrough is [docs/QUICK_START_GUIDE.md](docs/QUICK_START_GUIDE.md).
+Add `--pack monitoring` for `agents` and the menu bar, `--pack cooling` for fans that keep an Apple Silicon MacBook cool to the touch, `--pack herdr` for the sidebar across machines, and `--pack orchestration` for tiered subagents. The first-run walkthrough is [docs/QUICK_START_GUIDE.md](docs/QUICK_START_GUIDE.md).
 
 **Only want the agent setup?** The `orchestration` pack installs on its own, without the shell, theme or packages: `bash scripts/install/packs/orchestration.sh` from a clone. `git pull` and re-run to update, and `./uninstall.sh` to remove it. See [docs/orchestration.md](docs/orchestration.md).
 
@@ -170,6 +175,7 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 | `nvim`, `vim` | LazyVim, or a zero-plugin vimrc for servers |
 | `sandbox-container` | Tier 2 sandboxing in a container runtime (Apple `container`, Podman or Docker) |
 | `fnm`, `hunk` | Node via fnm; a review-first diff viewer |
+| `cooling` | Fans that follow the chip's temperature on Apple Silicon MacBooks, so the palm rest stays cool; Cool, Balanced and Quiet in the menu |
 
 What each profile and pack installs is in [docs/profiles.md](docs/profiles.md). macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it, and anything the distro lacks is skipped with a link to its upstream installer. `sbx` and the `ui` pack are macOS only.
 
