@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.0] - 2026-10-22
+
+A hijacked release waits three days before it can install, and Node stays on `PATH` for agents and git hooks.
+
+### Added
+
+- **`--pack release-age`: a minimum release age for npm, bun and uv, in `--profile full`.** Hijacked releases are usually pulled within hours (LiteLLM 1.107.0 was live for about two), so versions younger than `TUIDEV_RELEASE_AGE_DAYS` (default 3) wait. Managed blocks go in `~/.npmrc`, `~/.bunfig.toml` and uv's `uv.toml`, only for tools on `PATH` and never over a setting of your own. Lockfiles still install: `npm ci` and `bun install --frozen-lockfile` take a locked version of any age. pnpm keeps its own 1-day default, because its frozen installs check the age too and a longer one would block teammates' fresh dependencies. uv covers `uv pip`, `uvx` and `uv tool` only: a user-level `exclude-newer` is recorded in each project's `uv.lock`, and `uv sync --locked` then fails for teammates and CI without it ([sandboxing.md](docs/sandboxing.md#minimum-release-age)).
+
+### Fixed
+
+- **`node: not found` in agents, git hooks and heavy jobs.** fnm puts Node on `PATH` through a per-shell symlink, which long-lived children inherit and which can be deleted under them. `.zshrc` now puts fnm's default alias right after it, so `node` falls back to the default version when the link is gone; while it exists, the project's version still wins.
+
 ## [3.15.0] - 2026-10-22
 
 Security releases now reach the Node versions fnm installed, uv, and the Pythons uv manages.
