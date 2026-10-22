@@ -580,8 +580,18 @@ bindkey '^[[3~' delete-char
 # ============================================================================
 
 # Node.js via fnm (--pack fnm): ~1ms init, puts Node on PATH eagerly and
-# switches on .nvmrc/.node-version.
-(( $+commands[fnm] )) && eval "$(fnm env --use-on-cd)"
+# switches on .nvmrc/.node-version. fnm's PATH entry is a per-shell symlink
+# that long-lived children (agents, MCP servers, git hooks) inherit and that
+# can outlive its shell's cleanup, so the default alias follows it as a
+# fallback: when the link is gone, `node` is still the default version.
+if (( $+commands[fnm] )); then
+  eval "$(fnm env --use-on-cd)"
+  if [[ -n "$FNM_DIR" && -d "$FNM_DIR/aliases/default/bin" ]]; then
+    _fnm_i=${path[(i)$FNM_MULTISHELL_PATH/bin]}
+    path[_fnm_i+1,_fnm_i]=("$FNM_DIR/aliases/default/bin")
+    unset _fnm_i
+  fi
+fi
 
 # ============================================================================
 # Editor
