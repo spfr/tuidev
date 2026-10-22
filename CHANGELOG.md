@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.1] - 2026-10-22
+
+The release-age pack finds tools a short `PATH` hides, and says which it skipped.
+
+### Fixed
+
+- **release-age over a non-login ssh session.** The pack looked for npm, bun and uv on `PATH` only, so over plain `ssh` (no `/usr/local/bin`) it wrote nothing and still reported success. It now also looks where their installers put them (`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.bun/bin`, fnm's default alias), and prints `skipped TOOL: not installed` for each one it really can't find.
+
 ## [3.16.0] - 2026-10-22
 
 A hijacked release waits three days before it can install, and Node stays on `PATH` for agents and git hooks.
