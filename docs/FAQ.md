@@ -46,6 +46,8 @@ tmux is optional now (`--pack tmux`), bundled automatically by the `remote` prof
 
 **tmux-continuum stopped auto-saving.** Older configs appended the theme below the TPM line, which reset `status-right` after continuum hooked it. Migration `202609222000_tmux_theme_file` moves that block into `theme.conf`. Run `make update-migrations`, then `make update-configs`.
 
+**Links agents print aren't clickable inside tmux.** tmux passes OSC 8 links through only with the `hyperlinks` terminal feature (tmux 3.4+), which the shipped `tmux.conf` turns on (`tmux show -s terminal-features` lists `*:hyperlinks`). Claude Code also stops emitting links when `TERM_PROGRAM=tmux`, so the shipped `.zshrc` exports `FORCE_HYPERLINK=1` in tmux panes, as it does in Herdr. After `make update-configs`, restart the tmux server (`tmux kill-server`) or at least run `exec zsh` in each pane, then Cmd-click the link in Ghostty (Shift-Cmd-click if tmux's mouse mode takes the click).
+
 **Agent-team teammates don't open as panes.** Teams are off in the shipped settings, so turn them on first. Split panes need `claude` to run inside tmux (the shipped `teammateMode` is `auto`), which means `--pack tmux` installed and a session already attached. Outside tmux, teammates run in-process. See [agent-workflows.md](agent-workflows.md#agent-teams).
 
 ## Sandbox
