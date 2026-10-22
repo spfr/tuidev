@@ -153,6 +153,55 @@ If none is present, it installs Podman and points you at Apple's signed package.
 
 **Upgrades.** `./scripts/update.sh --packages` upgrades Podman installed with Homebrew, apt, dnf or pacman. Apple `container` comes from a pkg, so it only prints the installed version and Apple's updater: `container system stop && update-container.sh`, then `make sandbox-up`. Run it from a normal terminal: the updater asks for your sudo password, which an agent session can't take.
 
+## Minimum release age
+
+A sandbox limits what a bad package can reach; a minimum release age keeps
+most bad packages off the machine at all. Hijacked releases are usually
+caught and pulled within hours: LiteLLM 1.107.0 (PyPI and Docker, October
+2026) was live for about two, and the npm worm releases rarely last a day.
+`--pack release-age` (part of `--profile full`) makes npm, bun and uv skip
+any version younger than `TUIDEV_RELEASE_AGE_DAYS` (default 3) and pick the
+newest one that is old enough.
+
+| Tool | Where | Setting |
+|------|-------|---------|
+| npm | `~/.npmrc` | `min-release-age=3` (days) |
+| bun | `~/.bunfig.toml` | `[install]` `minimumReleaseAge = 259200` (seconds) |
+| uv | `~/.config/uv/uv.toml`, `shell.d/release-age.zsh` | `[pip]` `exclude-newer = "3 days"`, and `UV_EXCLUDE_NEWER` for `uvx` and `uv tool` |
+
+Each is a managed block, written only for a tool on `PATH` and only where you
+haven't set the key yourself; re-run the pack after installing another tool.
+A project's own config wins over these files.
+
+**Lockfiles still install.** npm and bun apply the age to new resolutions
+only: `npm ci` and `bun install --frozen-lockfile` install a locked version
+of any age, so a teammate's fresh dependency doesn't block you. pnpm is left
+on its own default (1 day since pnpm 11), because it checks the lockfile too:
+`pnpm install --frozen-lockfile` refuses a locked version younger than the
+age (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`), and a longer age would block
+fresh dependencies longer. A team that wants more sets `minimumReleaseAge` in
+its `pnpm-workspace.yaml`.
+
+**Not uv projects.** uv records a user-level `exclude-newer` in every
+project's `uv.lock` (`exclude-newer-span`), and `uv lock --check` or
+`uv sync --locked` then fail for each teammate and CI job that doesn't share
+it. So the age covers only installs without a lockfile: `uv pip`, `uvx` and
+`uv tool`. A project that wants it sets `exclude-newer` in its own
+`pyproject.toml`, for everyone.
+
+**When you need a release now** (a security fix, your own package):
+
+```bash
+npm i --min-release-age=0 PKG
+bun add --minimum-release-age=0 PKG
+UV_EXCLUDE_NEWER=false uvx PKG
+```
+
+npm (`min-release-age-exclude`), pnpm (`minimumReleaseAgeExclude`), bun
+(`minimumReleaseAgeExcludes`) and uv (`exclude-newer-package = { PKG = false }`)
+also take a standing exemption list. Plain `pip` isn't covered: use `uv pip`,
+or pip's own `--uploaded-prior-to P3D`.
+
 ## Troubleshooting
 
 - **`Operation not permitted`** from a tool inside `sbx`: Seatbelt denied an operation. Watch the log in another terminal and re-run the command:

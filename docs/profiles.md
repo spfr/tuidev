@@ -20,7 +20,7 @@ With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `m
 | `minimal` | `--core`                                    | Servers, VMs, CI runners, anyone who wants only the terminal layer |
 | `desktop` | `--core --ui --sandbox`                     | A Mac with a display: the daily driver |
 | `remote`  | `--core --remote --sandbox --pack tmux`     | A headless machine or Tailscale node you SSH into |
-| `full`    | `--core --ui --sandbox --extras --pack ai-clis --pack orchestration --pack monitoring --pack cooling --pack herdr --pack tmux` | The whole agent setup on a Mac, in one command |
+| `full`    | `--core --ui --sandbox --extras --pack ai-clis --pack orchestration --pack monitoring --pack cooling --pack herdr --pack tmux --pack release-age` | The whole agent setup on a Mac, in one command |
 
 | Component | minimal | desktop | remote | full |
 |-----------|:-------:|:-------:|:------:|:----:|
@@ -32,6 +32,7 @@ With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `m
 | tmux, the `tuidev-tmux` block, TPM (`--pack tmux`) | | | ✓ | ✓ |
 | Claude Code and Codex settings, tiered subagents (`ai-clis`, `orchestration`) | | | | ✓ |
 | `agents`, its menu bar, cooling fans, Herdr (`monitoring`, `cooling`, `herdr`) | | | | ✓ |
+| A 3-day minimum release age for npm, bun and uv (`release-age`) | | | | ✓ |
 | Neovim, LazyVim config (`--pack nvim`) | | | | |
 | Vim, zero-plugin vimrc (`--pack vim`) | | | | |
 | Optional packs (`--pack NAME`) | + | + | + | + |
@@ -69,6 +70,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 | `--pack fnm` | fnm (Fast Node Manager): the only way the shipped `.zshrc` puts Node on `PATH`. `update.sh --packages` keeps each installed Node major on its latest patch ([updating.md](updating.md#node-fnm)). |
 | `--pack hunk` | [hunk](https://hunk.dev), a review-first diff viewer for agent-written changesets (`hunk diff --watch`, `hunk show`). Homebrew only; 0.x, so opt-in. Nothing is written to `$HOME`: to page git through it, run `git config --global core.pager "hunk pager"`. |
 | `--pack monitoring` | `lazydocker` (`lzd`), `bottom` (`btm`, aliased as `top`), and `agents` in `~/.local/bin` (its modules in `~/.local/lib/tuidev/agents/`): agent sessions, orphaned MCP and dev servers, CPU hogs, keep-awake and thermal pressure, with settings in `~/.config/agents.conf` (placed once, yours to edit). On macOS, also SwiftBar and an `agents` menu-bar plugin that doubles as a CPU, memory, battery and thermal readout, and `terminal-notifier`, which makes an agent's notification clickable: a click jumps to its session ([Notifications](agent-workflows.md#notifications)). See [agent-workflows.md](agent-workflows.md#local-processes-agents---pack-monitoring). |
+| `--pack release-age` | A minimum release age (`TUIDEV_RELEASE_AGE_DAYS`, default 3) for npm, bun and uv, so a hijacked release is pulled before it can install here. Managed blocks in `~/.npmrc`, `~/.bunfig.toml` and uv's `uv.toml` (`[pip]` only), plus a `shell.d` fragment for `uvx` and `uv tool`; never project lockfiles. pnpm keeps its own 1-day default. Included in `full`. See [sandboxing.md](sandboxing.md#minimum-release-age). |
 | `--pack cooling` | Apple Silicon only. `tuidev-fan` (`lib/fan/tuidev-fan.swift`), built with the Command Line Tools' `swiftc`, runs as the root LaunchDaemon `dev.tuidev.fan` and raises the fans with the SoC's sustained temperature (what the palm rest feels), from their minimum at 60 °C to their maximum at 95 °C by default, long before macOS would, so a MacBook stays cool to the touch under agent workloads. One `sudo` prompt installs it, and again only when its source changes. `agents cool` and the menu switch between cool (palms first), balanced, quiet, max and off. See [agent-workflows.md](agent-workflows.md#fans---pack-cooling). |
 
 The canonical list of pack names is `TUIDEV_VALID_PACKS` in `scripts/lib/profile.sh`. Adding a pack is covered in [engineering.md](engineering.md#the-pack-contract).

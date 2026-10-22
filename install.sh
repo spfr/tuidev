@@ -15,7 +15,8 @@
 #   desktop   → core + ui + sandbox          (macOS laptop/desktop default)
 #   remote    → core + remote + sandbox + --pack tmux   (headless/Tailscale node)
 #   full      → desktop + extras + the agent packs: ai-clis orchestration
-#               monitoring cooling herdr tmux   (the whole setup on a Mac)
+#               monitoring cooling herdr tmux release-age
+#               (the whole setup on a Mac)
 #
 # Packs (compose your own):
 #   --core       the shell for agent CLIs (ripgrep, fd, fzf, starship, delta, ...)

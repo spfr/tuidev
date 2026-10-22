@@ -28,7 +28,7 @@ Add optional packs at any time: `./install.sh --pack monitoring` (the `agents` c
 Everything at once on a Mac (`--dry-run` first if you like; `cooling` asks for your password once):
 
 ```bash
-./install.sh --profile full   # desktop + extras + ai-clis, orchestration, monitoring, cooling, herdr, tmux
+./install.sh --profile full   # desktop + extras + ai-clis, orchestration, monitoring, cooling, herdr, tmux, release-age
 ```
 
 Check the result:
