@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.0] - 2026-10-22
+
+Security releases now reach the Node versions fnm installed, uv, and the Pythons uv manages.
+
+### Added
+
+- **`update.sh --packages` keeps Node patched.** Homebrew upgraded fnm but never the Node versions it installed, so the October 21 Node security release (TLS hostname bypasses, a Brotli RCE) reached them only by hand. Whenever fnm is installed, `--packages` now installs the latest patch of each Node major you have, then offers to move fnm's `default` to the newest patch of its major. It never adds a major, changes the default's major, or removes a version a project may pin; `--check` lists the superseded patches to `fnm uninstall` ([updating.md](docs/updating.md#node-fnm)). The helpers live in the new `scripts/lib/fnm.sh`, which the fnm pack now uses too.
+- **`update.sh --packages` updates uv and its Pythons.** A uv from Astral's standalone installer was never Homebrew's to upgrade, so it stayed behind (0.13.4 drops the emSign root CA after the eMudhra intermediate compromise), and so did the Pythons it manages. `--packages` now runs `uv self update` for it, then `uv python upgrade`, in that order because uv learns of new Python builds only from its own release. Homebrew's uv still upgrades with the extras ([updating.md](docs/updating.md#uv-and-its-pythons)). The helpers are in the new `scripts/lib/uv.sh`.
+
 ## [3.14.1] - 2026-10-22
 
 Links agents print are clickable inside tmux too.
