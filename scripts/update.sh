@@ -48,6 +48,10 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/pkg.sh"
 # shellcheck source=lib/herdr.sh disable=SC1091
 . "$SCRIPT_DIR/lib/herdr.sh"
+# shellcheck source=lib/fnm.sh disable=SC1091
+. "$SCRIPT_DIR/lib/fnm.sh"
+# shellcheck source=lib/uv.sh disable=SC1091
+. "$SCRIPT_DIR/lib/uv.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -593,6 +597,117 @@ report_herdr_update() {
     esac
 }
 
+# Node through fnm: brew upgrades fnm (FNM_FORMULAE), never the Node versions
+# it installed, so security releases never reached them. Install the newest
+# patch of each installed major and move the default along within its major;
+# never switch majors or remove a version a project may pin exactly. Runs
+# whenever fnm is installed, with or without the fnm pack in the profile.
+report_node_update() {
+    local fnm stale count old major have latest
+    fnm="$(fnm_bin)"
+    [[ -n "$fnm" ]] || return 0
+    echo ""
+    if ! stale="$(fnm_stale "$fnm")"; then
+        echo -e "  ${BOLD}Node via fnm${NC} (status unknown):"
+        print_warning "could not list Node releases from nodejs.org"
+        PKG_UNKNOWN=$((PKG_UNKNOWN + 1))
+        return 0
+    fi
+    old="$(fnm_superseded "$fnm" | tr '\n' ' ')"
+    count=0
+    [[ -n "$stale" ]] && count="$(printf '%s\n' "$stale" | wc -l | tr -d ' ')"
+    echo -e "  ${BOLD}Node via fnm${NC} (${count} major(s) behind):"
+    if [[ -n "$stale" ]]; then
+        while read -r major have latest; do
+            printf "    ${CYAN}•${NC} Node %s: %s → %s\n" "$major" "$have" "$latest"
+        done <<<"$stale"
+        PKG_OUTDATED_TOTAL=$((PKG_OUTDATED_TOTAL + count))
+    else
+        print_success "every installed major is on its latest patch"
+    fi
+    [[ -n "$old" ]] && print_info "older patches still installed: ${old% }; remove the ones no project pins with: fnm uninstall VERSION"
+
+    [[ "$MODE" == "check" ]] && return 0
+    if [[ -n "$stale" ]] && confirm "Install the latest patch of ${count} Node major(s)?"; then
+        while read -r major have latest; do
+            run_cmd "$fnm" install "$latest" || print_warning "fnm install $latest failed"
+        done <<<"$stale"
+    fi
+    _node_default_follow "$fnm"
+}
+
+# Point fnm's default at the newest installed patch of the default's major.
+_node_default_follow() {
+    local def major newest
+    def="$(fnm_default "$1")"
+    [[ -n "$def" ]] || return 0
+    major="${def#v}"; major="${major%%.*}"
+    newest="$(fnm_newest "$1" "$major")"
+    [[ -n "$newest" && "$newest" != "$def" ]] || return 0
+    confirm "Move the default Node from $def to $newest?" || return 0
+    if run_cmd "$1" default "$newest"; then
+        print_success "default Node: $def → $newest"
+    else
+        print_warning "fnm default $newest failed"
+    fi
+}
+
+# uv and the Pythons it manages (scripts/lib/uv.sh). Homebrew's uv is the
+# extras pack's formula; the standalone installer's updates itself. Its
+# Pythons move to their minor's latest patch after uv itself, which is what
+# learns of new builds. Runs whenever uv is installed.
+report_uv_update() {
+    local kind self stale count managed have latest updated=false
+    kind="$(uv_install_kind)"
+    [[ "$kind" == none ]] && return 0
+    echo ""
+    case "$kind" in
+        standalone)
+            if ! self="$(uv_self_check)"; then
+                echo -e "  ${BOLD}uv${NC} (standalone, status unknown):"
+                print_warning "uv self update --dry-run failed (no network, or GitHub's rate limit: set UV_GITHUB_TOKEN)"
+                PKG_UNKNOWN=$((PKG_UNKNOWN + 1))
+            elif [[ -n "$self" ]]; then
+                echo -e "  ${BOLD}uv${NC} (standalone, updates itself):"
+                read -r have latest <<<"$self"
+                printf "    ${CYAN}•${NC} uv %s → %s\n" "$have" "$latest"
+                PKG_OUTDATED_TOTAL=$((PKG_OUTDATED_TOTAL + 1))
+                if [[ "$MODE" != "check" ]] && confirm "Update uv?"; then
+                    if run_cmd uv self update; then updated=true; else print_warning "uv self update failed"; fi
+                fi
+            else
+                echo -e "  ${BOLD}uv${NC} (standalone):"
+                print_success "up to date"
+            fi ;;
+        brew)  echo -e "  ${BOLD}uv${NC} (Homebrew): upgraded with the extras pack's formulae" ;;
+        other) echo -e "  ${BOLD}uv${NC} ($(command -v uv), installed another way): update it the way it was installed" ;;
+    esac
+
+    managed="$(uv_python_managed)"
+    [[ -n "$managed" ]] || return 0
+    if ! stale="$(uv_python_stale)"; then
+        print_warning "uv python list failed; managed Pythons not checked"
+        PKG_UNKNOWN=$((PKG_UNKNOWN + 1))
+        return 0
+    fi
+    count=0
+    [[ -n "$stale" ]] && count="$(printf '%s\n' "$stale" | wc -l | tr -d ' ')"
+    echo -e "  ${BOLD}uv-managed Python${NC} (${count} behind, as far as this uv knows):"
+    if [[ -n "$stale" ]]; then
+        while read -r have latest; do
+            printf "    ${CYAN}•${NC} %s → %s\n" "$have" "$latest"
+        done <<<"$stale"
+        PKG_OUTDATED_TOTAL=$((PKG_OUTDATED_TOTAL + count))
+    else
+        print_success "every installed minor is on its latest patch"
+    fi
+    [[ "$MODE" == "check" ]] && return 0
+    # A uv just updated may know newer builds than the list above.
+    [[ -n "$stale" || "$updated" == true ]] || return 0
+    confirm "Upgrade uv-managed Pythons to their latest patch?" || return 0
+    run_cmd uv python upgrade || print_warning "uv python upgrade failed"
+}
+
 run_packages_mode() {
     print_section "Checking pack-scoped package updates"
 
@@ -600,6 +715,8 @@ run_packages_mode() {
     if ! mgr="$(pkg_manager)"; then
         print_warning "no supported package manager (brew, apt-get, dnf, pacman) — skipping package updates"
         report_herdr_update
+        report_node_update
+        report_uv_update
         return 0
     fi
 
@@ -630,6 +747,8 @@ run_packages_mode() {
 
     report_apple_container
     report_herdr_update
+    report_node_update
+    report_uv_update
 
     if [[ "$MODE" != "check" && ${#NATIVE_OUTDATED[@]} -gt 0 ]]; then
         echo ""

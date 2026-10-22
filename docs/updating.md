@@ -208,6 +208,32 @@ pacman is checked against the local sync database, and the fix is always
 tuidev prints that command instead of upgrading them one by one, and never
 runs a bare `pacman -Sy`.
 
+### Node (fnm)
+
+Homebrew upgrades fnm itself, never the Node versions it installed, so a Node
+security release used to reach them only by hand. Whenever fnm is installed,
+`--packages` lists Node releases from nodejs.org and, for each major you have,
+installs its latest patch when yours is behind (after asking). It then offers
+to move fnm's `default` to the newest patch of the default's major. It never
+installs a major you don't have, never changes the default's major, and never
+removes a version: an older patch a project pins exactly
+(`.nvmrc: 24.16.0`) keeps working. `--check` lists the patches newer ones
+have replaced, for `fnm uninstall VERSION` once no project pins them. When
+nodejs.org can't be reached, the group is "status unknown".
+
+### uv and its Pythons
+
+Homebrew's uv is an extras formula and upgrades with them. uv from Astral's
+standalone installer (it leaves `~/.config/uv/uv-receipt.json`) isn't
+Homebrew's to upgrade, so `--packages` runs `uv self update` for it, which
+checks the download against the release's sha256. uv knows only the Python
+builds that existed at its own release, so the order matters: uv first, then
+`uv python upgrade`, which moves each installed minor (3.12, 3.14, …) to its
+latest patch and repoints the minor's directory, so venvs built on it follow.
+It never installs a minor you don't have. `--check` lists what the installed
+uv knows to be behind; a newer uv may know more. If GitHub rate-limits the
+check, set `UV_GITHUB_TOKEN`.
+
 ### Herdr
 
 The herdr pack installs Herdr's release binary, not Homebrew's, because only

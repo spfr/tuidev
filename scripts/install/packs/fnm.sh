@@ -20,22 +20,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/../../lib/ui.sh"
 # shellcheck source=../../lib/brew.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/brew.sh"
+# shellcheck source=../../lib/fnm.sh disable=SC1091
+. "$SCRIPT_DIR/../../lib/fnm.sh"
 
 # Homebrew formula(e) this pack installs — declared so `update.sh --packages`
 # can discover and upgrade it (see scripts/lib/packs.sh `pack_array`).
 FNM_FORMULAE=(fnm)
-
-# Resolve the fnm binary even if it was just installed and isn't on PATH yet in
-# this non-interactive shell. Echoes the path (or nothing) on stdout.
-_fnm_bin() {
-    if command_exists fnm; then
-        command -v fnm
-        return 0
-    fi
-    local prefix
-    prefix="$(brew --prefix 2>/dev/null || true)"
-    [[ -n "$prefix" && -x "$prefix/bin/fnm" ]] && printf '%s\n' "$prefix/bin/fnm"
-}
 
 # Ensure fnm manages at least one Node version so `fnm env` yields a usable node
 # in new shells. Installs the latest LTS and marks it default. Non-fatal.
@@ -47,7 +37,7 @@ _fnm_ensure_node() {
         print_info "[dry-run] would run: fnm install --lts && fnm default <version>"
         return 0
     fi
-    if "$fnm_bin" ls 2>/dev/null | grep -qiE 'v[0-9]'; then
+    if [[ -n "$(fnm_installed "$fnm_bin")" ]]; then
         print_success "fnm already manages a Node version"
         return 0
     fi
@@ -55,7 +45,7 @@ _fnm_ensure_node() {
     print_step "installing latest LTS Node via fnm"
     "$fnm_bin" install --lts || print_warning "fnm install --lts failed (continuing)"
     local latest
-    latest="$("$fnm_bin" ls 2>/dev/null | grep -oiE 'v[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)"
+    latest="$(fnm_installed "$fnm_bin" | tail -1)"
     if [[ -n "$latest" ]]; then
         "$fnm_bin" default "$latest" 2>/dev/null || true
     fi
@@ -72,7 +62,7 @@ fnm_install() {
     brew_update_once
     brew_install_formulae "${FNM_FORMULAE[@]}"
 
-    _fnm_ensure_node "$(_fnm_bin)"
+    _fnm_ensure_node "$(fnm_bin)"
 
     print_info "Open a new shell — the managed ~/.zshrc loads fnm automatically."
     print_info "fnm reads .nvmrc/.node-version and switches Node on cd."

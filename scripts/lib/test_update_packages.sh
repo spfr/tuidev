@@ -1,8 +1,8 @@
 #!/bin/bash
 # End-to-end test of `update.sh --packages` on a native package manager (apt):
 # per-pack reporting, one batched upgrade across packs, "status unknown" on a
-# failed probe. apt, dpkg and sudo are stubs; nothing is installed and the real
-# HOME is never touched.
+# failed probe, and Node patch releases through fnm. apt, dpkg, sudo and fnm
+# are stubs; nothing is installed and the real HOME is never touched.
 # Run: bash scripts/lib/test_update_packages.sh  -> exit 0 on pass.
 set -eo pipefail
 
@@ -83,5 +83,87 @@ if [[ -e "$LIB_DIR/../../.git" ]]; then
 else
     echo "SKIP: not a git checkout — stale repo fallback not checked"
 fi
+
+# Node through fnm: installed v24.16.0 (behind), v24.22.1 and v26.8.2 (behind),
+# default v26.8.2. The stub keeps its state in files, like fnm's own dir.
+sed -i.bak 's/^extra_packs=.*/extra_packs=tmux vim fnm/' "$TUIDEV_STATE_DIR/profile"
+fnm_dir="$tmp/fnm"; mkdir -p "$fnm_dir"
+printf 'v24.16.0\nv24.22.1\nv26.8.2\n' > "$fnm_dir/installed"
+echo v26.8.2 > "$fnm_dir/default"
+# shellcheck disable=SC2016
+stub fnm 'd='"$fnm_dir"'
+case "$1" in
+    ls) while read -r v; do
+            [[ "$v" == "$(cat "$d/default")" ]] && echo "* $v default" || echo "* $v"
+        done < "$d/installed"; echo "* system" ;;
+    ls-remote) [[ -n "${FNM_REMOTE_FAIL:-}" ]] && exit 1
+        printf "v22.23.4\nv24.9.0\nv24.22.1 (Krypton)\nv26.8.2\nv26.12.1\nv27.0.0\n" ;;
+    install) echo "$2" >> "$d/installed" ;;
+    default) echo "$2" > "$d/default" ;;
+esac'
+
+: > "$log"
+out="$(run_update --check)" || fail "--check with fnm exited non-zero: $out"
+[[ "$out" == *"Node via fnm (1 major(s) behind)"* ]] || fail "fnm group: $out"
+[[ "$out" == *"Node 26: v26.8.2 → v26.12.1"* ]] || fail "stale major: $out"
+[[ "$out" != *"Node 24:"* && "$out" != *"Node 27"* && "$out" != *"Node 22"* ]] \
+    || fail "only installed majors that are behind: $out"
+[[ "$out" == *"older patches still installed: v24.16.0;"* ]] || fail "superseded hint: $out"
+grep -qE '^fnm (install|default) ' "$log" && fail "--check changed fnm state"
+pass "--check: fnm majors behind nodejs.org, no installs"
+
+out="$(run_update --packages --yes)" || fail "--packages with fnm exited non-zero: $out"
+grep -q '^fnm install v26.12.1$' "$log" || fail "did not install v26.12.1: $(cat "$log")"
+[[ "$(cat "$fnm_dir/default")" == v26.12.1 ]] || fail "default not moved: $out"
+grep -qE '^fnm install v2[27]' "$log" && fail "installed a major that wasn't there"
+grep -q 'v24.16.0' "$fnm_dir/installed" || fail "removed an old patch"
+pass "--packages: latest patch per installed major, default follows within its major"
+
+out="$(FNM_REMOTE_FAIL=1 run_update --check)" || fail "--check with nodejs.org down exited non-zero"
+[[ "$out" == *"Node via fnm (status unknown)"* ]] || fail "unreachable remote: $out"
+pass "an unreachable nodejs.org is status unknown"
+
+: > "$fnm_dir/installed"; : > "$fnm_dir/default"
+out="$(run_update --packages --yes)" || fail "--packages with fnm managing no Node exited non-zero: $out"
+[[ "$out" == *"Node via fnm (0 major(s) behind)"* ]] || fail "empty fnm: $out"
+pass "fnm with no Node installed and no default is not an error"
+
+# uv from the standalone installer (its receipt), 0.12.5 behind 0.13.5, and a
+# managed CPython 3.14.7 whose minor has 3.14.8. The 3.15 release candidate is
+# a minor that isn't installed, so it is no update.
+mkdir -p "$HOME/.config/uv"; echo '{}' > "$HOME/.config/uv/uv-receipt.json"
+# shellcheck disable=SC2016
+stub uv 'case "$1 $2" in
+    "self update") [[ -n "${UV_SELF_FAIL:-}" ]] && exit 2
+        [[ "$3" == --dry-run ]] && echo "Would update uv from v0.12.5 to v0.13.5" ;;
+    "python list") cat <<EOF
+cpython-3.15.0rc1-macos-aarch64-none   <download available>
+cpython-3.14.8-macos-aarch64-none      <download available>
+cpython-3.14.7-macos-aarch64-none      /h/.local/bin/python3 -> /h/py/bin/python3.14
+cpython-3.14.7-macos-aarch64-none      /h/py/bin/python3.14
+cpython-3.13.15-macos-aarch64-none     /h/py313/bin/python3.13
+EOF
+;;
+esac'
+
+: > "$log"
+out="$(run_update --check)" || fail "--check with uv exited non-zero: $out"
+[[ "$out" == *"uv v0.12.5 → v0.13.5"* ]] || fail "uv self check: $out"
+[[ "$out" == *"uv-managed Python (1 behind"* ]] || fail "python group: $out"
+[[ "$out" == *"cpython-3.14.7-macos-aarch64-none → cpython-3.14.8-macos-aarch64-none"* ]] || fail "stale python: $out"
+[[ "$out" != *"3.15.0rc1"* && "$out" != *"3.13.15 →"* ]] || fail "only installed minors that are behind: $out"
+grep -qE '^uv (self update$|python upgrade)' "$log" && fail "--check updated uv"
+pass "--check: standalone uv and its managed Pythons behind, no changes"
+
+: > "$log"
+out="$(run_update --packages --yes)" || fail "--packages with uv exited non-zero: $out"
+grep -q '^uv self update$' "$log" || fail "uv not updated: $(cat "$log")"
+[[ "$(grep -E '^uv (self update|python upgrade)$' "$log" | tr '\n' ,)" == "uv self update,uv python upgrade," ]] \
+    || fail "uv must update before its Pythons: $(cat "$log")"
+pass "--packages: uv self update, then uv python upgrade"
+
+out="$(UV_SELF_FAIL=1 run_update --check)" || fail "--check with a failing uv self check exited non-zero"
+[[ "$out" == *"uv"*"status unknown"* ]] || fail "failed self check: $out"
+pass "a failed uv self check is status unknown"
 
 echo "All update --packages tests passed."
