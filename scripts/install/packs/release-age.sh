@@ -48,12 +48,28 @@ _release_age_outside() {
     awk -v b="$begin" -v e="$end" '$0 == b { skip = 1 } !skip { print } $0 == e { skip = 0 }' "$file"
 }
 
+# Is TOOL installed? PATH first, then where installers put it, for a run
+# with a short PATH (a non-login ssh session has no /usr/local/bin).
+# RELEASE_AGE_TOOL_DIRS (colon-separated) replaces that list in tests.
+_release_age_has() {
+    command_exists "$1" && return 0
+    local dir dirs="${RELEASE_AGE_TOOL_DIRS:-/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.bun/bin:${FNM_DIR:-$HOME/.local/share/fnm}/aliases/default/bin}"
+    local IFS=:
+    for dir in $dirs; do
+        [[ -x "$dir/$1" ]] && return 0
+    done
+    return 1
+}
+
 # _release_age_write TOOL FILE CLASH_RE CONTENT: the block, unless TOOL is
 # missing or FILE already matches CLASH_RE outside it (the user's own
 # setting, or a table a second header would break).
 _release_age_write() {
     local tool="$1" file="$2" clash="$3" content="$4"
-    command_exists "$tool" || return 0
+    if ! _release_age_has "$tool"; then
+        print_info "skipped $tool: not installed (re-run the pack after installing it)"
+        return 0
+    fi
     if _release_age_outside "$file" | grep -qE "$clash"; then
         print_info "$tool: $file already has its own setting here; left as it is"
         return 0
@@ -63,7 +79,7 @@ _release_age_write() {
 
 _release_age_fragment() {
     local days="$1" src="$REPO_ROOT/configs/zsh/release-age.zsh" tmp
-    command_exists uv || return 0
+    _release_age_has uv || return 0
     [[ -f "$src" ]] || { print_warning "release-age fragment missing: $src"; return 0; }
     tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-release-age.XXXXXX")"
     sed "s/@DAYS@/$days/g" "$src" > "$tmp"

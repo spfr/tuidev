@@ -14,6 +14,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
 
 export HOME="$tmp/home" TUIDEV_STATE_DIR="$tmp/state" TUIDEV_NO_COLOR=1 XDG_CONFIG_HOME="$tmp/home/.config"
+# Only the fake home's install dirs: a real bun in /opt/homebrew/bin mustn't count.
+export RELEASE_AGE_TOOL_DIRS="$HOME/.bun/bin"
 mkdir -p "$HOME" "$TUIDEV_STATE_DIR" "$tmp/bin"
 for t in npm pnpm bun uv; do printf '#!/bin/sh\nexit 0\n' > "$tmp/bin/$t"; chmod +x "$tmp/bin/$t"; done
 run_pack() { PATH="$tmp/bin:/usr/bin:/bin" bash "$PACK" < /dev/null 2>&1; }
@@ -49,6 +51,13 @@ out="$(TUIDEV_RELEASE_AGE_DAYS=soon run_pack)" || fail "bad age exited non-zero"
 [[ "$out" == *"must be a whole number of days"* ]] || fail "bad age not refused: $out"
 run_pack >/dev/null
 [[ -e "$HOME/.bunfig.toml" ]] && fail "wrote bunfig without bun on PATH"
-pass "a bad age is refused, and a tool that isn't installed gets nothing"
+[[ "$(run_pack)" == *"skipped bun: not installed"* ]] || fail "no skip line for bun"
+pass "a bad age is refused, and a tool that isn't installed gets nothing but a skip line"
+
+# A short PATH (non-login ssh): bun only in ~/.bun/bin is still found.
+mkdir -p "$HOME/.bun/bin"; printf '#!/bin/sh\nexit 0\n' > "$HOME/.bun/bin/bun"; chmod +x "$HOME/.bun/bin/bun"
+out="$(run_pack)" || fail "run with bun off PATH failed: $out"
+grep -qx 'minimumReleaseAge = 259200' "$HOME/.bunfig.toml" || fail "bun in ~/.bun/bin not found: $out"
+pass "a tool installed off PATH, where its installer puts it, still gets its block"
 
 echo "All release-age tests passed."
