@@ -1,10 +1,10 @@
 # Security scan: gitleaks (secrets, every PR commit) + Semgrep CE (SAST, changed files).
-# Standalone copy of the org workflow (public repos cannot call the private one);
+# Standalone copy of spfr/spfr-trust's reusable workflow (a public repo cannot call a private one);
 # run through security-scan.yml so the check context is `security-scan / security-scan`.
+name: security-scan
 
 on:
   workflow_call:
-  pull_request:
 
 permissions:
   contents: read
