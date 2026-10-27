@@ -1,0 +1,47 @@
+# Security scan: gitleaks (secrets, every PR commit) + Semgrep CE (SAST, changed files).
+# Standalone copy of the org workflow (public repos cannot call the private one);
+# run through security-scan.yml so the check context is `security-scan / security-scan`.
+
+on:
+  workflow_call:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Resolve range
+        id: range
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Secret scan over every commit in the PR (not just the tip). Uses the
+      # gitleaks container, which needs no per-org license (unlike gitleaks-action).
+      - name: gitleaks
+        run: |
+          BASE="${{ steps.range.outputs.base }}"
+          case "$BASE" in ""|0000000000000000000000000000000000000000) OPTS="-1" ;; *) OPTS="$BASE..${{ github.sha }}" ;; esac
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.0@sha256:2bcceac45179b3a91bff11a824d0fb952585b429e54fc928728b1d4d5c3e5176 \
+            detect --source /repo --log-opts="$OPTS" --redact --verbose --exit-code 1
+
+      # Semgrep CE, default ruleset, changed files only; any finding fails the check.
+      - name: semgrep
+        run: |
+          BASE="${{ steps.range.outputs.base }}"
+          case "$BASE" in ""|0000000000000000000000000000000000000000) BASE="HEAD~1" ;; esac
+          git diff --name-only --diff-filter=ACMR "$BASE" HEAD > "$RUNNER_TEMP/changed.txt" || true
+          if [ ! -s "$RUNNER_TEMP/changed.txt" ]; then echo "No changed files"; exit 0; fi
+          docker run --rm -v "$PWD:/src" -v "$RUNNER_TEMP/changed.txt:/changed.txt:ro" -w /src semgrep/semgrep:1.181.1@sha256:3db5c7af55eb1f512eac0abf0ab69a97b52c74b5e9a27314c221aee1a78d7ab2 \
+            sh -c "tr '\n' '\0' < /changed.txt | xargs -0 semgrep scan --config p/default --error --metrics=off"
