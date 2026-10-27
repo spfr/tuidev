@@ -1,0 +1,148 @@
+# Reusable Dependabot auto-merge (CEO decision 2026-10-27): squash-merge a
+# Dependabot PR (version or security update) when it is a semver patch or minor
+# update and every other check on the PR head finished green. Majors and
+# unknown update types stay open for human triage.
+#
+# Rulesets require no status checks, so GitHub's native auto-merge would merge
+# at once. This job is the gate: it polls the head commit's check runs, commit
+# statuses and workflow runs until all of them (other than this workflow's own)
+# have finished, then merges only if every one passed and the required check
+# (the security scan) is among them.
+#
+# Called by dependabot-automerge-pr.yml here and by each org repo's caller,
+# which must grant the job permissions below (Dependabot-triggered runs get a
+# read-only GITHUB_TOKEN unless the workflow asks for more).
+# See docs/operations/dependabot-automerge.md.
+name: dependabot-automerge
+
+on:
+  workflow_call:
+    inputs:
+      required-check:
+        description: Check run that must be present and successful before merging.
+        type: string
+        default: security-scan / security-scan
+      timeout-minutes:
+        description: How long to wait for the other checks to finish.
+        type: number
+        default: 45
+
+permissions: {}
+
+jobs:
+  automerge:
+    # Opened or updated by Dependabot itself: a human push to a Dependabot
+    # branch changes the actor and is left for review.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    concurrency:
+      group: dependabot-automerge-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      statuses: read
+      actions: read
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Gate, wait for checks, merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          DEPS: ${{ steps.meta.outputs.dependency-names }}
+          REQUIRED_CHECK: ${{ inputs.required-check }}
+          TIMEOUT_MIN: ${{ inputs.timeout-minutes }}
+          POLL_SEC: 30
+        run: |
+          set -euo pipefail
+          MARK='<!-- dependabot-automerge -->'
+          summary() { echo "$*" >> "$GITHUB_STEP_SUMMARY"; echo "$*"; }
+          # One comment per reason: re-runs and rebases do not repeat it.
+          refuse() {
+            local body; body="$(printf '%s\nNot auto-merged: %s\n\nHead commit %s. Policy: patch and minor Dependabot updates merge automatically once every check passes; anything else waits for a human.' "$MARK" "$1" "$HEAD_SHA")"
+            summary "Not merged: $1"
+            local prior; prior="$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[].body')"
+            if grep -qF "Not auto-merged: $1" <<<"$prior"; then
+              echo "Same reason already on the PR; not commenting again."
+            else
+              gh pr comment "$PR" --repo "$REPO" --body "$body"
+            fi
+          }
+
+          summary "PR #$PR ($DEPS): update-type '${UPDATE_TYPE:-unknown}'"
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor) ;;
+            *) refuse "update type is '${UPDATE_TYPE:-unknown}' (only semver patch and minor merge automatically)"; exit 0 ;;
+          esac
+
+          # This workflow's runs (this one, and earlier ones on the same head)
+          # are excluded from the checks it waits for.
+          SELF_WF="$(gh api "repos/$REPO/actions/runs/$GITHUB_RUN_ID" --jq .workflow_id)"
+          deadline=$(( $(date +%s) + TIMEOUT_MIN * 60 ))
+          settled=0
+          while :; do
+            runs="$(gh api "repos/$REPO/actions/runs?head_sha=$HEAD_SHA&per_page=100" --paginate --jq '.workflow_runs[]' | jq -s .)"
+            self_suites="$(jq -c --argjson wf "$SELF_WF" '[.[] | select(.workflow_id == $wf) | .check_suite_id]' <<<"$runs")"
+            open_runs="$(jq -r --argjson wf "$SELF_WF" '[.[] | select(.workflow_id != $wf and .status != "completed") | .name] | join(", ")' <<<"$runs")"
+            checks="$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?filter=latest&per_page=100" --paginate --jq '.check_runs[]' \
+              | jq -s --argjson self "$self_suites" '[.[] | select(.check_suite.id as $s | ($self | index($s)) | not) | {name, status, conclusion}]')"
+            statuses="$(gh api "repos/$REPO/commits/$HEAD_SHA/status" --jq '[.statuses[] | {context, state}]')"
+
+            pending="$(jq -r '[.[] | select(.status != "completed") | .name] | join(", ")' <<<"$checks")"
+            pending_st="$(jq -r '[.[] | select(.state == "pending") | .context] | join(", ")' <<<"$statuses")"
+            have_required="$(jq --arg n "$REQUIRED_CHECK" '[.[] | select(.name == $n and .status == "completed")] | length' <<<"$checks")"
+            waiting=""
+            for w in "$pending" "$pending_st" "${open_runs:+workflow runs: $open_runs}"; do
+              if [ -n "$w" ]; then waiting="${waiting:+$waiting, }$w"; fi
+            done
+            # Everything that reported has finished and something failed: the
+            # outcome is settled, so do not wait out the timeout.
+            failed="$(jq '[.[] | select(.status == "completed" and (.conclusion as $c | ["success", "neutral", "skipped"] | index($c) | not))] | length' <<<"$checks")"
+            failed_st="$(jq '[.[] | select(.state == "failure" or .state == "error")] | length' <<<"$statuses")"
+            if [ -z "$waiting" ] && [ $((failed + failed_st)) -gt 0 ]; then break; fi
+            [ "$have_required" -gt 0 ] || waiting="${waiting:+$waiting, }$REQUIRED_CHECK (not reported yet)"
+
+            if [ -z "$waiting" ]; then
+              # Two consecutive quiet polls: jobs that start late (needs:, dynamic
+              # matrices) get one poll interval to register their check runs.
+              settled=$((settled + 1))
+              [ "$settled" -ge 2 ] && break
+            else
+              settled=0
+              echo "$(date -u +%TZ) waiting for: $waiting"
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              refuse "checks still unfinished after ${TIMEOUT_MIN} minutes: ${waiting:-none}"; exit 0
+            fi
+            sleep "$POLL_SEC"
+          done
+
+          bad="$(jq -r '[.[] | select(.conclusion as $c | ["success", "neutral", "skipped"] | index($c) | not) | "\(.name) (\(.conclusion))"] | join(", ")' <<<"$checks")"
+          bad_st="$(jq -r '[.[] | select(.state != "success") | "\(.context) (\(.state))"] | join(", ")' <<<"$statuses")"
+          req_ok="$(jq --arg n "$REQUIRED_CHECK" '[.[] | select(.name == $n and .conclusion == "success")] | length' <<<"$checks")"
+          summary "Checks considered: $(jq -r 'map("\(.name)=\(.conclusion)") | join(", ")' <<<"$checks")"
+          if [ -n "$bad$bad_st" ]; then
+            refuse "not every check passed: $bad${bad:+${bad_st:+, }}$bad_st"; exit 0
+          fi
+          if [ "$req_ok" -lt 1 ]; then
+            refuse "required check '$REQUIRED_CHECK' did not succeed"; exit 0
+          fi
+
+          state="$(gh pr view "$PR" --repo "$REPO" --json state,headRefOid --jq '"\(.state) \(.headRefOid)"')"
+          if [ "$state" != "OPEN $HEAD_SHA" ]; then
+            summary "PR is no longer open at $HEAD_SHA ($state); a newer run handles it."; exit 0
+          fi
+          # --match-head-commit: refuse if anything was pushed while we waited.
+          if gh pr merge "$PR" --repo "$REPO" --squash --delete-branch --match-head-commit "$HEAD_SHA"; then
+            summary "Merged PR #$PR ($UPDATE_TYPE)."
+          else
+            refuse "merge call failed (conflict, ruleset, or head moved); see run $GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID"
+          fi
