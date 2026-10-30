@@ -132,7 +132,17 @@ _monitoring_memguard() {
     install_config "$plist" "$tmp" --overwrite
     rm -f "$tmp"
     [[ "$DRY_RUN" == true ]] && return 0
-    launchctl bootout "gui/$(id -u)/$MONITORING_MEMGUARD_LABEL" 2>/dev/null || true
+    local job
+    job="gui/$(id -u)/$MONITORING_MEMGUARD_LABEL"
+    if launchctl print "$job" >/dev/null 2>&1; then
+        launchctl bootout "$job" 2>/dev/null || true
+        # bootout returns before the job is gone, and bootstrap fails (5:
+        # Input/output error) until it is: wait up to 5 s.
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+            launchctl print "$job" >/dev/null 2>&1 || break
+            sleep 0.25
+        done
+    fi
     run_cmd launchctl bootstrap "gui/$(id -u)" "$plist" \
         || print_warning "the memory guard did not start: agents mem restart (continuing)"
     print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM; 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
