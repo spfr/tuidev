@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.17.0] - 2026-10-30
+
+A runaway test can no longer take the Mac's memory: a guard stops it and says what it was.
+
+### Added
+
+- **A memory guard: `agents mem guard`, a LaunchAgent from the monitoring pack (macOS).** One node test an agent started grew to 16 GB in 55 seconds, macOS killed dozens of its own daemons, and its out-of-memory dialog blamed Chrome, because it lists only apps. Every 5 seconds the guard reads `ps`, and asks `top` for the footprint of the few big processes (RSS falls as the compressor squeezes a runaway; the footprint doesn't). Past 8 GB, and at each doubling, or growing faster than 200 MB/s, a notification names the process, its script, project and session, and a click jumps there. A process in an agent tree past half the RAM, or the largest past the warning while memory pressure is critical, is stopped through the `agents kill` engine; an agent itself, your apps and other users' processes are only warned about. Incidents go to `memory.tsv` (`AGENTS_MEM_GUARD`, `AGENTS_MEM_WARN`, `AGENTS_MEM_KILL`, `AGENTS_MEM_RATE`, `AGENTS_MEM_POLL`; [agent-workflows.md](docs/agent-workflows.md#memory-guard-agents-mem)).
+- **`agents mem`:** free memory, pressure and swap, the guard's state, the ten processes holding the most by footprint with their session and project, and the last incidents; `agents mem check -n` shows what the guard would do.
+- **Memory hogs.** A process past `AGENTS_MEM_WARN` leads the hogs in `agents`, `agents hogs` and the menu, by its memory. The menu's System section shows the guard and its last incident, and an incident in the last 15 minutes turns the icon orange.
+- **A 4 GB Node heap cap for agents.** The shipped Claude Code settings set `NODE_OPTIONS=--max-old-space-size=4096` (Codex: `shell_environment_policy.set`), so a runaway Node test fails fast with `JavaScript heap out of memory`. Raise it for one command with `NODE_OPTIONS=--max-old-space-size=8192 CMD`.
+
 ## [3.16.1] - 2026-10-22
 
 The release-age pack finds tools a short `PATH` hides, and says which it skipped.
