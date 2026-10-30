@@ -10,6 +10,7 @@
   - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`;
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
+  - `env.NODE_OPTIONS=--max-old-space-size=4096`, so a runaway Node test fails fast instead of taking the machine's memory (Codex: `shell_environment_policy.set`);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`;
   - a `statusLine` that runs `~/.local/bin/agents statusline` (it records Claude's usage limits, then prints a compact line or `AGENTS_STATUSLINE_CMD`'s; nothing without the `monitoring` pack, and a user's own `statusLine` survives the merge);
   - `SubagentStop` and `SessionEnd` (`clear|resume`) hooks that run `~/.local/bin/agents hook` to stop the background commands a finished subagent or cleared session left running (a no-op without the `monitoring` pack; `AGENTS_HOOK_REAP=0` turns them off);

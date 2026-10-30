@@ -58,6 +58,12 @@ exclude_slash_tmp = false
 [history]
 persistence = "save-all"
 
+# Cap Node's heap in the commands Codex runs: a runaway test fails fast with
+# "JavaScript heap out of memory" at 4 GB instead of taking the machine's
+# memory. Raise it for one command: NODE_OPTIONS=--max-old-space-size=8192 CMD
+[shell_environment_policy]
+set = { NODE_OPTIONS = "--max-old-space-size=4096" }
+
 # Terminal notifications (OSC 9 / bell) while the pane is unfocused —
 # Ghostty and tmux surface them. `true` = all event types; the reference
 # also accepts an array of event names if you want to narrow it.
