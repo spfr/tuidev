@@ -22,10 +22,10 @@
 # for each session (awk/lib_where.awk; PANES: tmux's "pane_pid<TAB>
 # session:window.pane" lines, where.sh), and "job" records (awk/lib_jobs.awk).
 agents_classify() {
-    local mcp
+    local mcp pats
     _agents_mcp_needles mcp     # which configured MCP server each process is
-    local IFS=$'\n'
-    AGENTS_MCP="$mcp" AGENTS_PANES="${3:-}" AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="${AGENTS_ORPHAN_PATTERNS[*]}" \
+    pats="$(printf '%s\n' "${AGENTS_ORPHAN_PATTERNS[@]}")"   # one pattern per line
+    AGENTS_MCP="$mcp" AGENTS_PANES="${3:-}" AGENTS_LISTEN="$1" AGENTS_KEEP="$2" AGENTS_PATTERNS="$pats" \
     AGENTS_UID="$AGENTS_UID" AGENTS_SELF="$AGENTS_SELF" AGENTS_NAMES="$AGENTS_NAMES" \
     AGENTS_DAEMON="$AGENTS_DAEMON_PATTERN" AGENTS_SYSTEM="$AGENTS_SYSTEM_PATTERN" \
     AGENTS_HOG_PCT="$AGENTS_HOG_PCT" AGENTS_HOG_MIN="$AGENTS_HOG_MIN" \

@@ -190,8 +190,9 @@ _agents_mcp_load() { _AGENTS_MCP_ROWS="$FIX_MCP"$'\n'; }
 _agents_listeners() { printf '%s\n' "$FIX_LISTEN"; }
 _agents_cwds() {
     [[ $# -gt 0 ]] || return 0
-    local IFS=,
-    printf '%s\n' "$FIX_CWDS" | awk -F '\t' -v want=",$*," 'index(want, "," $1 ",") { print $1 "\t" $2 }'
+    local want="," p
+    for p in "$@"; do want+="$p,"; done
+    printf '%s\n' "$FIX_CWDS" | awk -F '\t' -v want="$want" 'index(want, "," $1 ",") { print $1 "\t" $2 }'
 }
 # Herdr knows 90419 (by its directory) and its session id; no pane or title.
 _agents_herdr() { printf 'claude\tworking\t%s\t-\t-\tsess-90419-herdr\n' "$HOME/work/app"; }
