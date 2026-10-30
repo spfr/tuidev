@@ -15,7 +15,7 @@
 # keep-awake holder). Prints tab-separated records, 14 columns:
 #   type pid kind age_s cpu avg rss_kib kids start ports user herdr cwd args
 # type is agent | stale | cand (a dev-server candidate agents_enrich confirms
-# by cwd) | hog. Unknown fields are "-". Plus "watch PID PATH read|exists"
+# by cwd) | hog (CPU, or an RSS past AGENTS_MEM_WARN GB, listed first). Unknown fields are "-". Plus "watch PID PATH read|exists"
 # records: the file a polling loop waits on, and whether its condition reads
 # it or only tests that it exists (agents_collect checks its age,
 # agents_enrich drops them), "where PID tmux|herdr|ssh|app|- PLACE" records
@@ -30,6 +30,7 @@ agents_classify() {
     AGENTS_DAEMON="$AGENTS_DAEMON_PATTERN" AGENTS_SYSTEM="$AGENTS_SYSTEM_PATTERN" \
     AGENTS_HOG_PCT="$AGENTS_HOG_PCT" AGENTS_HOG_MIN="$AGENTS_HOG_MIN" \
     AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_HOG_TOP="$AGENTS_HOG_TOP" AGENTS_BAR_TOP="$AGENTS_BAR_TOP" \
+    AGENTS_MEM_WARN_KIB=$((AGENTS_MEM_WARN * 1048576)) \
     _agents_awk "lib_proc lib_activity lib_jobs lib_where classify"
 }
 

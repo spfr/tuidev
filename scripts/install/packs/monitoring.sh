@@ -8,7 +8,9 @@
 # with mcp-lazy, which `agents mcp lazy` puts in front of an MCP server so a
 # session starts it on its first tool call.
 # On macOS it adds SwiftBar and a menu-bar plugin built on `agents`, and
-# terminal-notifier, so a click on an agent's notification jumps to its session.
+# terminal-notifier, so a click on an agent's notification jumps to its session,
+# and a LaunchAgent that runs the memory guard (`agents mem guard`), which
+# stops a runaway process in an agent tree before macOS runs out of memory.
 #
 # Entrypoint: monitoring_install
 # Invoked via: ./install.sh --pack monitoring
@@ -116,6 +118,26 @@ _monitoring_swiftbar() {
     print_info "The first click asks to let terminal-notifier control your terminal app: allow it, so a click lands on the session's tab (declined, it only brings the app forward)."
 }
 
+# The memory guard's LaunchAgent: the plist (configs/agents) with this
+# install's paths filled in, then (re)loaded so a new agents takes over.
+MONITORING_MEMGUARD_LABEL="dev.tuidev.memguard"
+_monitoring_memguard() {
+    local plist="$HOME/Library/LaunchAgents/$MONITORING_MEMGUARD_LABEL.plist" tmp
+    local log="$HOME/Library/Logs/tuidev-memguard.log"
+    local path="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    print_step "installing the memory guard (LaunchAgent) -> $plist"
+    tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-memguard.XXXXXX")"
+    sed -e "s|@AGENTS@|$HOME/.local/bin/agents|" -e "s|@PATH@|$path|" -e "s|@LOG@|$log|" \
+        "$MONITORING_REPO/configs/agents/$MONITORING_MEMGUARD_LABEL.plist" > "$tmp"
+    install_config "$plist" "$tmp" --overwrite
+    rm -f "$tmp"
+    [[ "$DRY_RUN" == true ]] && return 0
+    launchctl bootout "gui/$(id -u)/$MONITORING_MEMGUARD_LABEL" 2>/dev/null || true
+    run_cmd launchctl bootstrap "gui/$(id -u)" "$plist" \
+        || print_warning "the memory guard did not start: agents mem restart (continuing)"
+    print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM; 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
+}
+
 monitoring_install() {
     print_header "Pack: monitoring"
 
@@ -123,6 +145,9 @@ monitoring_install() {
     _monitoring_agents
     if is_macos; then
         _monitoring_swiftbar
+        _monitoring_memguard
+    else
+        print_info "memory guard: run 'agents mem guard' in a tmux pane (or a systemd user service) to stop runaway agent processes."
     fi
 
     print_info "bottom installs as 'btm' on your PATH."

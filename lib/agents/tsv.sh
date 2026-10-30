@@ -7,7 +7,7 @@
 #   assess.sh (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
 #   (_agents_hist_line), report.sh (_agents_insight_line,
 #   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv), cool.sh
-#   (_agents_cool_row).
+#   (_agents_cool_row), memory.sh (_agents_mem_tsv_row).
 # Public: agents_tsv.
 
 # agents_tsv — agents_assess's need/evid rows (first, so the menu knows an
@@ -26,6 +26,8 @@
 #   lid on|off|stale guard_pid until max_secs  (keep-awake with the lid closed)
 #   cool state mode soc control rpms low high pressure  (fan control, only
 #     with the cooling pack: cool.sh)
+#   memg state guard_pid warn_kib stop_kib last_epoch last_event last_what
+#     last_project last_fp_kib  (the memory guard: memory.sh)
 #   conf KEY VALUE  for each AGENTS_BAR_* setting ("-" = empty)
 # Built for the menu bar, every few seconds: Herdr is read from its cache
 # (never waited on), the keep-awake state is read once, and the machine's
@@ -63,13 +65,14 @@ agents_tsv() {
     _agents_limits_lines
     printf '%s\n' "$lid"
     [[ -z "$cool" ]] || printf '%s\n' "$cool"
+    _agents_mem_tsv_row
     # Herdr: "hhealth server stale" and "hhealth outdated NAME…" while
     # Herdr's server or integrations need an update (an hourly check, never
     # waited on: _agents_herdr_health). Each session's Herdr pane and task
     # title came with the records ("herdr PID PANE TITLE", agents_enrich), and
     # so did each agent row's join key ("ident PID PANE SESSION").
     _agents_herdr_health
-    for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP; do
+    for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP AGENTS_MEM_GUARD; do
         val="${!key}"
         printf 'conf\t%s\t%s\n' "$key" "${val:--}"
     done

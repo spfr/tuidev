@@ -38,6 +38,9 @@ export AGENTS_TESTING=1 AGENTS_SELF=7000 AGENTS_UID=501 AGENTS_CONF="$tmp/none.c
 export AGENTS_DATA_DIR="$tmp/data" AGENTS_RUN_DIR="$tmp/run"
 unset CLAUDE_CONFIG_DIR CODEX_HOME   # the token scan reads only $HOME's transcripts (none)
 mkdir -p "$HOME" "$TMPDIR" "$AGENTS_DATA_DIR" "$AGENTS_RUN_DIR" "$tmp/out"
+# A 48 GB machine, whatever runs the test: the memory guard's stop size (half
+# the RAM) is in the tsv.
+echo 50331648 > "$AGENTS_RUN_DIR/memtotal"
 
 # shellcheck source=../../bin/agents disable=SC1091
 . "$REPO_DIR/bin/agents"

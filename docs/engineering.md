@@ -68,6 +68,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `awake.sh` | the keep-awake holder and `agents awake` |
 | `lid.sh` | `awake lid`: the root guard, the admin dialog, the lid state |
 | `cool.sh` | `agents cool`: the fan daemon's status file and mode file (`--pack cooling`), the tsv's cool row |
+| `memory.sh` | `agents mem`: each process's footprint (one `top` sample for the few candidates), the machine's memory, the memory guard's look (`agents_mem_tick`), its loop and state (`memguard.state`, `memguard.lock`), `memory.tsv`, the tsv's memg row |
 | `kill.sh` | refusals, PID@START plans, SIGTERM then SIGKILL (`kill`, `term`, and every other stop) |
 | `reap.sh` | what `agents reap` stops, by hand or with `--auto` |
 | `events.sh` | the private data dir and `events.tsv` |

@@ -162,6 +162,10 @@ lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 # Fan control (--pack cooling): absent until the cool row says otherwise.
 cool_state=absent cool_mode=- cool_soc=- cool_ctl=- cool_rpms=- cool_low=- cool_high=-
 cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
+# The memory guard (the memg row): its state, warning and stop sizes, and the
+# last incident. Hogs are rendered once it is known (hog_rows).
+mem_state=none mem_warn=0 mem_stop=0 mem_last=0 mem_ev=- mem_what=- mem_proj=- mem_fp=0
+hog_rows=()
 BAR_TITLE="count awake" BAR_SECTIONS="needs agents usage jobs stale hogs awake system" BAR_ICON=terminal CONF=""
 # Calm items in Needs you (finished sessions): counted in its header, never
 # in the title's tint. Herdr's health (hhealth rows) is maintenance, at the
@@ -424,18 +428,10 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                 stale_tokens+=" $t"
             fi
             ;;
-        hog)
-            n_hogs=$((n_hogs + 1))
-            cl "$kind"; c="$REPLY"; pctv "$pcpu"; a="$REPLY"; pctv "$avg"
-            hogs_menu+="$c · $a% now · $REPLY% avg | $ROW symbolize=false sfimage=flame"$'\n'
-            cl "$user"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
-            hogs_menu+="--pid $pid · $c · up $a · $REPLY | symbolize=false"$'\n'
-            if [[ "$user" == "$me" ]] && tok "$pid" "$start"; then
-                hogs_menu+="--Terminate (SIGTERM) | $ACT param1=term param2=-y param3=--notify param4=$REPLY sfimage=xmark.octagon"$'\n'
-            elif [[ "$user" != "$me" ]]; then
-                hogs_menu+="--Owned by $c: run sudo kill $pid in a terminal | symbolize=false"$'\n'
-            fi
-            ;;
+        hog)     hog_rows+=("$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$avg"$'\t'"$rss"$'\t'"$start"$'\t'"$user") ;;
+        # memg STATE GUARD_PID WARN_KIB STOP_KIB LAST_EPOCH LAST_EVENT LAST_WHAT LAST_PROJECT LAST_FP_KIB
+        memg)    mem_state="$pid"; mem_warn="$age_s"; mem_stop="$pcpu"; mem_last="$avg"
+                 mem_ev="$rss"; mem_what="$kids"; mem_proj="$start"; mem_fp="$ports" ;;
         top)     cl "$kind"; c="$REPLY"; pctv "$pcpu"; a="$REPLY"; memv "$rss"
                  top_menu+="--$c · $a% · $REPLY | $CALLBACK param1=activity-monitor symbolize=false"$'\n' ;;
         sys)     cpu="$pid"; load="$kind"; cores="$age_s"; memfree="$pcpu"; mempress="$avg"; batt="$rss"; bstate="$kids" ;;
@@ -474,6 +470,37 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             ;;
     esac
 done <<<"$data"
+
+# Hogs: a memory hog (RSS past the guard's warning, listed first) by its
+# memory, the others by their CPU.
+num "$mem_warn" || mem_warn=0
+for row in ${hog_rows[@]+"${hog_rows[@]}"}; do
+    IFS=$'\t' read -r pid kind age_s pcpu avg rss start user <<<"$row"
+    num "$rss" || rss=0
+    n_hogs=$((n_hogs + 1))
+    cl "$kind"; c="$REPLY"
+    if [[ $mem_warn -gt 0 && $rss -ge $mem_warn ]]; then
+        memv "$rss"
+        hogs_menu+="$c · $REPLY memory | $ROW symbolize=false sfimage=memorychip $DOT_RED"$'\n'
+    else
+        pctv "$pcpu"; a="$REPLY"; pctv "$avg"
+        hogs_menu+="$c · $a% now · $REPLY% avg | $ROW symbolize=false sfimage=flame"$'\n'
+    fi
+    cl "$user"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
+    hogs_menu+="--pid $pid · $c · up $a · $REPLY | symbolize=false"$'\n'
+    if [[ "$user" == "$me" ]] && tok "$pid" "$start"; then
+        hogs_menu+="--Terminate (SIGTERM) | $ACT param1=term param2=-y param3=--notify param4=$REPLY sfimage=xmark.octagon"$'\n'
+    elif [[ "$user" != "$me" ]]; then
+        hogs_menu+="--Owned by $c: run sudo kill $pid in a terminal | symbolize=false"$'\n'
+    fi
+done
+# A memory incident in the last 15 minutes (warn, grow, stop, refused,
+# pressure) needs a look, and so does a guard that should run but doesn't.
+mem_recent=0
+if num "$mem_last" && [[ $mem_last -gt 0 ]]; then
+    NOW_S="$(date +%s)"   # now_s, defined with the sections below
+    [[ $((NOW_S - mem_last)) -lt 900 ]] && mem_recent=1
+fi
 
 # Auto-reap (AGENTS_AUTO_REAP=1): when something here is safe to stop on its
 # own, `agents reap --auto` runs in the background, at most once a minute
@@ -613,7 +640,7 @@ fi
 # pressure.
 
 attention=""
-if [[ $n_attn -gt 0 || $n_stale -gt 0 || $n_hogs -gt 0 || "$mempress" == warn ]]; then attention="$ORANGE"; fi
+if [[ $n_attn -gt 0 || $n_stale -gt 0 || $n_hogs -gt 0 || "$mempress" == warn || $mem_recent -eq 1 || "$mem_state" == stopped ]]; then attention="$ORANGE"; fi
 if { num "$thermal" && [[ $thermal -ge 2 ]]; } || [[ "$mempress" == critical || "$lid_state" == stale ]]; then attention="$RED"; fi
 # A usage limit at 95% or more is about to stop a CLI: orange.
 if [[ -z "$attention" && $limit_max -ge 95 ]]; then attention="$ORANGE"; fi
@@ -1150,6 +1177,7 @@ section_system() {
         put "--Busiest processes | size=11"
         OUT+="$top_menu"
     fi
+    section_memguard
     num "$thermal" && [[ $thermal -ge 2 ]] && hot=" $DOT_RED"
     if num "$batt"; then
         charging "$bstate" && bolt=" :bolt.fill:"
@@ -1159,6 +1187,35 @@ section_system() {
         put "Thermal $thermal_name · Energy $power | sfimage=thermometer.medium$hot $CALLBACK param1=battery-settings"
     fi
     section_fans
+}
+
+# The memory guard: on (with the size it stops a runaway at), not running
+# (with Start), or off; then its last incident, and the memory view.
+section_memguard() {
+    local line ago=""
+    case "$mem_state" in
+        on)      memv "${mem_stop:-0}"; line="Memory guard: on · stops agent runaways at $REPLY | sfimage=shield.lefthalf.filled $TERM_OPEN param2=--hold param3=mem" ;;
+        stopped) line="Memory guard not running | sfimage=shield.slash $DOT_ORANGE $TERM_OPEN param2=--hold param3=mem" ;;
+        off)     line="Memory guard: off (AGENTS_MEM_GUARD) | sfimage=shield.slash $DOT_GRAY $TERM_OPEN param2=--hold param3=mem" ;;
+        *)       line="Memory guard: not set up (agents mem guard) | sfimage=shield.slash $DOT_GRAY $TERM_OPEN param2=--hold param3=mem" ;;
+    esac
+    put "$line"
+    [[ "$mem_state" != stopped ]] || put "--Start it | $ACT param1=mem param2=restart sfimage=play.circle"
+    if num "$mem_last" && [[ $mem_last -gt 0 ]]; then
+        now_s; agev $((NOW_S - mem_last)); ago="$REPLY"
+        cl "$mem_what"; line="$REPLY"
+        [[ "$mem_proj" == - ]] || { cl "$mem_proj"; line+=" in $REPLY"; }
+        num "$mem_fp" && { memv "$mem_fp"; line+=" · $REPLY"; }
+        case "$mem_ev" in
+            stop)     line="Stopped $line" ;;
+            refused)  line="Could not stop $line" ;;
+            grow)     line="Growing fast: $line" ;;
+            pressure) line="Pressure critical, biggest: $line" ;;
+            *)        line="Warned: $line" ;;
+        esac
+        put "--$line · $ago ago | symbolize=false size=11"
+    fi
+    put "--Memory view (agents mem) | $TERM_OPEN param2=--hold param3=mem sfimage=memorychip"
 }
 
 # Fans (--pack cooling only): the speed, the SoC's temperature and the mode,

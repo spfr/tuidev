@@ -83,12 +83,13 @@ END {
     }
     if (has("hogs") && (nh || !quiet)) {
         if (printed) print ""
-        printf "%sHOGS (%d)%s%s\n", (nh ? ENVIRON["R"] ENVIRON["B"] : ENVIRON["B"]), nh, e, (nh ? ENVIRON["DIM"] "  CPU% now / lifetime average: agents term PID" e : "")
+        printf "%sHOGS (%d)%s%s\n", (nh ? ENVIRON["R"] ENVIRON["B"] : ENVIRON["B"]), nh, e, (nh ? ENVIRON["DIM"] "  CPU% now / lifetime average, or memory: agents term PID · agents mem" e : "")
         if (nh) printf "%s  %-7s %-12s %7s %6s %6s %6s  %s%s\n", ENVIRON["DIM"], "PID", "USER", "AGE", "NOW%", "AVG%", "MEM", "PROCESS", e
         for (i = 1; i <= nh; i++) {
             split(h[i], f, "\t")
-            line = sprintf("  %-7s %-12s %7s %6.1f %6.1f %6s  ", f[2], substr(f[11], 1, 12), age(f[4]), f[5], f[6], mem(f[7]))
-            print line cut(f[3], w - 58)
+            mw = (ENVIRON["MEMWARN"] + 0 > 0 && f[7] + 0 >= ENVIRON["MEMWARN"] + 0)
+            line = sprintf("  %-7s %-12s %7s %6.1f %6.1f %s%6s%s  ", f[2], substr(f[11], 1, 12), age(f[4]), f[5], f[6], (mw ? ENVIRON["R"] ENVIRON["B"] : ""), mem(f[7]), (mw ? e : ""))
+            print line cut(f[3] (mw ? " (memory)" : ""), w - 58)
         }
         if (!nh) print "  none"
     }

@@ -243,6 +243,14 @@ else
         [[ -f "$f" ]] && cmp -s "$f" "$SCRIPT_DIR/configs/swiftbar/agents.10s.sh" && _remove_swiftbar_plugin "$f"
     done
 fi
+# The memory guard's LaunchAgent only runs `agents` too: unloaded and removed
+# with it, or launchd would retry a missing command at every login.
+memguard_plist="$HOME/Library/LaunchAgents/dev.tuidev.memguard.plist"
+if [[ -f "$memguard_plist" ]] && grep -q 'agents' "$memguard_plist" 2>/dev/null; then
+    run_cmd launchctl bootout "gui/$(id -u)/dev.tuidev.memguard" 2>/dev/null || true
+    run_cmd rm -f "$memguard_plist"
+    done_msg "removed $memguard_plist"
+fi
 # Unset SwiftBar's plugin folder only if it is still ours and now empty.
 if is_macos && [[ "$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null)" == "$swiftbar_dir" ]] \
    && [[ -z "$(ls -A "$swiftbar_dir" 2>/dev/null)" ]]; then

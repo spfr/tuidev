@@ -1003,13 +1003,14 @@ check_actions() {   # MENU
                         [[ $# -lt 2 ]] || agents_parse_duration "$2" >/dev/null || fail "awake $1: bad duration '$2'" ;;
                     open-term)
                         [[ "${1:-}" != --hold ]] || shift
-                        [[ "$*" == watch || "$*" == "awake status" || "$*" =~ ^(show\ --watch|peek)\ [0-9]+@[A-Za-z0-9_:]+( 60)?$ ]] \
+                        [[ "$*" == watch || "$*" == mem || "$*" == "awake status" || "$*" =~ ^(show\ --watch|peek)\ [0-9]+@[A-Za-z0-9_:]+( 60)?$ ]] \
                             || fail "open-term: unexpected command '$*'" ;;
                     jump)
                         [[ $# -eq 2 && "$1" == --notify && "$2" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || fail "jump: expects --notify PID@START, got '$*'" ;;
                     copy-path|reveal)
                         [[ $# -eq 1 && "$1" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || fail "$sub: expects one PID@START, got '$*'" ;;
                     config) [[ "$*" == --edit ]] || fail "config: unexpected '$*'" ;;
+                    mem)    [[ "$*" == restart ]] || fail "mem: unexpected '$*'" ;;
                     *) fail "menu runs agents $sub, which the test does not know" ;;
                 esac ;;
             "$REPO_DIR/configs/swiftbar/agents.10s.sh")

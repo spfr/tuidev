@@ -10,8 +10,24 @@ LOOK
                                sessions; all sessions without PID
   agents stale                 only stale processes: orphaned MCP servers, npx
                                helpers, caffeinate, dev servers (ppid 1)
-  agents hogs                  top 5 CPU hogs, any owner: lifetime average
-                               >= 50% after 30m, or >= 90% now outside agent trees
+  agents hogs                  top 5 hogs, any owner: memory past 8 GB RSS first,
+                               then CPU: lifetime average >= 50% after 30m,
+                               or >= 90% now outside agent trees
+  agents mem                   memory: free %, pressure and swap, the memory guard,
+                               the ten processes holding the most (footprint, which
+                               counts compressed pages RSS misses) with their session
+                               and project, and the last incidents
+  agents mem check [-n]        one look by the memory guard, saying what it did
+                               (-n: what it would do)
+  agents mem guard             the guard's loop, every AGENTS_MEM_POLL (5s): warns
+                               about a process past AGENTS_MEM_WARN (8 GB), and at each
+                               doubling, or growing faster than AGENTS_MEM_RATE (200 MB/s);
+                               stops one in an agent tree past AGENTS_MEM_KILL (0:
+                               half the RAM), or the largest past the warning while
+                               pressure is critical (AGENTS_MEM_GUARD=kill|warn|off).
+                               The monitoring pack runs it as a LaunchAgent (macOS)
+  agents mem log [N]           the last N (20) incidents (memory.tsv)
+  agents mem restart           restart the LaunchAgent (after editing the settings)
   agents thermal               thermal pressure and energy mode (display only)
   agents cool [cool|auto|quiet|max|off]
                                fan control (--pack cooling, Apple Silicon): the fans,
@@ -140,7 +156,8 @@ SETTINGS
   AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK AGENTS_NAMES AGENTS_NO_HERDR
   AGENTS_TERMINAL AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY, and the menu
   bar's AGENTS_BAR_TITLE
-  AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. The same
+  AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. Memory guard:
+  AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL. The same
   names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
   AGENTS_ORPHAN_PATTERNS in @REPO@/lib/agents/config.sh. History: AGENTS_HISTORY
   AGENTS_HISTORY_DAYS AGENTS_PRICES; extra job patterns (EREs): AGENTS_JOB_TEST

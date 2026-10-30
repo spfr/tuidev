@@ -554,6 +554,8 @@ CPU 84% · Mem 58% · Load 1.50/8 | sfimage=cpu bash="@TMP@/menu-agents" param1=
 --web.test · 102% · 180M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
 --web.test · 99% · 175M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
 --appstoreagent · 77% · 32M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
+Memory guard: not set up (agents mem guard) | sfimage=shield.slash sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=mem
+--Memory view (agents mem) | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=mem sfimage=memorychip
 Battery 87% · Thermal nominal · Energy automatic | sfimage=battery.75percent bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=battery-settings
 ---
 Maintenance (2) | size=12 sfimage=wrench.and.screwdriver sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true

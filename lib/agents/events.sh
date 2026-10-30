@@ -13,8 +13,9 @@
 # umask 077).
 #   events.tsv  one line per cleanup: epoch kind reason pid name project session
 #               kind:   kill (you), reap (`agents reap`), auto (AGENTS_AUTO_REAP),
-#                       hook (a session's or subagent's end)
-#               reason: manual stale stuck long subagent-end session-end
+#                       hook (a session's or subagent's end), guard (the
+#                       memory guard: memory.sh)
+#               reason: manual stale stuck long subagent-end session-end memory
 #               session: the owning session as kind:pid (claude:4242), "-"
 #                       for a stale tree
 

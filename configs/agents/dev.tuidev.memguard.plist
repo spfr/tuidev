@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The memory guard (`agents mem guard`), installed by ./install.sh --pack
+  monitoring into ~/Library/LaunchAgents: it warns about, records and stops a
+  runaway process in an agent tree before macOS runs out of application
+  memory. Settings: AGENTS_MEM_* in ~/.config/agents.conf, then
+  `agents mem restart`. The pack fills in the @...@ values.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.tuidev.memguard</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@AGENTS@</string>
+        <string>mem</string>
+        <string>guard</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>@PATH@</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <!-- Restarted when it fails; AGENTS_MEM_GUARD=off exits 0 and stays down. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <!-- Not Background: jetsam kills that band first, and the guard must
+         outlive the pressure it acts on. -->
+    <key>ProcessType</key>
+    <string>Standard</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>@LOG@</string>
+</dict>
+</plist>

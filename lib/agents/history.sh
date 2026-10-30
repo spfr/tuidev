@@ -175,7 +175,8 @@ _agents_hook_waits_rows() {
     done <<<"$out"
 }
 
-# _agents_history_prune NOW DAY — drop history, runs, waits, notification
+# _agents_history_prune NOW DAY — drop history, runs, waits, memory incidents
+# (memory.tsv, the memory guard's), notification
 # (notify.tsv, which scripts/notify.sh appends to) and token rows (tokens.sh:
 # _agents_tokens_prune, which also rolls tokens.tsv up by day) and events
 # older than AGENTS_HISTORY_DAYS, at most once a day. history.tsv, runs.tsv,
@@ -192,6 +193,7 @@ _agents_history_prune() {
     _agents_prune_file "$AGENTS_DATA_DIR/runs.tsv" "$cut"
     _agents_prune_file "$AGENTS_DATA_DIR/waits.tsv" "$cut"
     _agents_prune_file "$AGENTS_DATA_DIR/notify.tsv" "$cut"
+    _agents_prune_file "$AGENTS_DATA_DIR/memory.tsv" "$cut"
     _agents_tokens_prune "$1" "$cut" || echo "agents: the token files were not pruned" >&2
     if _agents_events_lock; then
         _agents_prune_file "$AGENTS_DATA_DIR/events.tsv" "$cut"

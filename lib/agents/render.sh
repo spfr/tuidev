@@ -38,7 +38,7 @@ _agents_footer() {
 # commands (busiest first, AGENTS_LS_TOOLS of them) and nested sessions.
 agents_render() {
     AGENTS_SECTIONS="$1" W="${AGENTS_WIDTH:-120}" HOME="$HOME" B="$C_B" DIM="$C_DIM" Y="$C_Y" R="$C_R" G="$C_G" N="$C_0" \
-    LS_TOOLS="$AGENTS_LS_TOOLS" FOCUS="${AGENTS_FOCUS:-}" _agents_awk "lib_fmt render" -F '\t'
+    LS_TOOLS="$AGENTS_LS_TOOLS" MEMWARN=$((AGENTS_MEM_WARN * 1048576)) FOCUS="${AGENTS_FOCUS:-}" _agents_awk "lib_fmt render" -F '\t'
 }
 
 agents_watch() {

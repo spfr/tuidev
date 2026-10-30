@@ -28,6 +28,7 @@ BEGIN {
     }
     daemon = ENVIRON["AGENTS_DAEMON"]; sysre = ENVIRON["AGENTS_SYSTEM"]
     hogpct = ENVIRON["AGENTS_HOG_PCT"] + 0; hogmin = 60 * ENVIRON["AGENTS_HOG_MIN"]
+    memhog = ENVIRON["AGENTS_MEM_WARN_KIB"] + 0
     hognow = ENVIRON["AGENTS_HOG_NOW"] + 0; hogtop = ENVIRON["AGENTS_HOG_TOP"] + 0; ntop = ENVIRON["AGENTS_BAR_TOP"] + 0
     n = 0
 }
@@ -88,7 +89,10 @@ END {
         }
         if (p <= 1 || anc[p] || mine[p]) continue
         a = avg(p)
-        if ((et[p] >= hogmin && a >= hogpct) || (cpu[p] >= hognow && root[p] == "")) {
+        # A memory hog (any tree: a runaway test is the one to see) ranks
+        # above every CPU hog, biggest first.
+        if (memhog > 0 && rss[p] >= memhog) { hp[++nh] = p; score[nh] = 1e9 + rss[p] }
+        else if ((et[p] >= hogmin && a >= hogpct) || (cpu[p] >= hognow && root[p] == "")) {
             hp[++nh] = p; score[nh] = (a > cpu[p] ? a : cpu[p])
         }
     }

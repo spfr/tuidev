@@ -40,7 +40,7 @@ STALE (7)  orphaned agent helpers and dev servers: agents reap
   6100    server    3h00m    0.5    78M    0  5174        node /Users/NAME/work/app/node_modules/.bin/vite --port 5174  (in ~/work/app)
   200     orphan      50m    3.0   312M    2  -           npm exec @playwright/mcp@latest  (in ~/work/app)
 
-HOGS (2)  CPU% now / lifetime average: agents term PID
+HOGS (2)  CPU% now / lifetime average, or memory: agents term PID · agents mem
   PID     USER             AGE   NOW%   AVG%    MEM  PROCESS
   41198   me            13d16h  116.0  117.0    38M  Messages
   9100    me               40s   95.0   75.0    19M  yes

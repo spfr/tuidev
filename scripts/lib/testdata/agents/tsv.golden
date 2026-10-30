@@ -281,6 +281,7 @@ thermal	0	nominal
 power	automatic
 hist	ok	5400	test	3000
 lid	off	-	0	28800
+memg	none	-	8388608	25165824	0	-	-	-	0
 conf	AGENTS_BAR_TITLE	count awake
 conf	AGENTS_BAR_SECTIONS	needs agents usage jobs stale hogs awake system
 conf	AGENTS_BAR_ICON	terminal
@@ -289,4 +290,5 @@ conf	AGENTS_BAR_REFRESH	10s
 conf	AGENTS_LID	1
 conf	AGENTS_CONF	@TMP@/none.conf
 conf	AGENTS_AUTO_REAP	0
+conf	AGENTS_MEM_GUARD	kill
 [rc=0]

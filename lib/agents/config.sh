@@ -23,6 +23,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
+_AGENTS_CONF_KEYS+=" AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
 _AGENTS_BAR_TOKENS="count cpu mem load battery thermal temp awake warn limit"
 _AGENTS_BAR_SECTION_NAMES="needs agents usage jobs stale hogs awake system"
@@ -56,6 +57,9 @@ _agents_conf_valid() {
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
         AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
+        AGENTS_MEM_GUARD)   [[ "$2" =~ ^(kill|warn|off)$ ]] ;;
+        AGENTS_MEM_WARN|AGENTS_MEM_RATE|AGENTS_MEM_POLL) [[ "$2" =~ ^[1-9][0-9]{0,4}$ ]] ;;
+        AGENTS_MEM_KILL)    [[ "$2" =~ ^[0-9]{1,5}$ ]] ;;
         AGENTS_PRICES)      [[ -z "$2" || "$2" == off || "$2" =~ ^(/|~/)[^[:cntrl:]]+$ ]] ;;
         AGENTS_HOOK_REAP|AGENTS_HOOK_LOG) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_STATUSLINE_CMD) [[ -z "$2" || "$2" =~ ^[[:print:]]+$ ]] ;;
@@ -138,6 +142,24 @@ AGENTS_AUTO_REAP="${AGENTS_AUTO_REAP:-0}"
 _agents_env_check AGENTS_HISTORY 1
 _agents_env_check AGENTS_HISTORY_DAYS 30
 _agents_env_check AGENTS_AUTO_REAP 0
+# The memory guard (memory.sh; `agents mem guard`, which the monitoring pack
+# runs as a LaunchAgent on macOS): kill (the default) warns about, records and
+# stops a runaway in an agent tree; warn only warns and records; off does
+# neither. A process holding AGENTS_MEM_WARN GB gets a warning (again at each
+# doubling), one growing faster than AGENTS_MEM_RATE MB/s too; one in an agent
+# tree holding AGENTS_MEM_KILL GB (0: half the RAM), or the largest such past
+# the warning while memory pressure is critical, is stopped. Checked every
+# AGENTS_MEM_POLL seconds.
+AGENTS_MEM_GUARD="${AGENTS_MEM_GUARD:-kill}"
+AGENTS_MEM_WARN="${AGENTS_MEM_WARN:-8}"
+AGENTS_MEM_KILL="${AGENTS_MEM_KILL:-0}"
+AGENTS_MEM_RATE="${AGENTS_MEM_RATE:-200}"
+AGENTS_MEM_POLL="${AGENTS_MEM_POLL:-5}"
+_agents_env_check AGENTS_MEM_GUARD kill
+_agents_env_check AGENTS_MEM_WARN 8
+_agents_env_check AGENTS_MEM_KILL 0
+_agents_env_check AGENTS_MEM_RATE 200
+_agents_env_check AGENTS_MEM_POLL 5
 # The reports' API-equivalent cost: API list prices ship (lib/agents/
 # prices.tsv); this file of yours (an absolute or ~/ path; USD per million
 # tokens, see configs/agents/agents-prices.example.tsv) changes or adds
