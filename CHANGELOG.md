@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.17.1] - 2026-10-30
+
+Re-running the monitoring pack no longer leaves the memory guard stopped.
+
+### Fixed
+
+- **The memory guard after an update.** The pack unloaded the running LaunchAgent and loaded the new one at once, but launchd unloads it after the call returns, so the load failed (`Bootstrap failed: 5: Input/output error`) and the guard stayed down until `agents mem restart`. The pack now waits for the old one to go first.
+
 ## [3.17.0] - 2026-10-30
 
 A runaway test can no longer take the Mac's memory: a guard stops it and says what it was.
