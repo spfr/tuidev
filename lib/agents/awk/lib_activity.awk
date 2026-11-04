@@ -26,14 +26,14 @@ function mcpinit(   n, t, i, f) {
 # mcp_known(a, cli): the configured name of the server whose needle a's
 # command line holds (mcp_at), "" for none; with cli (claude, codex), that
 # CLI's server first when two configs start the same program.
-function mcp_known(a, cli,   i, hit) {
-    mcpinit(); hit = ""
+function mcp_known(a, cli,   i, found) {
+    mcpinit(); found = ""
     for (i = 1; i <= mcpn; i++) {
         if (!index(a, mcpnd[i]) || !mcp_at(a, mcpnd[i])) continue
         if (cli == "" || mcpcli[i] == cli) return mcpnm[i]
-        if (hit == "") hit = mcpnm[i]
+        if (found == "") found = mcpnm[i]
     }
-    return hit
+    return found
 }
 # mcp_at(a, nd): whether needle nd is in a as a word, never inside one: it
 # starts a word, or follows a "/" (an absolute path's tail, as a

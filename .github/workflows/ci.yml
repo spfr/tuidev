@@ -163,6 +163,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tmux
       - name: scripts/lib harnesses
         run: for t in scripts/lib/test_*.sh; do echo "::group::$t"; bash "$t" || exit 1; echo "::endgroup::"; done
+      # Debian's awk refuses programs gawk takes, so the runner's awk isn't enough.
+      - name: the agents views under mawk
+        run: |
+          sudo apt-get install -y mawk
+          mkdir -p "$RUNNER_TEMP/mawk" && ln -s "$(command -v mawk)" "$RUNNER_TEMP/mawk/awk"
+          PATH="$RUNNER_TEMP/mawk:$PATH" bash scripts/lib/test_agents_golden.sh
+          PATH="$RUNNER_TEMP/mawk:$PATH" bash scripts/lib/test_agents_triage.sh
       - name: install dry-run (minimal, remote)
         run: |
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"

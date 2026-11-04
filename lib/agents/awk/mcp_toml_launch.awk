@@ -33,13 +33,13 @@ function strs(s, arr,   n, i, c, qc, v, L) {
 }
 # closes(s): whether s has a "]" outside its strings and before its
 # comment: where an array over several lines ends.
-function closes(s,   i, c, q, L) {
-    q = ""; L = length(s)
+function closes(s,   i, c, qc, L) {
+    qc = ""; L = length(s)
     for (i = 1; i <= L; i++) {
         c = substr(s, i, 1)
-        if (q != "") { if (q == "\"" && c == "\\") i++; else if (c == q) q = ""; continue }
+        if (qc != "") { if (qc == "\"" && c == "\\") i++; else if (c == qc) qc = ""; continue }
         if (c == "#") return 0
-        if (c == "\"" || c == "'") q = c
+        if (c == "\"" || c == "'") qc = c
         else if (c == "]") return 1
     }
     return 0

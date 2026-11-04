@@ -175,12 +175,12 @@ function strip_sgr(s) { gsub(/\033\[[0-9;]*m/, "", s); return s }
 
 # waits_lanes — one lane per project, a cell per hour, while the window fits on
 # a screen: a week of hours doesn't. True when it drew any.
-function waits_lanes(   cells, first, i, h, p, o, n, hdr) {
+function waits_lanes(   cells, first, i, hr, p, o, n, hdr) {
     cells = int((now - start + 3599) / 3600)
     if (cells < 1 || cells > 30 || W < cells + 40) return 0
     first = int((now + off) / 3600) - cells + 1
     hdr = ""
-    for (i = 0; i + 2 <= cells; i += 4) { h = (first + i) % 24; hdr = hdr sprintf("%02d", h) (i + 4 <= cells ? "  " : "") }
+    for (i = 0; i + 2 <= cells; i += 4) { hr = (first + i) % 24; hdr = hdr sprintf("%02d", hr) (i + 4 <= cells ? "  " : "") }
     th(lc("", 11) lc(hdr, cells) "now")
     n = 0
     for (i = 1; i <= WaPC && n < 5; i++) {
@@ -188,7 +188,7 @@ function waits_lanes(   cells, first, i, h, p, o, n, hdr) {
         if (WaPb[p] + WaPd[p] <= 0) continue
         n++
         o = lc(dcut(proj(p), 10), 11)
-        for (h = 0; h < cells; h++) o = o waits_cell(p, first + h)
+        for (hr = 0; hr < cells; hr++) o = o waits_cell(p, first + hr)
         print o e "    " ENVIRON["NEED"] gl("need") " " rc(waits_short(WaPb[p]), 6) e "  " gl("review") " " rc(waits_short(WaPf[p]), 6)
     }
     th(lc("", 11) gl("full") " blocked   " gl("half") " done under " rough(PARKED_S) "   " gl("light") " parked   " gl("none") " working or closed")

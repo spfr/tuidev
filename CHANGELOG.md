@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.1] - 2026-11-04
+
+`agents report` runs on Debian again.
+
+### Fixed
+
+- **Every `agents report` view failed on mawk,** Debian's and the Raspberry Pi's awk: a new function in the waits report had a parameter named like another function, which gawk and BSD awk accept and mawk refuses. A contract test now catches that on every platform.
+
 ## [3.19.0] - 2026-11-04
 
 Nineteen days of your own logs asked one question of the monitor: who needs me? `agents` and the menu now answer it first. A blocked session is impossible to miss, the hours of finished work you parked stop looking like an emergency, and everything wears one palette.

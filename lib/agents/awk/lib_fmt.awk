@@ -75,13 +75,13 @@ function gl(n) {
 # none; one column more). CF, CD and CM color the fill, the rest and the marker;
 # the reset is ENVIRON["N"]. "#", "-" and "|" where the locale has no blocks
 # (AGENTS_ASCII).
-function gauge(p, cells, mark, cf, cd, cm,   ascii, eighths, full, part, m, i, o, cur, c, g) {
+function gauge(p, cells, mark, cf, cd, cm,   ascii, eighths, full, frac, m, i, o, cur, c, g) {
     ascii = ENVIRON["AGENTS_ASCII"] != ""
     if (p < 0) p = 0
     if (p > 100) p = 100
     eighths = int(p * cells * 8 / 100 + 0.5)
     if (ascii) eighths = int((eighths + 4) / 8) * 8
-    full = int(eighths / 8); part = eighths % 8
+    full = int(eighths / 8); frac = eighths % 8
     m = mark < 0 ? -1 : int(mark * cells / 100 + 0.5)
     o = ""; cur = ""
     for (i = 0; i <= cells; i++) {
@@ -91,7 +91,7 @@ function gauge(p, cells, mark, cf, cd, cm,   ascii, eighths, full, part, m, i, o
         }
         if (i == cells) break
         if (i < full) { c = cf; g = gl("full") }
-        else if (i == full && part) { c = cf; g = substr("\342\226\217\342\226\216\342\226\215\342\226\214\342\226\213\342\226\212\342\226\211", (part - 1) * 3 + 1, 3) }
+        else if (i == full && frac) { c = cf; g = substr("\342\226\217\342\226\216\342\226\215\342\226\214\342\226\213\342\226\212\342\226\211", (frac - 1) * 3 + 1, 3) }
         else { c = cd; g = gl("light") }
         if (cur != c) { o = o c; cur = c }
         o = o g

@@ -222,6 +222,30 @@ while read -r _ image; do
 done < <(grep '^FROM ' "$REPO_DIR/.github/scanners/Dockerfile" | sed 's:docker\.io/::')
 pass "the security scan runs the images Dependabot tracks"
 
+# A parameter named like a function of the same program: gawk and BSD awk take
+# it, mawk (Debian's awk) refuses the whole program, and the view doesn't run.
+clash=""
+while IFS= read -r files; do
+    set --
+    for f in $files; do set -- "$@" "$REPO_DIR/lib/agents/awk/$f.awk"; done
+    found="$(cat "$@" | awk '
+        /^[ \t]*function[ \t]/ {
+            name = $0; sub(/^[ \t]*function[ \t]+/, "", name); sub(/[ \t]*\(.*/, "", name)
+            args = $0; sub(/^[^(]*\(/, "", args); sub(/\).*/, "", args); gsub(/[ \t]/, "", args)
+            fn[name] = 1; list[++n] = name "|" args
+        }
+        END {
+            for (i = 1; i <= n; i++) {
+                split(list[i], p, "|"); m = split(p[2], a, ",")
+                for (j = 1; j <= m; j++) if (a[j] in fn) print p[1] "(" a[j] ")"
+            }
+        }')"
+    [[ -z "$found" ]] || clash+=" [$files] $found"
+done < <(grep -ohE '_agents_awk(_eval|_colored)? +"?[a-z_][a-z_ ]*"?' "$REPO_DIR"/lib/agents/*.sh "$REPO_DIR/bin/agents" \
+    | sed -E 's/^_agents_awk(_eval|_colored)? +//; s/"//g; s/ +$//' | sort -u)
+[[ -z "$clash" ]] || fail "awk parameters named like functions, which mawk refuses:$clash"
+pass "no awk parameter is named like a function"
+
 # CI's required-files job must list only files that exist, or a removal breaks CI
 # while every local check stays green.
 while IFS= read -r f; do

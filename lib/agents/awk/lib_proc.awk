@@ -72,19 +72,19 @@ function hosts(a) {
 # argv(): the command line, column 14 on, of the current record (line is $0).
 # It starts after the start time's clock and year (" 07:31:08 2026 "), found
 # with one index(); a record without them is walked field by field.
-function argv(line,   s, i, p, k, t, c) {
+function argv(ln,   s, i, p, k, t, c) {
     t = " " $12 " " $13 " "
-    if ((k = index(line, t)) > 0) p = k + length(t)
+    if ((k = index(ln, t)) > 0) p = k + length(t)
     else {
         p = 1
-        for (i = 1; i <= 13; i++) { k = index(substr(line, p), $i); p += k - 1 + length($i) }
+        for (i = 1; i <= 13; i++) { k = index(substr(ln, p), $i); p += k - 1 + length($i) }
     }
     # Trimmed a character at a time: ps pads with a few spaces, and a regex
-    # would scan the whole command line.
-    while ((c = substr(line, p, 1)) == " " || c == "\t") p++
-    k = length(line)
-    while (k >= p && ((c = substr(line, k, 1)) == " " || c == "\t")) k--
-    return substr(line, p, k - p + 1)
+    # would scan the whole command ln.
+    while ((c = substr(ln, p, 1)) == " " || c == "\t") p++
+    k = length(ln)
+    while (k >= p && ((c = substr(ln, k, 1)) == " " || c == "\t")) k--
+    return substr(ln, p, k - p + 1)
 }
 # lstart(): the current record's start time (its 5 lstart words) as one token,
 # Wed_Oct_14_08:00:00_2026: what PID@START names a process by.
