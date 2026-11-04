@@ -394,7 +394,15 @@ run_hook wait-end "$(event_json Stop)"
 ended="$(ls "$WD")"
 [[ "$ended" =~ ^"$sess"@[0-9]+$ && "${ended#*@}" -ge "$now" ]] || fail "a turn end (no duration) ended the wait at $ended"
 wclear
-pass "wait-start opens one wait per session (permission and elicitation blocked, idle done, the first start stands); wait-end moves it to waited/, dated by the approved tool's start"
+# A background task wakes a finished session, and it asks: blocked always wins.
+wclear; run_hook wait-start "$(wait_json idle_prompt)"; IFS=$'\t' read -r _ wst _ < "$W/$sess"
+[[ "$wst" == "done" ]] || fail "idle prompt: $wst"
+run_hook wait-start "$(wait_json permission_prompt)"; IFS=$'\t' read -r _ wst _ < "$W/$sess"
+[[ "$wst" == blocked ]] || fail "a permission prompt over an open done: $wst"
+run_hook wait-start "$(wait_json idle_prompt)"; IFS=$'\t' read -r _ wst _ < "$W/$sess"
+[[ "$wst" == blocked ]] || fail "done replaced blocked: $wst"
+wclear
+pass "wait-start opens one wait per session (permission and elicitation blocked, idle done, the first start stands, but blocked replaces done); wait-end moves it to waited/, dated by the approved tool's start"
 
 # /clear and /resume end the old session's wait, cleanups on or off.
 for reap in 1 0; do

@@ -271,8 +271,8 @@ _agents_hook_sid_ok() { [[ "${1:-}" =~ ^[A-Za-z0-9_-]{1,128}$ ]]; }
 # Unless: it is no wait (another notification type), no dialog shows (a
 # PermissionRequest in dontAsk mode or claude -p), the session runs in
 # Herdr (HERDR_ENV=1: Herdr's status counts it, so nothing is counted
-# twice), history is off, one is open already (the earlier start stands),
-# no sample ran within _AGENTS_WAIT_FRESH, or agents finds no session above
+# twice), history is off, one is open already (the earlier start stands, but
+# blocked replaces done: blocked always wins), no sample ran within _AGENTS_WAIT_FRESH, or agents finds no session above
 # this hook.
 _agents_hook_wait_start() {
     local sid="$1" type="$2" cwd="$3" mode="${4:--}" dir="$AGENTS_DATA_DIR" status now age tok _r proj
@@ -289,7 +289,13 @@ _agents_hook_wait_start() {
     [[ "${HERDR_ENV:-}" != 1 ]] || { _agents_hook_say "in a Herdr pane: Herdr's status counts this wait"; return 0; }
     [[ "$AGENTS_HISTORY" == 1 ]] || { _agents_hook_say "AGENTS_HISTORY=$AGENTS_HISTORY: no waits recorded"; return 0; }
     _agents_hook_sid_ok "$sid" || { _agents_hook_say "no usable session_id"; return 0; }
-    [[ ! -e "$dir/waiting/$sid" ]] || { _agents_hook_say "already waiting: the earlier start stands"; return 0; }
+    # A wait already open stands, unless this one outranks it: a background task
+    # woke a finished session and now it asks you something.
+    if [[ -e "$dir/waiting/$sid" ]]; then
+        local open="" was=""
+        IFS=$'\t' read -r open was _ < "$dir/waiting/$sid" 2>/dev/null
+        if [[ "$status" != blocked || "$was" != "done" ]]; then _agents_hook_say "already waiting: the earlier start stands"; return 0; fi
+    fi
     now="$(date +%s)"
     _agents_stamp_age age "$dir/sample.stamp" "$now"
     [[ $age -lt $_AGENTS_WAIT_FRESH ]] || { _agents_hook_say "no agents sample within the hour (is the menu running?): nothing would count it"; return 0; }
