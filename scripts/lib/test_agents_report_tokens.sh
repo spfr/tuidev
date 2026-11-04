@@ -466,7 +466,7 @@ for n in 0 950:950 64249:64.2k 99949:99.9k 99950:100k 640000:640k 999499:999k 99
     line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep '^--.* tokens · ' || true)"
     if [[ "$n" == 0 ]]; then [[ -z "$line" ]] || fail "a tokens row for 0 tokens"; continue; fi
     [[ "$line" == "--${n#*:} tokens · 90% read from the prompt cache | "* ]] || fail "menu: ${n%%:*} tokens as '${n#*:}': $line"
-    [[ "$(_agents_awk_eval "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_waits report_insights report_views" 'BEGIN { print tk(x) }' -v x="${n%%:*}")" == "${n#*:}" ]] \
+    [[ "$(_agents_awk_eval "lib_json lib_sort lib_fmt lib_price lib_waits report_fmt report_runs report_tokens report_denials report_context report_waits report_insights report_views" 'BEGIN { print tk(x) }' -v x="${n%%:*}")" == "${n#*:}" ]] \
         || fail "report and menu disagree on ${n%%:*}"
 done
 printf 'hist\toff\t0\t-\t0\n' > "$tmp/tsv"

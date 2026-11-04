@@ -168,8 +168,8 @@ jobs:
         run: |
           sudo apt-get install -y mawk
           mkdir -p "$RUNNER_TEMP/mawk" && ln -s "$(command -v mawk)" "$RUNNER_TEMP/mawk/awk"
-          PATH="$RUNNER_TEMP/mawk:$PATH" bash scripts/lib/test_agents_golden.sh
-          PATH="$RUNNER_TEMP/mawk:$PATH" bash scripts/lib/test_agents_triage.sh
+          export PATH="$RUNNER_TEMP/mawk:$PATH"
+          for t in scripts/lib/test_agents*.sh; do bash "$t" || exit 1; done
       - name: install dry-run (minimal, remote)
         run: |
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
