@@ -133,7 +133,6 @@ Rectangle owns `Ctrl+Alt` plus arrows and letters for window snapping (its "Reco
 |------|--------|
 | `Ctrl+Alt+←` / `→` / `↑` / `↓` | Snap window to a half |
 | `Ctrl+Alt+Return` | Maximize |
-| `Cmd+Shift+C` | Maccy clipboard history |
 | ``Ctrl+` `` | Ghostty quick terminal (global) |
 
 Ghostty keeps its macOS defaults (`Cmd+T`, `Cmd+D`, and so on) and adds `Ctrl+Shift+T/W/D/N/C/V` for Linux habits.

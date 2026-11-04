@@ -22,7 +22,7 @@
 #   --core       the shell for agent CLIs (ripgrep, fd, fzf, starship, delta, ...)
 #   --remote     tailscale + mosh + SSH config
 #   --sandbox    Seatbelt profiles + sbx wrapper (macOS only)
-#   --ui         GUI apps: Ghostty, Rectangle, Maccy
+#   --ui         GUI apps: Ghostty, Rectangle
 #                (macOS only)
 #   --extras     lazygit, uv, xh, atuin, dust, broot, hyperfine, tokei, ...
 #
