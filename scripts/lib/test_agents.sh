@@ -144,6 +144,9 @@ listen="$(printf '%s\n' '4100 5173' '4200 11434' '4300 8000' '4400 56916' '22443
 # Read by the sourced functions.
 # shellcheck disable=SC2034
 AGENTS_UID=501 AGENTS_SELF=7000
+# These fixtures are single snapshots: one reading makes a CPU hog here. Hogs
+# judged over time have their own test below.
+AGENTS_HOG_SUSTAIN=0
 records="$(printf '%s\n' "$fixture" | agents_classify "$listen" "8800")"
 field() { printf '%s\n' "$records" | awk -F '\t' -v t="$1" -v p="$2" -v c="$3" '$1 == t && $2 == p { print $c }'; }
 has()   { [[ -n "$(field "$1" "$2" 2)" ]]; }
@@ -352,6 +355,62 @@ has hog 9100   || fail "a 95% process outside agent trees not a hog"
 few="$(printf '%s\n' "$fixture" | AGENTS_HOG_TOP=1 agents_classify "" "" | awk -F '\t' '$1 == "hog"' | wc -l | tr -d ' ')"
 [[ "$few" == 1 ]] || fail "AGENTS_HOG_TOP not honored ($few)"
 pass "hogs: lifetime average and current CPU, any owner, top N"
+
+# A CPU hog has to last: a reading starts a baseline, the CPU time really used
+# since decides. A spike comes and goes without ever being listed.
+hog_start=Wed_Oct_14_09:13:30_2026
+hog_snap() {   # %CPU CPUTIME
+    printf ' 9100     1     0 root %s  20000 %s 10:00 Wed Oct 14 09:13:30 2026     /usr/libexec/opendirectoryd\n' "$1" "$2"
+}
+hog_run() {    # %CPU CPUTIME CLOCK BASELINE
+    hog_snap "$1" "$2" | AGENTS_HOG_SUSTAIN=3 AGENTS_HOG_CLOCK="$3" AGENTS_HOG_HOT="$4" agents_classify "" ""
+}
+base() { printf 'hot\t9100\t%s\t%s\t%s\t%s\t%s' "${5:-$hog_start}" "$1" "$2" "$3" "$4"; }   # SINCE TS CPUTIME CONFIRMED [START]
+hogs_in() { printf '%s\n' "$1" | awk -F '\t' '$1 == "hog"' | wc -l | tr -d ' '; }
+hots_in() { printf '%s\n' "$1" | awk -F '\t' '$1 == "hot"'; }
+r="$(hog_run 119.0 1:00.00 1000 "")"
+[[ "$(hogs_in "$r")" == 0 && "$(hots_in "$r")" == "$(base 1000 1000 60 0)" ]] || fail "a first reading starts a streak, not a hog: $r"
+r="$(hog_run 5.0 1:02.00 1040 "$(base 1000 1000 60 0)")"
+[[ "$(hogs_in "$r")" == 0 && -z "$(hots_in "$r")" ]] || fail "a spike that passed keeps its streak: $r"
+r="$(hog_run 110.0 1:10.00 1010 "$(base 1000 1000 60 0)")"
+[[ "$(hogs_in "$r")" == 0 && "$(hots_in "$r")" == "$(base 1000 1000 60 0)" ]] || fail "too soon to judge a streak: $r"
+r="$(hog_run 95.0 2:00.00 1060 "$(base 1000 1000 60 0)")"
+[[ "$(hogs_in "$r")" == 0 && "$(hots_in "$r")" == "$(base 1000 1060 120 0)" ]] || fail "a minute at 100% is not 3 minutes: $r"
+r="$(hog_run 95.0 4:10.00 1190 "$(base 1000 1150 210 0)")"
+[[ "$(hogs_in "$r")" == 1 && "$(hots_in "$r")" == "$(base 1000 1190 250 1)" ]] || fail "3 minutes of real CPU time is a hog: $r"
+r="$(hog_run 3.0 4:00.00 1060 "$(base 1000 1030 240 0)")"
+[[ "$(hogs_in "$r")" == 0 && -z "$(hots_in "$r")" ]] || fail "600% for 30 s, then idle, earned credit for the idle time: $r"
+r="$(hog_run 100.0 5:00.00 1230 "$(base 1000 1190 250 1)")"
+[[ "$(hogs_in "$r")" == 1 ]] || fail "a confirmed hog that keeps going stays listed: $r"
+r="$(hog_run 100.0 4:36.00 1220 "$(base 1000 1190 250 1)")"
+[[ "$(hogs_in "$r")" == 1 ]] || fail "a short stall hid a confirmed hog: $r"
+r="$(hog_run 1.0 4:11.00 1230 "$(base 1000 1190 250 1)")"
+[[ "$(hogs_in "$r")" == 0 && -z "$(hots_in "$r")" ]] || fail "a confirmed hog that calmed down stays listed: $r"
+r="$(hog_run 95.0 1:00.00 1230 "$(base 1000 1000 0 1 Tue_Oct_13_09:13:30_2026)")"
+[[ "$(hogs_in "$r")" == 0 && "$(hots_in "$r")" == "$(base 1230 1230 60 0)" ]] || fail "a reused pid inherited a streak: $r"
+r="$(hog_snap 95.0 1:00.00 | AGENTS_SELF=9100 AGENTS_HOG_SUSTAIN=3 AGENTS_HOG_CLOCK=1100 AGENTS_HOG_HOT="$(base 1000 1000 60 1)" agents_classify "" "")"
+[[ "$(hots_in "$r")" == "$(base 1000 1000 60 1)" ]] || fail "running agents under a process reset its streak: $r"
+r="$(hog_snap 95.0 1:00.00 | AGENTS_HOG_SUSTAIN=3 agents_classify "" "")"
+[[ "$(hogs_in "$r")" == 0 && -z "$(hots_in "$r")" ]] || fail "a run without streaks (sample, awake) judged CPU hogs: $r"
+idle=' 9200     1   501 me 2.0  20000 60:00.00 01:00:00 Wed Oct 14 09:13:30 2026     /usr/bin/yes'
+[[ "$(hogs_in "$(printf '%s\n' "$idle" | agents_classify "" "")")" == 0 ]] || fail "a high lifetime average, idle now, is a hog"
+# shellcheck disable=SC2034,SC2317,SC2329  # read, and called, by agents_collect
+(
+    AGENTS_HOG_SUSTAIN=3 AGENTS_RUN_DIR="$tmp/hogrun" AGENTS_TESTING=1 AGENTS_NOW=1000
+    agents_snapshot() { hog_snap 119.0 1:00.00; }
+    _agents_listeners() { :; }
+    [[ "$(hogs_in "$(agents_collect 2>/dev/null)")" == 0 ]] || fail "agents_collect: a first reading listed"
+    [[ "$(<"$AGENTS_RUN_DIR/hog.state")" == "$(base 1000 1000 60 0)" ]] || fail "agents_collect kept no streak"
+    _agents_replace "$AGENTS_RUN_DIR/hog.state" "$(base 1000 1150 210 0)"
+    AGENTS_NOW=1190; agents_snapshot() { hog_snap 100.0 4:10.00; }
+    out="$(agents_collect 2>/dev/null)"
+    [[ "$(hogs_in "$out")" == 1 ]] || fail "agents_collect: a lasting hog not listed: $out"
+    [[ "$out" != *$'\nhot\t'* ]] || fail "agents_collect leaks streaks into its records"
+    AGENTS_NOW=1230; agents_snapshot() { hog_snap 0.0 4:10.00; }
+    [[ "$(hogs_in "$(agents_collect 2>/dev/null)")" == 0 ]] || fail "agents_collect: a calm process still listed"
+    [[ -z "$(<"$AGENTS_RUN_DIR/hog.state")" ]] || fail "agents_collect kept a dead streak"
+) || exit 1
+pass "CPU hogs last: spikes never listed, confirmed hogs clear, pids not confused"
 
 # Top processes (for the menu bar) skip hogs, this process and its parents; the total
 # leaves out this process's own subtree.
@@ -933,6 +992,20 @@ plugin() {
 }
 line_no() { printf '%s\n' "$menu" | grep -n -m1 -e "$1" | cut -d: -f1; }
 
+# A system service in the hogs: no Terminate, no sudo kill hint, whoever owns it.
+sys_hog() { printf 'hog\t%s\t%s\t600\t118.0\t1.0\t16000\t0\tWed_Oct_14_09:13:30_2026\t-\t%s\t-\t-\t%s\n' "$1" "$2" "$3" "$4"; }
+menu="$(plugin "$(sys_hog 575 opendirectoryd root /usr/libexec/opendirectoryd)"$'\n'"$(sys_hog 576 mds_stores "$(id -un)" /System/Library/Frameworks/CoreServices.framework/Support/mds_stores)" \
+    $'conf\tAGENTS_SERVICE_PATH\t'"$AGENTS_SERVICE_PATH")"
+[[ "$menu" == *"--A system service: it usually settles on its own"* ]] || fail "a system service hog not named: $menu"
+[[ "$menu" != *"sudo kill"* && "$menu" != *"Terminate"* ]] || fail "a system service hog offered a kill: $menu"
+verdict="$(sys_hog 575 opendirectoryd root /usr/libexec/opendirectoryd | agents_assess 575 | cut -f7-)"
+[[ "$verdict" == *"is a system service"* && "$verdict" != *"agents term"* ]] || fail "agents why suggests stopping a system service: $verdict"
+for app in /Applications/Ghostty.app/Contents/MacOS/ghostty /System/Library/Frameworks/WebKit.framework/XPCServices/com.apple.WebKit.WebContent.xpc/WebContent; do
+    verdict="$(sys_hog 575 app "$(id -un)" "$app" | agents_assess 575 | cut -f7-)"
+    [[ "$verdict" != *"system service"* ]] || fail "$app called a system service: $verdict"
+done
+pass "a system service among the hogs: told what it is, no way to kill offered; apps are not services"
+
 # The plugin offers Terminate only for hogs owned by the user running it.
 mine_recs="$(printf '%s\n' "$enriched" | awk -F '\t' -v OFS='\t' -v u="$(id -un)" '$11 == "me" { $11 = u } { print }')"
 menu="$(plugin "$mine_recs" "$sys_line"$'\nawake\tagents\t8800\t0\nthermal\t2\theavy\npower\tautomatic')"
@@ -1261,7 +1334,7 @@ wt_fixture="$(cat <<'EOF'
  3010  3000   501 me    0.0   3000  0:00.10 01:00 Wed Oct 14 08:59:00 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/s.sh 2>/dev/null || true && eval 'cd /Users/NAME/r/.claude/worktrees/a && go test ./...' < /dev/null && pwd -P >| /tmp/c1
  3020  3000   501 me    0.0   3000  0:00.10 01:00 Wed Oct 14 08:59:00 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/s.sh 2>/dev/null || true && eval 'cd /Users/NAME/r/.claude/worktrees/b && go test ./...' < /dev/null && pwd -P >| /tmp/c2
  3030  3000   501 me    0.0   3000  0:00.10 01:00 Wed Oct 14 08:59:00 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/s.sh 2>/dev/null || true && eval 'make lint' < /dev/null && pwd -P >| /tmp/c3
- 3040  3000   501 me    0.0   3000  0:00.10 00:30 Wed Oct 14 08:59:30 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/s.sh 2>/dev/null || true && eval 'make lint' < /dev/null && pwd -P >| /tmp/c4
+ 3040  3000   501 me    0.0   3000  0:00.10 01:30 Wed Oct 14 08:58:30 2026     /bin/zsh -c source /Users/NAME/.claude/shell-snapshots/s.sh 2>/dev/null || true && eval 'make lint' < /dev/null && pwd -P >| /tmp/c4
 EOF
 )"
 wt_enr="$(printf '%s\n' "$wt_fixture" | AGENTS_SELF=9999 agents_classify "" "" \
@@ -1269,6 +1342,13 @@ wt_enr="$(printf '%s\n' "$wt_fixture" | AGENTS_SELF=9999 agents_classify "" "" \
 wflags() { printf '%s\n' "$wt_enr" | awk -F '\t' -v p="$1" '$1 == "act" && $2 == p { print $16 "/" $15 }'; }
 [[ "$(wflags 3010)" == "-/a" && "$(wflags 3020)" == "-/b" ]] || fail "worktree subagents flagged dup: $(wflags 3010) $(wflags 3020)"
 [[ "$(wflags 3030)" == "dup/main" && "$(wflags 3040)" == "dup/main" ]] || fail "same command, same directory not dup: $(wflags 3030) $(wflags 3040)"
+young_enr="$(printf '%s\n' "$wt_fixture" | sed 's/01:30 Wed/00:30 Wed/' | AGENTS_SELF=9999 agents_classify "" "" \
+    | agents_enrich "$(printf '%s\t%s\n' 3000 /Users/NAME/r 3010 /Users/NAME/r 3020 /Users/NAME/r 3030 /Users/NAME/r 3040 /Users/NAME/r)" "")"
+[[ "$(printf '%s\n' "$young_enr" | awk -F '\t' '$1 == "act" && ($2 == 3030 || $2 == 3040) { print $16 $17 }' | tr '\n' ' ')" == "-1 -1 " ]] \
+    || fail "a copy younger than a minute counts as a duplicate"
+third_enr="$(printf '%s\n%s\n' "$wt_fixture" " 3050  3000   501 me    0.0   3000  0:00.10 00:30 Wed Oct 14 08:59:30 2026     $(printf '%s\n' "$wt_fixture" | awk '$1 == 3040 { sub(/^.*2026 +/, ""); print }')" | AGENTS_SELF=9999 agents_classify "" "" \
+    | agents_enrich "$(printf '%s\t%s\n' 3000 /Users/NAME/r 3010 /Users/NAME/r 3020 /Users/NAME/r 3030 /Users/NAME/r 3040 /Users/NAME/r 3050 /Users/NAME/r)" "")"
+[[ "$(printf '%s\n' "$third_enr" | awk -F '\t' '$1 == "act" && $2 == 3050 { print $16 $17 }')" == dup3 ]] || fail "a young third copy is not counted with two lasting ones"
 pass "parallel worktree subagents running the same command are not duplicates; the same command twice in one directory is"
 
 # Stuck polling loops: one waiting 3h27m on a task output that will never end

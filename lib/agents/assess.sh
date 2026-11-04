@@ -30,7 +30,7 @@ agents_assess() {
     _agents_now now
     AGENTS_TARGET="${1:-}" NOW="$now" HOME="$HOME" AGENTS_WAIT_STUCK="$AGENTS_WAIT_STUCK" \
     AGENTS_AUTO_REAP="$AGENTS_AUTO_REAP" AGENTS_HISTORY="$AGENTS_HISTORY" AGENTS_SEEN="$AGENTS_DATA_DIR/sample.state" \
-    _agents_awk assess -F '\t' -v OFS='\t'
+    AGENTS_MEM_WARN_KIB=$((AGENTS_MEM_WARN * 1048576)) _agents_awk assess -F '\t' -v OFS='\t'
 }
 
 # _agents_with_needs RECORDS — agents_assess rows first, then the records

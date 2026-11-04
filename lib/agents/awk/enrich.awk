@@ -160,6 +160,12 @@ END {
         if (f[3] != "tool" || waits(f[14])) continue
         same[f[11], f[13], f[14]]++
         if (f[13] != "-") here[f[13], f[14]]++
+        # Duplicates once two copies have run a minute: agents run the same quick
+        # command side by side all the time, and it is gone by the next look.
+        if (f[4] >= 60) {
+            olds[f[11], f[13], f[14]]++
+            if (f[13] != "-") oldh[f[13], f[14]]++
+        }
     }
     for (i = 1; i <= nx; i++) {
         $0 = xrow[i]; d = 1; fl = ""
@@ -171,7 +177,9 @@ END {
             if (stuck > 0 && $4 >= stuck && w != "fresh") fl = fl ",stuck"
         }
         else if ($3 == "tool") {
-            d = same[$11, $13, $14]; if ($13 != "-" && here[$13, $14] > d) d = here[$13, $14]
+            d = 1
+            if (olds[$11, $13, $14] > 1) d = same[$11, $13, $14]
+            if ($13 != "-" && oldh[$13, $14] > 1 && here[$13, $14] > d) d = here[$13, $14]
             if (d > 1) fl = "dup"
             if ($4 >= longs) fl = fl (fl == "" ? "" : ",") "long"
         }

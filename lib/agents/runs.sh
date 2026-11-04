@@ -14,7 +14,7 @@
 # conversation, "-" when unknown; cmd: a name only (go, pnpm, wait-loop),
 # never arguments; exit: the code a Claude Code task's output file ends with
 # ("[exited with code N]"), else "-"; dup: 1 when the same command ran in the
-# same directory at the same time; cleaned: 1 when agents stopped it (an
+# same directory at the same time, two copies past a minute; cleaned: 1 when agents stopped it (an
 # events.tsv kill, reap, auto or hook of its pid or its session's, within
 # seconds of its end). cpu_s counts every process ever seen in the run at its
 # largest CPU time; a process that starts and ends between two snapshots is

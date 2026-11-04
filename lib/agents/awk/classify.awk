@@ -16,6 +16,32 @@ function act(p, cls, r, label, cmd) {
     gsub(/\t/, " ", cmd)
     printf "act\t%d\t%s\t%d\t%.1f\t%.1f\t%d\t%d\t%s\t%s\t%d\t%s\t-\t%s\n", p, cls, et[p], tcpu[p], avg(p), trss[p], kids[p], st[p], (tp[p] == "" ? "-" : tp[p]), r, label, cmd
 }
+function hot_row(p, since, ts, c, ok) { hotrows = hotrows sprintf("hot\t%d\t%s\t%d\t%d\t%d\t%d\n", p, st[p], since, ts, c, ok) }
+function hot_known(p) { return (p in hot_st) && hot_st[p] == st[p] }
+function hot_keep(p) { hot_row(p, hot_since[p], hot_ts[p], hot_ct[p], hot_ok[p]) }
+# Is p using AGENTS_HOG_NOW CPU for real? One reading of ps is only a moment:
+# a daemon flickers past it during any build. A reading that high starts a
+# streak (a "hot" row, kept by agents_collect between runs). From then on the
+# CPU time p really used is checked every 30 s or more, each stretch on its own,
+# so a burst on many cores earns no credit for the idle time after it. A streak
+# of AGENTS_HOG_SUSTAIN minutes makes a hog, which then has to fall below half
+# of AGENTS_HOG_NOW to clear, so one short stall doesn't hide it.
+# AGENTS_HOG_SUSTAIN=0: one reading is enough.
+function sustained(p,   el, ok) {
+    if (sustain <= 0) return cpu[p] >= hognow
+    if (clock <= 0) return 0
+    if (hot_known(p)) {
+        el = clock - hot_ts[p]
+        if (el >= 0 && el < 30) { hot_keep(p); return hot_ok[p] }
+        if (el > 0 && 100 * (ct[p] - hot_ct[p]) / el >= (hot_ok[p] ? hognow / 2 : hognow)) {
+            ok = (hot_ok[p] || clock - hot_since[p] >= sustain) ? 1 : 0
+            hot_row(p, hot_since[p], clock, ct[p], ok)
+            return ok
+        }
+    }
+    if (cpu[p] >= hognow) hot_row(p, clock, clock, ct[p], 0)
+    return 0
+}
 BEGIN {
     me = ENVIRON["AGENTS_UID"]; self = ENVIRON["AGENTS_SELF"] + 0
     np = split(ENVIRON["AGENTS_PATTERNS"], pat, "\n")
@@ -30,6 +56,12 @@ BEGIN {
     hogpct = ENVIRON["AGENTS_HOG_PCT"] + 0; hogmin = 60 * ENVIRON["AGENTS_HOG_MIN"]
     memhog = ENVIRON["AGENTS_MEM_WARN_KIB"] + 0
     hognow = ENVIRON["AGENTS_HOG_NOW"] + 0; hogtop = ENVIRON["AGENTS_HOG_TOP"] + 0; ntop = ENVIRON["AGENTS_BAR_TOP"] + 0
+    sustain = 60 * ENVIRON["AGENTS_HOG_SUSTAIN"]; clock = ENVIRON["AGENTS_HOG_CLOCK"] + 0
+    n = split(ENVIRON["AGENTS_HOG_HOT"], t, "\n")
+    for (i = 1; i <= n; i++) {
+        if (split(t[i], f, "\t") != 7 || f[1] != "hot") continue
+        q = f[2] + 0; hot_st[q] = f[3]; hot_since[q] = f[4] + 0; hot_ts[q] = f[5] + 0; hot_ct[q] = f[6] + 0; hot_ok[q] = f[7] + 0
+    }
     n = 0
 }
 NF >= 14 {
@@ -87,12 +119,17 @@ END {
             # starting vite); a tree that hosts a session never gets here.
             else if (tp[p] != "" && av[p] !~ sysre) { rec("cand", p, "server", tcpu[p], trss[p], kids[p], tp[p]); sroot[p] = 1 }
         }
-        if (p <= 1 || anc[p] || mine[p]) continue
+        if (p <= 1 || anc[p] || mine[p]) {
+            if (hot_known(p)) hot_keep(p)    # the menu's measure of this process goes on
+            continue
+        }
         a = avg(p)
         # A memory hog (any tree: a runaway test is the one to see) ranks
         # above every CPU hog, biggest first.
         if (memhog > 0 && rss[p] >= memhog) { hp[++nh] = p; score[nh] = 1e9 + rss[p] }
-        else if ((et[p] >= hogmin && a >= hogpct) || (cpu[p] >= hognow && root[p] == "")) {
+        # A lifetime average also has to still be burning (a fifth of it):
+        # one that worked hard an hour ago and now idles is no hog.
+        else if ((et[p] >= hogmin && a >= hogpct && cpu[p] >= hogpct / 5) || (root[p] == "" && sustained(p))) {
             hp[++nh] = p; score[nh] = (a > cpu[p] ? a : cpu[p])
         }
     }
@@ -143,4 +180,5 @@ END {
         else act(p, "other", r, "-", a)
     }
     jobs_emit()
+    printf "%s", hotrows    # last: agents_collect cuts them off
 }

@@ -376,6 +376,8 @@ agents_collect() {
     if command -v launchctl >/dev/null 2>&1; then _agents_bg 7 _agents_keep_pids ""; kbg=1; fi
     if _agents_tmux_up; then _agents_bg 9 _agents_panes; tbg=1; fi
     _agents_cwd_prefetch 8 ${feed:+--stdout} || true
+    local clock
+    _agents_now clock    # read with the ps below, not after lsof
     ps="$(agents_snapshot)"
     _agents_bg_wait listen 5 || lprobe=fail
     if [[ -n "$kbg" ]]; then _agents_bg_wait keep 7; else keep="$(_agents_keep_pids "$ps")"; fi
@@ -385,7 +387,15 @@ agents_collect() {
         echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2
         return 1
     fi
-    recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+    # Hogs by CPU are judged over time: the streaks go from run to run.
+    local hotf="$AGENTS_RUN_DIR/hog.state" hot="" newhot=""
+    [[ -r "$hotf" ]] && hot="$(<"$hotf")"
+    recs="$(printf '%s\n' "$ps" | AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+    if [[ "$recs" == *$'\nhot\t'* ]]; then
+        newhot="hot${recs#*$'\nhot'}"
+        recs="${recs%%$'\nhot\t'*}"
+    fi
+    [[ "$newhot" == "$hot" ]] || { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$hotf" "$newhot"; } 2>/dev/null
     local type pid kind rest watch="" where="" runs="" herdr
     set --
     while IFS=$'\t' read -r type pid kind rest; do

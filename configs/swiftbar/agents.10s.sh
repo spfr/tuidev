@@ -345,7 +345,7 @@ need_item() {
     needs_menu+="$SUB"
 }
 
-n_auto=0 BAR_AUTO=0
+n_auto=0 BAR_AUTO=0 BAR_SERVICE=""
 agent_rows=()
 while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user herdr cwd args project aflags adup; do
     case "$type" in
@@ -428,7 +428,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                 stale_tokens+=" $t"
             fi
             ;;
-        hog)     hog_rows+=("$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$avg"$'\t'"$rss"$'\t'"$start"$'\t'"$user") ;;
+        hog)     hog_rows+=("$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$avg"$'\t'"$rss"$'\t'"$start"$'\t'"$user"$'\t'"$args") ;;
         # memg STATE GUARD_PID WARN_KIB STOP_KIB LAST_EPOCH LAST_EVENT LAST_WHAT LAST_PROJECT LAST_FP_KIB
         memg)    mem_state="$pid"; mem_warn="$age_s"; mem_stop="$pcpu"; mem_last="$avg"
                  mem_ev="$rss"; mem_what="$kids"; mem_proj="$start"; mem_fp="$ports" ;;
@@ -466,6 +466,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                 AGENTS_LID)          BAR_LID="${kind:-1}" ;;
                 AGENTS_CONF)         CONF="$kind" ;;
                 AGENTS_AUTO_REAP)    BAR_AUTO="${kind:-0}" ;;
+                AGENTS_SERVICE_PATH) BAR_SERVICE="$kind" ;;
             esac
             ;;
     esac
@@ -475,7 +476,7 @@ done <<<"$data"
 # memory, the others by their CPU.
 num "$mem_warn" || mem_warn=0
 for row in ${hog_rows[@]+"${hog_rows[@]}"}; do
-    IFS=$'\t' read -r pid kind age_s pcpu avg rss start user <<<"$row"
+    IFS=$'\t' read -r pid kind age_s pcpu avg rss start user args <<<"$row"
     num "$rss" || rss=0
     n_hogs=$((n_hogs + 1))
     cl "$kind"; c="$REPLY"
@@ -488,7 +489,11 @@ for row in ${hog_rows[@]+"${hog_rows[@]}"}; do
     fi
     cl "$user"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
     hogs_menu+="--pid $pid · $c · up $a · $REPLY | symbolize=false"$'\n'
-    if [[ "$user" == "$me" ]] && tok "$pid" "$start"; then
+    # A system service: nothing to stop, its manager would only restart it.
+    # Past the memory warning it has no "settles" to promise.
+    if [[ -n "$BAR_SERVICE" && "$args" =~ $BAR_SERVICE ]]; then
+        [[ $mem_warn -gt 0 && $rss -ge $mem_warn ]] || hogs_menu+="--A system service: it usually settles on its own | symbolize=false"$'\n'
+    elif [[ "$user" == "$me" ]] && tok "$pid" "$start"; then
         hogs_menu+="--Terminate (SIGTERM) | $ACT param1=term param2=-y param3=--notify param4=$REPLY sfimage=xmark.octagon"$'\n'
     elif [[ "$user" != "$me" ]]; then
         hogs_menu+="--Owned by $c: run sudo kill $pid in a terminal | symbolize=false"$'\n'

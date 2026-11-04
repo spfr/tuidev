@@ -20,7 +20,7 @@ LOOK
                                helpers, caffeinate, dev servers (ppid 1)
   agents hogs                  top $AGENTS_HOG_TOP hogs, any owner: memory past ${AGENTS_MEM_WARN} GB RSS first,
                                then CPU: lifetime average >= ${AGENTS_HOG_PCT}% after ${AGENTS_HOG_MIN}m,
-                               or >= ${AGENTS_HOG_NOW}% now outside agent trees
+                               or >= ${AGENTS_HOG_NOW}% for ${AGENTS_HOG_SUSTAIN}m outside agent trees
   agents mem                   memory: free %, pressure and swap, the memory guard,
                                the ten processes holding the most (footprint, which
                                counts compressed pages RSS misses) with their session
@@ -160,7 +160,8 @@ SETTINGS
   agents config [--edit]       effective settings, and the file they came from;
                                --edit opens the file in your text editor
   $AGENTS_CONF (KEY=value; AGENTS_CONF picks another file). Keys: AGENTS_HOG_PCT
-  AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP AGENTS_GRACE AGENTS_AWAKE_POLL
+  AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_SUSTAIN AGENTS_HOG_TOP AGENTS_GRACE
+  AGENTS_AWAKE_POLL
   AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK AGENTS_NAMES AGENTS_NO_HERDR
   AGENTS_TERMINAL AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY, and the menu
   bar's AGENTS_BAR_TITLE

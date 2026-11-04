@@ -164,9 +164,15 @@ function judge(f,   t, cls, fl, ports, root, cwd, w, have, rd, hv, quiet, last, 
     } else {
         FLAG = "hog"; OWN = "-"
         fact(int(f[5] + 0.5) "% CPU now \302\267 " int(f[6] + 0.5) "% on average over " age(f[4]) " \302\267 owned by " f[11])
-        verdict("check", "medium", "hog", "check first \342\200\224 " f[3] " uses " int(f[5] + 0.5) "% CPU")
-        hint("quit it normally if you can; agents term " tok " sends it SIGTERM")
-        nope = "it is not an agent leftover"
+        if (f[14] ~ ENVIRON["AGENTS_SERVICE_PATH"] && f[7] + 0 < ENVIRON["AGENTS_MEM_WARN_KIB"] + 0) {
+            verdict("info", "high", "system", "informational \342\200\224 " f[3] " is a system service; it usually settles on its own")
+            hint("leave it: stopping it only restarts it. If it stays busy for hours, restart the machine")
+            nope = "it is a system service"
+        } else {
+            verdict("check", "medium", "hog", "check first \342\200\224 " f[3] " uses " int(f[5] + 0.5) "% CPU")
+            hint("quit it normally if you can; agents term " tok " sends it SIGTERM")
+            nope = "it is not an agent leftover"
+        }
     }
     if (AUTO) facts = facts "evid\t" P "\tauto\t" (autoon ? "auto-reap is on: it stops this within a minute" : "auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own") "\n"
     else facts = facts "evid\t" P "\tauto\tauto-reap never stops this: " nope "\n"

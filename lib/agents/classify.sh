@@ -20,7 +20,9 @@
 # it or only tests that it exists (agents_collect checks its age,
 # agents_enrich drops them), "where PID tmux|herdr|ssh|app|- PLACE" records
 # for each session (awk/lib_where.awk; PANES: tmux's "pane_pid<TAB>
-# session:window.pane" lines, where.sh), and "job" records (awk/lib_jobs.awk).
+# session:window.pane" lines, where.sh), "job" records (awk/lib_jobs.awk) and,
+# last, "hot PID START SINCE TS CPUTIME CONFIRMED" streaks when AGENTS_HOG_CLOCK and
+# AGENTS_HOG_HOT (the previous run's) are set: only agents_collect keeps them.
 agents_classify() {
     local mcp pats
     _agents_mcp_needles mcp     # which configured MCP server each process is
@@ -29,7 +31,8 @@ agents_classify() {
     AGENTS_UID="$AGENTS_UID" AGENTS_SELF="$AGENTS_SELF" AGENTS_NAMES="$AGENTS_NAMES" \
     AGENTS_DAEMON="$AGENTS_DAEMON_PATTERN" AGENTS_SYSTEM="$AGENTS_SYSTEM_PATTERN" \
     AGENTS_HOG_PCT="$AGENTS_HOG_PCT" AGENTS_HOG_MIN="$AGENTS_HOG_MIN" \
-    AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_HOG_TOP="$AGENTS_HOG_TOP" AGENTS_BAR_TOP="$AGENTS_BAR_TOP" \
+    AGENTS_HOG_NOW="$AGENTS_HOG_NOW" AGENTS_HOG_SUSTAIN="$AGENTS_HOG_SUSTAIN" \
+    AGENTS_HOG_TOP="$AGENTS_HOG_TOP" AGENTS_BAR_TOP="$AGENTS_BAR_TOP" \
     AGENTS_MEM_WARN_KIB=$((AGENTS_MEM_WARN * 1048576)) \
     _agents_awk "lib_proc lib_activity lib_jobs lib_where classify"
 }

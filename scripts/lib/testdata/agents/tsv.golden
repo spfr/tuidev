@@ -291,4 +291,5 @@ conf	AGENTS_LID	1
 conf	AGENTS_CONF	@TMP@/none.conf
 conf	AGENTS_AUTO_REAP	0
 conf	AGENTS_MEM_GUARD	kill
+conf	AGENTS_SERVICE_PATH	^/(usr/libexec|usr/sbin|sbin)/|^/System/Library/(CoreServices|PrivateFrameworks|Frameworks/CoreServices\.framework)/
 [rc=0]

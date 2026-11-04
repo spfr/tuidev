@@ -16,7 +16,7 @@
 # KEY=value, never sourced: only the keys below are accepted, each value must
 # match its shape, and anything else is reported and ignored.
 AGENTS_CONF="${AGENTS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/agents.conf}"
-_AGENTS_CONF_KEYS="AGENTS_HOG_PCT AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_TOP AGENTS_GRACE"
+_AGENTS_CONF_KEYS="AGENTS_HOG_PCT AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_SUSTAIN AGENTS_HOG_TOP AGENTS_GRACE"
 _AGENTS_CONF_KEYS+=" AGENTS_AWAKE_POLL AGENTS_NAMES AGENTS_NO_HERDR AGENTS_TERMINAL AGENTS_BAR_TITLE"
 _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH"
 _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
@@ -50,7 +50,7 @@ _agents_ere_ok() {
 _agents_conf_valid() {
     local w allowed=""
     case "$1" in
-        AGENTS_HOG_PCT|AGENTS_HOG_MIN|AGENTS_HOG_NOW|AGENTS_HOG_TOP|AGENTS_GRACE|AGENTS_AWAKE_POLL|AGENTS_BAR_TOP|AGENTS_TOOL_LONG|AGENTS_LS_TOOLS|AGENTS_WAIT_STUCK)
+        AGENTS_HOG_PCT|AGENTS_HOG_MIN|AGENTS_HOG_NOW|AGENTS_HOG_SUSTAIN|AGENTS_HOG_TOP|AGENTS_GRACE|AGENTS_AWAKE_POLL|AGENTS_BAR_TOP|AGENTS_TOOL_LONG|AGENTS_LS_TOOLS|AGENTS_WAIT_STUCK)
             [[ "$2" =~ ^[0-9]+$ ]] ;;
         AGENTS_NAMES)       [[ "$2" =~ ^[A-Za-z0-9._\ -]+$ ]] ;;
         AGENTS_NO_HERDR)    [[ "$2" =~ ^[01]?$ ]] ;;
@@ -110,7 +110,8 @@ agents_conf_load "$AGENTS_CONF"
 
 AGENTS_HOG_PCT="${AGENTS_HOG_PCT:-50}"   # lifetime-average CPU% that makes a hog…
 AGENTS_HOG_MIN="${AGENTS_HOG_MIN:-30}"   # …once it has run this many minutes
-AGENTS_HOG_NOW="${AGENTS_HOG_NOW:-90}"   # current CPU% hog (outside agent trees)
+AGENTS_HOG_NOW="${AGENTS_HOG_NOW:-90}"   # CPU% that makes a hog outside agent trees…
+AGENTS_HOG_SUSTAIN="${AGENTS_HOG_SUSTAIN:-3}"  # …held for this many minutes (0: one reading)
 AGENTS_HOG_TOP="${AGENTS_HOG_TOP:-5}"    # hogs listed
 AGENTS_TOOL_LONG="${AGENTS_TOOL_LONG:-20}"  # minutes before a tool command counts as long-running
 AGENTS_LS_TOOLS="${AGENTS_LS_TOOLS:-5}"    # tool commands listed per session in ls
@@ -131,6 +132,7 @@ _agents_env_check() {   # KEY DEFAULT
     printf -v "$1" '%s' "$2"
 }
 _agents_env_check AGENTS_WAIT_STUCK 60
+_agents_env_check AGENTS_HOG_SUSTAIN 3
 _agents_env_check AGENTS_LID 1
 _agents_env_check AGENTS_LID_MAX 8h
 _agents_env_check AGENTS_LID_MIN_BATTERY 20
@@ -238,7 +240,11 @@ export AGENTS_SUPERVISOR_NAMES AGENTS_SHELL_NAMES   # read by the awk programs
 # your terminal. /System/Applications (Messages, Mail…) stays allowed.
 AGENTS_CRITICAL_NAMES="loginwindow Finder Dock WindowServer SystemUIServer ControlCenter launchd Ghostty ghostty Terminal iTerm2 WezTerm wezterm-gui kitty Alacritty alacritty"
 AGENTS_CRITICAL_PATH='^/(System/Library|System/Volumes|usr/libexec|usr/sbin|sbin)/'
-export AGENTS_CRITICAL_NAMES AGENTS_CRITICAL_PATH   # read by the awk programs
+# A background system service, which settles on its own and which stopping only
+# restarts. Narrower than critical: not a terminal, and not a browser's WebKit
+# processes under /System, where closing the tab is the answer.
+AGENTS_SERVICE_PATH='^/(usr/libexec|usr/sbin|sbin)/|^/System/Library/(CoreServices|PrivateFrameworks|Frameworks/CoreServices\.framework)/'
+export AGENTS_CRITICAL_NAMES AGENTS_CRITICAL_PATH AGENTS_SERVICE_PATH   # read by the awk programs
 
 # This process and your uid, and the clock (AGENTS_NOW, read by _agents_now).
 # Overridable only by the test harness; the clock of an `agents tsv` refresh
