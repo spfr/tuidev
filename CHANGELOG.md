@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.0] - 2026-11-04
+
+The menu warns about what lasts. A daemon's moment at 120% during a build no longer comes and goes as a hog.
+
+### Changed
+
+- **A CPU hog has to last.** One reading of 90% was enough, so `mds_stores`, `opendirectoryd` and friends flickered through Hogs and tinted the icon on every build. A reading now starts a streak, checked from the CPU time really used every 30 seconds or so, and 3 minutes of it makes a hog (`AGENTS_HOG_SUSTAIN`; 0 brings back one reading). It clears once it falls below half of that. The lifetime average still catches an app stuck for days, as long as it is still busy: on macOS, one that worked hard an hour ago and now idles is no hog.
+- **Duplicates have to last too.** The same quick command twice in one directory is normal for an agent. It counts once two copies have run a minute, so it stops blinking through Needs you. The run ledger and the waste view follow: copies that overlap for under a minute are no longer duplicates there.
+
+### Fixed
+
+- **No kill advice for system services.** A background service (under `/usr/libexec`, `/usr/sbin`, `/sbin`, or macOS's CoreServices and PrivateFrameworks) offered Terminate, which `agents term` refuses, or `sudo kill`, which only restarts it. The menu and `agents why` now say what it is and that it usually settles on its own.
+
+### Security
+
+- **More out of the sandbox's reach.** `sbx` and Claude Code's deny rules now cover atuin's data, shell histories and browser profiles and cookies. HOME is readable and port 443 is open, so anything readable could leave.
+- **`sbx` stops `open` and Apple Events,** which handed work to apps outside the sandbox, and `strict.sb` no longer claims a host allowlist it doesn't have.
+- **Herdr's provenance.** With a logged-in `gh`, the release binary and what `herdr update` installs are checked against GitHub's attestation. A failing one refuses the download, or warns after `herdr update`.
+- **Slower automatic updates.** Dependabot waits a week on a new release and now tracks the pinned images. The scan moves to gitleaks 8.30.1 and semgrep 1.183.0, and no longer leaves a token in the checkout it mounts.
+
+### Removed
+
+- **Maccy.** Nobody here used it, and it carries an old Sparkle updater. The `ui` pack no longer installs it. An existing copy stays until you run `brew uninstall --cask maccy`.
+
 ## [3.17.1] - 2026-10-30
 
 Re-running the monitoring pack no longer leaves the memory guard stopped.
