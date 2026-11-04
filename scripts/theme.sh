@@ -241,6 +241,7 @@ render_herdr() {
 [theme.custom]
 accent = "$(pc accent)"
 panel_bg = "reset"
+sidebar_bg = "$(pc bg_dark)"
 active_row_bg = "$(pc bg_highlight)"
 selection_bg = "$(pc selection_bg)"
 surface0 = "$(pc bg_highlight)"

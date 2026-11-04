@@ -7,3 +7,9 @@
 
 [theme]
 name = "tokyo-night"
+
+[ui]
+# Who needs you first: blocked agents lead the panel, with a shape for each
+# state, as in `agents` and the menu.
+agent_panel_sort = "priority"
+status_indicators = "symbols"

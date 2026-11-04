@@ -334,7 +334,7 @@ grep -qE '^red = "#f38ba8"$' <<< "$block" || fail "blocked's red isn't the palet
 grep -qE '^green = "#a6e3a1"$' <<< "$block" || fail "green"
 grep -qE '^accent = "#89b4fa"$' <<< "$block" || fail "accent"
 grep -qE '^panel_bg = "reset"$' <<< "$block" || fail "panel_bg stays the terminal's"
-for t in accent panel_bg active_row_bg selection_bg surface0 surface1 surface_dim overlay0 overlay1 text subtext0 mauve green yellow red blue teal peach; do
+for t in accent panel_bg sidebar_bg active_row_bg selection_bg surface0 surface1 surface_dim overlay0 overlay1 text subtext0 mauve green yellow red blue teal peach; do
     grep -qE "^$t = " <<< "$block" || fail "Herdr token $t not set"
 done
 grep -qF 'name = "tokyo-night"' "$HERDR_CONF" || fail "the shipped [theme] was touched"

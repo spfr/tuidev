@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.2] - 2026-11-04
+
+Herdr joins the triage: blocked agents first, a shape for each state, and a sidebar in your palette.
+
+### Changed
+
+- **Herdr's shipped defaults.** `agent_panel_sort = "priority"` and `status_indicators = "symbols"`, so the agent panel answers "who needs me?" as `agents` and the menu do. They reach new installs only, since `config.toml` is yours once placed: add the two lines under `[ui]` to take them.
+- **`scripts/theme.sh` sets Herdr's `sidebar_bg`** from the palette's `bg_dark`, so the sidebar sits apart from the panes.
+
 ## [3.19.1] - 2026-11-04
 
 `agents report` runs on Debian again.

@@ -186,6 +186,7 @@ in the sidebar is the same red as `▲` in `agents`.
 |-------------|-------------|
 | `accent`, `text`, `subtext0` | `accent`, `fg`, `fg_dim` |
 | `active_row_bg`, `selection_bg` | `bg_highlight`, `selection_bg` |
+| `sidebar_bg` | `bg_dark` |
 | `surface0`, `surface1`, `surface_dim` | `bg_highlight`, `border`, `bg_dark` |
 | `overlay0`, `overlay1` | `ansi_bright_black`, `fg_dim` |
 | `red`, `green`, `yellow`, `blue`, `teal`, `mauve`, `peach` | `ansi_red`, `ansi_green`, `ansi_yellow`, `ansi_blue`, `ansi_cyan`, `ansi_magenta`, `ansi_bright_yellow` |
