@@ -389,11 +389,6 @@ agents_collect() {
     local hotf="$AGENTS_RUN_DIR/hog.state" hot="" newhot=""
     [[ -r "$hotf" ]] && hot="$(<"$hotf")"
     recs="$(printf '%s\n' "$ps" | AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
-    if [[ "$recs" == *$'\nhot\t'* ]]; then
-        newhot="hot${recs#*$'\nhot'}"
-        recs="${recs%%$'\nhot\t'*}"
-    fi
-    [[ "$newhot" == "$hot" ]] || { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$hotf" "$newhot"; } 2>/dev/null
     local type pid kind rest watch="" where="" runs="" herdr
     set --
     while IFS=$'\t' read -r type pid kind rest; do
@@ -403,8 +398,10 @@ agents_collect() {
             act) [[ "$kind" == tool ]] && { set -- "$@" "$pid"; runs=1; } ;;   # its origin
             watch) watch+="$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;  # kind: the path; rest: read|exists
             where) where+="where"$'\t'"$pid"$'\t'"$kind"$'\t'"$rest"$'\n' ;;
+            hot) newhot+="${newhot:+$'\n'}hot"$'\t'"$pid"$'\t'"$kind"$'\t'"$rest" ;;   # agents_enrich drops them
         esac
     done <<<"$recs"
+    [[ "$newhot" == "$hot" ]] || { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$hotf" "$newhot"; } 2>/dev/null
     _agents_cwds_hinted pids 8 "$hint" ${feed:+--stdout} "$@"
     herdr="$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")"
     enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$herdr" "$(_agents_watched "$watch")" "$(_agents_herdr_panes "$herdr" "$where")")"

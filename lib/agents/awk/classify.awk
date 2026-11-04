@@ -180,5 +180,5 @@ END {
         else act(p, "other", r, "-", a)
     }
     jobs_emit()
-    printf "%s", hotrows    # last: agents_collect cuts them off
+    printf "%s", hotrows
 }

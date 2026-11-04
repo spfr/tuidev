@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.18.1] - 2026-11-04
+
+The menu is fast again.
+
+### Fixed
+
+- **A 15-second refresh.** 3.18.0 cut its hog streaks off the process records with a bash pattern match, which took about 14 seconds on a Mac with a thousand processes, longer than the menu's 10-second refresh. `agents`, `agents tsv` and the menu are back under a second.
+
 ## [3.18.0] - 2026-11-04
 
 The menu warns about what lasts. A daemon's moment at 120% during a build no longer comes and goes as a hog.
