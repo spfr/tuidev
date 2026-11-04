@@ -10,13 +10,14 @@
 # with headless Chrome at 2x:
 #
 #   docs/assets/menu-light.webp, menu-dark.webp the menu, with the submenu of
-#                                               its first stuck command open
+#                                               its first flagged command open
 #   docs/assets/menu.gif                        the menu, then four submenus
 #
 # So when the plugin's output changes, re-running this redraws the picture.
 # Nothing is read from this machine's processes or menu bar. macOS only; needs
 # Google Chrome or Chromium (CHROME=/path/to/binary to choose) and Swift (the
-# Xcode command-line tools). See docs/assets/tapes/README.md.
+# Xcode command-line tools). MENU_OUT=DIR writes the pictures there instead, to
+# look at a change without touching docs/assets. See docs/assets/tapes/README.md.
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,7 +27,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TAPES="$REPO_DIR/docs/assets/tapes"
 TEMPLATE="$REPO_DIR/docs/assets/menu"
-OUT="$REPO_DIR/docs/assets"
+OUT="${MENU_OUT:-$REPO_DIR/docs/assets}"
 
 is_macos || die "render_menu.sh runs on macOS only (SF Symbols and the menu it draws are macOS's)"
 command_exists swift || die "Swift is not installed: xcode-select --install"
@@ -92,8 +93,8 @@ capture() {
 }
 
 # The stills: the first stuck or long command's verdict, in both appearances.
-first="$(grep -m1 -E '^[^-].* · (stuck|running) [0-9]' "$work/menu.txt" | cut -d'|' -f1 | cut -c1-12)"
-[[ -n "$first" ]] || die "no stuck or long command in Needs you"
+first="$(grep -m1 -E '^[^-].* · (wait-loop stuck|running) [0-9]|^[^-].* · .* · running [0-9]' "$work/menu.txt" | cut -d'|' -f1 | cut -c1-12)"
+[[ -n "$first" ]] || die "no flagged command in the menu"
 open="$(jq -cn --arg a "$first" '[$a]')"
 # WebP: the desktop gradient behind the menu makes a PNG of it near 1 MB.
 for theme in light dark; do
@@ -107,12 +108,12 @@ for theme in light dark; do
     fi
 done
 
-# The GIF: closed, then the verdict, the CPU by job, keep-awake with the lid
-# closed, and the system line, all on one canvas (the largest frame's size).
+# The GIF: closed, then the verdict, the day and the CPU by job, keep-awake with
+# the lid closed, and the system row, all on one canvas (the largest frame's size).
 frames=(
     '[]'
     "$open"
-    "$(jq -cn --arg a "$(grep -m1 -E '^[a-z ]+ · [0-9<]+% · ' "$work/menu.txt" | cut -d'|' -f1 | cut -c1-8)" '[$a]')"
+    '["Today:"]'
     '["Awake:", "Lid closed too"]'
     '["CPU "]'
 )
@@ -133,4 +134,4 @@ else
     print_warning "ffmpeg not found: menu.gif not rendered (brew install ffmpeg)"
 fi
 
-print_success "menu rendered from the plugin's output: docs/assets/menu-light.webp, menu-dark.webp, menu.gif"
+print_success "menu rendered from the plugin's output: ${OUT#"$REPO_DIR"/}/menu-light.webp, menu-dark.webp, menu.gif"

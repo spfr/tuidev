@@ -7,12 +7,13 @@
 #   memory guard (`agents mem guard`: warn about, record and stop a runaway
 #   in an agent tree before macOS runs out of application memory), its
 #   state and its incident log, memory.tsv.
-# Uses: config.sh, util.sh, render.sh (the colors), snapshot.sh
+# Uses: config.sh, util.sh, palette.sh (the colors), snapshot.sh
 #   (agents_snapshot, _agents_cwds), classify.sh (agents_project), system.sh
 #   (_agents_parse_memfree), kill.sh (_agents_kill_unattended), events.sh
-#   (_agents_data_dir), notify.sh, where.sh (agents_root_of); awk/memory.awk.
+#   (_agents_data_dir), notify.sh, where.sh (agents_root_of); awk/memory.awk, awk/mem_view.awk.
 # Public: agents_mem, agents_mem_tick, agents_mem_machine, _agents_mem_fp,
-#   _agents_mem_tsv_row, _agents_mem_guard_state.
+#   _agents_mem_tsv_row, _agents_mem_guard_state, _agents_swap_high,
+#   _agents_swap_row.
 #
 # memory.tsv, in $AGENTS_DATA_DIR (private, names only, pruned with the
 # history), one line per incident:
@@ -90,14 +91,60 @@ agents_mem_machine() {
         while IFS= read -r line; do
             case "$line" in
                 1) level=normal ;; 2) level=warn ;; 4) level=critical ;;
-                *total\ =*) read -r su stot <<<"$(printf '%s\n' "$line" | LC_ALL=C awk '
-                    function k(v,   u, x) { u = substr(v, length(v)); x = substr(v, 1, length(v) - 1) + 0
-                        return int(u == "G" ? x * 1048576 : u == "M" ? x * 1024 : u == "K" ? x : x / 1024) }
-                    { for (i = 1; i < NF; i++) { if ($i == "total") t = k($(i + 2)); if ($i == "used") u = k($(i + 2)) } print u + 0, t + 0 }')" ;;
+                *total\ =*) _agents_swap_parse "$line" && read -r su stot <<<"$REPLY" ;;
             esac
         done < <(LC_ALL=C sysctl -n kern.memorystatus_vm_pressure_level vm.swapusage 2>/dev/null)
     fi
     printf '%s\t%s\t%s\t%s\t%s\n' "${total:--}" "${free:--}" "${level:--}" "${su:--}" "${stot:--}"
+}
+
+# _agents_swap_parse LINE — REPLY: "used_kib total_kib" from vm.swapusage's
+# `total = 13312.00M  used = 11800.25M  free = ...`; false when it isn't that.
+_agents_swap_parse() {
+    local re='total = ([0-9]+)\.?([0-9]*)([KMG])[[:space:]]+used = ([0-9]+)\.?([0-9]*)([KMG])' t
+    [[ "$1" =~ $re ]] || return 1
+    _agents_swap_kib "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"; t="$REPLY"
+    _agents_swap_kib "${BASH_REMATCH[4]}" "${BASH_REMATCH[5]}" "${BASH_REMATCH[6]}"
+    REPLY="$REPLY $t"
+}
+# _agents_swap_kib WHOLE FRACTION UNIT — REPLY: that size in KiB (two decimals
+# of it count: sysctl prints no more).
+_agents_swap_kib() {
+    local m=1024 f="${2}00"
+    case "$3" in K) m=1 ;; G) m=1048576 ;; esac
+    REPLY=$(( (10#$1 * 100 + 10#${f:0:2}) * m / 100 ))
+}
+# _agents_swap — "used_kib total_kib" of swap, nothing when unknown.
+_agents_swap() {
+    local k v u="" t=""
+    if [[ -r /proc/meminfo ]]; then
+        while read -r k v _; do
+            case "$k" in SwapTotal:) t="$v" ;; SwapFree:) u="$v" ;; esac
+        done < /proc/meminfo
+        [[ -z "$t" || -z "$u" ]] || echo "$((t - u)) $t"
+    elif _agents_swap_parse "$(LC_ALL=C sysctl -n vm.swapusage 2>/dev/null)"; then
+        echo "$REPLY"
+    fi
+}
+# _AGENTS_SWAP_HIGH — the % of swap worth a word in the summary and the menu: it
+# fills up before a guard stop, and a little of it means nothing.
+_AGENTS_SWAP_HIGH=80
+# _agents_swap_high — true, REPLY the % and REPLY_USED, REPLY_TOTAL the KiB, when
+# swap is past _AGENTS_SWAP_HIGH.
+_agents_swap_high() {
+    local u t
+    read -r u t <<<"$(_agents_swap)"
+    [[ "${t:-0}" -gt 0 ]] || return 1
+    REPLY=$((u * 100 / t)) REPLY_USED="$u" REPLY_TOTAL="$t"
+    [[ $REPLY -ge $_AGENTS_SWAP_HIGH ]]
+}
+# _agents_swap_row — agents tsv's swap row, while swap is high (a rare awk, for
+# the bar): swap PCT USED_KIB TOTAL_KIB BAR.
+_agents_swap_row() {
+    _agents_swap_high || return 0
+    local pct="$REPLY" u="$REPLY_USED" t="$REPLY_TOTAL" bar
+    bar="$(_agents_awk_eval lib_fmt "BEGIN { printf \"%s\", gauge($pct, 12, -1, \"\", \"\", \"\") }")"
+    printf 'swap\t%s\t%s\t%s\t%s\n' "$pct" "$u" "$t" "$bar"
 }
 
 # _agents_mem_kill_kib TOTAL_KIB — the size that gets an agent tree's process
@@ -333,33 +380,14 @@ _agents_mem_tsv_row() {
         "$(_agents_mem_kill_kib "$(_agents_mem_total)")" "$e" "${ev:--}" "$(_agents_mem_what "${name:--}" "${label:--}")" "${proj:--}" "${fp:-0}"
 }
 
-# _agents_mem_show — `agents mem`: the machine's memory, the guard, the
-# processes holding the most (by footprint on macOS) with the session and
-# project each runs in, and the last incidents.
+# _agents_mem_show — `agents mem`: the machine's memory and swap as bars, the
+# guard, the processes holding the most (by footprint on macOS) on a bar to the
+# guard's stop size, with the session and project each runs in, and the last
+# incidents. The bars are awk/mem_view.awk's.
 _agents_mem_show() {
-    local total free level su stot st gpid top pids="" rows line pid fp cwds e ev name label proj session rss what c n=0
+    local total free level su stot st gpid top pids="" rows line pid fp cwds e ev name label proj session rss what n=0 stops=0 list=""
     IFS=$'\t' read -r total free level su stot <<<"$(agents_mem_machine)"
-    printf '%sMEMORY%s  ' "$C_B" "$C_0"
-    [[ "$total" =~ ^[0-9]+$ && $total -gt 0 ]] && printf '%s total · ' "$(_agents_mem_gb "$total")"
-    [[ "$free" =~ ^[0-9]+$ ]] && printf '%s%% free · ' "$free"
-    case "$level" in
-        critical) printf '%spressure critical%s' "$C_R$C_B" "$C_0" ;;
-        warn)     printf '%spressure warn%s' "$C_Y" "$C_0" ;;
-        *)        printf 'pressure %s' "${level:--}" ;;
-    esac
-    [[ "$su" =~ ^[0-9]+$ && "$stot" =~ ^[0-9]+$ && $stot -gt 0 ]] && printf ' · swap %s of %s' "$(_agents_mem_gb "$su")" "$(_agents_mem_gb "$stot")"
-    echo
     read -r st gpid <<<"$(_agents_mem_guard_state)"
-    printf '%sGUARD%s   ' "$C_B" "$C_0"
-    case "$st" in
-        on)      printf 'running (pid %s) · ' "$gpid" ;;
-        stopped) printf '%snot running%s (agents mem restart) · ' "$C_Y" "$C_0" ;;
-        off)     printf 'off (AGENTS_MEM_GUARD=off)\n' ;;
-        none)    printf 'not running (run "agents mem guard" in a tmux pane) · ' ;;
-    esac
-    [[ "$st" == off ]] || printf '%s · warns at %s · stops agent-tree processes at %s\n' "$AGENTS_MEM_GUARD" \
-        "$(_agents_mem_gb $((AGENTS_MEM_WARN * 1048576)))" "$(_agents_mem_gb "$(_agents_mem_kill_kib "$total")")"
-    echo
     # The ten holding the most: top's own order on macOS, ps's RSS elsewhere.
     if [[ "$OSTYPE" == darwin* ]]; then
         top="$(_agents_mem_top -o mem -n 10 -stats pid,mem | _agents_mem_parse_top)"
@@ -371,7 +399,6 @@ _agents_mem_show() {
         -v self="$AGENTS_SELF" -v screen=0 -v max=400 -v pids=" $pids")"
     # shellcheck disable=SC2086  # one pid per word
     cwds="$(_agents_cwds $pids 2>/dev/null)"
-    printf '%s  %-7s %9s %8s  %-38s %-18s %s%s\n' "$C_DIM" PID FOOTPRINT RSS PROCESS PROJECT SESSION "$C_0"
     # Biggest first by what is shown: the footprint, or RSS when larger.
     top="$(printf '%s\n' "$top" | _ROWS="$rows" awk -F '\t' '
         BEGIN { n = split(ENVIRON["_ROWS"], r, "\n"); for (i = 1; i <= n; i++) { split(r[i], f, "\t"); rss[f[1]] = f[3] } }
@@ -386,10 +413,13 @@ _agents_mem_show() {
         if [[ "$proj" == /* ]]; then proj="$(agents_project "$proj")"; else proj=-; fi
         session=-; [[ "$root" == - ]] || session="$rkind:$root"
         what="$(_agents_mem_what "$name" "$label")"
-        c=""
-        [[ $fp -ge $((AGENTS_MEM_WARN * 1048576)) ]] && c="$C_R$C_B"
-        printf '  %-7s %s%9s%s %8s  %-38.38s %-18.18s %s\n' "$pid" "$c" "$(_agents_mem_gb "$fp")" "$C_0" "$(_agents_mem_gb "$rss")" "$what" "$proj" "$session"
+        list+="$pid"$'\t'"$fp"$'\t'"$rss"$'\t'"$what"$'\t'"$proj"$'\t'"$session"$'\n'
     done <<<"$top"
+    [[ ! -s "$AGENTS_DATA_DIR/memory.tsv" ]] || stops="$(_agents_mem_stops)"
+    printf '%s' "$list" | W="${AGENTS_WIDTH:-120}" _agents_awk_colored "lib_fmt mem_view" -F '\t' \
+        -v total="${total:--}" -v free="${free:--}" -v level="${level:--}" -v su="${su:--}" -v stot="${stot:--}" \
+        -v gstate="$st" -v gpid="${gpid:--}" -v gmode="$AGENTS_MEM_GUARD" -v stops="$stops" \
+        -v warn=$((AGENTS_MEM_WARN * 1048576)) -v stop="$(_agents_mem_kill_kib "$total")" -v high="$_AGENTS_SWAP_HIGH"
     [[ -s "$AGENTS_DATA_DIR/memory.tsv" ]] || return 0
     echo
     printf '%sINCIDENTS%s %s(%s)%s\n' "$C_B" "$C_0" "$C_DIM" "${AGENTS_DATA_DIR/#"$HOME"/\~}/memory.tsv" "$C_0"
@@ -399,6 +429,13 @@ _agents_mem_show() {
         printf '  %s  %-8s %-38.38s %-18.18s %8s  %s\n' "$(date -r "$e" '+%b %d %H:%M' 2>/dev/null || date -d "@$e" '+%b %d %H:%M' 2>/dev/null)" \
             "$ev" "$(_agents_mem_what "$name" "$label")" "$proj" "$(_agents_mem_gb "${fp:-0}")" "$session"
     done < <(tail -n 8 "$AGENTS_DATA_DIR/memory.tsv" 2>/dev/null)
+}
+
+# _agents_mem_stops — how many runaways the guard stopped in the last 7 days.
+_agents_mem_stops() {
+    local now
+    _agents_now now
+    LC_ALL=C awk -F '\t' -v cut=$((now - 7 * 86400)) '$2 == "stop" && $1 + 0 >= cut { n++ } END { print n + 0 }' "$AGENTS_DATA_DIR/memory.tsv"
 }
 
 # agents_mem [show|check [-n]|guard|log [N]|restart] — `agents mem`.

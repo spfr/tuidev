@@ -1,0 +1,17 @@
+ ● 6
+
+ ● repo       tests 2m00s   1h00m  1.5c 1.1G
+ ● repo       tests 2m00s   1h00m  1.1c 1.4G
+   ! 3× go test -race ./internal/web · check first
+   · make serve running 45m
+ ● app        working       1h42m  1.0c 1.0G
+ ● myapp      tests 25m00s  6h00m  0.1c 512M
+   ! wait-loop stuck 5h10m · safe to stop
+   ! wait-loop stuck 1h40m · safe to stop
+   ! wait-loop stuck 3h00m · check first
+   ... 4 more (agents ps 5000)
+ ● shop/fix-… working         33m  0.1c 632M
+ ● repo       tests 1m00s     30m  0.0c 298M
+   ! 3× go test -race ./internal/web · check first
+! 7 stale · ! 2 hogs
+[rc=0]

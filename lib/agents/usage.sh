@@ -9,9 +9,13 @@ agents_usage() {
 agents — see and control local agentic-coding processes (claude, codex, agy, grok, cursor-agent)
 
 LOOK
-  agents [ls]                  sessions (blocked first), then stale processes and
-                               hogs when there are any, then system status
+  agents                       who needs you: a summary, then Needs you (blocked), To
+                               review (done under AGENTS_PARKED_MIN, ${AGENTS_PARKED_MIN} minutes) and
+                               Running, one line for what is parked, one for the system
   agents watch [SECS]          the same, redrawn every SECS (default 2); q quits
+  agents ls                    the full table: each session's PID, status, CPU, memory,
+                               ports and cwd, its MCP servers and commands; stale
+                               processes and hogs when there are any; system status
   agents ps [PID]              everything a session runs: MCP servers, each command
                                (tool shell) with its origin (main or a worktree
                                subagent) and flags (dup, long, hot, wait, stuck), nested
@@ -21,10 +25,11 @@ LOOK
   agents hogs                  top $AGENTS_HOG_TOP hogs, any owner: memory past ${AGENTS_MEM_WARN} GB RSS first,
                                then CPU: lifetime average >= ${AGENTS_HOG_PCT}% after ${AGENTS_HOG_MIN}m,
                                or >= ${AGENTS_HOG_NOW}% for ${AGENTS_HOG_SUSTAIN}m outside agent trees
-  agents mem                   memory: free %, pressure and swap, the memory guard,
-                               the ten processes holding the most (footprint, which
-                               counts compressed pages RSS misses) with their session
-                               and project, and the last incidents
+  agents mem                   memory and swap as bars, pressure, the memory guard, the
+                               ten processes holding the most (footprint, which counts
+                               compressed pages RSS misses) on a bar to the guard's
+                               stop size, with their session and project, and the
+                               last incidents
   agents mem check [-n]        one look by the memory guard, saying what it did
                                (-n: what it would do)
   agents mem guard             the guard's loop, every AGENTS_MEM_POLL (${AGENTS_MEM_POLL}s): warns
@@ -89,16 +94,17 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
                                prices), context (MCP servers, skills and subagents
                                used and loaded, plugins, what is unused; default
                                7d), denials (tool calls denied, by command, with
-                               what to try), waits (how long sessions in Herdr
-                               waited on you, blocked or done, and the
+                               what to try), waits (how long sessions waited on
+                               you: blocked, fresh and parked, hour by hour, and the
                                notifications, by project and kind)
   agents runs [--since 24h|7d|30d|today] [--json]
                                finished commands, newest first: when, how long, CPU,
                                peak memory, exit code, project, session, the agent
                                that started it, dup, and whether agents stopped it
   agents limits [--json]       each CLI's usage limits (Claude Code, Codex,
-                               Antigravity): used % per window, when it resets,
-                               and how old the reading is
+                               Antigravity): used % per window on a gauge marking the
+                               time gone, under or over pace (with the time left at
+                               this rate), when it resets, how old the reading is
   agents sample                record one sample; the menu bar and 'agents watch'
                                do it every minute (cron it where neither runs)
 
@@ -154,7 +160,7 @@ CLAUDE CODE HOOKS AND STATUS LINE (shipped in ~/.claude/settings.json; JSON on s
   agents statusline            Claude Code's status line (statusLine): records
                                Claude's 5-hour and weekly limits (Pro and Max),
                                then prints AGENTS_STATUSLINE_CMD's line for the
-                               same JSON, or "Opus · ctx 42% · 5h 23% · wk 41%"
+                               same JSON, or a compact one with a context gauge
 
 SETTINGS
   agents config [--edit]       effective settings, and the file they came from;
@@ -171,7 +177,10 @@ SETTINGS
   AGENTS_ORPHAN_PATTERNS in $_AGENTS_LIB/config.sh. History: AGENTS_HISTORY
   AGENTS_HISTORY_DAYS AGENTS_PRICES; extra job patterns (EREs): AGENTS_JOB_TEST
   AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Your status line:
-  AGENTS_STATUSLINE_CMD. Data: $AGENTS_DATA_DIR
+  AGENTS_STATUSLINE_CMD. How long a finished session stays to review: AGENTS_PARKED_MIN.
+  Colors: AGENTS_THEME (auto, ansi, none or a palette's name) and AGENTS_COLOR_NEED
+  AGENTS_COLOR_DONE AGENTS_COLOR_RUN AGENTS_COLOR_WARN AGENTS_COLOR_DIM AGENTS_COLOR_ACCENT
+  (a palette key or #rrggbb). Data: $AGENTS_DATA_DIR
 
 SAFETY
   Never signals pid 1, this shell or its parents, another user's process

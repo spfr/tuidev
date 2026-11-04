@@ -21,7 +21,8 @@
 # removed), each sample appends to waits.tsv the sessions Herdr shows
 # blocked or done (_agents_waits_rows) and the waits Claude Code's hooks
 # recorded for sessions outside Herdr (_agents_hook_waits_rows; hooks.sh
-# writes them), scans the transcripts for tokens
+# writes them), keeps how long each live session has waited (triage.sh:
+# waits.now, waits.today), scans the transcripts for tokens
 # (tokens.sh; a failure there never stops the sample), updates the run
 # ledger (runs.sh; a failure there never makes the next sample count history
 # twice) and then the menu's top insight (report.sh: insight.txt).
@@ -29,7 +30,7 @@
 # Uses: config.sh, util.sh, snapshot.sh (_agents_herdr, _agents_herdr_panes),
 #   classify.sh, events.sh (the data directory and the events lock), runs.sh (the run
 #   ledger), tokens.sh (_agents_tokens_scan, _agents_tokens_prune), report.sh
-#   (agents_insight_write); awk/sample.awk.
+#   (agents_insight_write), triage.sh (_agents_waits_state); awk/sample.awk.
 # Public: agents_sample, _agents_sample_kick, _agents_hist_line,
 #   _agents_prune_file.
 
@@ -49,7 +50,7 @@ agents_sample() {
 }
 
 _agents_sample_locked() {
-    local dir="$AGENTS_DATA_DIR" now day ps recs type pid kind rest paths enr feed="" prev="" herdr
+    local dir="$AGENTS_DATA_DIR" now day ps recs type pid kind rest paths enr feed="" prev="" herdr waits
     read -r now day <<<"$(date '+%s %Y-%m-%d')"
     # The last sample that counted (sample.state's epoch): what waits credit.
     [[ ! -r "$dir/sample.state" ]] || read -r prev < "$dir/sample.state"
@@ -82,9 +83,12 @@ _agents_sample_locked() {
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || rm -f "${_AGENTS_RUNS_FED[@]}"
     # The sessions waiting on you, once the interval they are credited is
     # committed (a sample that fails before this credits nothing twice).
-    { printf '%s\n' "$enr" | _agents_waits_rows "$now" "$prev"
-      printf '%s\n' "$enr" | _agents_hook_waits_rows "$now" "$prev"; } >> "$dir/waits.tsv" \
+    waits="$(printf '%s\n' "$enr" | _agents_waits_rows "$now" "$prev"
+             printf '%s\n' "$enr" | _agents_hook_waits_rows "$now" "$prev")"
+    { [[ -z "$waits" ]] || printf '%s\n' "$waits" >> "$dir/waits.tsv"; } \
         || echo "agents: waits.tsv was not updated" >&2
+    # What the views read instead of that file (triage.sh).
+    _agents_waits_state "$now" "$day" "$waits" "$enr" || echo "agents: waits.now was not updated" >&2
     # Where the tokens went (tokens.sh), in a subshell: nothing it does can
     # stop the sample. Before the ledger: the task ids it indexes name the
     # agent of each background command that just ended.

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unit tests for bin/agents job types, history sampling, `agents report` and
-# the menu's Where the CPU goes section.
+# the menu's Today row, which holds where the CPU goes.
 # Run: bash scripts/lib/test_agents_history.sh  -> exit 0 on pass.
 #
 # Everything runs against fixture `ps` text, a fixed clock and temp dirs:
@@ -503,7 +503,7 @@ rc=0; agents_report --bogus 2>/dev/null || rc=$?
 [[ "$(AGENTS_DATA_DIR="$tmp/empty" agents_report)" == *"no history yet; it starts within a minute of the menu running"* ]] || fail "report without history"
 pass "report: --since today, bad options refused, a friendly line without history"
 
-# 6. The menu's Where the CPU goes section, from a fixture `agents tsv`.
+# 6. The menu's Today row and where the CPU goes, from a fixture `agents tsv`.
 FAKE_NOW=1760400000
 enr2="$(agents_snapshot | AGENTS_SELF=9999 AGENTS_UID=501 agents_classify "" "" | agents_enrich "$(_agents_cwds 300 400 500)" "")"
 printf '%s\n' "$enr2" > "$tmp/tsv"
@@ -512,21 +512,22 @@ printf 'hist\tdue\t3600\ttest\t1800\n' >> "$tmp/tsv"
 printf '#!/bin/bash\ncase "$1" in tsv) cat "%s" ;; sample) echo sampled >> "%s" ;; esac\n' "$tmp/tsv" "$tmp/sampled" > "$tmp/agents-stub"
 chmod +x "$tmp/agents-stub"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
-section="$(printf '%s\n' "$menu" | awk '/^Where the CPU goes/ { on = 1 } on && /^---$/ { exit } on')"
-[[ -n "$section" ]] || fail "no Where the CPU goes section:"$'\n'"$menu"
-[[ "$(printf '%s\n' "$menu" | grep -n -m1 '^Agents (' | cut -d: -f1)" -lt "$(printf '%s\n' "$menu" | grep -n -m1 '^Where the CPU goes' | cut -d: -f1)" ]] \
-    || fail "jobs section is not after agents"
-first="$(printf '%s\n' "$section" | sed -n 2p)"
-[[ "$first" == "tests · 99% · 178M | sfimage=checkmark.seal refresh=true symbolize=false" ]] || fail "busiest job line: $first"
-[[ "$section" == *$'\n'"--app · claude · 99% · 178M | bash=\"$tmp/agents-stub\" terminal=false param1=reveal param2=300@Wed_Oct_14_08:00:00_2026 symbolize=false"* ]] \
+section="$(printf '%s\n' "$menu" | awk '/^Today:/ { on = 1 } on && /^---$/ { exit } on')"
+[[ -n "$section" ]] || fail "no Today row:"$'\n'"$menu"
+[[ "$(printf '%s\n' "$menu" | grep -n -m1 '^Running (' | cut -d: -f1)" -lt "$(printf '%s\n' "$menu" | grep -n -m1 '^Today:' | cut -d: -f1)" ]] \
+    || fail "Today is not after the sessions"
+[[ "$(printf '%s\n' "$section" | head -1)" == "Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today symbolize=false" ]] || fail "today row:"$'\n'"$section"
+[[ "$(printf '%s\n' "$section" | sed -n 2p)" == "--Where the CPU goes | size=11" ]] || fail "the job breakdown is not first in Today's submenu:"$'\n'"$section"
+first="$(printf '%s\n' "$section" | sed -n 3p)"
+[[ "$first" == "--tests · 99% · 178M | sfimage=checkmark.seal refresh=true symbolize=false" ]] || fail "busiest job line: $first"
+[[ "$section" == *$'\n'"----app · claude · 99% · 178M | bash=\"$tmp/agents-stub\" terminal=false param1=reveal param2=300@Wed_Oct_14_08:00:00_2026 symbolize=false"* ]] \
     || fail "session under a job:"$'\n'"$section"
-[[ "$section" == *$'\n'"builds · 50% · 380M | sfimage=hammer "* ]] || fail "builds line:"$'\n'"$section"
-[[ "$section" == *$'\n'"--some · app · stale · 0% · 48M | bash="*"param1=reveal param2=500@Wed_Oct_14_08:10:00_2026 symbolize=false"* ]] || fail "stale tree under MCP servers:"$'\n'"$section"
-[[ "$section" == *$'\n'"Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis refresh=true symbolize=false"* ]] || fail "today line:"$'\n'"$section"
-[[ "$section" == *$'\n'"Open report | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today sfimage="* ]] || fail "Open report:"$'\n'"$section"
+[[ "$section" == *$'\n'"--builds · 50% · 380M | sfimage=hammer "* ]] || fail "builds line:"$'\n'"$section"
+[[ "$section" == *$'\n'"----some · app · stale · 0% · 48M | bash="*"param1=reveal param2=500@Wed_Oct_14_08:10:00_2026 symbolize=false"* ]] || fail "stale tree under MCP servers:"$'\n'"$section"
+[[ "$section" == *$'\n'"--Open report | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today sfimage="* ]] || fail "Open report:"$'\n'"$section"
 for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$tmp/sampled" ]] && break; sleep 0.2; done
 [[ -s "$tmp/sampled" ]] || fail "the menu did not start agents sample when one was due"
-pass "menu: Where the CPU goes lists jobs busiest first with their sessions, today's CPU-h and Open report"
+pass "menu: one Today row; its submenu lists jobs busiest first with their sessions, and Open report"
 pass "menu: a due sample starts agents sample in the background"
 # Params carry only fixed words and PID@START tokens.
 bad="$(printf '%s\n' "$section" | grep 'param' | grep -vE 'param1=(reveal|open-term|jump|kill) ' || true)"
@@ -545,13 +546,13 @@ menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10
 [[ "$menu" == *"Today: nothing recorded yet"* ]] || fail "today line before the first numbers"
 printf 'hist\tok\t300\tbuild\t240\n' >> "$tmp/tsv"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
-[[ "$menu" == *"Today: 5 CPU-min · builds 80% |"* ]] || fail "today line under an hour: $(printf '%s\n' "$menu" | grep Today)"
+[[ "$menu" == *$'\n'"Today: 5 CPU-min · builds 80% |"* ]] || fail "today line under an hour: $(printf '%s\n' "$menu" | grep Today)"
 sleep 0.3
 [[ ! -e "$tmp/sampled" ]] || fail "sample started while not due"
 printf '%s\n' "$enr2" > "$tmp/tsv"; printf 'conf\tAGENTS_BAR_SECTIONS\tagents\n' >> "$tmp/tsv"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
-[[ "$menu" != *"Where the CPU goes"* ]] || fail "jobs section shown although AGENTS_BAR_SECTIONS leaves it out"
-pass "menu: no section without jobs or history; AGENTS_BAR_SECTIONS can leave it out"
+[[ "$menu" != *"Where the CPU goes"* ]] || fail "Today shown although AGENTS_BAR_SECTIONS leaves it out"
+pass "menu: no Today row without jobs or history; AGENTS_BAR_SECTIONS can leave it out"
 
 # 7. Live smoke test: one real sample into a temp dir, where ps works.
 unset -f agents_snapshot _agents_keep_pids _agents_cwds date

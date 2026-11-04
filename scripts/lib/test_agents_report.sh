@@ -34,6 +34,7 @@ mkdir -p "$HOME"
 
 # shellcheck source=../../bin/agents disable=SC1091
 . "$REPO_DIR/bin/agents"
+_agents_utf8() { return 0; }   # block glyphs, whatever locale runs this
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
@@ -231,16 +232,16 @@ printf 'hist\tok\t3600\ttest\t1800\ninsight\ttrends\t- a|b: `go` test ×3 — do
 printf '#!/bin/bash\ncase "$1" in tsv) cat "%s" ;; esac\n' "$tmp/tsv" > "$tmp/agents-stub"
 chmod +x "$tmp/agents-stub"
 menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
-section="$(printf '%s\n' "$menu" | awk '/^Where the CPU goes/ { on = 1 } on && /^---$/ { exit } on')"
-want="Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis refresh=true symbolize=false
-a¦b: go test ×3 | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=trends param6=--since param7=today tooltip=\"a¦b: go test ×3 — do 'this'\" sfimage=lightbulb symbolize=false
-Open report | "
+section="$(printf '%s\n' "$menu" | awk '/^Today:/ { on = 1 } on && /^---$/ { exit } on')"
+want="Today: 1.0 CPU-h · tests 50% | sfimage=chart.bar.xaxis bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today symbolize=false
+--a¦b: go test ×3 | bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=trends param6=--since param7=today tooltip=\"a¦b: go test ×3 — do 'this'\" sfimage=lightbulb symbolize=false
+--Open report | "
 [[ "$section" == *"$want"* ]] || fail "menu insight line:"$'\n'"$section"
 long="api: 40 CPU-min today, ↑200% on yesterday by this hour (build +27 CPU-min) — see what changed: agents report --view trends"
 printf 'hist\tok\t3600\ttest\t1800\ninsight\ttrends\t%s\n' "$long" > "$tmp/tsv"
 line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'sfimage=lightbulb')"
 # (67 characters or bytes, by the locale, then back to a word.)
-[[ "$line" == "api: 40 CPU-min today, ↑200% on yesterday by this hour "*"... | "*" param5=trends param6=--since param7=today tooltip=\"$long\" "* \
+[[ "$line" == "--api: 40 CPU-min today, ↑200% on yesterday by this hour "*"... | "*" param5=trends param6=--since param7=today tooltip=\"$long\" "* \
    && "${line%% | *}" != *" ..." && "${line%% | *}" != *"CPU-min)"* ]] \
     || fail "a long insight: label cut at a word, the sentence in the tooltip:"$'\n'"$line"
 for bad in '--x' 'trends extra' ''; do
@@ -300,27 +301,28 @@ nrow() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' $((FAKE_NOW - $1)) "${@:2}"; }
     nrow $((2 * 86400)) - old Idle banner -
 } > "$wt/notify.tsv"
 out="$(AGENTS_DATA_DIR="$wt" agents_report --view waits)"
-[[ "$out" == "agents report · waits · last 24h"$'\n\n'"WAITED ON YOU  39 min · blocked 25 min · done, unseen 14 min · 3 sessions"$'\n'"NOTIFICATIONS  7 · Permission 5 · other 1 · Idle 1 · 5 banners skipped (4 while you were at the Mac, 1 for ssh sessions)"* ]] \
+[[ "$out" == "agents report · waits · last 24h"$'\n\n'"▲ blocked 25 min   ◆ fresh 14 min   ○ parked 0 min      7 notifications, 1 idle"$'\n'* ]] \
     || fail "waits header:"$'\n'"$out"
-row "$out" " billing 30 min 20 min 10 min 5 4" || fail "waits: billing:"$'\n'"$out"
-row "$out" " app 9 min 5 min 4 min 1 1" || fail "waits: app (a subagent's worktree folded in):"$'\n'"$out"
+[[ "$out" == *"NOTIFICATIONS  7 · Permission 5 · other 1 · Idle 1 · 5 banners skipped (4 while you were at the Mac, 1 for ssh sessions)"* ]] || fail "waits notifications:"$'\n'"$out"
+row "$out" " billing 20 min 10 min - 5 4" || fail "waits: billing:"$'\n'"$out"
+row "$out" " app 5 min 4 min - 1 1" || fail "waits: app (a subagent's worktree folded in):"$'\n'"$out"
 row "$out" " notes - - - 1 0" || fail "waits: a project that only notified:"$'\n'"$out"
-[[ "$out" == *"BY AGENT     claude 30 min · codex 9 min"* ]] || fail "waits by agent:"$'\n'"$out"
-[[ "$out" != *old* && "$out" != *working* && "$out" != *garbage* ]] || fail "waits counts rows outside the window, other statuses or bad rows:"$'\n'"$out"
+[[ "$out" == *"BY AGENT       claude 30 min · codex 9 min"* ]] || fail "waits by agent:"$'\n'"$out"
+[[ "$out" != *old* && "$out" != *garbage* ]] || fail "waits counts rows outside the window, other statuses or bad rows:"$'\n'"$out"
 json="$(AGENTS_DATA_DIR="$wt" agents_report --view waits --json)"
 jqt "$json" '.view == "waits" and .data and .waited_s == 2340 and .blocked_s == 1500 and .done_s == 840 and .sessions == 3 and .notifications == 7 and .banners_skipped == {"present":4,"remote":1}' "waits json totals"
-jqt "$json" '.projects[0] == {"project":"billing","waited_s":1800,"blocked_s":1200,"done_s":600,"notifications":5,"banners_skipped":4}' "waits json: billing" '.projects'
+jqt "$json" '.projects[0] == {"project":"billing","waited_s":1800,"blocked_s":1200,"done_s":600,"fresh_s":600,"parked_s":0,"notifications":5,"banners_skipped":4}' "waits json: billing" '.projects'
 jqt "$json" '.kinds == [{"kind":"Permission","count":5},{"kind":null,"count":1},{"kind":"Idle","count":1}] and [.agents[].agent] == ["claude","codex"]' "waits json kinds and agents" '{kinds, agents}'
 json="$(AGENTS_DATA_DIR="$wt" agents_report --view waits --since 7d --json)"
 jqt "$json" '.waited_s == 2640 and .notifications == 8 and (.projects | map(.project) | index("old") != null)' "waits --since 7d" '{waited_s, notifications}'
 pass "waits: blocked and done minutes, notifications by kind and banners skipped, per project (worktrees folded) and agent; --since"
 
 out="$(AGENTS_DATA_DIR="$wt" agents_report --since today)"
-[[ "$out" == *"WAITS  39 min waited on you · 7 notifications · 5 banners skipped (4 while you were at the Mac, 1 for ssh sessions)"$'\n'"  by project and kind: agents report --view waits"* ]] \
+[[ "$out" == *"WAITS  blocked 25 min · fresh 14 min · parked 0 min · 7 notifications · 5 banners skipped (4 while you were at the Mac, 1 for ssh sessions)"$'\n'"  by project and kind: agents report --view waits"* ]] \
     || fail "summary: the waits line:"$'\n'"$out"
 [[ "$out" == *"  1. Agents waited on you 39 min today (top: billing 30 min; 7 notifications, 4 banners skipped while you were at the Mac) — allow what you always approve, so they ask less"* ]] \
     || fail "summary: the waits insight:"$'\n'"$out"
-jqt "$(AGENTS_DATA_DIR="$wt" agents_report --json)" '.waits == {"waited_s":2340,"blocked_s":1500,"done_s":840,"notifications":7,"banners_skipped":{"present":4,"remote":1}} and .insights[0].kind == "waited" and .insights[0].view == "waits" and .insights[0].impact_s == 390 and .insights[0].project == "billing"' "summary json waits" '{waits, insights}'
+jqt "$(AGENTS_DATA_DIR="$wt" agents_report --json)" '.waits == {"waited_s":2340,"blocked_s":1500,"done_s":840,"fresh_s":840,"parked_s":0,"notifications":7,"banners_skipped":{"present":4,"remote":1}} and .insights[0].kind == "waited" and .insights[0].view == "waits" and .insights[0].impact_s == 390 and .insights[0].project == "billing"' "summary json waits" '{waits, insights}'
 jqt "$(rep --json)" '.waits == null' "summary json without waits"
 # Under half an hour is not worth a line; mostly done says so.
 mkdir -p "$tmp/w2"; grep -v billing "$wt/waits.tsv" > "$tmp/w2/waits.tsv"
@@ -343,7 +345,7 @@ e2="$tmp/w-empty"; mkdir -p "$e2"
 jqt "$(AGENTS_DATA_DIR="$e2" agents_report --view waits --json)" '.data == false and .waited_s == 0 and .projects == []' "waits json without data"
 printf 'hist\tok\t3600\ttest\t1800\ninsight\twaits\tAgents waited on you 47 min today (top: billing 20 min) — allow what you always approve, so they ask less\n' > "$tmp/tsv"
 line="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | grep 'sfimage=lightbulb')"
-[[ "$line" == "Agents waited on you 47 min today (top: billing 20 min) | "*" param4=--view param5=waits param6=--since param7=today "* ]] || fail "menu: a waits insight:"$'\n'"$line"
+[[ "$line" == "--Agents waited on you 47 min today (top: billing 20 min) | "*" param4=--view param5=waits param6=--since param7=today "* ]] || fail "menu: a waits insight:"$'\n'"$line"
 pass "waits: no data, history off, nothing in the window; the menu opens a waits insight's view"
 
 echo "All agents report tests passed."

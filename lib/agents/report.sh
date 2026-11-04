@@ -11,7 +11,7 @@
 #   AGENTS_PRICES; AGENTS_PRICES=off: none), and one session's tokens for
 #   another view (agents_session_tokens).
 # Uses: config.sh, util.sh (_agents_window, _agents_replace),
-#   events.sh (_agents_data_dir), render.sh (colors), tokens.sh
+#   events.sh (_agents_data_dir), palette.sh (colors), tokens.sh
 #   (_agents_tokens_raw_since), context.sh (the context view's inventory);
 #   awk/report.awk and its parts (report_fmt, report_runs, report_tokens,
 #   report_denials, report_context, report_waits, report_insights,
@@ -60,14 +60,14 @@ _agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|t
 _agents_report_awk() {
     local d="$AGENTS_DATA_DIR" inv=""
     [[ "$1" != context ]] || inv="$(_agents_context_inventory)"
-    B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" \
-    _agents_awk "lib_json lib_sort lib_fmt lib_price report_fmt report_runs report_tokens report_denials report_context report_waits report_insights report_views report" -F '\t' \
+    W="${AGENTS_WIDTH:-120}" \
+    _agents_awk_colored "lib_json lib_sort lib_fmt lib_price lib_waits report_fmt report_runs report_tokens report_denials report_context report_waits report_insights report_views report" -F '\t' \
         -v view="$1" -v label="$2" -v json="$3" -v start="$start" -v now="$now" -v off="$off" \
         -v pstart="$((start - period))" -v pend="$((now - period))" -v hist="$AGENTS_HISTORY" \
         -v rawb="$(_agents_tokens_raw_since "$now" "$off")" \
         -v hf="$d/history.tsv" -v ef="$d/events.tsv" -v rf="$d/runs.tsv" \
         -v tf="$d/tokens.tsv" -v cf="$d/compacts.tsv" -v df="$d/denials.tsv" -v lf="$d/limits.tsv" -v uf="$d/uses.tsv" \
-        -v waf="$d/waits.tsv" -v ntf="$d/notify.tsv" \
+        -v waf="$d/waits.tsv" -v ntf="$d/notify.tsv" -v PARKED_S=$((AGENTS_PARKED_MIN * 60)) \
         -v pfs="$(_agents_prices_files)" -v invf=/dev/fd/3 3<<<"$inv"
 }
 

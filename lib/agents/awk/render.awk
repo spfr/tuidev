@@ -1,15 +1,15 @@
-# lib/agents/awk/render.awk — agents_render: the human table (sessions with
+# lib/agents/awk/render.awk — agents_render: the full table (sessions with
 # what they run, stale processes, hogs). Needs lib_fmt.
 
 function tilde(p) { return (p != "-" && index(p, home) == 1) ? "~" substr(p, length(home) + 1) : p }
 function has(x) { return index(want, " " x " ") > 0 }
 function flags(f,   o) {
     o = ""
-    if (index("," f[16] ",", ",dup,")) o = o "  " ENVIRON["Y"] "x" f[17] " dup" e
-    if (index("," f[16] ",", ",long,")) o = o "  " ENVIRON["Y"] "long" e
-    if (index("," f[16] ",", ",hot,")) o = o "  " ENVIRON["R"] "hot" e
+    if (index("," f[16] ",", ",dup,")) o = o "  " ENVIRON["WARN"] "x" f[17] " dup" e
+    if (index("," f[16] ",", ",long,")) o = o "  " ENVIRON["WARN"] "long" e
+    if (index("," f[16] ",", ",hot,")) o = o "  " ENVIRON["NEED"] "hot" e
     if (index("," f[16] ",", ",wait,")) o = o "  " ENVIRON["DIM"] "wait" e
-    if (index("," f[16] ",", ",stuck,")) o = o "  " ENVIRON["Y"] "stuck" e
+    if (index("," f[16] ",", ",stuck,")) o = o "  " ENVIRON["WARN"] "stuck" e
     return o
 }
 # The activity lines under session r; full lists every unit with its pid.
@@ -59,7 +59,7 @@ END {
         if (na + nd) printf "%s  %-7s %-7s %-8s %7s %6s %6s %4s  %-11s %-22s %s%s\n", ENVIRON["DIM"], "PID", "KIND", "STATUS", "AGE", "CPU%", "MEM", "KIDS", "PORTS", "PROJECT", "CWD", e
         for (i = 1; i <= na + nd; i++) {
             split(i <= na ? a[i] : d[i - na], f, "\t")
-            c = f[12] == "blocked" ? ENVIRON["Y"] ENVIRON["B"] : f[12] == "working" ? ENVIRON["G"] : ""
+            c = f[12] == "blocked" ? ENVIRON["NEED"] ENVIRON["B"] : f[12] == "working" ? ENVIRON["RUN"] : f[12] == "done" ? ENVIRON["DONE"] : ""
             pre = (i > na ? ENVIRON["DIM"] : "")
             line = sprintf("%s  %-7s %-7s %s%-8s%s%s %7s %6.1f %6s %4d  %-11s %-22s ", pre, f[2], f[3], c, f[12], (c == "" ? "" : e), pre, age(f[4]), f[5], mem(f[7]), f[8], cut(f[10], 11), cut(f[15], 22))
             print line cut(tilde(f[13]), w - 101) (pre == "" ? "" : e)
@@ -71,7 +71,7 @@ END {
     if (quiet && !ns && !nh && (has("stale") || has("hogs"))) { print ""; print ENVIRON["DIM"] "no stale processes · no hogs" e; exit }
     if (has("stale") && (ns || !quiet)) {
         if (printed) print ""
-        printf "%sSTALE (%d)%s%s\n", (ns ? ENVIRON["Y"] ENVIRON["B"] : ENVIRON["B"]), ns, e, (ns ? ENVIRON["DIM"] "  orphaned agent helpers and dev servers: agents reap" e : "")
+        printf "%sSTALE (%d)%s%s\n", (ns ? ENVIRON["WARN"] ENVIRON["B"] : ENVIRON["B"]), ns, e, (ns ? ENVIRON["DIM"] "  orphaned agent helpers and dev servers: agents reap" e : "")
         if (ns) printf "%s  %-7s %-7s %7s %6s %6s %4s  %-11s %s%s\n", ENVIRON["DIM"], "PID", "WHY", "AGE", "CPU%", "MEM", "KIDS", "PORTS", "COMMAND", e
         for (i = 1; i <= ns; i++) {
             split(s[i], f, "\t")
@@ -83,12 +83,12 @@ END {
     }
     if (has("hogs") && (nh || !quiet)) {
         if (printed) print ""
-        printf "%sHOGS (%d)%s%s\n", (nh ? ENVIRON["R"] ENVIRON["B"] : ENVIRON["B"]), nh, e, (nh ? ENVIRON["DIM"] "  CPU% now / lifetime average, or memory: agents term PID · agents mem" e : "")
+        printf "%sHOGS (%d)%s%s\n", (nh ? ENVIRON["NEED"] ENVIRON["B"] : ENVIRON["B"]), nh, e, (nh ? ENVIRON["DIM"] "  CPU% now / lifetime average, or memory: agents term PID · agents mem" e : "")
         if (nh) printf "%s  %-7s %-12s %7s %6s %6s %6s  %s%s\n", ENVIRON["DIM"], "PID", "USER", "AGE", "NOW%", "AVG%", "MEM", "PROCESS", e
         for (i = 1; i <= nh; i++) {
             split(h[i], f, "\t")
             mw = (ENVIRON["MEMWARN"] + 0 > 0 && f[7] + 0 >= ENVIRON["MEMWARN"] + 0)
-            line = sprintf("  %-7s %-12s %7s %6.1f %6.1f %s%6s%s  ", f[2], substr(f[11], 1, 12), age(f[4]), f[5], f[6], (mw ? ENVIRON["R"] ENVIRON["B"] : ""), mem(f[7]), (mw ? e : ""))
+            line = sprintf("  %-7s %-12s %7s %6.1f %6.1f %s%6s%s  ", f[2], substr(f[11], 1, 12), age(f[4]), f[5], f[6], (mw ? ENVIRON["NEED"] ENVIRON["B"] : ""), mem(f[7]), (mw ? e : ""))
             print line cut(f[3] (mw ? " (memory)" : ""), w - 58)
         }
         if (!nh) print "  none"

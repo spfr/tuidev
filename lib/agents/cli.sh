@@ -33,7 +33,7 @@ _agents_term_cols() {
 # modules read.
 # shellcheck disable=SC2034
 agents_main() {
-    local cmd="${1:-ls}"
+    local cmd="${1:-triage}"
     [[ $# -gt 0 ]] && shift
     AGENTS_DRY_RUN=false AGENTS_YES=false AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false AGENTS_STUCK=false
     AGENTS_AUTO=false AGENTS_THROTTLE=false
@@ -66,6 +66,7 @@ agents_main() {
             ;;
     esac
     case "$cmd" in
+        triage)   agents_triage ;;
         ls|list)  local r; _agents_awake_prime; r="$(agents_collect)" || return 1
                   printf '%s\n' "$r" | agents_render "agents stale hogs quiet"; echo; _agents_footer "$r" ;;
         ps)       [[ -z "${1:-}" || "$1" =~ ^[0-9]+$ ]] || { echo "usage: agents ps [PID]" >&2; return 2; }

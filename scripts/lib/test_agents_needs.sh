@@ -411,10 +411,12 @@ T5010="5010@Wed_Oct_14_03:50:00_2026"
 ORANGE_DOT="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19"
 GRAY_DOT="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19"
 menu="$(plugin "$enr" $'conf\tAGENTS_AUTO_REAP\t0')"
-[[ "$menu" == *$'\n'"Needs you (7) | size=12"$'\n'* ]] || fail "Needs you count: $(printf '%s\n' "$menu" | grep 'Needs you')"
-[[ "$menu" == *$'\n'"myapp: until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; done · stuck 5h10m · safe to stop | sfimage=hourglass $ORANGE_DOT refresh=true symbolize=false"$'\n'* ]] \
+[[ "$menu" != *"Needs you"* ]] || fail "flagged commands in Needs you: $(printf '%s\n' "$menu" | grep 'Needs you')"
+[[ "$menu" == *$'\n'"myapp · wait-loop stuck 5h10m · safe to stop | sfimage=hourglass $ORANGE_DOT refresh=true symbolize=false"$'\n'* ]] \
     || fail "stuck item line: $(printf '%s\n' "$menu" | grep 'stuck 5h10m')"
 sub="$(printf '%s\n' "$menu" | awk '/stuck 5h10m · safe to stop/ { on = 1; next } on && /^--/ { print; next } on { exit }')"
+[[ "$sub" == "--until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; done | symbolize=false"$'\n'* ]] || fail "the command first in the submenu: $sub"
+sub="${sub#*$'\n'}"
 [[ "$sub" == "--Jump to session | bash=\""*"\" terminal=false param1=jump param2=--notify param3=$T5010 sfimage=arrow.up.forward.app"$'\n'"--safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago) | refresh=true sfimage=checkmark.circle symbolize=false"$'\n'* ]] \
     || fail "Jump to session, then the verdict, first in the submenu: $sub"
 [[ "$sub" == *$'\n'"--owner: claude 5000 in myapp (working) | symbolize=false"$'\n'* && "$sub" == *$'\n'"--last line: [exited with code 0] (a completion marker) | symbolize=false"$'\n'* ]] \
@@ -425,17 +427,17 @@ sub="$(printf '%s\n' "$menu" | awk '/stuck 5h10m · safe to stop/ { on = 1; next
 [[ "$sub" == *$'\n'"--Copy details | bash=\""*"\" terminal=false param1=why param2=--copy param3=$T5010 sfimage=doc.on.doc"$'\n'* ]] || fail "Copy details: $sub"
 [[ "$sub" == *$'\n'"--Show session | bash=\""*"\" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal"$'\n'"--Details | "*"param2=show param3=--watch param4=$T5010 sfimage=info.circle" ]] || fail "Show session, Details: $sub"
 [[ "$sub" != *"look at it"* && "$sub" != *"stop it:"* ]] || fail "next steps (why only) leaked into the menu: $sub"
-[[ "$menu" == *$'\n'"myapp: node dist/server.js · running 5h0m · check first | sfimage=clock $ORANGE_DOT refresh=true symbolize=false"$'\n'"--Jump to session | "*$'\n'"--check first — dev server on :3000, its session is still active | refresh=true sfimage=questionmark.circle"* ]] \
+[[ "$menu" == *$'\n'"myapp · node dist/server.js · running 5h0m · check first | sfimage=clock $ORANGE_DOT refresh=true symbolize=false"$'\n'"--node dist/server.js | symbolize=false"$'\n'"--Jump to session | "*$'\n'"--check first — dev server on :3000, its session is still active | refresh=true sfimage=questionmark.circle"* ]] \
     || fail "long server: $(printf '%s\n' "$menu" | grep -A1 'server.js · running')"
-[[ "$menu" == *$'\n'"myapp: make test · running 25m · informational | sfimage=clock $GRAY_DOT refresh=true symbolize=false"$'\n'* ]] || fail "informational long is gray: $(printf '%s\n' "$menu" | grep 'make test · running')"
-[[ "$menu" == *$'\n'"myapp: while kill -0 4242 2>/dev/null; do sleep 5; done · stuck 3h0m · check first | "* ]] || fail "age-only stuck: $(printf '%s\n' "$menu" | grep 'kill -0')"
+[[ "$menu" == *$'\n'"myapp · make test · running 25m · informational | sfimage=clock $GRAY_DOT refresh=true symbolize=false"$'\n'* ]] || fail "informational long is gray: $(printf '%s\n' "$menu" | grep 'make test · running')"
+[[ "$menu" == *$'\n'"myapp · wait-loop stuck 3h0m · check first | "* ]] || fail "age-only stuck: $(printf '%s\n' "$menu" | grep 'kill -0')"
 [[ "$menu" == *$'\n'"npm exec chrome-devtools-mcp@latest · 50m · 210M · safe to stop | "*$'\n'"--orphan · pid 6000 | symbolize=false"$'\n'"--safe to stop — its session ended | "* ]] \
     || fail "stale helper with its verdict: $(printf '%s\n' "$menu" | grep -A2 '^npm exec')"
 [[ "$menu" == *$'\n'"--Kill tree | bash="*" param1=kill param2=-y param3=--notify param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon"$'\n'"--Copy details | "*"param3=6000@Wed_Oct_14_08:10:00_2026 "* ]] \
     || fail "stale: Kill tree, then Copy details"
 [[ "$menu" == *"node /Users/NAME/work/app/node_modules/.bin/vite · 3h0m · 78M · check first | "* ]] || fail "stale server: $(printf '%s\n' "$menu" | grep 'vite')"
 [[ "$(printf '%s\n' "$menu" | grep -c 'Show session')" == 7 ]] || fail "Show session on each live-session item (and never on a stale one): $(printf '%s\n' "$menu" | grep -c 'Show session')"
-pass "menu: each Needs-you item shows its verdict; its submenu the evidence, then Stop, Copy details, Show session"
+pass "menu: each flagged command shows its verdict; its submenu the evidence, then Stop, Copy details, Show session"
 
 # Every action is a known command with plain arguments; no process text ever
 # reaches a param (a hostile last line included).
@@ -482,10 +484,10 @@ pass "menu: auto-reap runs in the background only with AGENTS_AUTO_REAP=1 and so
 # An older agents without verdict rows: the plain menu, unchanged.
 { printf '%s\n' "$enr"; } > "$tmp/tsv"
 old="$(bash "$REPO_DIR/configs/swiftbar/agents.10s.sh")"
-[[ "$old" == *$'\n'"myapp: until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; done · stuck 5h10m | sfimage=hourglass $ORANGE_DOT refresh=true symbolize=false"$'\n'"--Stop command… | "* ]] \
-    || fail "menu without verdicts: $(printf '%s\n' "$old" | grep -A1 'stuck 5h10m')"
+[[ "$old" == *$'\n'"myapp · wait-loop stuck 5h10m | sfimage=hourglass $ORANGE_DOT refresh=true symbolize=false"$'\n'"--until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; done | symbolize=false"$'\n'"--Stop command… | "* ]] \
+    || fail "menu without verdicts: $(printf '%s\n' "$old" | grep -A2 'stuck 5h10m')"
 [[ "$old" != *"Copy details"* ]] || fail "Copy details without a verdict"
-pass "menu without verdict rows (an older agents) keeps the plain Needs-you lines"
+pass "menu without verdict rows (an older agents) keeps plain flagged rows"
 
 # The menu's budget: verdicts cost one awk pass, nothing per item.
 t0="$(date +%s)"

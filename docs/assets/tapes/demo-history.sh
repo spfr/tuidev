@@ -131,8 +131,14 @@ BEGIN {
     printf "%d\tclaude\t83.0\t10080\t%d\t-\n", now - 120, now + 2 * 86400 + 5400 > (dir "/limits.tsv")
     printf "%d\tcodex\t31.0\t300\t%d\t-\n", now - 900, now + 7800 > (dir "/limits.tsv")
     printf "%s\t%d\t%d\t%d\t%d\t%d\n", day, ti + tcw + tcr + to, ti, tcw, tcr, to > (dir "/tokens.today")
+    # How long the blocked and the finished session have waited, what today held,
+    # and the permission prompt that says why api blocks.
+    printf "2101@Wed_Oct_14_04:19:50_2026\tblocked\t%d\t%d\n", now - 360, now - 30 > (dir "/waits.now")
+    printf "3101@Wed_Oct_14_09:12:48_2026\tdone\t%d\t%d\n", now - 720, now - 30 > (dir "/waits.now")
+    printf "%s\t12240\t25200\t86400\n", day > (dir "/waits.today")
+    printf "%d\t2101@Wed_Oct_14_04:19:50_2026\tapi\tPermission\therdr\t-\n", now - 350 > (dir "/notify.tsv")
 }'
-chmod 600 "$dir"/*.tsv "$dir/tokens.today"
+chmod 600 "$dir"/*.tsv "$dir/tokens.today" "$dir/waits.now" "$dir/waits.today"
 echo "$now" > "$dir/sample.stamp"
 # The menu's top insight, as `agents sample` writes it, by the real code.
 (

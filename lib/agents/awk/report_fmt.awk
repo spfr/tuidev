@@ -43,15 +43,6 @@ function chg(c, p,   r) {
     if (!r) return "0%"
     return (c > p ? "\342\206\221" : "\342\206\223") r "%"
 }
-# dw: display width in a UTF-8 terminal (continuation bytes take no column).
-function dw(s,   i, n, c, w) {
-    n = length(s); w = 0
-    for (i = 1; i <= n; i++) { c = substr(s, i, 1); if (c < "\200" || c >= "\300") w++ }
-    return w
-}
-# lc / rc: S left- or right-aligned in W columns.
-function lc(s, w,   k) { k = w - dw(s); while (k-- > 0) s = s " "; return s }
-function rc(s, w,   k, o) { k = w - dw(s); o = ""; while (k-- > 0) o = o " "; return o s }
 # line KEYS N ARR FMT LIM — "a 1.00 · b 0.50" (FMT "h": CPU-h, else counts).
 function line(keys, cnt, arr, fmt, lim,   i, o) {
     o = ""

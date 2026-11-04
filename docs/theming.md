@@ -1,8 +1,9 @@
 # Theming
 
 One palette file drives the whole terminal. Instead of hand-syncing the same
-hex codes across `tmux.conf`, the Ghostty config and `starship.toml`, you edit
-(or pick) a palette and run one command.
+hex codes across `tmux.conf`, the Ghostty config, `starship.toml` and Herdr's
+config, you edit (or pick) a palette and run one command. `agents` and its menu
+follow on their own.
 
 ```bash
 scripts/theme.sh list                       # what's available (* = active)
@@ -75,10 +76,10 @@ palettes do this, which is what makes them auditable.
 
 ## How `apply` writes your configs
 
-1. **Render to a staging directory.** All three snippets are generated into a
+1. **Render to a staging directory.** All four snippets are generated into a
    temp dir and sanity-checked before anything in `$HOME` is touched, so a
    broken palette cannot leave you half-themed. (This is Omarchy's
-   stage-then-swap idea, scaled down to three files.)
+   stage-then-swap idea, scaled down to four files.)
 2. **Write managed blocks.** Each snippet is written as a fenced region, using
    the same writer as the rest of the installer
    (`scripts/lib/config_write.sh`):
@@ -102,6 +103,7 @@ palettes do this, which is what makes them auditable.
 | tmux | `~/.config/tmux/theme.conf` (its own file) | status bar, window status, pane borders, message and copy-mode styles. `theme.sh` always renders this file, even without tmux installed — harmless, since nothing reads it until `~/.config/tmux/tmux.conf` sources it, which only happens once you install `--pack tmux` |
 | Ghostty | `~/.config/ghostty/config` | `background`, `foreground`, cursor, selection, `palette = 0..15` |
 | Starship | `~/.config/starship.toml` | a `[palettes.tuidev]` table |
+| Herdr | `~/.config/herdr/config.toml` | a `[theme.custom]` table, [when the theme there isn't yours](#herdr-a-custom-table-never-your-theme) |
 
 **Why tmux gets its own file:** the tail of `tmux.conf` belongs to TPM.
 Plugins such as tmux-continuum hook `status-right` when TPM runs, and a theme
@@ -114,7 +116,7 @@ earlier release, and migration `202609222000_tmux_theme_file` does the same on
 upgrade.
 
 Ghostty needs a config reload (its reload keybind, or restarting the app);
-Starship applies in new shells.
+Starship applies in new shells; Herdr reloads with `herdr server reload-config`.
 
 ## Fresh installs ship pre-themed
 
@@ -172,6 +174,70 @@ The generated table deliberately **overrides Starship's standard color names**
 also exports `tuidev_bg`, `tuidev_fg`, `tuidev_accent` and friends if you want
 to reference palette roles directly.
 
+## Herdr: a custom table, never your theme
+
+Herdr's `[theme.custom]` overrides its color tokens on top of the theme `[theme]`
+names, one by one, and `apply` sets all of them from the palette but `panel_bg`,
+which stays `reset`: the panels keep the terminal's background, as Herdr's own docs
+do it. `blocked` is Herdr's `red` and `working` its `yellow`, so a session blocked
+in the sidebar is the same red as `▲` in `agents`.
+
+| Herdr token | Palette key |
+|-------------|-------------|
+| `accent`, `text`, `subtext0` | `accent`, `fg`, `fg_dim` |
+| `active_row_bg`, `selection_bg` | `bg_highlight`, `selection_bg` |
+| `surface0`, `surface1`, `surface_dim` | `bg_highlight`, `border`, `bg_dark` |
+| `overlay0`, `overlay1` | `ansi_bright_black`, `fg_dim` |
+| `red`, `green`, `yellow`, `blue`, `teal`, `mauve`, `peach` | `ansi_red`, `ansi_green`, `ansi_yellow`, `ansi_blue`, `ansi_cyan`, `ansi_magenta`, `ansi_bright_yellow` |
+
+TOML has no way to close a table, so the block goes at the end of the file, with a
+comment asking you to add your own settings above it. Two refusals, both with a
+printed line, while the other targets are themed anyway:
+
+- **No `~/.config/herdr/config.toml` yet:** skipped. The herdr pack places that
+  file only when it is absent, so writing one first would keep the shipped config
+  out. Install the pack, then re-apply.
+- **A theme of yours:** skipped. Anything of `[theme]` beyond the
+  `name = "tokyo-night"` the shipped config has, or a `[theme.custom]` outside our
+  block, however TOML spells it, is yours, and it stays. An earlier block of ours
+  goes then, and `apply` says so: its tokens would override your theme. Remove your
+  tables and re-apply to use the palette, or set `name = "terminal"` there, which
+  follows the terminal's colors.
+
+## `agents` and its menu
+
+`agents` needs no step of its own: its colors are six tokens, read from the palette
+you applied (`~/.config/tuidev/theme`) on each run.
+
+| Token | Means | Palette key | Shape |
+|-------|-------|-------------|-------|
+| `need` | Blocked, or about to be stopped | `ansi_red` | `▲` |
+| `done` | Finished, not yet reviewed | `ansi_blue` | `◆` |
+| `run` | Working, healthy | `ansi_green` | `●` |
+| `warn` | Worth a look: stuck, long, high swap | `ansi_yellow` | `!` |
+| `dim` | Parked, labels, an empty gauge | SGR 2 | `○ ░` |
+| `accent` | Headers, the time marker | `accent` | `│` |
+
+The shapes carry the meaning, so `NO_COLOR` loses nothing, and a locale with no such
+glyphs gets `^`, `*`, `o`, `.`, `?` (and `#`, `-`, `|` in a gauge). How many colors a token
+can use follows the terminal: none with `TERM=dumb`, truecolor when `COLORTERM` says so (which also adds
+the Needs-you row's tint), 256 when `TERM` does, else the terminal's own 16, which
+in a themed Ghostty are the palette anyway. In `~/.config/agents.conf`:
+
+```bash
+AGENTS_THEME=auto            # the palette applied, else the 16 colors
+                             # ansi: the 16 colors; none: no color; or a palette's name
+AGENTS_COLOR_NEED=ansi_red   # any token: a palette key or #rrggbb
+```
+
+The palettes ship with the monitoring pack, beside the `agents` modules, so an
+installed `agents` needs no repo. A palette you added to `configs/themes/` reaches
+it with the next `./install.sh --pack monitoring`; until then it uses the 16 colors.
+
+The menu tints its symbols with the same tokens, where they suit the menu's
+appearance: a dark palette's pastels wash out on a light menu, so that keeps Apple's
+system hues. SwiftBar colors symbols only: the text stays the system's.
+
 ## Neovim is not themed by this pipeline
 
 Deliberately out of scope: LazyVim's colorscheme is plugin-managed, and
@@ -197,7 +263,5 @@ Ideas that fit the same palette contract without changing it:
   and are currently unthemed; each is one more renderer function.
 - **OSC live reload** — emit OSC 4/10/11/12 sequences on apply so already-open
   terminal panes recolor without a Ghostty restart.
-- **Light themes** — nothing in the contract assumes dark, but no shipped
-  palette exercises that yet; a `latte` or `tokyo-night-day` would prove it.
 - **Theme drift detection** — teach `update.sh --configs` about the
   `tuidev-theme` block so a re-install does not silently revert a chosen theme.

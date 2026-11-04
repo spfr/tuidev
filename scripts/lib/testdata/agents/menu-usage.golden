@@ -1,128 +1,7 @@
-:terminal: 6 :cup.and.saucer.fill: | sfcolor=#FF9F0A
+:terminal: :cup.and.saucer.fill:
 ---
-Needs you (10) | size=12
-repo: 2× go test -race ./internal/web running | sfimage=square.stack.3d.up sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Stop duplicates (keep newest)… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=1020@Wed_Oct_14_08:56:00_2026 sfimage=xmark.octagon
-repo: make serve · running 45m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1080@Wed_Oct_14_08:15:00_2026 sfimage=arrow.up.forward.app
---informational — running 45m; its session is still active | refresh=true sfimage=info.circle symbolize=false
---owner: claude 1000 in repo | symbolize=false
---running 45m · 0% CPU | symbolize=false
---auto-reap never stops this: it belongs to a live session and is not stuck | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=1080@Wed_Oct_14_08:15:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=1080@Wed_Oct_14_08:15:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=1000 sfimage=terminal
---Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1080@Wed_Oct_14_08:15:00_2026 param5=60 sfimage=eye
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1080@Wed_Oct_14_08:15:00_2026 sfimage=info.circle
-myapp: node dist/server.js · running 5h0m · check first | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5060@Wed_Oct_14_04:00:00_2026 sfimage=arrow.up.forward.app
---check first — dev server on :3000, its session is still active | refresh=true sfimage=questionmark.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---running 5h0m · 1% CPU | symbolize=false
---listens on :3000 | symbolize=false
---in ~/work/myapp | symbolize=false
---auto-reap never stops this: it belongs to a live session and is not stuck | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5060@Wed_Oct_14_04:00:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5060@Wed_Oct_14_04:00:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5060@Wed_Oct_14_04:00:00_2026 sfimage=info.circle
-myapp: make test · running 25m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5070@Wed_Oct_14_08:35:00_2026 sfimage=arrow.up.forward.app
---informational — running 25m; its session is still active | refresh=true sfimage=info.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---running 25m · 12% CPU | symbolize=false
---in ~/work/myapp | symbolize=false
---auto-reap never stops this: it belongs to a live session and is not stuck | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5070@Wed_Oct_14_08:35:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5070@Wed_Oct_14_08:35:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5070@Wed_Oct_14_08:35:00_2026 sfimage=info.circle
-myapp: until tail -1 $F ¦ grep -qE "^(ok¦FAIL)"; do sleep 5; done · stuck 5h10m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5010@Wed_Oct_14_03:50:00_2026 sfimage=arrow.up.forward.app
---safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago) | refresh=true sfimage=checkmark.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---waiting 5h10m · 0% CPU | symbolize=false
---watches @TMP@/w/done.output | symbolize=false
---last line: [exited with code 0] (a completion marker) | symbolize=false
---file quiet for 5h0m | symbolize=false
---auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5010@Wed_Oct_14_03:50:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5010@Wed_Oct_14_03:50:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5010@Wed_Oct_14_03:50:00_2026 sfimage=info.circle
-myapp: until grep -q "^built" @TMP@/w/build.log; d... · stuck 1h40m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5020@Wed_Oct_14_07:20:00_2026 sfimage=arrow.up.forward.app
---safe to stop — nothing has written to the file it watches for 1h30m | refresh=true sfimage=checkmark.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---waiting 1h40m · 0% CPU | symbolize=false
---watches @TMP@/w/build.log | symbolize=false
---last line: compiling 3/9 | symbolize=false
---file quiet for 1h30m | symbolize=false
---auto-reap never stops this: its file has been quiet less than 2h0m (2 x AGENTS_WAIT_STUCK) | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5020@Wed_Oct_14_07:20:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5020@Wed_Oct_14_07:20:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5020@Wed_Oct_14_07:20:00_2026 sfimage=info.circle
-myapp: while kill -0 4242 2>/dev/null; do sleep 5; done · stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5030@Wed_Oct_14_06:00:00_2026 sfimage=arrow.up.forward.app
---check first — waiting 3h0m, with no file to judge by (age only) | refresh=true sfimage=questionmark.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---waiting 3h0m · 0% CPU | symbolize=false
---watches no file agents can check, so only its age counts | symbolize=false
---auto-reap never stops this: nothing but its age says it is stuck | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5030@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5030@Wed_Oct_14_06:00:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5030@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
-myapp: until [ -s @TMP@/w/missing.out ]; do sleep ... · stuck 2h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5040@Wed_Oct_14_07:00:00_2026 sfimage=arrow.up.forward.app
---check first — the file it watches is gone; waiting 2h0m | refresh=true sfimage=questionmark.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---waiting 2h0m · 0% CPU | symbolize=false
---watches @TMP@/w/missing.out, which no longer exists | symbolize=false
---auto-reap never stops this: nothing but its age says it is stuck | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5040@Wed_Oct_14_07:00:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5040@Wed_Oct_14_07:00:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5040@Wed_Oct_14_07:00:00_2026 sfimage=info.circle
-myapp: until tail -1 @TMP@/w/fail.out ¦ grep -q P... · stuck 2h30m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5080@Wed_Oct_14_06:30:00_2026 sfimage=arrow.up.forward.app
---safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago) | refresh=true sfimage=checkmark.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---waiting 2h30m · 0% CPU | symbolize=false
---watches @TMP@/w/fail.out | symbolize=false
---last line: --- FAIL: TestX (0.01s) (a completion marker) | symbolize=false
---file quiet for 2h10m | symbolize=false
---auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5080@Wed_Oct_14_06:30:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5080@Wed_Oct_14_06:30:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5080@Wed_Oct_14_06:30:00_2026 sfimage=info.circle
-myapp: while [ -f @TMP@/w/build.log ]; do sleep 5;... · stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
---Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5090@Wed_Oct_14_06:00:00_2026 sfimage=arrow.up.forward.app
---check first — waiting 3h0m on whether @TMP@/w/build.log exists | refresh=true sfimage=questionmark.circle symbolize=false
---owner: claude 5000 in myapp | symbolize=false
---waiting 3h0m · 0% CPU | symbolize=false
---watches @TMP@/w/build.log | symbolize=false
---its condition only tests whether the file exists, so how long it has been quiet says nothing | symbolize=false
---file quiet for 1h30m | symbolize=false
---auto-reap never stops this: it only tests whether its file exists, so the file being quiet proves nothing | symbolize=false
------
---Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5090@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
---Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5090@Wed_Oct_14_06:00:00_2026 sfimage=doc.on.doc
---Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5090@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
----
-Agents (6) | size=12
-app · claude · working · 102% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+Running (14) | size=12
+app · working · 1.0 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
 --~/work/app | symbolize=false
 --claude · pid 90419 · up 1h42m · 4 children · ports 41234,41235 | symbolize=false
@@ -135,7 +14,7 @@ app · claude · working · 102% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5k
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=90419@Wed_Oct_14_07:31:08_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=90419 sfimage=number
-shop/fix-cart · claude · 7% · 632M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
+shop/fix-cart · working · 0.1 cores · 632M | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=84091@Wed_Oct_14_08:40:22_2026 sfimage=arrow.up.forward.app
 --~/work/shop/.claude/worktrees/fix-cart | symbolize=false
 --claude · pid 84091 · up 33m · 1 children | symbolize=false
@@ -149,7 +28,9 @@ shop/fix-cart · claude · 7% · 632M | sfimage=circle bash="@TMP@/menu-agents" 
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=84091@Wed_Oct_14_08:40:22_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=84091 sfimage=number
-repo · claude · 107% (tools 102%) · 1.4G | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+repo · 2× go test -race ./internal/web running | sfimage=square.stack.3d.up sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--Stop duplicates (keep newest)… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=1020@Wed_Oct_14_08:56:00_2026 sfimage=xmark.octagon
+-----
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --claude · pid 1000 · up 1h0m · 16 children | symbolize=false
@@ -177,7 +58,7 @@ repo · claude · 107% (tools 102%) · 1.4G | sfimage=circle bash="@TMP@/menu-ag
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=1000@Wed_Oct_14_08:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=1000 sfimage=number
-repo · codex · 1% · 298M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
+repo · tests 1m00s · 0.0 cores · 298M | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=2000@Wed_Oct_14_08:30:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --codex · pid 2000 · up 30m · 2 children | symbolize=false
@@ -194,7 +75,21 @@ repo · codex · 1% · 298M | sfimage=circle bash="@TMP@/menu-agents" terminal=f
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=2000@Wed_Oct_14_08:30:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=2000 sfimage=number
-myapp · claude · 14% · 512M | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
+myapp · node dist/server.js · running 5h0m · check first | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--node dist/server.js | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5060@Wed_Oct_14_04:00:00_2026 sfimage=arrow.up.forward.app
+--check first — dev server on :3000, its session is still active | refresh=true sfimage=questionmark.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--running 5h0m · 1% CPU | symbolize=false
+--listens on :3000 | symbolize=false
+--in ~/work/myapp | symbolize=false
+--auto-reap never stops this: it belongs to a live session and is not stuck | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5060@Wed_Oct_14_04:00:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5060@Wed_Oct_14_04:00:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5060@Wed_Oct_14_04:00:00_2026 sfimage=info.circle
+-----
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
 --~/work/myapp | symbolize=false
 --claude · pid 5000 · up 6h0m · 11 children · ports 3000 | symbolize=false
@@ -224,7 +119,7 @@ myapp · claude · 14% · 512M | sfimage=circle bash="@TMP@/menu-agents" termina
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=5000@Wed_Oct_14_03:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=5000 sfimage=number
-repo · codex · 146% (tools 141%) · 1.0G | sfimage=circle bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
+repo · tests 2m00s · 1.5 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --codex · pid 100 · up 1h0m · 9 children | symbolize=false
@@ -246,203 +141,312 @@ repo · codex · 146% (tools 141%) · 1.0G | sfimage=circle bash="@TMP@/menu-age
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=100@Wed_Oct_14_08:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=100 sfimage=number
-codex daemon · 0% · 70M | sfimage=gearshape refresh=true symbolize=false
---daemon · pid 61904 · up 18h20m · 1 children | symbolize=false
+repo · make serve · running 45m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
+--make serve | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1080@Wed_Oct_14_08:15:00_2026 sfimage=arrow.up.forward.app
+--informational — running 45m; its session is still active | refresh=true sfimage=info.circle symbolize=false
+--owner: claude 1000 in repo | symbolize=false
+--running 45m · 0% CPU | symbolize=false
+--auto-reap never stops this: it belongs to a live session and is not stuck | symbolize=false
 -----
---Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=61904@Tue_Oct_13_14:53:18_2026 sfimage=info.circle
---Kill daemon… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=61904@Tue_Oct_13_14:53:18_2026 sfimage=xmark.octagon
---Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=61904 sfimage=number
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=1080@Wed_Oct_14_08:15:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=1080@Wed_Oct_14_08:15:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=1000 sfimage=terminal
+--Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1080@Wed_Oct_14_08:15:00_2026 param5=60 sfimage=eye
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1080@Wed_Oct_14_08:15:00_2026 sfimage=info.circle
+myapp · make test · running 25m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
+--make test | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5070@Wed_Oct_14_08:35:00_2026 sfimage=arrow.up.forward.app
+--informational — running 25m; its session is still active | refresh=true sfimage=info.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--running 25m · 12% CPU | symbolize=false
+--in ~/work/myapp | symbolize=false
+--auto-reap never stops this: it belongs to a live session and is not stuck | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5070@Wed_Oct_14_08:35:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5070@Wed_Oct_14_08:35:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5070@Wed_Oct_14_08:35:00_2026 sfimage=info.circle
+myapp · wait-loop stuck 5h10m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--until tail -1 $F ¦ grep -qE "^(ok¦FAIL)"; do sleep 5; done | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5010@Wed_Oct_14_03:50:00_2026 sfimage=arrow.up.forward.app
+--safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago) | refresh=true sfimage=checkmark.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--waiting 5h10m · 0% CPU | symbolize=false
+--watches @TMP@/w/done.output | symbolize=false
+--last line: [exited with code 0] (a completion marker) | symbolize=false
+--file quiet for 5h0m | symbolize=false
+--auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5010@Wed_Oct_14_03:50:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5010@Wed_Oct_14_03:50:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5010@Wed_Oct_14_03:50:00_2026 sfimage=info.circle
+myapp · wait-loop stuck 1h40m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--until grep -q "^built" @TMP@/w/build.log; d... | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5020@Wed_Oct_14_07:20:00_2026 sfimage=arrow.up.forward.app
+--safe to stop — nothing has written to the file it watches for 1h30m | refresh=true sfimage=checkmark.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--waiting 1h40m · 0% CPU | symbolize=false
+--watches @TMP@/w/build.log | symbolize=false
+--last line: compiling 3/9 | symbolize=false
+--file quiet for 1h30m | symbolize=false
+--auto-reap never stops this: its file has been quiet less than 2h0m (2 x AGENTS_WAIT_STUCK) | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5020@Wed_Oct_14_07:20:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5020@Wed_Oct_14_07:20:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5020@Wed_Oct_14_07:20:00_2026 sfimage=info.circle
+myapp · wait-loop stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--while kill -0 4242 2>/dev/null; do sleep 5; done | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5030@Wed_Oct_14_06:00:00_2026 sfimage=arrow.up.forward.app
+--check first — waiting 3h0m, with no file to judge by (age only) | refresh=true sfimage=questionmark.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--waiting 3h0m · 0% CPU | symbolize=false
+--watches no file agents can check, so only its age counts | symbolize=false
+--auto-reap never stops this: nothing but its age says it is stuck | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5030@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5030@Wed_Oct_14_06:00:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5030@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
+myapp · wait-loop stuck 2h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--until [ -s @TMP@/w/missing.out ]; do sleep ... | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5040@Wed_Oct_14_07:00:00_2026 sfimage=arrow.up.forward.app
+--check first — the file it watches is gone; waiting 2h0m | refresh=true sfimage=questionmark.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--waiting 2h0m · 0% CPU | symbolize=false
+--watches @TMP@/w/missing.out, which no longer exists | symbolize=false
+--auto-reap never stops this: nothing but its age says it is stuck | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5040@Wed_Oct_14_07:00:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5040@Wed_Oct_14_07:00:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5040@Wed_Oct_14_07:00:00_2026 sfimage=info.circle
+myapp · wait-loop stuck 2h30m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--until tail -1 @TMP@/w/fail.out ¦ grep -q P... | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5080@Wed_Oct_14_06:30:00_2026 sfimage=arrow.up.forward.app
+--safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago) | refresh=true sfimage=checkmark.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--waiting 2h30m · 0% CPU | symbolize=false
+--watches @TMP@/w/fail.out | symbolize=false
+--last line: --- FAIL: TestX (0.01s) (a completion marker) | symbolize=false
+--file quiet for 2h10m | symbolize=false
+--auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5080@Wed_Oct_14_06:30:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5080@Wed_Oct_14_06:30:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5080@Wed_Oct_14_06:30:00_2026 sfimage=info.circle
+myapp · wait-loop stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+--while [ -f @TMP@/w/build.log ]; do sleep 5;... | symbolize=false
+--Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5090@Wed_Oct_14_06:00:00_2026 sfimage=arrow.up.forward.app
+--check first — waiting 3h0m on whether @TMP@/w/build.log exists | refresh=true sfimage=questionmark.circle symbolize=false
+--owner: claude 5000 in myapp | symbolize=false
+--waiting 3h0m · 0% CPU | symbolize=false
+--watches @TMP@/w/build.log | symbolize=false
+--its condition only tests whether the file exists, so how long it has been quiet says nothing | symbolize=false
+--file quiet for 1h30m | symbolize=false
+--auto-reap never stops this: it only tests whether its file exists, so the file being quiet proves nothing | symbolize=false
+-----
+--Stop command… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=5090@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
+--Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5090@Wed_Oct_14_06:00:00_2026 sfimage=doc.on.doc
+--Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
+--Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5090@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
 ---
-Usage | size=12
-Claude: 5h 86% (resets 14:05) · wk 41% | sfimage=gauge.with.dots.needle.100percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
---5h 86% · resets 14:05 | sfimage=gauge.with.dots.needle.100percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
---week 41% · resets Mon 09:00 | sfimage=gauge.with.dots.needle.33percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+Limits and memory | size=12
+Claude 5h 86% | sfimage=gauge.with.dots.needle.100percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--resets 14:05 | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
 --updated 1m ago | size=11
-Claude (work): 5h 12% | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
---5h 12% · resets 15:40 | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+Claude wk 41% | sfimage=gauge.with.dots.needle.33percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--resets Mon 09:00 | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--updated 1m ago | size=11
+Claude (work) 5h 12% | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--resets 15:40 | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
 --updated 5m ago | size=11
-Codex: wk 0% | sfimage=gauge.with.dots.needle.0percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
---week 0% | sfimage=gauge.with.dots.needle.0percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+Codex wk 0% | sfimage=gauge.with.dots.needle.0percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
 --updated 1h30m ago | size=11
-Antigravity: 5h 9% · wk 3% | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
---Claude and GPT · week 3% | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
---Gemini · 5h 9% · resets 21:10 | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+Antigravity 5h 9% | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--resets 21:10 | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--Gemini 9% · resets 21:10 | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
 --updated 15m ago | size=11
-Today: 12.4M tokens · 94% cached · 12 denials · 3 compactions | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false
+Antigravity wk 3% | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--Claude and GPT 3% | sfimage=gauge.with.dots.needle.0percent bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=limits symbolize=false
+--updated 15m ago | size=11
+---
+Today: 1.5 CPU-h · tests 56% | sfimage=chart.bar.xaxis bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today symbolize=false
+--Where the CPU goes | size=11
+--tests · 295% · 768M | sfimage=checkmark.seal refresh=true symbolize=false
+----app · claude · 102% · 180M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
+------tests · 1 process · claude 90419 · in tmux pane main:2.1 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90419@Wed_Oct_14_07:31:08_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90419@Wed_Oct_14_07:31:08_2026 sfimage=info.circle
+----repo · claude · 100% · 270M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------tests · 5 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+----repo · codex · 81% · 262M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------tests · 6 processes · codex 100 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+----myapp · claude · 12% · 48M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
+------tests · 1 process · claude 5000 | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
+----repo · codex · 0% · 5M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=2000@Wed_Oct_14_08:30:00_2026 sfimage=arrow.up.forward.app
+------tests · 2 processes · codex 2000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=2000@Wed_Oct_14_08:30:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=2000@Wed_Oct_14_08:30:00_2026 sfimage=info.circle
+--browsers · 43% · 292M | sfimage=globe refresh=true symbolize=false
+----repo · codex · 40% · 146M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------browsers · 1 process · codex 100 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+----app · stale · 3% · 146M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=200@Wed_Oct_14_08:10:00_2026 symbolize=false
+------browsers · 1 process · stale: its session ended | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=200@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=200@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
+--agents · 21% · 3.3G | sfimage=sparkles refresh=true symbolize=false
+----repo · claude · 7% · 878M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------agents · 2 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+----shop/fix-cart · claude · 7% · 629M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=84091@Wed_Oct_14_08:40:22_2026 sfimage=arrow.up.forward.app
+------agents · 1 process · claude 84091 · in Ghostty | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=84091@Wed_Oct_14_08:40:22_2026 sfimage=info.circle
+----repo · codex · 5% · 585M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------agents · 1 process · codex 100 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+----repo · codex · 1% · 292M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=2000@Wed_Oct_14_08:30:00_2026 sfimage=arrow.up.forward.app
+------agents · 1 process · codex 2000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=2000@Wed_Oct_14_08:30:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=2000@Wed_Oct_14_08:30:00_2026 sfimage=info.circle
+----myapp · claude · 1% · 292M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
+------agents · 1 process · claude 5000 | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
+----app · claude · <1% · 672M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
+------agents · 1 process · claude 90419 · in tmux pane main:2.1 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90419@Wed_Oct_14_07:31:08_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90419@Wed_Oct_14_07:31:08_2026 sfimage=info.circle
+---- · codex daemon · 0% · 70M | refresh=true symbolize=false
+------agents · 2 processes · the codex daemon | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=61904@Tue_Oct_13_14:53:18_2026 sfimage=info.circle
+--builds · 20% · 92M | sfimage=hammer refresh=true symbolize=false
+----repo · codex · 20% · 90M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------builds · 2 processes · codex 100 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+----repo · claude · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------builds · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+--dev servers · 2% · 321M | sfimage=server.rack refresh=true symbolize=false
+----myapp · claude · 1% · 156M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
+------dev servers · 2 processes · claude 5000 | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
+----app · stale · 0% · 78M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=4100@Wed_Oct_14_06:00:00_2026 symbolize=false
+------dev servers · 1 process · stale: its session ended | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=4100@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=4100@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
+----app · stale · 0% · 78M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6100@Wed_Oct_14_06:00:00_2026 symbolize=false
+------dev servers · 1 process · stale: its session ended | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6100@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6100@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
+----repo · claude · 0% · 8M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------dev servers · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+--MCP servers · 0% · 1.1G | sfimage=puzzlepiece.extension refresh=true symbolize=false
+----memory in use now (RSS), not data sent | size=11 symbolize=false
+----chrome-devtools · 4 copies, 2 stale · 0% · 874M | refresh=true symbolize=false
+------user scope (~/.claude.json) — starts in every session | symbolize=false
+------via npx (adds an npm wrapper process) | symbolize=false
+---------
+------repo · claude · 0% · 253M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+--------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+--------MCP server chrome-devtools · 3 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
+--------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1001@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
+--------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1001@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
+------~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60829@Wed_Oct_14_08:23:56_2026 symbolize=false
+--------MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
+--------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
+--------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
+------~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6000@Wed_Oct_14_08:10:00_2026 symbolize=false
+--------MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
+--------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
+--------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
+------app · claude · 0% · 200M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+--------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
+--------MCP server chrome-devtools · 2 processes · claude 90419 · in tmux pane main:2.1 | symbolize=false
+--------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90466@Wed_Oct_14_07:31:11_2026 param5=60 sfimage=eye
+--------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90466@Wed_Oct_14_07:31:11_2026 sfimage=info.circle
+----playwright · app · stale · 0% · 166M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=200@Wed_Oct_14_08:10:00_2026 symbolize=false
+------MCP server playwright · 2 processes · stale: its session ended | symbolize=false
+------project scope (~/work/app/.mcp.json) — starts in sessions in ~/work/app | symbolize=false
+------via npx (adds an npm wrapper process) | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=200@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=200@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
+----example-agent · 2 copies, 1 stale · 0% · 103M | refresh=true symbolize=false
+------local scope (~/.claude.json) — starts in sessions in /Users/NAME/repo | symbolize=false
+---------
+------~ · stale · 0% · 54M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60831@Wed_Oct_14_08:23:56_2026 symbolize=false
+--------MCP server example-agent · 1 process · stale: its session ended | symbolize=false
+--------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
+--------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
+------repo · claude · 0% · 48M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+--------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+--------MCP server example-agent · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
+--------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1004@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
+--------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1004@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
+--polling loops · 0% · 16M | sfimage=hourglass refresh=true symbolize=false
+----myapp · claude · 0% · 14M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
+------polling loops · 8 processes · claude 5000 | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
+----repo · claude · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------polling loops · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+--other · 0% · 12M | sfimage=ellipsis.circle refresh=true symbolize=false
+----repo · claude · 0% · 5M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
+------other · 3 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
+----shop/fix-cart · claude · 0% · 2M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=84091@Wed_Oct_14_08:40:22_2026 sfimage=arrow.up.forward.app
+------other · 1 process · claude 84091 · in Ghostty | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=84091@Wed_Oct_14_08:40:22_2026 sfimage=info.circle
+----~ · stale · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=27681@Wed_Oct_14_09:13:19_2026 symbolize=false
+------other · 1 process · stale: its session ended | symbolize=false
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=27681@Wed_Oct_14_09:13:19_2026 sfimage=info.circle
+------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=27681@Wed_Oct_14_09:13:19_2026 sfimage=xmark.octagon
+----app · claude · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
+------other · 1 process · claude 90419 · in tmux pane main:2.1 | symbolize=false
+------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90419@Wed_Oct_14_07:31:08_2026 param5=60 sfimage=eye
+------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90419@Wed_Oct_14_07:31:08_2026 sfimage=info.circle
 --12.4M tokens · 94% read from the prompt cache | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false
 --12 denials · top: Production Deploy | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false
 --3 context compactions | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--view param5=tokens param6=--since param7=today sfimage=arrow.down.right.and.arrow.up.left symbolize=false
----
-Where the CPU goes | size=12
-tests · 295% · 768M | sfimage=checkmark.seal refresh=true symbolize=false
---app · claude · 102% · 180M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
-----tests · 1 process · claude 90419 · in tmux pane main:2.1 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90419@Wed_Oct_14_07:31:08_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90419@Wed_Oct_14_07:31:08_2026 sfimage=info.circle
---repo · claude · 100% · 270M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----tests · 5 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
---repo · codex · 81% · 262M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----tests · 6 processes · codex 100 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
---myapp · claude · 12% · 48M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
-----tests · 1 process · claude 5000 | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
---repo · codex · 0% · 5M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=2000@Wed_Oct_14_08:30:00_2026 sfimage=arrow.up.forward.app
-----tests · 2 processes · codex 2000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=2000@Wed_Oct_14_08:30:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=2000@Wed_Oct_14_08:30:00_2026 sfimage=info.circle
-browsers · 43% · 292M | sfimage=globe refresh=true symbolize=false
---repo · codex · 40% · 146M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----browsers · 1 process · codex 100 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
---app · stale · 3% · 146M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=200@Wed_Oct_14_08:10:00_2026 symbolize=false
-----browsers · 1 process · stale: its session ended | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=200@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=200@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
-agents · 21% · 3.3G | sfimage=sparkles refresh=true symbolize=false
---repo · claude · 7% · 878M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----agents · 2 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
---shop/fix-cart · claude · 7% · 629M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=84091@Wed_Oct_14_08:40:22_2026 sfimage=arrow.up.forward.app
-----agents · 1 process · claude 84091 · in Ghostty | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=84091@Wed_Oct_14_08:40:22_2026 sfimage=info.circle
---repo · codex · 5% · 585M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----agents · 1 process · codex 100 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
---repo · codex · 1% · 292M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=2000@Wed_Oct_14_08:30:00_2026 sfimage=arrow.up.forward.app
-----agents · 1 process · codex 2000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=2000@Wed_Oct_14_08:30:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=2000@Wed_Oct_14_08:30:00_2026 sfimage=info.circle
---myapp · claude · 1% · 292M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
-----agents · 1 process · claude 5000 | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
---app · claude · <1% · 672M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
-----agents · 1 process · claude 90419 · in tmux pane main:2.1 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90419@Wed_Oct_14_07:31:08_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90419@Wed_Oct_14_07:31:08_2026 sfimage=info.circle
--- · codex daemon · 0% · 70M | refresh=true symbolize=false
-----agents · 2 processes · the codex daemon | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=61904@Tue_Oct_13_14:53:18_2026 sfimage=info.circle
-builds · 20% · 92M | sfimage=hammer refresh=true symbolize=false
---repo · codex · 20% · 90M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----builds · 2 processes · codex 100 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=100@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=100@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
---repo · claude · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----builds · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
-dev servers · 2% · 321M | sfimage=server.rack refresh=true symbolize=false
---myapp · claude · 1% · 156M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
-----dev servers · 2 processes · claude 5000 | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
---app · stale · 0% · 78M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=4100@Wed_Oct_14_06:00:00_2026 symbolize=false
-----dev servers · 1 process · stale: its session ended | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=4100@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=4100@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
---app · stale · 0% · 78M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6100@Wed_Oct_14_06:00:00_2026 symbolize=false
-----dev servers · 1 process · stale: its session ended | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6100@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6100@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
---repo · claude · 0% · 8M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----dev servers · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
-MCP servers · 0% · 1.1G | sfimage=puzzlepiece.extension refresh=true symbolize=false
---memory in use now (RSS), not data sent | size=11 symbolize=false
---chrome-devtools · 4 copies, 2 stale · 0% · 874M | refresh=true symbolize=false
-----user scope (~/.claude.json) — starts in every session | symbolize=false
-----via npx (adds an npm wrapper process) | symbolize=false
--------
-----repo · claude · 0% · 253M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-------MCP server chrome-devtools · 3 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
-------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1001@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
-------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1001@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
-----~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60829@Wed_Oct_14_08:23:56_2026 symbolize=false
-------MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
-------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
-------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
-----~ · stale · 0% · 210M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=6000@Wed_Oct_14_08:10:00_2026 symbolize=false
-------MCP server chrome-devtools · 2 processes · stale: its session ended | symbolize=false
-------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
-------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
-----app · claude · 0% · 200M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
-------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
-------MCP server chrome-devtools · 2 processes · claude 90419 · in tmux pane main:2.1 | symbolize=false
-------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90466@Wed_Oct_14_07:31:11_2026 param5=60 sfimage=eye
-------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90466@Wed_Oct_14_07:31:11_2026 sfimage=info.circle
---playwright · app · stale · 0% · 166M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=200@Wed_Oct_14_08:10:00_2026 symbolize=false
-----MCP server playwright · 2 processes · stale: its session ended | symbolize=false
-----project scope (~/work/app/.mcp.json) — starts in sessions in ~/work/app | symbolize=false
-----via npx (adds an npm wrapper process) | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=200@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=200@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
---example-agent · 2 copies, 1 stale · 0% · 103M | refresh=true symbolize=false
-----local scope (~/.claude.json) — starts in sessions in /Users/NAME/repo | symbolize=false
--------
-----~ · stale · 0% · 54M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=60831@Wed_Oct_14_08:23:56_2026 symbolize=false
-------MCP server example-agent · 1 process · stale: its session ended | symbolize=false
-------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
-------Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
-----repo · claude · 0% · 48M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-------Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-------MCP server example-agent · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
-------Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1004@Wed_Oct_14_08:00:01_2026 param5=60 sfimage=eye
-------Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1004@Wed_Oct_14_08:00:01_2026 sfimage=info.circle
-polling loops · 0% · 16M | sfimage=hourglass refresh=true symbolize=false
---myapp · claude · 0% · 14M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5000@Wed_Oct_14_03:00:00_2026 sfimage=arrow.up.forward.app
-----polling loops · 8 processes · claude 5000 | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5000@Wed_Oct_14_03:00:00_2026 sfimage=info.circle
---repo · claude · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----polling loops · 1 process · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
-other · 0% · 12M | sfimage=ellipsis.circle refresh=true symbolize=false
---repo · claude · 0% · 5M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
-----other · 3 processes · claude 1000 · in tmux pane work:1.0 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1000@Wed_Oct_14_08:00:00_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1000@Wed_Oct_14_08:00:00_2026 sfimage=info.circle
---shop/fix-cart · claude · 0% · 2M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=84091@Wed_Oct_14_08:40:22_2026 sfimage=arrow.up.forward.app
-----other · 1 process · claude 84091 · in Ghostty | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=84091@Wed_Oct_14_08:40:22_2026 sfimage=info.circle
---~ · stale · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=27681@Wed_Oct_14_09:13:19_2026 symbolize=false
-----other · 1 process · stale: its session ended | symbolize=false
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=27681@Wed_Oct_14_09:13:19_2026 sfimage=info.circle
-----Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=27681@Wed_Oct_14_09:13:19_2026 sfimage=xmark.octagon
---app · claude · 0% · 1M | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
-----Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
-----other · 1 process · claude 90419 · in tmux pane main:2.1 | symbolize=false
-----Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=90419@Wed_Oct_14_07:31:08_2026 param5=60 sfimage=eye
-----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=90419@Wed_Oct_14_07:31:08_2026 sfimage=info.circle
-Today: 1.5 CPU-h · tests 56% | sfimage=chart.bar.xaxis refresh=true symbolize=false
-Open report | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today sfimage=doc.text.magnifyingglass
+--Open report | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=report param4=--since param5=today sfimage=doc.text.magnifyingglass
 ---
 Stale (7) | size=12
 npm exec chrome-devtools-mcp@latest · 50m · 210M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
@@ -548,15 +552,22 @@ Awake: <1m left | sfimage=cup.and.saucer refresh=true
 --Off | bash="@TMP@/menu-agents" terminal=false refresh=true param1=awake param2=off
 -----
 --Who holds the Mac awake? | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=awake param4=status
----
-CPU 84% · Mem 58% · Load 1.50/8 | sfimage=cpu bash="@TMP@/menu-agents" param1=open-term terminal=false param2=watch
+CPU 84% · Mem 58% · Thermal nominal | sfimage=cpu bash="@TMP@/menu-agents" param1=open-term terminal=false param2=watch
+--Load 1.50/8 | size=11
 --Busiest processes | size=11
 --web.test · 102% · 180M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
 --web.test · 99% · 175M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
 --appstoreagent · 77% · 32M | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=activity-monitor symbolize=false
-Memory guard: not set up (agents mem guard) | sfimage=shield.slash sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=mem
---Memory view (agents mem) | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=mem sfimage=memorychip
-Battery 87% · Thermal nominal · Energy automatic | sfimage=battery.75percent bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=battery-settings
+-----
+--Battery 87% · Energy automatic | sfimage=battery.75percent bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=battery-settings
+--codex daemon · 0% · 70M | sfimage=gearshape refresh=true symbolize=false
+----daemon · pid 61904 · up 18h20m · 1 children | symbolize=false
+-------
+----Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=61904@Tue_Oct_13_14:53:18_2026 sfimage=info.circle
+----Kill daemon… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=61904@Tue_Oct_13_14:53:18_2026 sfimage=xmark.octagon
+----Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=61904 sfimage=number
+--Memory guard: not set up (agents mem guard) | sfimage=shield.slash sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=mem
+----Memory view (agents mem) | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=mem sfimage=memorychip
 ---
 Maintenance (2) | size=12 sfimage=wrench.and.screwdriver sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true
 --Herdr server 0.9.4 → 0.9.5 on next restart | sfimage=arrow.triangle.2.circlepath sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
@@ -566,4 +577,5 @@ Maintenance (2) | size=12 sfimage=wrench.and.screwdriver sfconfig=eyJyZW5kZXJpbm
 ----herdr integration install claude | refresh=true sfimage=terminal symbolize=false
 ----herdr integration install codex | refresh=true sfimage=terminal symbolize=false
 Open agents watch | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=watch sfimage=rectangle.and.text.magnifyingglass
+--Full table (agents ls) | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ls sfimage=tablecells
 Refresh | refresh=true sfimage=arrow.clockwise

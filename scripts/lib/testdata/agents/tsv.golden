@@ -149,6 +149,12 @@ evid	200	fact	in ~/work/app
 evid	200	next	nothing uses it any more: its session is gone
 evid	200	next	stop it: agents kill 200@Wed_Oct_14_08:10:00_2026
 evid	200	auto	auto-reap never stops this: no sample saw it under an agent, so it may be yours
+triage	90419	run	6173	working
+triage	84091	run	2019	working
+triage	1000	run	3600	tests 2m00s
+triage	2000	run	1800	tests 1m00s
+triage	5000	run	21600	tests 25m00s
+triage	100	run	3600	tests 2m00s
 agent	90419	claude	6173	102.4	4.4	1080416	4	Wed_Oct_14_07:31:08_2026	41234,41235	me	working	@HOME@/work/app	claude --continue	app
 agent	84091	claude	2019	6.8	3.0	647704	1	Wed_Oct_14_08:40:22_2026	-	me	-	@HOME@/work/shop/.claude/worktrees/fix-cart	claude	shop/fix-cart
 agent	1000	claude	3600	107.0	1.7	1505900	16	Wed_Oct_14_08:00:00_2026	-	me	-	/Users/NAME/repo	claude	repo
@@ -282,8 +288,8 @@ power	automatic
 hist	ok	5400	test	3000
 lid	off	-	0	28800
 memg	none	-	8388608	25165824	0	-	-	-	0
-conf	AGENTS_BAR_TITLE	count awake
-conf	AGENTS_BAR_SECTIONS	needs agents usage jobs stale hogs awake system
+conf	AGENTS_BAR_TITLE	triage awake
+conf	AGENTS_BAR_SECTIONS	needs review running parked limits today stale hogs awake system
 conf	AGENTS_BAR_ICON	terminal
 conf	AGENTS_BAR_TOP	3
 conf	AGENTS_BAR_REFRESH	10s

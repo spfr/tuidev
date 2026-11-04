@@ -3,11 +3,12 @@
 # compared with what limits.tsv holds (statusline.sh documents both).
 #
 # Variables: lf (limits.tsv), hist (AGENTS_HISTORY), now (empty: the clock,
-# read here rather than by a fork of date).
-# Prints the default status line, "Opus 5.5 · ctx 42% · 5h 23% · wk 41%"
-# (whole percents; a field absent or null is left out), then a limits.tsv
-# row for each window that changed, or was read 5 minutes ago or more (none
-# with hist other than 1):
+# read here rather than by a fork of date), cols (COLUMNS; empty: wide), and the
+# colors in the environment. Needs lib_fmt.
+# Prints the default status line, "Opus 5.5  ctx ████░░░░░░ 42%  5h 23%  wk 41%"
+# (whole percents; a field absent or null is left out), without the model where
+# COLUMNS is too small for it, and tighter still "ctx ██░░ 42  5h 23  wk 41", then a limits.tsv row for each window that
+# changed, or was read 5 minutes ago or more (none with hist other than 1):
 #   NOW ACCT USED WINDOW RESETS LABEL
 # ACCT is the -v acct ("claude", or "claude:NAME" for another Claude account),
 # LABEL the -v label ("-" or NAME); only that account's rows are compared.
@@ -66,6 +67,7 @@ function window(w, o,   p, r) {
     rows = rows now "\t" acct "\t" p "\t" w "\t" r "\t" label "\n"
     return p
 }
+BEGIN { MODEL_UNKNOWN_W = 16 }
 length(s) < 1048576 { s = s $0 "\n" }
 END {
     # srand() returns the seed before it, which the first call set to the clock.
@@ -79,15 +81,39 @@ END {
     p5 = num(obj(rl, "five_hour"), "used_percentage"); p7 = num(obj(rl, "seven_day"), "used_percentage")
     rows = ""
     if (rl != "") { window(300, obj(rl, "five_hour")); window(10080, obj(rl, "seven_day")) }
-    o = str(obj(s, "model"), "display_name")
-    gsub(/\t/, " ", o)
-    o = part(o, "ctx ", whole(num(obj(s, "context_window"), "used_percentage")))
-    o = part(part(o, "5h ", whole(p5)), "wk ", whole(p7))
+    cw = whole(num(obj(s, "context_window"), "used_percentage"))
+    m = str(obj(s, "model"), "display_name")
+    gsub(/\t/, " ", m)
+    # Claude Code sets COLUMNS. A CLI that doesn't gets a line that can't wrap
+    # badly: a model's long name is what would make it, so that's cut.
+    if (cols !~ /^[0-9]+$/) { cols = 0; m = dcut(m, MODEL_UNKNOWN_W) }
+    narrow = 0
+    o = fields(m, cw, p5, p7)
+    # Too wide: the model goes first, then the room the gauge and the words take.
+    if (cols + 0 > 0 && shown_w(o) > cols + 0) o = fields("", cw, p5, p7)
+    if (cols + 0 > 0 && shown_w(o) > cols + 0) { narrow = 1; o = fields("", cw, p5, p7) }
     print o
     if (hist == 1) printf "%s", rows
 }
-# part LINE WHAT PCT — LINE, then " · WHAT PCT%" when PCT is one.
+function fields(m, cw, p5, p7) { return part(part(ctx(m, cw), "5h ", whole(p5)), "wk ", whole(p7)) }
+# shown_w S — S's width on screen, colors left out.
+function shown_w(s) { gsub(/\033\[[0-9;]*m/, "", s); return dw(s) }
+# tone PCT — the color a share used turns: warn from 70%, need from 90% (you
+# compact by hand, and these are the points you'd act at).
+function tone(p) { return p >= 90 ? ENVIRON["NEED"] : p >= 70 ? ENVIRON["WARN"] : "" }
+# shown PCT — a percent as the line prints it, in its tone.
+function shown(p,   c) {
+    c = tone(p)
+    return c (narrow ? p : p "%") (c == "" ? "" : ENVIRON["N"])
+}
+# ctx LINE PCT — LINE, then the context gauge, when PCT is one.
+function ctx(l, p,   c) {
+    if (p == "-") return l
+    c = tone(p); if (c == "") c = ENVIRON["RUN"]
+    return l (l == "" ? "" : "  ") "ctx " gauge(p, narrow ? 4 : 10, -1, c, ENVIRON["DIM"], "") " " shown(p)
+}
+# part LINE WHAT PCT — LINE, then "  WHAT PCT%" when PCT is one.
 function part(l, w, p) {
     if (p == "-") return l
-    return l (l == "" ? "" : " \302\267 ") w p "%"
+    return l (l == "" ? "" : "  ") w shown(p)
 }

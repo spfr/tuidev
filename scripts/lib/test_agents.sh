@@ -74,7 +74,7 @@ grep -q "unknown key AGENTS_BAR_TITLES" "$tmp/conf.err" || fail "unknown key not
 grep -q "bad value for AGENTS_GRACE" "$tmp/conf.err" || fail "bad value not reported"
 [[ "$(AGENTS_CONF="$conf" bash "$REPO_DIR/bin/agents" config 2>/dev/null | grep '^AGENTS_BAR_ICON=')" == AGENTS_BAR_ICON=brain ]] \
     || fail "agents config does not read AGENTS_CONF"
-[[ "$(AGENTS_CONF="$tmp/none" bash "$REPO_DIR/bin/agents" config | grep '^AGENTS_BAR_TITLE=')" == "AGENTS_BAR_TITLE=count awake" ]] \
+[[ "$(AGENTS_CONF="$tmp/none" bash "$REPO_DIR/bin/agents" config | grep '^AGENTS_BAR_TITLE=')" == "AGENTS_BAR_TITLE=triage awake" ]] \
     || fail "defaults without a config file"
 pass "config: allowlisted keys, validated values, nothing executed, environment wins"
 
@@ -308,13 +308,14 @@ out="$(printf '%s\n' "$irecs" | AGENTS_TESTING=1 AGENTS_NOW=1792174456 CLAUDE_CO
 pass "join key: a record without a procStart that parses is not trusted; a resume id only from its option or codex's subcommand"
 
 # Herdr's answer: its agent's session id is the sixth column (agent_session,
-# an object in Herdr's API, read as a plain string too).
+# an object in Herdr's API, read as a plain string too), the number of its last
+# state change the seventh.
 if command -v jq >/dev/null 2>&1; then
     # shellcheck disable=SC2329  # the stub herdr _agents_herdr_query runs
     # shellcheck disable=SC2317,SC2329  # stub herdr, called by the query
-    hq_out="$( herdr() { printf '%s\n' '{"result":{"agents":[{"agent":"claude","agent_status":"idle","cwd":"/w","pane_id":"w1:p1","terminal_title_stripped":"T","agent_session":{"value":"s-1"}},{"agent":"codex","pane_id":"w2:p1","agent_session":"s-2"},{"agent":"pi"}]}}'; }
+    hq_out="$( herdr() { printf '%s\n' '{"result":{"agents":[{"agent":"claude","agent_status":"idle","cwd":"/w","pane_id":"w1:p1","terminal_title_stripped":"T","agent_session":{"value":"s-1"},"state_change_seq":42},{"agent":"codex","pane_id":"w2:p1","agent_session":"s-2"},{"agent":"pi"}]}}'; }
         _agents_herdr_query )"
-    [[ "$hq_out" == $'claude\tidle\t/w\tw1:p1\tT\ts-1\ncodex\t-\t-\tw2:p1\t-\ts-2\npi\t-\t-\t-\t-\t-' ]] || fail "Herdr query columns: $(printf "%s" "$hq_out" | cat -vet)"
+    [[ "$hq_out" == $'claude\tidle\t/w\tw1:p1\tT\ts-1\t42\ncodex\t-\t-\tw2:p1\t-\ts-2\t-\npi\t-\t-\t-\t-\t-\t-' ]] || fail "Herdr query columns: $(printf "%s" "$hq_out" | cat -vet)"
     pass "Herdr's query: kind, status, cwd, pane, title and the agent's session id"
 else
     echo "SKIP: no jq: the Herdr query test not run"
@@ -1010,11 +1011,11 @@ pass "a system service among the hogs: told what it is, no way to kill offered; 
 mine_recs="$(printf '%s\n' "$enriched" | awk -F '\t' -v OFS='\t' -v u="$(id -un)" '$11 == "me" { $11 = u } { print }')"
 menu="$(plugin "$mine_recs" "$sys_line"$'\nawake\tagents\t8800\t0\nthermal\t2\theavy\npower\tautomatic')"
 title="$(printf '%s\n' "$menu" | head -1)"
-[[ "$title" == ":terminal: 2 :cup.and.saucer.fill: | sfcolor=#FF453A" ]] || fail "default title, heavy thermal: $title"
-[[ "$menu" == *"Agents (2) | size=12"* ]] || fail "Agents header does not count sessions only"
-[[ "$menu" == *$'\n'"app · claude · working · 102% · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="*" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"* ]] \
-    || fail "agent row: project · kind · status · CPU · MEM with a green dot"
-[[ "$menu" == *$'\n'"codex daemon · 0% · 70M | sfimage=gearshape refresh=true symbolize=false"* ]] || fail "daemon not its own (enabled) row"
+[[ "$title" == ":terminal: :cup.and.saucer.fill: | sfcolor=#FF453A sfcolor1=#1D1D1F,#F2F2F5" ]] || fail "default title, heavy thermal: $title"
+[[ "$menu" == *"Running (1) | size=12"* && "$menu" == *"No signal (1) | size=12"* ]] || fail "headers do not count sessions only: $menu"
+[[ "$menu" == *$'\n'"app · working · 1.0 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="*" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"* ]] \
+    || fail "agent row: project · what it does · cores · memory, with a green dot"
+[[ "$menu" == *$'\n'"--codex daemon · 0% · 70M | sfimage=gearshape refresh=true symbolize=false"* ]] || fail "daemon not in the system row's submenu"
 [[ "$menu" != *" color="* ]] || fail "menu text colored with a fixed color"
 [[ "$menu" == *"--Kill session… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=90419@Wed_Oct_14_07:31:08_2026"* ]] \
     || fail "killing a live session does not ask in a dialog"
@@ -1076,7 +1077,7 @@ check_actions() {   # MENU
                         [[ $# -lt 2 ]] || agents_parse_duration "$2" >/dev/null || fail "awake $1: bad duration '$2'" ;;
                     open-term)
                         [[ "${1:-}" != --hold ]] || shift
-                        [[ "$*" == watch || "$*" == mem || "$*" == "awake status" || "$*" =~ ^(show\ --watch|peek)\ [0-9]+@[A-Za-z0-9_:]+( 60)?$ ]] \
+                        [[ "$*" == watch || "$*" == mem || "$*" == ls || "$*" == limits || "$*" == "report --since today" || "$*" == "awake status" || "$*" =~ ^(show\ --watch|peek)\ [0-9]+@[A-Za-z0-9_:]+( 60)?$ ]] \
                             || fail "open-term: unexpected command '$*'" ;;
                     jump)
                         [[ $# -eq 2 && "$1" == --notify && "$2" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || fail "jump: expects --notify PID@START, got '$*'" ;;
@@ -1124,16 +1125,16 @@ reap_line="$(printf '%s\n' "$menu" | grep '^Reap all stale')"
     || fail "Reap all stale does not pass the listed PID@START tokens: $reap_line"
 [[ "$menu" != *"param1=reap"* ]] || fail "Reap all stale re-collects at click time"
 [[ "$(printf '%s\n' "$menu" | grep -A2 '^yes · ' | grep -c 'Terminate (SIGTERM) | .*param3=--notify')" == 1 ]] || fail "a hog lost Terminate"
-# System: two lines, the busiest processes as plain lines in the CPU submenu.
-[[ "$menu" == *$'\n'"CPU 23% · Mem 34% · Load 7.8/14 | sfimage=cpu bash="*" param1=open-term terminal=false param2=watch"$'\n'"--Busiest processes | size=11"$'\n'"--web.test · 102% · 180M | bash="*" terminal=false param1=activity-monitor symbolize=false"* ]] \
-    || fail "system CPU line with busiest processes in its submenu"
-[[ "$menu" == *$'\n'"Battery 85% · Thermal heavy · Energy automatic | sfimage=battery.75percent sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" terminal=false param1=battery-settings"* ]] || fail "system battery/thermal line"
+# System: one row, the load, busiest processes and battery in its submenu.
+[[ "$menu" == *$'\n'"CPU 23% · Mem 34% · Thermal heavy | sfimage=thermometer.medium sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" param1=open-term terminal=false param2=watch"$'\n'"--Load 7.8/14 | size=11"$'\n'"--Busiest processes | size=11"$'\n'"--web.test · 102% · 180M | bash="*" terminal=false param1=activity-monitor symbolize=false"* ]] \
+    || fail "system row with the load and busiest processes in its submenu: $(printf '%s\n' "$menu" | grep -A3 '^CPU ')"
+[[ "$menu" == *$'\n'"--Battery 85% · Energy automatic | sfimage=battery.75percent bash="*" terminal=false param1=battery-settings"* ]] || fail "system battery line"
 [[ "$(printf '%s\n' "$menu" | grep -A3 '^--web.test · ' | grep -c Terminate)" == 0 ]] || fail "a top process offers Terminate"
 # Awake: state in the header, a check on the active choice.
 [[ "$menu" == *$'\n'"Awake: while agents run | sfimage=cup.and.saucer refresh=true"* ]] || fail "awake header"
 [[ "$menu" == *"--While agents run | "*"param2=agents checked=true"* && "$menu" != *"param2=off checked=true"* ]] || fail "awake check mark"
-# Default order: agents, stale, hogs, awake, system.
-[[ $(line_no '^Agents (') -lt $(line_no '^Stale (') && $(line_no '^Stale (') -lt $(line_no '^Hogs (') \
+# Default order: sessions, stale, hogs, awake, system.
+[[ $(line_no '^Running (') -lt $(line_no '^Stale (') && $(line_no '^Stale (') -lt $(line_no '^Hogs (') \
    && $(line_no '^Hogs (') -lt $(line_no '^Awake:') && $(line_no '^Awake:') -lt $(line_no '^CPU ') ]] || fail "default section order"
 pass "SwiftBar menu: sessions first (project rows, dialog-confirmed kill), then stale, hogs, awake, compact system"
 
@@ -1148,32 +1149,32 @@ blocked_recs="$(printf '%s\n' "$records" | agents_enrich "$(printf '84091\t%s/co
     "$(printf 'claude\tworking\t%s/work/app\nclaude\tblocked\t%s/code/shop/.claude/worktrees/fix-cart\n' "$HOME" "$HOME")" | awk -F '\t' '$1 == "agent"')"
 menu="$(plugin "$blocked_recs" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
 title="$(printf '%s\n' "$menu" | head -1)"
-[[ "$title" == ":terminal: 2 · 1 blocked | sfcolor=#FF9F0A" ]] || fail "blocked title: $title"
+[[ "$title" == ":exclamationmark.circle.fill: 1 | sfcolor=#FF453A" ]] || fail "blocked title: $title"
 [[ "$(printf '%s\n' "$menu" | sed -n 3p)" == "Needs you (1) | size=12" ]] || fail "Needs you is not the first section"
-[[ "$(printf '%s\n' "$menu" | sed -n 4p)" == "shop/fix-cart · claude · waiting for you | sfimage=exclamationmark.circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 bash=\"$HOME/.local/bin/agents\" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false" ]] \
+[[ "$(printf '%s\n' "$menu" | sed -n 4p)" == "shop/fix-cart · blocked | sfimage=exclamationmark.circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash=\"$HOME/.local/bin/agents\" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false" ]] \
     || fail "blocked session line: $(printf '%s\n' "$menu" | sed -n 4p)"
-[[ $(line_no '^shop/fix-cart · claude · blocked') -lt $(line_no '^app · claude · working') ]] || fail "blocked session not first among agents"
+[[ $(line_no '^shop/fix-cart · blocked') -lt $(line_no '^app · working') ]] || fail "the blocked session comes after a running one"
 check_actions "$(plugin "$blocked_recs" "$sys_line"$'\nawake\ttimed\t8800\t9999999999')"
-pass "SwiftBar: blocked sessions lead (title count, Needs you section, first in Agents)"
+pass "SwiftBar: blocked sessions lead (title count, Needs you section)"
 
-# Finished sessions (Herdr's done, not yet looked at):
-# calm items in Needs you, after the blocked ones, counted in its header,
-# never tinting the icon; Herdr's task title names the session.
+# Finished sessions (Herdr's done, not yet looked at): To review, after the
+# blocked ones, counted in the title in their own calm tint; Herdr's task title
+# names the session.
 done_recs="$(printf '%s\n' "$records" | agents_enrich "$(printf '84091\t%s/code/shop\n90419\t%s/work/app\n' "$HOME" "$HOME")" \
     "$(printf 'claude\tdone\t%s/work/app\tw1:p1\tHerdr fleet smart notifications\nclaude\tblocked\t%s/code/shop\tw2:p1\t-\n' "$HOME" "$HOME")" \
     "" $'90419\tw1:p1\n84091\tw2:p1' | awk -F '\t' '$1 == "agent" || $1 == "herdr"')"
 menu="$(plugin "$done_recs" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
-[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2 · 1 blocked · 1 done | sfcolor=#FF9F0A" ]] || fail "title with done: $(printf '%s\n' "$menu" | head -1)"
-[[ "$menu" == *$'\n'"Needs you (2) | size=12"$'\n'"shop · claude · waiting for you | "* ]] || fail "Needs you header counts the done session; blocked first"
-[[ "$menu" == *$'\n'"Herdr fleet smart notifications · claude · finished, to review | sfimage=checkmark.circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMEE4NEZGIl19 bash="*" param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"$'\n'"--Jump to session | "* ]] \
-    || fail "done item: $(printf '%s\n' "$menu" | grep 'finished, to review')"
-[[ "$menu" == *$'\n'"Herdr fleet smart notifications · app · claude · done · 102% · "* ]] || fail "session row led by Herdr's title: $(printf '%s\n' "$menu" | grep '· done ·')"
-[[ $(line_no '· waiting for you') -lt $(line_no 'finished, to review') ]] || fail "done before blocked in Needs you"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":exclamationmark.circle.fill: 1 :checkmark.circle: 1 | sfcolor=#FF453A sfcolor1=#0A84FF" ]] || fail "title with done: $(printf '%s\n' "$menu" | head -1)"
+[[ "$menu" == *$'\n'"Needs you (1) | size=12"$'\n'"shop · blocked | "* ]] || fail "Needs you counts only the blocked session"
+[[ "$menu" == *$'\n'"To review (1) | size=12"$'\n'"Herdr fleet smart notifications · done | sfimage=checkmark.circle sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMEE4NEZGIl19 bash="*" param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"$'\n'"--Jump to session | "* ]] \
+    || fail "done item: $(printf '%s\n' "$menu" | grep -A1 'To review')"
+[[ $(line_no '^Needs you') -lt $(line_no '^To review') ]] || fail "To review before Needs you"
+[[ "$(printf '%s\n' "$menu" | grep -c '^---$')" -ge 1 && "$(printf '%s\n' "$menu" | awk '/^Needs you/ { on = 1 } /^To review/ { exit } on' | grep -c '^---$')" == 0 ]] || fail "a separator between the session sections"
 check_actions "$menu"
 done_only="$(printf '%s\n' "$done_recs" | awk -F '\t' -v OFS='\t' '$1 == "agent" && $12 == "blocked" { $12 = "working" } { print }')"
 menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
-[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2 · 1 done" ]] || fail "a done session tinted the icon: $(printf '%s\n' "$menu" | head -1)"
-[[ "$menu" == *$'\n'"Needs you (1) | size=12"$'\n'"Herdr fleet smart notifications · claude · finished, to review | "* ]] || fail "Needs you with only a done session"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":checkmark.circle: 1 | sfcolor=#0A84FF" ]] || fail "title with only a done session: $(printf '%s\n' "$menu" | head -1)"
+[[ "$menu" != *"Needs you"* && "$menu" == *$'\n'"To review (1) | size=12"$'\n'"Herdr fleet smart notifications · done | "* ]] || fail "only a done session"
 # Herdr's health is maintenance: a version mismatch is fine and a server
 # restart restarts every Herdr session, so never Needs you, the tint or the
 # title; one gray line at the bottom, its submenu holding the rest. The
@@ -1181,7 +1182,7 @@ menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
 GRAY_DOT="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19"
 idle_calm="$(printf '%s\n' "$calm" | awk -F '\t' -v OFS='\t' '$12 == "working" { $12 = "idle" } { print }')"
 menu="$(plugin "$idle_calm" $'awake\toff\t-\t0\nthermal\t0\tnominal\nhhealth\tserver\tstale\t0.9.4\t0.9.5\nhhealth\toutdated\tclaude letta bad$(x)')"
-[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2" ]] || fail "Herdr's health tinted the icon: $(printf '%s\n' "$menu" | head -1)"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal:" ]] || fail "Herdr's health tinted the icon: $(printf '%s\n' "$menu" | head -1)"
 [[ "$menu" != *"Needs you"* ]] || fail "Herdr's health in Needs you"
 [[ "$menu" == *$'\n'"---"$'\n'"Maintenance (2) | size=12 sfimage=wrench.and.screwdriver $GRAY_DOT refresh=true"$'\n'"--Herdr server 0.9.4 → 0.9.5 on next restart | sfimage=arrow.triangle.2.circlepath $GRAY_DOT refresh=true symbolize=false"$'\n'"----The version difference is fine; restarting the server restarts every Herdr session | size=11"$'\n'"----Its agents are idle: restart now (it also stops shells and servers in its panes) | "*$'\n'"------In a terminal outside Herdr: | size=11"$'\n'"------herdr server stop | "*$'\n'"------then: herdr | "*$'\n'"--Herdr integrations outdated: claude letta | "*$'\n'"----Reinstall each, in a terminal: | size=11"$'\n'"----herdr integration install claude | "*$'\n'"----herdr integration install letta | "*$'\n'"Open agents watch | "* ]] \
     || fail "Maintenance: $(printf '%s\n' "$menu" | awk '/^Maintenance/ { on = 1 } on && /^Open agents/ { exit } on')"
@@ -1192,36 +1193,36 @@ check_actions "$menu"
 menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal\nhhealth\tserver\tstale')"
 [[ "$menu" == *$'\n'"Maintenance (1) | "*$'\n'"--Herdr server update on next restart | "*$'\n'"----The version difference is fine; "*" | size=11"$'\n'"Open agents watch | "* ]] \
     || fail "Maintenance with a Herdr session working: $(printf '%s\n' "$menu" | awk '/^Maintenance/ { on = 1 } on && /^Open agents/ { exit } on')"
-[[ "$menu" != *"restart now"* && "$menu" == *$'\n'"Needs you (1) | size=12"$'\n'* ]] || fail "restart offered while a Herdr session works, or Herdr counted in Needs you"
+[[ "$menu" != *"restart now"* && "$menu" != *"Needs you"* ]] || fail "restart offered while a Herdr session works, or Herdr counted in Needs you"
 # No Herdr session at all: safe, and says so.
 menu="$(plugin "" $'hhealth\tserver\tstale')"
 [[ "$menu" == *$'\n'"----No agents running: restart now (it also stops shells and servers in its panes) | "* ]] || fail "no Herdr session: $(printf '%s\n' "$menu" | grep 'restart now')"
-pass "SwiftBar: finished sessions are calm Needs-you items (counted, untinted); Herdr's health is a gray Maintenance line at the bottom, the restart commands only while no Herdr session works; Herdr's title names a session"
+pass "SwiftBar: finished sessions are To review, calm in the title; Herdr's health is a gray Maintenance line at the bottom, the restart commands only while no Herdr session works; Herdr's title names a session"
 
 # An MCP server in several sessions, every copy an mcp-lazy proxy whose
 # server never started: proxies, not copies.
 lz_job() { printf 'job\t%s\tmcp\t0\t0.0\t0\t9000\t1\tWed_Oct_14_07:31:08_2026\town\t%s\tclaude\t/w/%s\tchrome-devtools\t%s\t%s\n' "$1" "$2" "$3" "$3" "$4"; }
 menu="$(plugin "$(lz_job 90419 90466 app lazy-idle; lz_job 84091 90500 shop lazy-idle)" "")"
-[[ "$menu" == *$'\n'"--chrome-devtools · 2 lazy proxies · server not started · 0% · 17M | "* ]] \
+[[ "$menu" == *$'\n'"----chrome-devtools · 2 lazy proxies · server not started · 0% · 17M | "* ]] \
     || fail "lazy proxies: $(printf '%s\n' "$menu" | grep 'chrome-devtools ·')"
 menu="$(plugin "$(lz_job 90419 90466 app lazy-idle; lz_job 84091 90500 shop lazy)" "")"
-[[ "$menu" == *$'\n'"--chrome-devtools · 2 copies · 0% · 17M | "* ]] || fail "lazy copies, one started: $(printf '%s\n' "$menu" | grep 'chrome-devtools ·')"
+[[ "$menu" == *$'\n'"----chrome-devtools · 2 copies · 0% · 17M | "* ]] || fail "lazy copies, one started: $(printf '%s\n' "$menu" | grep 'chrome-devtools ·')"
 pass "SwiftBar: an MCP server whose copies are all idle mcp-lazy proxies reads as proxies, its server not started"
 
-# A calm machine: icon and count, and no empty sections.
+# A calm machine: the icon alone, and no empty sections.
 menu="$(plugin "$calm" "$sys_line"$'\nawake\toff\t-\t0\nthermal\t0\tnominal')"
-[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2" ]] || fail "calm title: $(printf '%s\n' "$menu" | head -1)"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal:" ]] || fail "calm title: $(printf '%s\n' "$menu" | head -1)"
 [[ "$menu" != *"Needs you"* && "$menu" != *"Stale ("* && "$menu" != *"Hogs ("* ]] || fail "empty sections shown"
 [[ "$menu" == *$'\n'"Awake: off | sfimage=cup.and.saucer refresh=true"* && "$menu" == *"param2=off checked=true"* ]] || fail "awake off state"
-[[ "$menu" == *$'\n'"Battery 85% · Thermal nominal · Energy unknown | sfimage=battery.75percent bash="*" terminal=false param1=battery-settings"$'\n'* ]] || fail "calm battery line"
+[[ "$menu" == *$'\n'"--Battery 85% · Energy unknown | sfimage=battery.75percent bash="*" terminal=false param1=battery-settings"$'\n'* ]] || fail "calm battery line"
 until_epoch=$(( $(date +%s) + 2900 ))
 menu="$(plugin "$calm" "awake"$'\t'"timed"$'\t'"8800"$'\t'"$until_epoch")"
 [[ "$menu" == *$'\n'"Awake: 48m left | sfimage=cup.and.saucer"* || "$menu" == *$'\n'"Awake: 47m left | sfimage=cup.and.saucer"* ]] || fail "awake time left"
 title="$(plugin "$enriched" $'awake\toff\t-\t0\nthermal\t0\tnominal' | head -1)"
-[[ "$title" == ":terminal: 2 | sfcolor=#FF9F0A" ]] || fail "stale/hogs tint: $title"
+[[ "$title" == ":terminal:" ]] || fail "stale processes and hogs tinted the title: $title"
 title="$(plugin "$calm" $'sys\t5\t1.0\t14\t9\twarn\t-\t-\nthermal\t0\tnominal' | head -1)"
-[[ "$title" == ":terminal: 2 | sfcolor=#FF9F0A" ]] || fail "memory-pressure tint: $title"
-pass "SwiftBar: a calm machine shows icon and count only, no empty sections; tints when something needs a look"
+[[ "$title" == ":terminal: | sfcolor=#FF9F0A" ]] || fail "memory-pressure tint: $title"
+pass "SwiftBar: a calm machine shows the icon alone, no empty sections; tinted only for what the machine can't take"
 
 # AGENTS_BAR_TITLE tokens, AGENTS_BAR_ICON, and an empty title.
 title="$(plugin "$calm" "$sys_line"$'\nthermal\t1\tmoderate\nconf\tAGENTS_BAR_TITLE\tcount cpu mem load battery thermal warn\nconf\tAGENTS_BAR_ICON\tbrain' | head -1)"
@@ -1234,10 +1235,29 @@ pass "SwiftBar title follows AGENTS_BAR_TITLE and AGENTS_BAR_ICON"
 # AGENTS_BAR_SECTIONS picks and orders the sections.
 menu="$(plugin "$enriched" $'conf\tAGENTS_BAR_SECTIONS\thogs agents')"
 [[ "$menu" != *"Awake:"* && "$menu" != *"CPU "* && "$menu" != *"Stale ("* ]] || fail "unlisted sections shown"
-[[ $(line_no '^Hogs (') -lt $(line_no '^Agents (') ]] || fail "sections not in AGENTS_BAR_SECTIONS order"
+[[ $(line_no '^Hogs (') -lt $(line_no '^Running (') ]] || fail "sections not in AGENTS_BAR_SECTIONS order"
 menu="$(plugin "$enriched" "$sys_line")"
 [[ "$(printf '%s\n' "$menu" | grep -c '^Messages · ')" == 1 && "$menu" != *"--Messages · "* ]] || fail "a hog listed twice (hogs and top)"
 pass "SwiftBar sections follow AGENTS_BAR_SECTIONS; top processes skip the hogs"
+
+# The names from before the triage still work. The old default is the new layout;
+# a list of old names keeps what those sections held.
+sections() { plugin "$1" $'conf\tAGENTS_BAR_SECTIONS\t'"$2"$'\nawake\toff\t-\t0\ntokens\t1000\t50\nlimit\tClaude\t5h\t3\t-\tclaude\t1'; }
+old_menu="$(sections "$done_recs" "needs agents usage jobs stale hogs awake system")"
+new_menu="$(sections "$done_recs" "needs review running parked limits today stale hogs awake system")"
+[[ "$old_menu" == "$new_menu" ]] || fail "the old default sections differ from the new default"
+menu="$(sections "$done_recs" "agents")"
+[[ "$menu" == *"Needs you (1)"* && "$menu" == *"To review (1)"* && "$menu" != *"Limits"* && "$menu" != *"Today:"* ]] || fail "agents alone is every session: $menu"
+menu="$(sections "$done_recs" "needs")"
+[[ "$menu" == *"Needs you (1)"* && "$menu" == *"To review (1)"* ]] || fail "needs alone keeps the finished sessions it held"
+menu="$(sections "$done_recs" "needs running")"
+[[ "$menu" == *"Needs you (1)"* && "$menu" != *"To review"* ]] || fail "a list in the new names means what it says"
+menu="$(sections "$done_recs" "usage jobs")"
+[[ "$menu" == *"Limits and memory"* && "$menu" == *"--1k tokens"* && "$menu" != *"Needs you"* ]] || fail "usage and jobs read as limits and today: $menu"
+_agents_conf_valid AGENTS_BAR_SECTIONS "agents usage jobs" || fail "old section names refused"
+_agents_conf_valid AGENTS_BAR_SECTIONS "review running parked limits today" || fail "new section names refused"
+! _agents_conf_valid AGENTS_BAR_SECTIONS "review bogus" || fail "a bogus section accepted"
+pass "AGENTS_BAR_SECTIONS: old names keep working, the old default reads as the new layout"
 
 # Lid mode in the menu: the group by default, hidden with AGENTS_LID=0
 # (choices up to AGENTS_LID_MAX, each reporting by notification); the time
@@ -1255,12 +1275,12 @@ lid_end=$(( $(date +%s) + 9700 ))
 menu="$(plugin "$calm" "awake"$'\t'"lid"$'\t'"8800"$'\t'"$lid_end"$'\n'"lid"$'\t'"on"$'\t'"4242"$'\t'"$lid_end"$'\t'"28800")"
 [[ "$menu" == *$'\n'"Awake: lid closed · 2h41m left | sfimage=laptopcomputer refresh=true"* || "$menu" == *$'\n'"Awake: lid closed · 2h42m left | sfimage=laptopcomputer refresh=true"* ]] \
     || fail "lid awake line: $(printf '%s\n' "$menu" | grep '^Awake')"
-[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2 :cup.and.saucer.fill:" ]] || fail "lid on is not a calm title"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: :cup.and.saucer.fill:" ]] || fail "lid on is not a calm title"
 [[ "$menu" == *$'\n'"End lid mode now… | bash="*" param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"* ]] || fail "no End lid mode now… while on"
 check_actions "$menu"
 [[ "$(plugin "$calm" "$lid_off")" != *"End lid mode now"* ]] || fail "End lid mode now… shown with lid mode off"
 menu="$(plugin "$calm" $'awake\toff\t-\t0\nlid\tstale\t-\t0\t28800')"
-[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 2 | sfcolor=#FF453A" ]] || fail "stale lid sleep does not turn the icon red"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: | sfcolor=#FF453A" ]] || fail "stale lid sleep does not turn the icon red"
 [[ "$(printf '%s\n' "$menu" | sed -n 3,4p)" == "Needs you (1) | size=12"$'\n'"Restore lid sleep (disabled, nothing restores it)… | sfimage=exclamationmark.triangle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" param1=awake param2=restore param3=--notify symbolize=false" ]] \
     || fail "Restore lid sleep does not lead Needs you: $(printf '%s\n' "$menu" | sed -n 3,4p)"
 [[ "$menu" == *$'\n'"Restore lid sleep… | bash="*" param1=awake param2=restore param3=--notify sfimage=lock.open"* ]] || fail "Restore lid sleep missing from Awake"
@@ -1455,16 +1475,16 @@ pass "stuck loops: ps shows stuck, json flags it (schema 1), reap -n --stuck pla
 
 st_menu_recs="$(printf '%s\n' "$st_enr" | awk -F '\t' '($1 == "agent" || $1 == "act") && $2 != 5050')"
 menu="$(plugin "$st_menu_recs" "")"
-[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: 1 | sfcolor=#FF9F0A" ]] || fail "a stuck loop does not tint the title (or counts as blocked): $(printf '%s\n' "$menu" | head -1)"
-[[ "$menu" == *$'\n'"Needs you (2) | size=12"$'\n'* ]] || fail "stuck loops not in Needs you"
-[[ "$menu" == *$'\n'"myapp: until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; don... · stuck 3h27m | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false"$'\n'"--Stop command… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=5010@Wed_Oct_14_05:33:00_2026 sfimage=xmark.octagon"* ]] \
-    || fail "Needs you stuck line: $(printf '%s\n' "$menu" | grep -A1 'stuck')"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal:" ]] || fail "a stuck loop tinted the title (or counts as blocked): $(printf '%s\n' "$menu" | head -1)"
+[[ "$menu" == *$'\n'"Running (2) | size=12"$'\n'* ]] || fail "a session's stuck loops not in Running"
+[[ "$menu" == *$'\n'"myapp · wait-loop stuck 3h27m | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false"$'\n'"--until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; don... | symbolize=false"$'\n'"--Stop command… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=5010@Wed_Oct_14_05:33:00_2026 sfimage=xmark.octagon"* ]] \
+    || fail "stuck row: $(printf '%s\n' "$menu" | grep -A1 'stuck')"
 [[ "$menu" == *$'\n'"--until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; don... · 3h27m · 0% · main · stuck | refresh=true sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 symbolize=false"* ]] \
     || fail "Running line of a stuck loop: $(printf '%s\n' "$menu" | grep 'tail -1')"
 [[ "$menu" == *" · main · waiting | refresh=true sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 "* ]] || fail "a young loop is not a gray waiting"
-[[ "$menu" != *"myapp: while"* ]] || fail "a loop that is not stuck needs you"
+[[ "$menu" != *"myapp · while"* ]] || fail "a loop that is not stuck has a row"
 check_actions "$menu"
-pass "menu: a stuck loop is an orange hourglass in Needs you with Stop command…; young loops stay gray"
+pass "menu: a stuck loop takes over its session's row, an orange hourglass with Stop command…; young loops stay gray"
 
 if command -v jq >/dev/null 2>&1; then
     aj="$(printf '%s\n' "$act_enr" | agents_json)"
@@ -1507,8 +1527,7 @@ pass "variables before non-ASCII text are braced (bash 3.2)"
 # The menu: CPU split hint, Running list with Stop command…, duplicates.
 act_menu_recs="$(printf '%s\n' "$act_enr" | awk -F '\t' '$1 == "agent" || $1 == "act"')"
 menu="$(plugin "$act_menu_recs" "")"
-[[ "$(printf '%s\n' "$menu" | head -1)" == *"sfcolor=#FF9F0A" ]] || fail "duplicate/long commands do not tint the title"
-[[ "$menu" == *$'\n'"repo · claude · 107% (tools 102%) · 1.4G | "* ]] || fail "session row CPU split hint: $(printf '%s\n' "$menu" | grep "^repo")"
+[[ "$(printf '%s\n' "$menu" | head -1)" != *"sfcolor"* ]] || fail "duplicate/long commands tinted the title"
 [[ "$menu" == *$'\n'"--Running (6) | size=11"$'\n'* ]] || fail "Running list"
 [[ "$menu" == *$'\n'"--until [ -s /tmp/x ]; do sleep 5; done · 52m · 0% · main · waiting | refresh=true sfimage=hourglass "* ]] \
     || fail "a polling loop is not marked as waiting"
@@ -1516,12 +1535,12 @@ menu="$(plugin "$act_menu_recs" "")"
     || fail "tool line with Stop command…"
 [[ "$menu" == *"Stop duplicates: 2× go test -race ./internal/web (keep newest)… | "*"param4=1020@Wed_Oct_14_08:56:00_2026 sfimage"* ]] \
     || fail "Stop duplicates keeps the newest (1010) and stops the older (1020): $(printf '%s\n' "$menu" | grep -E 'Stop duplicates|internal/web')"
-[[ "$menu" == *$'\n'"repo: 2× go test -race ./internal/web running | "* && "$menu" == *$'\n'"repo: make serve · running 45m | "* ]] \
-    || fail "Needs you: duplicates and long-running commands"
-[[ "$menu" != *"repo: until [ -s"* ]] || fail "a polling loop counted as needing attention"
+[[ "$menu" == *$'\n'"repo · 2× go test -race ./internal/web running | "* && "$menu" == *$'\n'"repo · make serve · running 45m | "* ]] \
+    || fail "Running: duplicates and long-running commands"
+[[ "$menu" != *"repo · until [ -s"* ]] || fail "a polling loop counted as needing attention"
 [[ "$menu" == *$'\n'"--MCP: 2 servers · 4 procs · 302M | size=11"* ]] || fail "MCP collapsed to one line"
 check_actions "$menu"
-pass "menu: tools CPU hint, Running list with Stop command…, Stop duplicates (keep newest), Needs you"
+pass "menu: Running list with Stop command…, Stop duplicates (keep newest), flagged commands in Running"
 
 rm "$HOME/.local/bin/agents"
 [[ "$(PATH=/usr/bin:/bin bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" | head -1)" == ":exclamationmark.triangle: | sfcolor=#FF9F0A" ]] \

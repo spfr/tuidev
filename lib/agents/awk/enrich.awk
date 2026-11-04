@@ -148,11 +148,13 @@ END {
         ti = hm[i] ? hti[hm[i]] : "-"
         if (p != "-" || ti != "-") hrec[i] = "herdr" OFS $2 OFS p OFS ti
         irec[i] = "ident" OFS $2 OFS p OFS session_id(i)
+        if (hm[i] in hseq) qrec[i] = "hstate" OFS $2 OFS hseq[hm[i]]
         ar[i] = rank($3, $12)
     }
     for (r = 0; r <= 4; r++) for (i = 1; i <= na; i++) if (ar[i] == r) print arow[i]
     for (i = 1; i <= na; i++) if (i in hrec) print hrec[i]
     for (i = 1; i <= na; i++) print irec[i]
+    for (i = 1; i <= na; i++) if (i in qrec) print qrec[i]
     longs = 60 * ENVIRON["AGENTS_TOOL_LONG"]; hot = ENVIRON["AGENTS_HOG_NOW"] + 0
     stuck = 60 * ENVIRON["AGENTS_WAIT_STUCK"]
     for (i = 1; i <= nx; i++) {
@@ -194,8 +196,8 @@ BEGIN {
     nr = split(ENVIRON["AGENTS_CWD_ROOTS"], roots, "\n")
     n = split(ENVIRON["AGENTS_CWDS"], t, "\n")
     for (i = 1; i <= n; i++) if ((m = split(t[i], f, "\t")) >= 2 && (m == 2 || f[3] == "cwd")) cwd[f[1]] = f[2]
-    # Herdr's agents: kind, status, cwd, and (newer caches) pane, title and
-    # the agent's session id.
+    # Herdr's agents: kind, status, cwd, and (newer caches) pane, title, the
+    # agent's session id and the number of its last state change.
     n = split(ENVIRON["AGENTS_HERDR"], t, "\n")
     for (i = 1; i <= n; i++) {
         if ((m = split(t[i], f, "\t")) < 3) continue
@@ -203,6 +205,7 @@ BEGIN {
         hpn[nh] = (m >= 4 && f[4] ~ /^[A-Za-z0-9:_-]+$/) ? f[4] : "-"
         hti[nh] = (m >= 5) ? htitle(f[5], f[1]) : "-"
         hsid[nh] = (m >= 6 && sid_ok(f[6]) && f[6] != "-") ? f[6] : ""
+        if (m >= 7 && f[7] ~ /^[0-9]+$/) hseq[nh] = f[7]
         if (hpn[nh] != "-" && !(hpn[nh] in byp)) { byp[hpn[nh]] = nh; npane++ }
     }
     n = split(ENVIRON["AGENTS_HPANES"], t, "\n")

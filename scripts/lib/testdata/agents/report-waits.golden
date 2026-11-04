@@ -1,14 +1,21 @@
 agents report · waits · last 24h
 
-WAITED ON YOU  63 min · blocked 43 min · done, unseen 20 min · 2 sessions
-NOTIFICATIONS  10 · Permission 8 · other 1 · Idle 1 · 6 banners skipped (5 while you were at the Mac, 1 for ssh sessions)
+▲ blocked 43 min   ◆ fresh 55 min   ○ parked 25 min      10 notifications, 1 idle
 
-  PROJECT                    WAITED  BLOCKED     DONE  NOTIFIED  SKIPPED
-  billing                    45 min   25 min   20 min         8        5
-  app                        18 min   18 min        -         1        1
+           10  14  18  22  02  06  now
+billing    ·····················▒█·    ▲   25 m  ◆   55 m
+app        ······················█·    ▲   18 m  ◆      -
+           █ blocked   ▒ done under 1 h   ░ parked   · working or closed
+
+Longest: billing blocked 25 min, 08:34 to 08:59.
+
+  PROJECT                   BLOCKED    FRESH   PARKED  NOTIFIED  SKIPPED
+  billing                    25 min   55 min   25 min         8        5
+  app                        18 min        -        -         1        1
   notes                           -        -        -         1        0
 
-BY AGENT     claude 45 min · codex 18 min
+BY AGENT       claude 80 min · codex 18 min
+NOTIFICATIONS  10 · Permission 8 · other 1 · Idle 1 · 6 banners skipped (5 while you were at the Mac, 1 for ssh sessions)
 
-blocked: waiting for your answer; done: finished, not yet looked at (outside Herdr: until your next prompt). Counted once a minute while the menu runs.
+blocked: waiting for your answer; fresh: finished, not yet looked at, for its first 1 h; parked: finished longer than that (outside Herdr: until your next prompt). Counted once a minute while the menu runs.
 [rc=0]

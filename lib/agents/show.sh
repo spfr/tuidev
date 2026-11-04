@@ -93,8 +93,8 @@ _agents_show_once() {
     _agents_now now
     { printf '%s\n' "$recs"; printf '%s\n' "$needs"; printf '%s\n' "$tree"; printf '%s\n' "$proc"; printf '%s' "$extra"
       [[ -z "$info" ]] || printf '%s\n' "$info"; } \
-        | W="${AGENTS_WIDTH:-120}" HOME="$HOME" B="$C_B" DIM="$C_DIM" Y="$C_Y" R="$C_R" G="$C_G" N="$C_0" \
-          _agents_awk "lib_fmt lib_json lib_proc lib_where show" -v t="$pid" -v phase="${json:+json}" -v now="$now"
+        | W="${AGENTS_WIDTH:-120}" HOME="$HOME" \
+          _agents_awk_colored "lib_fmt lib_json lib_proc lib_where show" -v t="$pid" -v phase="${json:+json}" -v now="$now"
 }
 
 # _agents_show_tree PID — awk/show_tree.awk's rows for PID, from a snapshot

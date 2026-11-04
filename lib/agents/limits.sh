@@ -52,15 +52,15 @@ agents_limits() {
     esac
     _agents_now now
     _agents_window today "$now" || return 1
-    B="${C_B:-}" DIM="${C_DIM:-}" N="${C_0:-}" \
-    _agents_awk "lib_fmt lib_json limits" -v mode="$mode" -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$now" -v off="$off" \
-        -v hist="$AGENTS_HISTORY" -v b="${C_B:-}" -v dim="${C_DIM:-}" -v e="${C_0:-}" </dev/null
+    W="${AGENTS_WIDTH:-120}" _agents_awk_colored "lib_fmt lib_json limits" -v mode="$mode" -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$now" -v off="$off" \
+        -v hist="$AGENTS_HISTORY" </dev/null
 }
 
 # _agents_limits_lines — agents tsv's usage records, from the state files
-# alone (never a CLI): one per limit window not reset yet, then today's
-# denials and compactions when there are any:
+# alone (never a CLI): one per limit window not reset yet, each with its pace,
+# then today's denials and compactions when there are any:
 #   limit NAME WINDOW PCT RESETS CLI AGE   (RESETS: 14:05, Mon 09:00, Oct 19, "-")
+#   pace ELAPSED_PCT under|over|- LEFT_S BAR   (awk/limits.awk says how)
 #   denials COUNT TOP_REASON               (TOP_REASON "-" when none was tagged)
 #   compacts COUNT
 _agents_limits_lines() {

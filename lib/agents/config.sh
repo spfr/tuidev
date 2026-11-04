@@ -25,8 +25,12 @@ _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
 _AGENTS_CONF_KEYS+=" AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
-_AGENTS_BAR_TOKENS="count cpu mem load battery thermal temp awake warn limit"
-_AGENTS_BAR_SECTION_NAMES="needs agents usage jobs stale hogs awake system"
+_AGENTS_CONF_KEYS+=" AGENTS_PARKED_MIN AGENTS_THEME AGENTS_COLOR_NEED AGENTS_COLOR_DONE AGENTS_COLOR_RUN"
+_AGENTS_CONF_KEYS+=" AGENTS_COLOR_WARN AGENTS_COLOR_DIM AGENTS_COLOR_ACCENT"
+_AGENTS_BAR_TOKENS="triage count cpu mem load battery thermal temp awake warn limit"
+# agents, usage and jobs are the names before the menu's triage (3.19): the
+# plugin reads them as running and parked, limits, and today.
+_AGENTS_BAR_SECTION_NAMES="needs review running parked limits today stale hogs awake system agents usage jobs"
 
 # _agents_ere_ok VALUE — empty, or a printable extended regex that compiles in
 # the awk that will use it, read the same way (ENVIRON, LC_ALL=C). Some awks
@@ -66,6 +70,10 @@ _agents_conf_valid() {
         AGENTS_JOB_TEST|AGENTS_JOB_BUILD|AGENTS_JOB_SERVER|AGENTS_JOB_BROWSER|AGENTS_JOB_MCP) _agents_ere_ok "$2" ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
         AGENTS_LID_MIN_BATTERY) [[ "$2" =~ ^([0-9]|[1-9][0-9]|100)$ ]] ;;
+        AGENTS_PARKED_MIN)  [[ "$2" =~ ^[1-9][0-9]{0,4}$ ]] ;;
+        AGENTS_THEME)       [[ "$2" =~ ^[a-z0-9][a-z0-9_-]*$ ]] ;;
+        AGENTS_COLOR_NEED|AGENTS_COLOR_DONE|AGENTS_COLOR_RUN|AGENTS_COLOR_WARN|AGENTS_COLOR_DIM|AGENTS_COLOR_ACCENT)
+                            [[ -z "$2" || "$2" =~ ^(#[0-9a-fA-F]{6}|[a-z][a-z0-9_]*)$ ]] ;;
         AGENTS_BAR_ICON)    [[ "$2" =~ ^[a-z0-9.]+$ ]] ;;
         AGENTS_BAR_REFRESH) [[ "$2" =~ ^[1-9][0-9]*[smhd]$ ]] ;;
         AGENTS_BAR_TITLE)    allowed="$_AGENTS_BAR_TOKENS" ;;
@@ -132,6 +140,21 @@ _agents_env_check() {   # KEY DEFAULT
     printf -v "$1" '%s' "$2"
 }
 _agents_env_check AGENTS_WAIT_STUCK 60
+# Minutes a finished session stays "to review" before it counts as parked: most
+# of the time sessions sit finished is in stretches past an hour, and nobody is
+# about to look at those.
+AGENTS_PARKED_MIN="${AGENTS_PARKED_MIN:-60}"
+_agents_env_check AGENTS_PARKED_MIN 60
+# Colors (palette.sh): auto, ansi, none or a palette's name, then any of the six
+# tokens as a palette key or #rrggbb.
+AGENTS_THEME="${AGENTS_THEME:-auto}"
+_agents_env_check AGENTS_THEME auto
+for _agents_k in NEED DONE RUN WARN DIM ACCENT; do
+    _agents_k="AGENTS_COLOR_$_agents_k"
+    printf -v "$_agents_k" '%s' "${!_agents_k:-}"
+    _agents_env_check "$_agents_k" ""
+done
+unset _agents_k
 _agents_env_check AGENTS_HOG_SUSTAIN 3
 _agents_env_check AGENTS_LID 1
 _agents_env_check AGENTS_LID_MAX 8h
@@ -200,10 +223,10 @@ _agents_job_env
 AGENTS_NAMES="${AGENTS_NAMES:-claude codex agy grok cursor-agent}"  # argv[0] basenames that are agents
 AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
 # Menu bar (SwiftBar plugin): what the title shows, which sections the menu
-# has (in this order), its icon, how many top CPU processes the System
-# section lists, and the refresh interval the pack names the plugin file with.
-AGENTS_BAR_TITLE="${AGENTS_BAR_TITLE-count awake}"
-AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs agents usage jobs stale hogs awake system}"
+# has (in this order), its icon, how many top CPU processes the system
+# row's submenu lists, and the refresh interval the pack names the plugin file with.
+AGENTS_BAR_TITLE="${AGENTS_BAR_TITLE-triage awake}"
+AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs review running parked limits today stale hogs awake system}"
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"

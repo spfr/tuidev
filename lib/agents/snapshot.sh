@@ -159,7 +159,8 @@ _agents_herdr_query() {
         ((.terminal_title_stripped // "") | tostring | gsub("[[:cntrl:]]"; " ") | gsub("  +"; " ") | sub("^ +"; "")
             | .[0:60] | sub(" +$"; "") | if . == "" then "-" else . end),
         ((.agent_session | if type == "object" then .value elif type == "string" then . else null end) // "-"
-            | tostring | gsub("[[:cntrl:]]"; "") | if . == "" then "-" else . end)] | map(tostring) | @tsv' 2>/dev/null
+            | tostring | gsub("[[:cntrl:]]"; "") | if . == "" then "-" else . end),
+        (.state_change_seq // "-")] | map(tostring) | @tsv' 2>/dev/null
 }
 _agents_herdr() {
     [[ -z "${AGENTS_NO_HERDR:-}" ]] || return 0

@@ -12,8 +12,8 @@
 # so a status line of your own is kept (the settings merge keeps your value),
 # and AGENTS_STATUSLINE_CMD (agents.conf) runs yours behind this one.
 #
-# Uses: config.sh, util.sh (_agents_awk), limits.sh
-#   (_agents_limits_put); awk/statusline.awk.
+# Uses: config.sh, palette.sh, limits.sh (_agents_limits_put);
+#   awk/statusline.awk.
 # Public: agents_statusline.
 
 # Status line JSON is a few KiB; a command of yours gets at most this much
@@ -24,8 +24,8 @@ _AGENTS_STATUSLINE_MAX=1048576
 # windows into limits.tsv when a reading changed (or is 5 minutes old: the
 # READ column of `agents limits`); then the status line itself: what
 # AGENTS_STATUSLINE_CMD prints for the same JSON (its output and exit status
-# untouched), else "Opus · ctx 42% · 5h 23% · wk 41%" (only the fields the
-# JSON has). Never fails because of the recording; never prompts.
+# untouched), else awk/statusline.awk's "Opus  ctx ████░░░░░░ 42%  5h 23%  wk
+# 41%" (only the fields the JSON has). Never fails because of the recording; never prompts.
 # One awk does the work (and reads the clock); the JSON is kept in a
 # variable only for a command of yours: a status line runs on every message.
 agents_statusline() {
@@ -37,6 +37,8 @@ agents_statusline() {
     # Yours, unless this already runs inside it (a command of yours that
     # calls agents statusline again would loop).
     [[ -z "${AGENTS_STATUSLINE_CMD:-}" || -n "${_AGENTS_STATUSLINE_INNER:-}" ]] || own=1
+    # Claude Code pipes this and shows the colors.
+    [[ -n "$own" ]] || _agents_colors --always
     [[ -z "${AGENTS_TESTING:-}" ]] || now="${AGENTS_NOW:-}"
     if [[ -n "$own" ]]; then
         in="$(head -c "$_AGENTS_STATUSLINE_MAX" 2>/dev/null)" || in=""
@@ -95,6 +97,6 @@ _agents_claude_acct_name() {
 _agents_statusline_awk() {
     local REPLY_CLI REPLY_LABEL
     _agents_claude_account
-    _agents_awk statusline -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$1" -v hist="$AGENTS_HISTORY" \
-        -v acct="$REPLY_CLI" -v label="$REPLY_LABEL" 2>/dev/null
+    _agents_awk_colored "lib_fmt statusline" -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$1" -v hist="$AGENTS_HISTORY" \
+        -v acct="$REPLY_CLI" -v label="$REPLY_LABEL" -v cols="${COLUMNS:-}" 2>/dev/null
 }

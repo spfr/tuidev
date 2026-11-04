@@ -123,10 +123,14 @@
     return el;
   }
   // Text with SwiftBar's inline :symbol.name: tokens (unless symbolize=false).
-  function richText(el, text, size, symbolize, color) {
-    var parts = symbolize ? text.split(/(:[a-z0-9.]+:)/) : [text];
+  // Colors go by position, and one past the last takes the last (colors: a list).
+  function richText(el, text, size, symbolize, colors) {
+    var parts = symbolize ? text.split(/(:[a-z0-9.]+:)/) : [text], n = 0;
     parts.forEach(function (part) {
-      var m = symbolize && part.match(/^:([a-z0-9.]+):$/), s = m && symbol(m[1], size, color);
+      var m = symbolize && part.match(/^:([a-z0-9.]+):$/);
+      var c = colors && colors.length ? colors[Math.min(n, colors.length - 1)] : null;
+      var s = m && symbol(m[1], size, c);
+      if (m) n++;
       if (s) el.appendChild(s); else if (part) el.appendChild(document.createTextNode(part));
     });
   }
@@ -159,6 +163,7 @@
         row.appendChild(ic);
       }
       var t = document.createElement("span"); t.className = "text";
+      if (it.params.font) t.style.fontFamily = it.params.font;
       richText(t, it.text, Math.round(size), it.params.symbolize !== "false", null);
       row.appendChild(t);
       if (it.children.length) {
@@ -182,7 +187,12 @@
   var head = data.title[0] || "", bar = head.indexOf("|"), tp = {}, re = /(\w+)=(\S+)/g, m;
   if (bar >= 0) { while ((m = re.exec(head.slice(bar + 1)))) tp[m[1]] = m[2]; head = head.slice(0, bar).replace(/\s+$/, ""); }
   var item = document.createElement("div"); item.id = "item"; item.style.left = "60px";
-  richText(item, head, 16, true, tp.sfcolor || null);
+  // sfcolor, sfcolor1, sfcolor2...: "light,dark" or one color for both.
+  var tints = [];
+  if (tp.sfcolor) tints.push(tp.sfcolor);
+  for (var ti = 1; tp["sfcolor" + ti]; ti++) tints.push(tp["sfcolor" + ti]);
+  tints = tints.map(function (c) { var a = c.split(","); return theme === "dark" ? a[a.length - 1] : a[0]; });
+  richText(item, head, 16, true, tints);
   stage.appendChild(item);
   buildMenu(data.root.children, OPEN, 60, 33, stage);
 

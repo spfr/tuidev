@@ -1,16 +1,17 @@
 # shellcheck shell=bash
-# lib/agents/assess.sh — Needs you: evidence and a verdict.
+# lib/agents/assess.sh — a flagged item: evidence and a verdict.
 #
 # Why an item is listed, how far to trust that, and what to do about it. The
 # verdict is made in one place, agents_assess; `agents why`, `json`, `tsv` (the
 # menu) and auto-reap only read its rows.
 #
 # Owns: agents_assess (awk/assess.awk) and `agents why`.
-# Uses: config.sh, util.sh, snapshot.sh (agents_collect), render.sh (colors).
+# Uses: config.sh, util.sh, snapshot.sh (agents_collect), palette.sh (colors),
+#   triage.sh (_agents_triage_rows).
 # Public: agents_assess, agents_why, _agents_with_needs.
 
-# agents_assess [PID] < RECORDS — evidence and a verdict for each item that
-# needs you (stale trees; commands flagged stuck, long or dup), or with PID,
+# agents_assess [PID] < RECORDS — evidence and a verdict for each flagged item
+# (stale trees; commands flagged stuck, long or dup), or with PID,
 # for that one item whatever it is. Two row types:
 #   need PID START FLAG ACTION CONF CODE AUTO OWNER SHORT VERDICT OKIND OPROJ
 #        AGE CPU PORTS WATCHED QUIET LAST MARKER
@@ -33,12 +34,13 @@ agents_assess() {
     AGENTS_MEM_WARN_KIB=$((AGENTS_MEM_WARN * 1048576)) _agents_awk assess -F '\t' -v OFS='\t'
 }
 
-# _agents_with_needs RECORDS — agents_assess rows first, then the records
-# (agents_json and the menu build an item when they meet it, so they need its
-# verdict before that).
+# _agents_with_needs RECORDS — agents_assess rows first, then each session's
+# triage row (triage.sh), then the records (agents_json, the menu and the triage
+# view build an item when they meet it, so they need its verdict before that).
 _agents_with_needs() {
     [[ -n "$1" ]] || return 0
     printf '%s\n' "$1" | agents_assess
+    _agents_triage_rows "$1"
     printf '%s\n' "$1"
 }
 

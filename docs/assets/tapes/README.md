@@ -47,7 +47,7 @@ The `cli` tape then runs `demo-zsh-setup.sh`, which copies the shipped `configs/
 |------|------|
 | `ps`, `lsof` (listeners) | `fixtures/ps.txt`, `fixtures/listeners.txt` |
 | working directories (`lsof`, or `/proc` on Linux) | `fixtures/cwds.tsv`, read by the wrapper's own `_agents_cwds` |
-| `herdr agent list` | `fixtures/herdr.tsv` (session status: blocked, working, idle) |
+| `herdr agent list` | `fixtures/herdr.tsv` (session status: blocked, working, done) |
 | `sysctl`, `memory_pressure`, `pmset`, `notifyutil`, `launchctl` | fixed answers in `demo-stub.sh` |
 | `kill` | a no-op: the demo never signals anything |
 | `AGENTS_UID`, `AGENTS_SELF` | the fixture's uid 501, and a pid that isn't in the table (`AGENTS_TESTING=1`, the test harness's hook) |
@@ -96,9 +96,9 @@ SwiftBar draws a native macOS menu, which VHS can't record, and a screenshot of 
 
 1. It runs `configs/swiftbar/agents.10s.sh` twice (the second run sees Herdr's status, as SwiftBar's second refresh would) with `AGENTS_BIN` set to the demo `agents`, in a demo home from `demo-env.sh`. The output is the text SwiftBar would get.
 2. `docs/assets/menu/symbols.swift` renders every SF Symbol the output names (`sfimage=`, and `:name:` in titles) with AppKit, so the icons are the system's own.
-3. `docs/assets/menu/menu.html` parses SwiftBar's format (`--` submenus, `---` separators, `size`, `checked`, `sfconfig` colors, rows without an action dimmed, as SwiftBar shows them) and lays it out as a macOS menu in light and dark, with given submenus open. Headless Chrome captures it at 2x: `menu-light.webp` and `menu-dark.webp` with the first stuck command's verdict open, and `menu.gif`, which opens four submenus in turn.
+3. `docs/assets/menu/menu.html` parses SwiftBar's format (`--` submenus, `---` separators, `size`, `font`, `checked`, `sfconfig` and `sfcolor` colors, rows without an action dimmed, as SwiftBar shows them) and lays it out as a macOS menu in light and dark, with given submenus open. Headless Chrome captures it at 2x: `menu-light.webp` and `menu-dark.webp` with the first flagged command's verdict open, and `menu.gif`, which opens four submenus in turn.
 
-What it can't show: SwiftBar's own items at the bottom of a real menu, the live translucency of your wallpaper, and hover. When the plugin's output changes, `make screenshots TAPES=menu` redraws it.
+What it can't show: SwiftBar's own items at the bottom of a real menu, the live translucency of your wallpaper, and hover. When the plugin's output changes, `make screenshots TAPES=menu` redraws it (`MENU_OUT=DIR scripts/render_menu.sh` draws it elsewhere, to look at a change first).
 
 To capture the real menu by hand instead, `swiftbar-demo.sh` writes a demo plugin over the same fixtures:
 

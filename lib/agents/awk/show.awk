@@ -21,7 +21,7 @@ function ago(at,   s) { s = now - at; return s < 0 ? "" : " (" age(s) " ago)" }
 function num(x) { return (x == "" || x == "-") ? "null" : x + 0 }
 BEGIN {
     FS = "\t"; home = ENVIRON["HOME"]; w = ENVIRON["W"] + 0; if (w < 60) w = 60
-    b = ENVIRON["B"]; dim = ENVIRON["DIM"]; yel = ENVIRON["Y"]; red = ENVIRON["R"]; grn = ENVIRON["G"]; e = ENVIRON["N"]
+    b = ENVIRON["B"]; dim = ENVIRON["DIM"]; yel = ENVIRON["WARN"]; red = ENVIRON["NEED"]; grn = ENVIRON["RUN"]; e = ENVIRON["N"]
     t += 0
 }
 $1 == "agent" && NF >= 14 { ag[$2] = $0 }

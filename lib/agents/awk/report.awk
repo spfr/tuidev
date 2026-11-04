@@ -5,7 +5,7 @@
 # price files (pfs, "|"-separated, "" for none) and, for the context view,
 # the configured inventory (invf); rawb: where tokens.tsv's rows stop being
 # kept by day. Runs in BEGIN: it reads no input. Needs lib_json, lib_sort,
-# lib_fmt, lib_price, report_fmt, report_runs, report_tokens,
+# lib_fmt, lib_price, lib_waits, report_fmt, report_runs, report_tokens,
 # report_denials, report_context, report_waits, report_insights and
 # report_views.
 #
@@ -20,6 +20,7 @@
 
 BEGIN {
     b = ENVIRON["B"]; dim = ENVIRON["DIM"]; e = ENVIRON["N"]
+    W = ENVIRON["W"] + 0; WAITS_GAP = 300   # a row more than a sample's cap apart ends a stretch
     when = (label == "today" ? "today" : "last " label)
     runs_load(rf, start, pstart, pend)
     # The token dimensions each view shows: the insights need the CLIs only.

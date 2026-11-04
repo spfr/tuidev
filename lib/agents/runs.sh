@@ -193,7 +193,7 @@ agents_runs() {
     _agents_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
     local rf="$AGENTS_DATA_DIR/runs.tsv"
     { [[ ! -r "$rf" ]] || LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2nr "$rf"; } \
-        | B="${C_B:-}" DIM="${C_DIM:-}" R="${C_R:-}" N="${C_0:-}" _agents_awk "lib_fmt lib_json runs_view" -F '\t' \
+        | _agents_awk_colored "lib_fmt lib_json runs_view" -F '\t' \
             -v start="$start" -v now="$now" -v off="$off" -v label="$since" -v json="$json" \
             -v hist="$AGENTS_HISTORY" -v have="$([[ -r "$rf" ]] && echo 1)"
 }

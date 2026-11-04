@@ -9,7 +9,7 @@ function cell(i, c, v) { cv[i, c] = v; if (length(v) > w[c]) w[c] = length(v) }
 BEGIN {
     split("ENDED TOOK CPU PEAK EXIT PROJECT SESSION AGENT CMD JOB FLAGS", hd, " ")
     nc = 11; for (c = 1; c <= nc; c++) w[c] = length(hd[c])
-    B = ENVIRON["B"]; DIM = ENVIRON["DIM"]; R = ENVIRON["R"]; N = ENVIRON["N"]
+    B = ENVIRON["B"]; DIM = ENVIRON["DIM"]; R = ENVIRON["NEED"]; N = ENVIRON["N"]
     win = (label == "today" ? "today" : "in the last " label)
 }
 NF >= 13 && $1 ~ /^[0-9]+$/ {

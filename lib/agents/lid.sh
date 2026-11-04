@@ -166,7 +166,7 @@ agents_lid_stale() {
 _AGENTS_LID_FIX="agents awake restore (or: sudo pmset -a disablesleep 0)"
 _agents_lid_warning() {
     agents_lid_stale || return 0
-    printf '%sWARNING: lid sleep is disabled and nothing will restore it. Fix: %s%s\n' "${C_R:-}${C_B:-}" "$_AGENTS_LID_FIX" "${C_0:-}"
+    printf '%sWARNING: lid sleep is disabled and nothing will restore it. Fix: %s%s\n' "${C_NEED:-}${C_B:-}" "$_AGENTS_LID_FIX" "${C_0:-}"
 }
 
 # agents_awake_lid DURATION — keep awake with the lid closed for DURATION (at

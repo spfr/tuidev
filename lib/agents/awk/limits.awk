@@ -2,11 +2,11 @@
 # (limits.tsv; limits.sh documents it) and today's usage signals, for the
 # menu (mode tsv: agents tsv's limit, denials and compacts records), for
 # `agents limits` (mode view) and its --json (mode json). Needs lib_fmt
-# (age, dayhm) and lib_json (js, opt).
+# (age, dayhm, gauge) and lib_json (js, opt).
 #
 # Variables: mode; lf (limits.tsv), now, off (the UTC offset); in mode tsv
 # also df (denials.tsv), cf (compacts.tsv) and mid (local midnight); in mode
-# view b, dim, e (the colors) and hist (AGENTS_HISTORY).
+# view hist (AGENTS_HISTORY), and the colors in the environment.
 #
 # A reading is stale once its window has reset (resets_at passed), or, with
 # no reset time (a window nothing has been used of yet), a day after it was
@@ -55,6 +55,26 @@ function rtext(t,   s) {
     if (t - now < 86400) return hhmm(t)
     if (t - now < 7 * 86400) return wday(t) " " hhmm(t)
     s = dayhm(t); return substr(s, 1, 6)
+}
+# pace I — how window I compares with the time gone: PE, the % of the window
+# elapsed now (-1 when its length or reset doesn't say); PV, over when the
+# reading runs ahead of the time elapsed at that reading, under when not, "-"
+# in the window's first PACE_EARLY % (3% used after 1% of the time says nothing
+# yet) or with no reset to go by; PL, while over, the seconds left at this rate.
+function pace(i,   win, at) {
+    PE = -1; PV = "-"; PL = "-"
+    win = W[i] * 60
+    if (R[i] <= now || win <= 0) return
+    at = win - (R[i] - E[i])
+    PE = 100 * (win - (R[i] - now)) / win
+    if (PE < 0) PE = 0
+    if (at <= 0 || at > win || 100 * at / win < PACE_EARLY) return
+    PV = (P[i] > 100 * at / win + PACE_MARGIN) ? "over" : "under"
+    if (PV == "over") {
+        # At the rate so far, from the reading on.
+        PL = int((100 - P[i]) * at / P[i] - (now - E[i]))
+        if (PL < 0) PL = 0
+    }
 }
 function stale(i) { return (R[i] > 0 && R[i] <= now) || (R[i] <= 0 && now - E[i] > 86400) || (i in SUP) }
 function name(i) { return cliname(F[i]) (L[i] != "-" && L[i] != "" ? " \302\267 " L[i] : "") }
@@ -113,32 +133,75 @@ function tsv(   i, x, n) {
         if (stale(i)) continue
         n = rtext(R[i])
         print "limit\t" name(i) "\t" wname(W[i]) "\t" pcti(P[i]) "\t" (n == "" ? "-" : n) "\t" C[i] "\t" (now - E[i])
+        pace(i)
+        print "pace\t" int(PE) "\t" PV "\t" PL "\t" gauge(P[i], 12, PE, "", "", "")
     }
     if ((n = today(df, 8)) > 0) print "denials\t" n "\t" TOP
     if ((n = today(cf, 1)) > 0) print "compacts\t" n
 }
 
-# dlen S — S's width on screen (a middle dot is two bytes, one column);
-# pad S W — S padded with spaces to W columns.
-function dlen(s,   t) { t = s; return length(s) - gsub(/\302\267/, "", t) }
-function pad(s, w) { while (dlen(s) < w) s = s " "; return s }
-
-function view(   i, x, w, s, r, rt, any, cl) {
-    printf "%sagents limits%s %s\302\267 usage limits each CLI reported, newest reading per window%s\n\n", b, e, dim, e
+# wtag M — a window as a gauge's label: 5h, wk, mo.
+function wtag(m) { return m == 10080 ? "wk" : m == 43200 ? "mo" : wname(m) }
+# over_text ROOM — over pace in words, as much as fits in ROOM columns ("" if not
+# even the word does): the time left at this rate is what you'd act on, and "at
+# this rate" the first to go.
+function over_text(room,   t, l) {
+    l = PL == "-" ? "" : PL > 0 ? rough(PL) " left" : "at the limit"
+    t = "! over pace" (l == "" ? "" : ", " l " at this rate"); if (dw(t) <= room) return t
+    if (l != "") {
+        t = "! over pace, " l; if (dw(t) <= room) return t
+        t = "! over, " l; if (dw(t) <= room) return t
+        t = "! " l; if (dw(t) <= room) return t
+    }
+    t = "! over pace"; if (dw(t) <= room) return t
+    t = "! over"; return dw(t) <= room ? t : ""
+}
+# tail ROOM RESET READ — what follows the percent, fit to ROOM columns: over pace
+# first, with the time left even at the reset's cost; then the reset, the pace
+# when under, and how old the reading is.
+function tail(room, rt, rd,   t, c, r, used) {
+    room -= 3
+    if (room < 1) return ""
+    if (dw(rt) > room) rt = ""
+    t = ""; c = ""
+    if (PV == "over") {
+        c = WARN
+        t = over_text(rt == "" ? room : room - dw(rt) - 2)
+        if (PL != "-" && !index(t, "left") && !index(t, "limit")) { rt = ""; t = over_text(room) }
+    } else if (PV == "under" && (rt == "" ? 10 : dw(rt) + 12) <= room) { c = DIM; t = "under pace" }
+    r = rt; used = dw(rt)
+    if (t != "") {
+        # Lined up with the rows above, when there is room for that.
+        if (rt != "" && 20 + 2 + dw(t) <= room) { r = lc(rt, 20); used = 20 }
+        r = r (r == "" ? "" : "  ") c t e
+        used += (used ? 2 : 0) + dw(t)
+    }
+    if (rd != "" && used + 2 + dw(rd) <= room) r = r (r == "" ? "" : "  ") DIM rd e
+    return r == "" ? "" : "   " r
+}
+function view(   i, x, w, s, rt, any, cl, c, rd, cells, width, lab, tag, g) {
+    # A narrow pane keeps what you act on: the gauge and the pace.
+    width = ENVIRON["W"] + 0; cells = width < 72 ? 10 : 20
+    printf "%s\n\n", b dcut("agents limits", width) e dim dcut(" " gl("dot") " usage limits each CLI reported, newest reading per window", width - 13) e
     w = 12
-    for (i = 1; i <= N; i++) if (dlen(name(i)) > w) w = dlen(name(i))
+    for (i = 1; i <= N; i++) if (dw(name(i) " " wtag(W[i])) > w) w = dw(name(i) " " wtag(W[i]))
+    if (w > (width < 72 ? 16 : 24)) w = width < 72 ? 16 : 24
     if (N) {
-        printf "%s%s  %-6s %5s  %-18s %s%s\n", dim, pad("CLI", w), "WINDOW", "USED", "RESETS", "READ", e
         for (x = 1; x <= N; x++) {
             i = O[x]; s = stale(i)
             rt = rtext(R[i])
             if (R[i] > 0 && R[i] <= now) rt = "reset " age(now - R[i]) " ago"
-            else if (rt != "") rt = rt " (" age(R[i] - now) ")"
+            else if (rt != "") rt = "resets " rt
             else rt = "-"
-            r = sprintf("%s  %-6s %4d%%  %-18s %s ago", pad(name(i), w),wname(W[i]), pcti(P[i]), rt, age(now - E[i]))
-            if (s) printf "%s%s%s\n", dim, r, e
-            else if (P[i] >= 80) printf "%s%s%s\n", b, r, e
-            else print r
+            pace(i)
+            tag = wtag(W[i]); lab = lc(dcut(name(i), w - dw(tag) - 1) " " tag, w)
+            rd = (s || now - E[i] >= 600) ? "read " age(now - E[i]) " ago" : ""
+            if (s) { PV = "-"; g = gauge(P[i], cells, -1, "", "", "") " "; c = "" }
+            else {
+                c = P[i] >= 95 ? NEED : (P[i] >= 80 || PV == "over") ? WARN : RUN
+                g = gauge(P[i], cells, PE, c, dim, ACC) (PE < 0 ? " " : "")
+            }
+            printf "%s%s  %s  %s%3d%%%s%s%s\n", (s ? dim : ""), lab, g, ((s || c == RUN) ? "" : c), pcti(P[i]), ((s || c == RUN) ? "" : e), tail(width - w - 2 - cells - 1 - 2 - 4, rt, rd), (s ? e : "")
             if (F[i] == "claude") cl = 1
             any = 1
         }
@@ -147,23 +210,31 @@ function view(   i, x, w, s, r, rt, any, cl) {
         return
     } else print "no readings yet"
     print ""
-    if (!cl) printf "%sClaude Code: no reading yet. Its status line reports them (Pro and Max plans): agents statusline%s\n", dim, e
-    if (any) printf "%sA window that has reset is shown dimmed until the CLI reports it again.%s\n", dim, e
+    if (!cl) printf "%s%s%s\n", dim, dcut("Claude Code: no reading yet. Its status line reports them (Pro and Max plans): agents statusline", width), e
+    if (any) {
+        printf "%s%s%s\n", dim, dcut(gl("mark") " marks the time gone in the window.", width), e
+        printf "%s%s%s\n", dim, dcut("A window that has reset is dimmed until the CLI reports it again.", width), e
+    }
 }
 
 function json(   i, x, o) {
     o = "{\"schema_version\":1,\"now\":" now ",\"limits\":["
     for (x = 1; x <= N; x++) {
         i = O[x]
+        pace(i)
         o = o (x > 1 ? "," : "") "{\"cli\":" js(C[i]) ",\"name\":" js(cliname(F[i])) ",\"label\":" opt(L[i]) \
             ",\"window_minutes\":" W[i] ",\"used_percent\":" P[i] ",\"resets_at\":" (R[i] > 0 ? R[i] : "null") \
-            ",\"as_of\":" E[i] ",\"stale\":" (stale(i) ? "true" : "false") "}"
+            ",\"as_of\":" E[i] ",\"stale\":" (stale(i) ? "true" : "false") \
+            ",\"elapsed_percent\":" (PE < 0 ? "null" : int(PE + 0.5)) ",\"pace\":" opt(PV) ",\"left_s\":" (PL == "-" ? "null" : PL) "}"
     }
     print o "]}"
 }
 
 BEGIN {
     now += 0; off += 0; mid += 0
+    PACE_EARLY = 5; PACE_MARGIN = 5
+    b = ENVIRON["B"]; dim = ENVIRON["DIM"]; e = ENVIRON["N"]
+    NEED = ENVIRON["NEED"]; WARN = ENVIRON["WARN"]; RUN = ENVIRON["RUN"]; ACC = ENVIRON["ACC"]; DIM = dim
     load()
     if (mode == "tsv") tsv()
     else if (mode == "json") json()

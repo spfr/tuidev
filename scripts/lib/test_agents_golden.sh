@@ -45,6 +45,7 @@ echo 50331648 > "$AGENTS_RUN_DIR/memtotal"
 
 # shellcheck source=../../bin/agents disable=SC1091
 . "$REPO_DIR/bin/agents"
+_agents_utf8() { return 0; }   # the glyphs, under this C locale; triage-ascii has the rest
 
 # --- The clock and the files polling loops watch ------------------------------------
 # "Now" is 2020-01-01 09:00 UTC. done.output ended 5h ago with Claude Code's
@@ -333,7 +334,11 @@ case_() {
     { cat "$tmp/raw"; echo "[rc=$rc]"; } | norm > "$tmp/out/$name"
 }
 
-case_ ls
+case_ triage
+# A narrow pane: agents_main takes the width from a terminal, and here is none.
+{ ( AGENTS_WIDTH=52; agents_triage ) 2>&1 < /dev/null; echo "[rc=0]"; } | norm > "$tmp/out/triage-narrow"
+( _agents_utf8() { return 1; }; case_ triage-ascii )
+case_ ls ls
 case_ ls-list list
 case_ ps ps
 case_ ps-1000 ps 1000
@@ -418,14 +423,16 @@ awk -F '\t' -v OFS='\t' -v n="$FAKE_NOW" '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { $
 # The waits view: sessions Herdr showed blocked or done (waits.tsv) and the
 # notifications notify.sh logged (notify.tsv), counted back from now.
 mkdir -p "$tmp/waits"
+# Oldest first, as a sample appends them. billing was blocked for the last 25
+# minutes, after 80 minutes done: one stretch that turns parked past its hour.
 awk -v n="$FAKE_NOW" 'BEGIN {
     OFS = "\t"
-    for (i = 1; i <= 25; i++) print n - i * 60, "billing", "claude", "blocked", "4100@Wed_Oct_14_08:00:00_2026", 60
-    for (i = 1; i <= 4; i++) print n - i * 300, "billing", "claude", "done", "4100@Wed_Oct_14_08:00:00_2026", 300
-    for (i = 1; i <= 9; i++) print n - i * 120, "app/agent-a1", "codex", "blocked", "4200@Wed_Oct_14_09:00:00_2026", 120
+    for (i = 1; i <= 16; i++) print n - 1500 - (17 - i) * 300, "billing", "claude", "done", "4100@Wed_Oct_14_08:00:00_2026", 300
+    for (i = 25; i >= 1; i--) print n - i * 60, "billing", "claude", "blocked", "4100@Wed_Oct_14_08:00:00_2026", 60
+    for (i = 9; i >= 1; i--) print n - i * 120, "app/agent-a1", "codex", "blocked", "4200@Wed_Oct_14_09:00:00_2026", 120
     print n - 3 * 86400, "old", "claude", "blocked", "4300@Mon_Oct_12_09:00:00_2026", 300
     print n - 60, "app", "claude", "working", "4400@Wed_Oct_14_09:00:00_2026", 60
-}' > "$tmp/waits/waits.tsv"
+}' | sort -n > "$tmp/waits/waits.tsv"
 awk -v n="$FAKE_NOW" 'BEGIN {
     OFS = "\t"
     for (i = 1; i <= 7; i++) print n - i * 200, "4100@Wed_Oct_14_08:00:00_2026", "billing", "Permission", "herdr", (i <= 5 ? "present" : "-")
