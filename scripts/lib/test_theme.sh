@@ -321,7 +321,7 @@ grep -q "skipping herdr" <<< "$out" || fail "no Herdr config: no word about it"
 [[ ! -e "$HERDR_CONF" ]] || fail "apply created a Herdr config before the pack"
 
 mkdir -p "$HOME/.config/herdr"
-{ cat "$REPO_ROOT/configs/herdr/config.toml"; printf '\n[ui]\nsound = false\n'; } > "$HERDR_CONF"
+awk '{ print } /^\[ui\]$/ { print "sound = false" }' "$REPO_ROOT/configs/herdr/config.toml" > "$HERDR_CONF"
 before="$(cat "$HERDR_CONF")"
 out="$("$THEME" apply catppuccin-mocha --dry-run 2>&1)"
 grep -q "f38ba8" <<< "$out" || fail "dry-run did not preview Herdr's colors"
