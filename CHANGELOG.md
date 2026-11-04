@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.0] - 2026-11-04
+
+Nineteen days of your own logs asked one question of the monitor: who needs me? `agents` and the menu now answer it first. A blocked session is impossible to miss, the hours of finished work you parked stop looking like an emergency, and everything wears one palette.
+
+### Added
+
+- **Four states, each with its own shape.** `▲` needs you, `◆` to review, `●` running, `○` parked, in `agents`, the menu and the waits report, so they read the same under `NO_COLOR`. Blocked and done come from Herdr, or Claude Code's hooks outside it; a session you looked at and left idle is parked at once, and one finished over `AGENTS_PARKED_MIN` minutes ago (60) is parked too. A session nothing says anything about is running while it runs a command or uses the CPU; otherwise it gets a `?` row of its own, since no signal is not parked. A session whose age can't be established shows none and stays to review: Herdr's own state-change number says whether a record is still the latest stretch, across a night asleep or a minute's work.
+- **`agents` opens with the answer.** A summary line, then Needs you, To review and Running, one line for what is parked and one for the system, in 80 columns, folding at about 52. The table with PIDs, ports and MCP servers lost nothing: it is `agents ls`, and `agents watch` follows the new view.
+- **The waits report stops summing the unsummable.** "34.4 h waited in 24 h" was mostly parked. `agents report --view waits` now keeps blocked, fresh and parked apart, draws a lane per project with a cell per hour, and names the longest block. The insight counts only blocked and fresh. `--json` adds `fresh_s`, `parked_s` and `longest_blocked`.
+- **One palette.** `need`, `done`, `run`, `warn`, `dim` and `accent`, as truecolor, 256 or 16 colors by what the terminal says. `AGENTS_THEME` (`auto`, `ansi`, `none`, a palette) and `AGENTS_COLOR_*` (a palette key or `#rrggbb`) change them, and with nothing set they follow the theme you applied, or the terminal's own. The Needs-you row gets a tint on a truecolor terminal.
+- **`scripts/theme.sh` reaches Herdr.** A `[theme.custom]` table in `~/.config/herdr/config.toml`, so the sidebar and `agents` agree. A `[theme]` of your own is left alone, with a hint. `catppuccin-latte` joins the shipped palettes, proving the tokens on a light terminal.
+- **Gauges where a threshold matters.** The status line's `ctx` is a bar that turns yellow at 70% and red at 90%, with a narrow form. `agents limits` and the menu mark the time gone in each window, so 41% reads as fine or not, and over pace says how long the rest lasts. `agents mem` draws memory, swap and each process against the guard's warning and stop sizes. Swap shows in the summary and the menu only past 80%.
+
+### Changed
+
+- **The menu counts only what needs you.** About 30 rows become about 17. The title is the blocked count, then the to-review count, then the cup, and calm otherwise; stale processes, hogs and flagged commands no longer tint it. Needs you, To review, Running; Parked as one row; Limits and memory; one Today row that holds the job breakdown, tokens, denials, compactions and the insight; Awake; one CPU row that holds the rest of the system. Every action is still there, one submenu down. `AGENTS_BAR_TITLE` gains `triage`, its new default, and `count` still works. `AGENTS_BAR_SECTIONS` gains `review`, `running`, `parked`, `limits` and `today`; `agents`, `usage` and `jobs` still work, and the old default reads as the new layout.
+- **A permission prompt outranks an open `done`.** A background task can wake a finished session outside Herdr; when it then asks for something, that session now reads blocked.
+- **Blocked is red.** It was yellow in `agents` and red in Herdr, where yellow means working: the same hue with opposite urgency, on one screen, all day.
+- **The menu's tints follow your palette** where it suits the appearance: a dark palette's pastels keep to Apple's hues on a light menu.
+
+### Removed
+
+- **The session row's `(tools 102%)` hint and its kind.** The row says what the session runs now, and the submenu has both.
+
 ## [3.18.1] - 2026-11-04
 
 The menu is fast again.
@@ -12,6 +36,8 @@ The menu is fast again.
 ### Fixed
 
 - **A 15-second refresh.** 3.18.0 cut its hog streaks off the process records with a bash pattern match, which took about 14 seconds on a Mac with a thousand processes, longer than the menu's 10-second refresh. `agents`, `agents tsv` and the menu are back under a second.
+
+||||||| parent of ee0512c (docs: 3.19.0 changelog, triage, palette and gauges)
 
 ## [3.18.0] - 2026-11-04
 
