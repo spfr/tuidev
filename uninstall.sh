@@ -144,6 +144,7 @@ remove_managed_block "$HOME/.config/tmux/tmux.conf" tuidev-theme
 remove_managed_block "$HOME/.config/tmux/theme.conf" tuidev-theme
 remove_managed_block "$HOME/.config/ghostty/config" tuidev-theme
 remove_managed_block "$HOME/.config/starship.toml"  tuidev-theme
+remove_managed_block "$HOME/.config/herdr/config.toml" tuidev-theme
 
 # Records are `<key> <value>`. A key the user has since changed is theirs now.
 # Install checked with --includes (is the key set anywhere the user's global
@@ -198,7 +199,8 @@ _remove_helper() {
 _remove_lib_dirs() {
     local d
     [[ "$DRY_RUN" != true ]] || return 0
-    for d in "$TUIDEV_LIB_DIR/agents/awk" "$TUIDEV_LIB_DIR/agents" "$TUIDEV_LIB_DIR/fan" "$TUIDEV_LIB_DIR"; do
+    for d in "$TUIDEV_LIB_DIR/agents/awk" "$TUIDEV_LIB_DIR"/agents/themes/* "$TUIDEV_LIB_DIR/agents/themes" \
+             "$TUIDEV_LIB_DIR/agents" "$TUIDEV_LIB_DIR/fan" "$TUIDEV_LIB_DIR"; do
         [[ -d "$d" ]] && rmdir "$d" 2>/dev/null && done_msg "removed $d"
     done
     return 0
@@ -224,6 +226,9 @@ else
     while IFS= read -r src; do
         _remove_if_ours "$TUIDEV_LIB_DIR/agents/${src#"$SCRIPT_DIR/lib/agents/"}" "$src"
     done < <(find "$SCRIPT_DIR/lib/agents" -type f | LC_ALL=C sort)
+    for src in "$SCRIPT_DIR"/configs/themes/*/palette.toml; do
+        _remove_if_ours "$TUIDEV_LIB_DIR/agents/themes/${src#"$SCRIPT_DIR/configs/themes/"}" "$src"
+    done
 fi
 _remove_lib_dirs
 

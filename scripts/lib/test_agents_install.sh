@@ -131,10 +131,22 @@ out="$("$bin" --help 2>&1)" && fail "agents ran without its modules"
 mv "$tmp/lib-away" "$lib"
 pass "a missing module, awk program or module directory is named, and agents exits 1 before running anything"
 
-# 5. uninstall.sh removes the command, every module and their directories.
+# The palettes ship with it: an installed agents has its colors without the repo.
+[[ -f "$lib/themes/tokyo-night/palette.toml" && -f "$lib/themes/catppuccin-mocha/palette.toml" ]] || fail "the palettes are not installed: $(ls "$lib")"
+mkdir -p "$HOME/.config/tuidev"; echo catppuccin-mocha > "$HOME/.config/tuidev/theme"
+row="$(cd "$tmp/elsewhere" || exit 1; bash "$bin" tsv 2>/dev/null | grep '^palette'$'\t')" || row=""
+[[ "$row" == $'palette\tcatppuccin-mocha\t#f38ba8\t#89b4fa\t#a6e3a1\t#f9e2af\t#89b4fa\t#1e1e2e' ]] || fail "the installed agents reads no palette: $row"
+rm -f "$HOME/.config/tuidev/theme"
+pass "the palettes are installed with the modules and read without the repo"
+
+# 5. uninstall.sh removes the command, every module and their directories, and
+# theme.sh's block in Herdr's config, not the rest of that file.
+mkdir -p "$HOME/.config/herdr"
+{ echo 'onboarding = false'; echo '# >>> tuidev managed (tuidev-theme) >>>'; echo '[theme.custom]'; echo 'red = "#f7768e"'; echo '# <<< tuidev managed (tuidev-theme) <<<'; } > "$HOME/.config/herdr/config.toml"
 cd "$tmp"
 bash "$REPO_DIR/uninstall.sh" --all </dev/null > "$tmp/uninstall.log" 2>&1 || fail "uninstall.sh: $(tail -20 "$tmp/uninstall.log")"
 [[ ! -e "$bin" ]] || fail "uninstall left $bin"
+[[ "$(cat "$HOME/.config/herdr/config.toml")" == "onboarding = false" ]] || fail "uninstall and Herdr's config: $(cat "$HOME/.config/herdr/config.toml")"
 [[ ! -e "$HOME/.local/lib/tuidev" ]] || fail "uninstall left $(find "$HOME/.local/lib/tuidev" | head -5)"
 pass "uninstall.sh removes agents, its modules and their directories"
 

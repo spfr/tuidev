@@ -89,6 +89,7 @@ pass "all palettes share one 26-key contract"
 HOME="$(new_home discovery)" out="$("$THEME" list)"
 grep -q "tokyo-night" <<< "$out"      || fail "list missing tokyo-night"
 grep -q "catppuccin-mocha" <<< "$out" || fail "list missing catppuccin-mocha"
+grep -q "catppuccin-latte" <<< "$out" || fail "list missing catppuccin-latte"
 pass "list discovers shipped themes"
 
 out="$("$THEME" show tokyo-night)"
@@ -294,6 +295,101 @@ bash "$MIGRATION" >/dev/null || fail "migration failed on a tmux.conf without TP
 [[ "$(tail -n1 "$TMUX_CONF")" == "source-file -q ~/.config/tmux/theme.conf" ]] \
     || fail "source-file line not appended at the end"
 pass "migration sources theme.conf from a user-owned tmux.conf (above TPM), idempotently"
+
+# ============================================================================
+# 12c. Herdr: a [theme.custom] table, never over a [theme] of yours
+# ============================================================================
+# herdr_sane FILE — valid TOML, with the shipped [theme] and our custom table.
+herdr_sane() {
+    command -v python3 >/dev/null 2>&1 || { echo "SKIP: python3 unavailable"; return 0; }
+    python3 - "$1" <<'PY'
+import sys
+try:
+    import tomllib
+except ModuleNotFoundError:
+    print("SKIP: tomllib unavailable"); sys.exit(0)
+d = tomllib.load(open(sys.argv[1], "rb"))
+assert d["theme"]["custom"]["red"].startswith("#"), d
+assert d["ui"]["sound"] is False, "the [ui] above it was swallowed"
+PY
+}
+HOME="$(new_home herdr)"; export HOME
+HERDR_CONF="$HOME/.config/herdr/config.toml"
+# No config yet: left for the pack to place, which --adopt-existing would skip.
+out="$("$THEME" apply catppuccin-mocha 2>&1)"
+grep -q "skipping herdr" <<< "$out" || fail "no Herdr config: no word about it"
+[[ ! -e "$HERDR_CONF" ]] || fail "apply created a Herdr config before the pack"
+
+mkdir -p "$HOME/.config/herdr"
+{ cat "$REPO_ROOT/configs/herdr/config.toml"; printf '\n[ui]\nsound = false\n'; } > "$HERDR_CONF"
+before="$(cat "$HERDR_CONF")"
+out="$("$THEME" apply catppuccin-mocha --dry-run 2>&1)"
+grep -q "f38ba8" <<< "$out" || fail "dry-run did not preview Herdr's colors"
+[[ "$(cat "$HERDR_CONF")" == "$before" ]] || fail "dry-run wrote the Herdr config"
+out="$("$THEME" apply catppuccin-mocha 2>&1)"
+grep -q "reload-config" <<< "$out" || fail "apply does not say how to reload Herdr"
+block="$(read_managed_block "$HERDR_CONF" tuidev-theme)"
+grep -qF '[theme.custom]' <<< "$block" || fail "no [theme.custom] in the block"
+grep -qE '^red = "#f38ba8"$' <<< "$block" || fail "blocked's red isn't the palette's"
+grep -qE '^green = "#a6e3a1"$' <<< "$block" || fail "green"
+grep -qE '^accent = "#89b4fa"$' <<< "$block" || fail "accent"
+grep -qE '^panel_bg = "reset"$' <<< "$block" || fail "panel_bg stays the terminal's"
+for t in accent panel_bg active_row_bg selection_bg surface0 surface1 surface_dim overlay0 overlay1 text subtext0 mauve green yellow red blue teal peach; do
+    grep -qE "^$t = " <<< "$block" || fail "Herdr token $t not set"
+done
+grep -qF 'name = "tokyo-night"' "$HERDR_CONF" || fail "the shipped [theme] was touched"
+herdr_sane "$HERDR_CONF" || fail "Herdr config broken after apply"
+"$THEME" apply tokyo-night >/dev/null 2>&1
+[[ "$(grep -cF '# >>> tuidev managed (tuidev-theme) >>>' "$HERDR_CONF")" == 1 ]] || fail "re-apply duplicated the Herdr block"
+grep -qE '^red = "#f7768e"$' <<< "$(read_managed_block "$HERDR_CONF" tuidev-theme)" || fail "re-apply kept the old colors"
+herdr_sane "$HERDR_CONF" || fail "Herdr config broken after re-apply"
+pass "herdr: a [theme.custom] block beside the shipped [theme]; valid TOML; re-apply replaces it"
+
+# A theme of yours stays: each way TOML can say it.
+for own in '[theme]\nname = "catppuccin"\n' '[theme]\nname = "tokyo-night"\nauto_switch = true\n' \
+           '[theme.custom]\naccent = "#123456"\n' '[ theme ]\nname = "terminal"\n' 'theme.name = "terminal"\n[ui]\nsound = false\n' \
+           '["theme"]\nname = "catppuccin"\n' "['theme']\nname = \"catppuccin\"\n" '["theme".custom]\nred = "#123456"\n' '"theme".name = "terminal"\n[ui]\nsound = false\n'; do
+    HOME="$(new_home "herdr-own-$RANDOM")"; export HOME
+    HERDR_CONF="$HOME/.config/herdr/config.toml"
+    mkdir -p "$HOME/.config/herdr"
+    # shellcheck disable=SC2059  # the fixture carries its own escapes
+    printf "onboarding = false\n\n$own" > "$HERDR_CONF"
+    before="$(cat "$HERDR_CONF")"
+    out="$("$THEME" apply catppuccin-mocha 2>&1)" || fail "apply failed over a user's theme: $out"
+    grep -q "skipping herdr" <<< "$out" || fail "no word when skipping: $own"
+    grep -q 'name = \\\?"terminal' <<< "$out" || grep -q 'terminal' <<< "$out" || fail "no hint: $out"
+    [[ "$(cat "$HERDR_CONF")" == "$before" ]] || fail "a user's theme was touched: $own"
+    grep -qF "1e1e2e" "$HOME/.config/ghostty/config" || fail "the other targets not themed"
+done
+# Applied, then you set a theme: our block goes, or its tokens would override yours.
+HOME="$(new_home herdr-then-own)"; export HOME
+HERDR_CONF="$HOME/.config/herdr/config.toml"
+mkdir -p "$HOME/.config/herdr"
+printf '[theme]\nname = "tokyo-night"\n\n[ui]\nsound = false\n' > "$HERDR_CONF"
+"$THEME" apply catppuccin-mocha >/dev/null 2>&1
+grep -qF '[theme.custom]' "$HERDR_CONF" || fail "setup: no block"
+sed -i.bak 's/name = "tokyo-night"/name = "dracula"/' "$HERDR_CONF"
+out="$("$THEME" apply catppuccin-mocha --dry-run 2>&1)"
+grep -qF '[theme.custom]' "$HERDR_CONF" || fail "a dry run removed the block"
+grep -q "would remove tuidev's theme block" <<< "$out" || fail "the dry run doesn't say: $out"
+out="$("$THEME" apply catppuccin-mocha 2>&1)"
+grep -q "removed tuidev's theme block" <<< "$out" || fail "apply doesn't say it removed the block: $out"
+! grep -qF 'theme.custom' "$HERDR_CONF" || fail "our block kept over the user's theme: $(cat "$HERDR_CONF")"
+grep -qF 'name = "dracula"' "$HERDR_CONF" || fail "the user's theme was touched"
+grep -qF 'sound = false' "$HERDR_CONF" || fail "the user's [ui] was touched"
+pass "herdr: applied, then a theme of yours: our block goes, and apply says so"
+
+# Our own block doesn't count as yours, and a file with no theme at all is fine.
+HOME="$(new_home herdr-plain)"; export HOME
+HERDR_CONF="$HOME/.config/herdr/config.toml"
+mkdir -p "$HOME/.config/herdr"
+printf 'onboarding = false\n\n[ui]\nsound = false\n' > "$HERDR_CONF"
+"$THEME" apply catppuccin-mocha >/dev/null 2>&1
+grep -qF '[theme.custom]' "$HERDR_CONF" || fail "a config with no theme stayed unthemed"
+"$THEME" apply catppuccin-latte >/dev/null 2>&1 || fail "re-apply over our own block"
+grep -qE '^red = "#d20f39"$' <<< "$(read_managed_block "$HERDR_CONF" tuidev-theme)" || fail "re-apply over our own block: not replaced"
+herdr_sane "$HERDR_CONF" || fail "Herdr config broken with no [theme] of its own"
+pass "herdr: a [theme] of yours is left alone, with a hint; the other targets still themed"
 
 # ============================================================================
 # 13. tmux actually loads theme.conf through the shipped tmux.conf

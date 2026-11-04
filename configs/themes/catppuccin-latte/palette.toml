@@ -1,0 +1,59 @@
+# ============================================================================
+# tuidev palette: Catppuccin Latte
+# ============================================================================
+# Upstream values, not eyeballed. Sources:
+#   * catppuccin/palette  -> palette.json, `latte` (the canonical hex list)
+#   * catppuccin/ghostty  -> themes/catppuccin-latte.conf (the official ANSI
+#     mapping)
+#
+# Catppuccin name -> tuidev key, for anyone re-deriving these:
+#   base #eff1f5 -> bg          mantle #e6e9ef -> bg_dark
+#   surface0 #ccd0da -> bg_highlight   surface1 #bcc0cc -> border
+#   text #4c4f69 -> fg          subtext0 #6c6f85 -> fg_dim
+#   blue #1e66f5 -> accent      rosewater #dc8a78 -> cursor
+#
+# Same strict `key = "#rrggbb"` format contract as every other palette; see
+# docs/theming.md.
+# ============================================================================
+
+[theme]
+name = "catppuccin-latte"
+description = "Catppuccin Latte — the light one, for a light terminal."
+
+[colors]
+
+# --- Surfaces ---------------------------------------------------------------
+bg = "#eff1f5"            # base
+bg_dark = "#e6e9ef"       # mantle
+bg_highlight = "#ccd0da"  # surface0
+
+# --- Text -------------------------------------------------------------------
+fg = "#4c4f69"            # text
+fg_dim = "#6c6f85"        # subtext0
+
+# --- Interface --------------------------------------------------------------
+accent = "#1e66f5"        # blue
+cursor = "#dc8a78"        # rosewater
+selection_bg = "#acb0be"  # official ghostty port selection-background
+border = "#bcc0cc"        # surface1
+border_active = "#1e66f5" # blue
+
+# --- ANSI 0-7 (normal) ------------------------------------------------------
+ansi_black = "#5c5f77"
+ansi_red = "#d20f39"
+ansi_green = "#40a02b"
+ansi_yellow = "#df8e1d"
+ansi_blue = "#1e66f5"
+ansi_magenta = "#ea76cb"
+ansi_cyan = "#179299"
+ansi_white = "#acb0be"
+
+# --- ANSI 8-15 (bright) -----------------------------------------------------
+ansi_bright_black = "#6c6f85"
+ansi_bright_red = "#d20f39"
+ansi_bright_green = "#40a02b"
+ansi_bright_yellow = "#df8e1d"
+ansi_bright_blue = "#1e66f5"
+ansi_bright_magenta = "#ea76cb"
+ansi_bright_cyan = "#179299"
+ansi_bright_white = "#bcc0cc"

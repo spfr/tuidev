@@ -323,6 +323,7 @@ required_files=(
     configs/herdr/config.toml
     configs/themes/tokyo-night/palette.toml
     configs/themes/catppuccin-mocha/palette.toml
+    configs/themes/catppuccin-latte/palette.toml
     configs/ghostty/config
     scripts/health_check.sh
     scripts/notify.sh
