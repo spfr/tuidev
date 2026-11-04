@@ -1,0 +1,7 @@
+# Browser profiles under Application Support, denied alongside credential-paths.txt.
+# In their own list because the prose copies of that one cannot hold a space.
+~/Library/Application Support/Google/Chrome/
+~/Library/Application Support/BraveSoftware/
+~/Library/Application Support/Microsoft Edge/
+~/Library/Application Support/Arc/
+~/Library/Application Support/Firefox/

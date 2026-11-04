@@ -178,7 +178,15 @@ for sb in strict standard; do
 done
 for f in settings.json settings.linux.json; do
     check_creds "$f" "$cred_want" "$(grep -oE '"Read\(~/[^)]*\)"' "$REPO_DIR/configs/claude/$f" \
-        | sed -E 's:^"Read\(::; s:\)"$::; s:/\*\*$:/:')"
+        | sed -E 's:^"Read\(::; s:\)"$::; s:/\*\*$:/:' | grep -v 'Application Support/')"
+done
+# Browser profiles have a list of their own: its paths have spaces.
+browser_want="$(grep -vE '^(#|$)' "$REPO_DIR/configs/sandbox/browser-paths.txt" | sort)"
+for sb in strict standard; do
+    check_creds "$sb.sb browser profiles" "$browser_want" "$(sed -nE 's:.*\(subpath \(string-append \(param "HOME_DIR"\) "/(Library/Application Support/[^"]+)"\).*:~/\1/:p' "$REPO_DIR/configs/sandbox/profiles/$sb.sb")"
+done
+for f in settings.json settings.linux.json; do
+    check_creds "$f browser profiles" "$browser_want" "$(grep -oE '"Read\(~/Library/Application Support/[^)]*\)"' "$REPO_DIR/configs/claude/$f" | sed -E 's:^"Read\(::; s:\)"$::; s:/\*\*$:/:')"
 done
 # Prose copies write the two cargo files as ~/.cargo/credentials[.toml].
 prose_paths() {
@@ -197,6 +205,22 @@ check_creds "AGENTS.md" "$cred_want_flat" \
 check_creds "lib/agents/watched.sh _AGENTS_CRED_PATHS" "$cred_want" \
     "$(sed -n "s/^_AGENTS_CRED_PATHS='\(.*\)'$/\1/p" "$REPO_DIR/lib/agents/watched.sh" | tr ' ' '\n' | grep -v '^$' | sed 's:^:~/:')"
 pass "credential lockout matches configs/sandbox/credential-paths.txt in every copy"
+
+# Nothing inside sbx hands work to an app outside it.
+for sb in strict standard; do
+    for rule in '(deny appleevent-send)' 'com.apple.coreservices.launchservicesd'; do
+        grep -qF "$rule" "$REPO_DIR/configs/sandbox/profiles/$sb.sb" || fail "$sb.sb lost $rule"
+    done
+done
+pass "sbx profiles keep open and Apple Events out"
+
+# Dependabot tracks the scanner images through .github/scanners/Dockerfile: the
+# workflow has to run exactly those.
+while read -r _ image; do
+    grep -qF "$image" "$REPO_DIR/.github/workflows/security-scan-reusable.yml" \
+        || fail "security-scan-reusable.yml does not run $image from .github/scanners/Dockerfile"
+done < <(grep '^FROM ' "$REPO_DIR/.github/scanners/Dockerfile" | sed 's:docker\.io/::')
+pass "the security scan runs the images Dependabot tracks"
 
 # CI's required-files job must list only files that exist, or a removal breaks CI
 # while every local check stays green.

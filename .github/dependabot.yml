@@ -1,10 +1,25 @@
-# Keeps the SHA-pinned GitHub Actions in .github/workflows current.
+# Keeps the SHA-pinned GitHub Actions and the pinned images current. A new
+# release waits a week first, like the release-age pack: a hijacked one is
+# usually caught by then.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /.github/scanners
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      images:
         patterns: ["*"]

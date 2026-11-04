@@ -43,7 +43,7 @@ _agents_mtimes() {
 # directory): never read for a last line, whatever a loop watches. The same
 # list as configs/sandbox/credential-paths.txt (test_contract.sh checks it;
 # agents runs without the repo, so it carries its own copy).
-_AGENTS_CRED_PATHS='.ssh/ .aws/ .gnupg/ Library/Keychains/ .config/gh/ .config/gcloud/ .config/op/ .azure/ .docker/ .kube/ .terraform.d/ .password-store/ .netrc .git-credentials .npmrc .pypirc .cargo/credentials .cargo/credentials.toml .vault-token .pgpass .config/git/credentials .config/containers/auth.json .gem/credentials'
+_AGENTS_CRED_PATHS='.ssh/ .aws/ .gnupg/ Library/Keychains/ .config/gh/ .config/gcloud/ .config/op/ .azure/ .docker/ .kube/ .terraform.d/ .password-store/ .netrc .git-credentials .npmrc .pypirc .cargo/credentials .cargo/credentials.toml .vault-token .pgpass .config/git/credentials .config/containers/auth.json .gem/credentials .local/share/atuin/ .zsh_history .bash_history Library/Cookies/ Library/Safari/ .mozilla/ .config/google-chrome/ .config/chromium/'
 
 # _agents_cred_path PATH [HOME2] — true when PATH is one of those files or
 # lies under one of those directories, in $HOME or in HOME2 (its physical

@@ -29,8 +29,9 @@ _agents_token() { [[ "${1:-}" =~ $_AGENTS_TOKEN_RE && -n "${BASH_REMATCH[3]}" ]]
 # concatenation of awk/FILE.awk... (the shared lib_*.awk first, then the
 # program) over stdin. The options (-F, -v) go before the program.
 _agents_awk() {
-    local f files=() IFS=' '
-    for f in $1; do files+=(-f "$_AGENTS_AWK_DIR/$f.awk"); done
+    local f names files=()
+    IFS=' ' read -r -a names <<<"$1"
+    for f in "${names[@]}"; do files+=(-f "$_AGENTS_AWK_DIR/$f.awk"); done
     shift
     LC_ALL=C awk "$@" "${files[@]}"
 }
@@ -254,6 +255,13 @@ _agents_stamp_age() {
     [[ -r "$2" ]] && read -r _stamp < "$2"
     [[ "$_stamp" =~ ^[0-9]+$ ]] || _stamp=0
     printf -v "$1" '%s' "$(( $3 - _stamp ))"
+}
+
+# _agents_commas WORD... — the words joined by commas (a pid list for lsof or ps).
+_agents_commas() {
+    local out
+    printf -v out '%s,' "$@"
+    printf '%s' "${out%,}"
 }
 
 # _agents_replace FILE TEXT — FILE now holds TEXT (and a newline): written

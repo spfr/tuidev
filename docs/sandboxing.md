@@ -118,7 +118,11 @@ Reads and writes are both denied:
 ~/.password-store  ~/.netrc  ~/.git-credentials  ~/.npmrc  ~/.pypirc
 ~/.cargo/credentials[.toml]  ~/.vault-token  ~/.pgpass  ~/.config/git/credentials
 ~/.config/containers/auth.json (podman)  ~/.gem/credentials
+~/.local/share/atuin  ~/.zsh_history  ~/.bash_history
+~/Library/Cookies  ~/Library/Safari  ~/.mozilla  ~/.config/google-chrome  ~/.config/chromium
 ```
+
+Browser profiles under `~/Library/Application Support` are denied too (Chrome, Brave, Edge, Arc, Firefox; `configs/sandbox/browser-paths.txt`). `sbx` also stops `open` and Apple Events: they would hand work to apps outside the sandbox.
 
 The shipped `configs/claude/settings.json` adds matching `permissions.deny` rules, plus `.env` / `.env.*` anywhere in the project (`Read(**/.env)` and friends), so Claude Code's `Read` tool (and `Edit`, for `.env*`) respects the same boundary whether or not you're also running under `sbx`. Codex has no equivalent: under `workspace-write` it can read these paths.
 

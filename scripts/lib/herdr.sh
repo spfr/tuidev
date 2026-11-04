@@ -422,6 +422,9 @@ herdr_self_update() {
     fi
     _herdr_timeout 600 "$bin" "${args[@]}" < /dev/null \
         || print_warning "herdr ${args[*]} did not finish cleanly (continuing; its output says what is left)"
+    # Herdr's own updater picks the file: check what it installed afterwards.
+    release_attest "$HERDR_REPO" "$bin" "$(file_sha256 "$bin")" herdr \
+        || print_warning "the updated $bin did not verify; reinstall it with: ./install.sh --pack herdr"
     return 0
 }
 

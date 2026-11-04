@@ -139,8 +139,7 @@ _agents_proc_paths() {
             done
         done
     elif command -v lsof >/dev/null 2>&1; then
-        local IFS=,
-        lsof -b -w -a -d "$what" -Fpfn -p "$*" 2>/dev/null | awk -v tag="$tag" '
+        lsof -b -w -a -d "$what" -Fpfn -p "$(_agents_commas "$@")" 2>/dev/null | awk -v tag="$tag" '
             /^p/ { p = substr($0, 2) } /^f/ { f = substr($0, 2) } /^n/ { print p "\t" substr($0, 2) (tag ? "\t" f : "") }'
     fi
 }
@@ -315,8 +314,7 @@ _agents_pane_env() {
         [[ -z "$out" ]] || printf '%s' "$out" | _agents_pane_env_parse
         return 0
     fi
-    local IFS=,
-    _agents_timeout 2 env LC_ALL=C ps -E -ww -o pid=,command= -p "$*" 2>/dev/null | _agents_pane_env_parse
+    _agents_timeout 2 env LC_ALL=C ps -E -ww -o pid=,command= -p "$(_agents_commas "$@")" 2>/dev/null | _agents_pane_env_parse
     return 0
 }
 

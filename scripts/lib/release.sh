@@ -107,11 +107,34 @@ _release_fetch() {
         print_warning "$asset checksum mismatch (expected $want, got ${got:-none}); nothing installed"
         return 1
     fi
+    # shellcheck disable=SC2154  # repo: release_install's local
+    if ! release_attest "$repo" "$part" "$want" "$asset"; then
+        rm -f "$part"
+        return 1
+    fi
     if ! chmod 755 "$part" || ! mv -f "$part" "$dest"; then
         rm -f "$part"
         print_warning "could not put $asset in place at $dest"
         return 1
     fi
+}
+
+# release_attest REPO FILE SHA256 NAME — where it can be checked, that FILE was
+# built by REPO's own workflow. The digest only says it is the file the same API
+# lists; a GitHub attestation says who built it. Needs a logged-in gh, and not
+# every release has one, so only an attestation that exists and fails refuses.
+release_attest() {
+    local repo="$1" file="$2" sha="$3" name="$4"
+    command_exists gh && gh auth status >/dev/null 2>&1 || return 0
+    if gh attestation verify "$file" --repo "$repo" >/dev/null 2>&1; then
+        print_success "$name: built by $repo (attestation verified)"
+        return 0
+    fi
+    if gh api "repos/$repo/attestations/sha256:$sha" >/dev/null 2>&1; then
+        print_warning "$name: its attestation does not verify for $repo; not trusting it"
+        return 1
+    fi
+    return 0
 }
 
 release_install() {

@@ -21,9 +21,9 @@
 ;;     CLIs' own state directories (sessions, auth, logs). The agent cannot
 ;;     scribble over the rest of $HOME, nor over the CLIs' settings, hooks,
 ;;     plugins and binaries (see "except the files that steer a CLI" below).
-;;   - Network is default-deny with an allowlist scoped to the major LLM
-;;     provider endpoints plus loopback. Package registries, GitHub, etc. are
-;;     NOT reachable from strict — use the standard profile for those.
+;;   - Network is default-deny: TCP 443, DNS and loopback only. That is any host
+;;     on 443, not an allowlist of hosts, so what can be read can leave. Other
+;;     ports are NOT reachable from strict — use the standard profile for those.
 ;;
 ;; Non-goals:
 ;;   This profile does not protect against kernel exploits, sandbox-exec
@@ -49,6 +49,13 @@
 ;; --- Sysctl / mach lookups needed by almost every tool ---
 (allow sysctl-read)
 (allow mach-lookup)
+;; Except what opens or scripts other apps, which run outside this sandbox:
+;; `open` and Apple Events would be a way out of it.
+(deny mach-lookup
+  (global-name "com.apple.coreservices.launchservicesd")
+  (global-name "com.apple.coreservices.quarantine-resolver")
+  (global-name "com.apple.coreservices.appleevents"))
+(deny appleevent-send)
 (allow iokit-open)
 
 ;; --- The CLI's own terminal ---
@@ -191,6 +198,14 @@
   (allow network-outbound
     (subpath (string-append (param "HOME_DIR") "/.config/herdr"))))
 
+;; --- BROWSER PROFILES (configs/sandbox/browser-paths.txt) ---
+(deny file-read* file-write*
+  (subpath (string-append (param "HOME_DIR") "/Library/Application Support/Google/Chrome"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Application Support/BraveSoftware"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Application Support/Microsoft Edge"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Application Support/Arc"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Application Support/Firefox")))
+
 ;; --- CREDENTIAL LOCKOUT (last, so it wins over every allow above) ---
 ;; Seatbelt applies the last matching rule. Keeping the lockout at the end means
 ;; no allow can reopen these, even when PROJECT_DIR is $HOME itself. Keep this
@@ -218,4 +233,12 @@
   (literal (string-append (param "HOME_DIR") "/.pgpass"))
   (literal (string-append (param "HOME_DIR") "/.config/git/credentials"))
   (literal (string-append (param "HOME_DIR") "/.config/containers/auth.json"))
-  (literal (string-append (param "HOME_DIR") "/.gem/credentials")))
+  (literal (string-append (param "HOME_DIR") "/.gem/credentials"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/atuin"))
+  (literal (string-append (param "HOME_DIR") "/.zsh_history"))
+  (literal (string-append (param "HOME_DIR") "/.bash_history"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Cookies"))
+  (subpath (string-append (param "HOME_DIR") "/Library/Safari"))
+  (subpath (string-append (param "HOME_DIR") "/.mozilla"))
+  (subpath (string-append (param "HOME_DIR") "/.config/google-chrome"))
+  (subpath (string-append (param "HOME_DIR") "/.config/chromium")))

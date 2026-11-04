@@ -71,6 +71,8 @@ CREDENTIALS (denied read + write in strict and standard)
   ~/.netrc ~/.git-credentials ~/.npmrc ~/.pypirc ~/.cargo/credentials[.toml]
   ~/.vault-token ~/.pgpass ~/.config/git/credentials
   ~/.config/containers/auth.json ~/.gem/credentials
+  ~/.local/share/atuin ~/.zsh_history ~/.bash_history ~/Library/Cookies
+  ~/Library/Safari ~/.mozilla ~/.config/google-chrome ~/.config/chromium
 
   gh keeps its token in ~/.config/gh, so `gh` inside sbx reports that you are
   not logged in, under either profile (--profile standard widens the network,
