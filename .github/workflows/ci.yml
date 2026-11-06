@@ -12,55 +12,33 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Shellcheck — every shell file under our control.
+  # Cheap repo checks, one job: each used to be its own job billed a whole minute.
   # ---------------------------------------------------------------------------
-  lint-scripts:
-    name: shellcheck
+  checks:
+    name: checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: install shellcheck and validators
+        run: sudo apt-get update && sudo apt-get install -y shellcheck jq lua5.4 zsh
       # The file list lives in the Makefile, so local `make lint` and CI agree.
       # shellcheck also parses every file, which is why there is no bash -n job.
-      - run: make lint
-
-  # ---------------------------------------------------------------------------
-  # Config syntax: JSON, TOML, Lua (luac -p), shell — one validator, strict.
-  # ---------------------------------------------------------------------------
-  validate-configs:
-    name: validate configs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: install validators
-        run: sudo apt-get update && sudo apt-get install -y jq lua5.4 zsh
-      - run: scripts/validate_configs.sh --strict
-
-  # ---------------------------------------------------------------------------
-  # No hardcoded user paths leaked into shipped configs or scripts.
-  # ---------------------------------------------------------------------------
-  check-paths:
-    name: no hardcoded paths
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: shellcheck
+        run: make lint
+      # Config syntax: JSON, TOML, Lua (luac -p), shell — one validator, strict.
+      - name: validate configs
+        run: scripts/validate_configs.sh --strict
+      # No hardcoded user paths leaked into shipped configs or scripts.
       - name: grep for hardcoded user paths and personal mDNS hosts
         run: scripts/check_paths.sh
-
-  # ---------------------------------------------------------------------------
-  # Config-file presence: the files install.sh references must exist.
-  # ---------------------------------------------------------------------------
-  required-files:
-    name: required files
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: |
+      # Config-file presence: the files install.sh references must exist.
+      - name: required files
+        run: |
           required=(
             install.sh
             Makefile
@@ -112,6 +90,8 @@ jobs:
             fi
           done
           exit $missing
+      - name: documentation links
+        run: scripts/check_links.sh
 
   # ---------------------------------------------------------------------------
   # Seatbelt profiles parse on the macOS runner.
@@ -119,6 +99,7 @@ jobs:
   seatbelt-profiles:
     name: macOS (seatbelt + bash 3.2)
     runs-on: macos-26
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Each profile parses twice: as is, and with the opt-in herdr branch on.
@@ -156,6 +137,7 @@ jobs:
   lib-tests:
     name: unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # tmux lets test_theme.sh load the shipped tmux.conf on a private server.
@@ -182,6 +164,7 @@ jobs:
   docker-core:
     name: docker core-tag test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # The runner ships podman too; pin docker so the job tests what its name says.
     env:
       TUIDEV_CONTAINER_RUNTIME: docker
@@ -197,30 +180,17 @@ jobs:
         run: ./scripts/container.sh clean
 
   # ---------------------------------------------------------------------------
-  # Doc link + presence check.
-  # ---------------------------------------------------------------------------
-  check-docs:
-    name: documentation links
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: scripts/check_links.sh
-
-  # ---------------------------------------------------------------------------
   # Aggregate result.
   # ---------------------------------------------------------------------------
   summary:
     name: summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
-      - lint-scripts
-      - validate-configs
-      - check-paths
-      - required-files
+      - checks
       - seatbelt-profiles
       - lib-tests
       - docker-core
-      - check-docs
     if: always()
     steps:
       # The required status check: fails if any job failed or was cancelled.
