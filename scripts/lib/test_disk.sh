@@ -546,7 +546,12 @@ done
 for t in go npm pnpm uv brew fnm podman docker pip3; do rm -f "$tmp/bin/$t"; done
 ( set -euo pipefail; DISK_FD="" disk_collect; disk_report >/dev/null ) || fail "missing tools aborted the audit"
 DISK_FD="" disk_collect; out="$(disk_report)"
-[[ "$out" == *"Go module cache"*"go is not installed any more"* ]] || fail "a missing go's cache not stale: $out"
+# The stubs are gone; a go the system itself ships (/usr/bin/go) is still there.
+if command -v go >/dev/null 2>&1; then
+    echo "SKIP: a system go is on PATH, so a missing go cannot be staged"
+else
+    [[ "$out" == *"Go module cache"*"go is not installed any more"* ]] || fail "a missing go's cache not stale: $out"
+fi
 pass "failing and missing tools are skipped or judged, never fatal"
 
 # 19. The script: --json on stdout with progress on stderr, --explain, a

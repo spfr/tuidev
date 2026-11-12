@@ -54,10 +54,9 @@ _release_age_outside() {
 _release_age_has() {
     command_exists "$1" && return 0
     local dir dirs="${RELEASE_AGE_TOOL_DIRS:-/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$HOME/.bun/bin:${FNM_DIR:-$HOME/.local/share/fnm}/aliases/default/bin}"
-    local IFS=:
-    for dir in $dirs; do
-        [[ -x "$dir/$1" ]] && return 0
-    done
+    while IFS= read -r dir; do
+        [[ -n "$dir" && -x "$dir/$1" ]] && return 0
+    done < <(printf '%s\n' "$dirs" | tr ':' '\n')
     return 1
 }
 
