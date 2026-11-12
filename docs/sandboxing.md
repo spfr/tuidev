@@ -67,7 +67,7 @@ sbx -- claude --settings '{"sandbox":{"enabled":false}}'   # Claude Code under s
 sbx -- codex -s danger-full-access -a on-request   # optional kernel-level mode for Codex
 sbx --profile standard -- npm ci       # wider network for package installs
 sbx --profile off -- some-tool         # no sandbox
-sbx --project ~/code/api -- make test  # choose the writable project dir (default: $PWD)
+sbx --project ~/code/api -- make test  # choose the writable project dir (default: $PWD; never $HOME or above)
 sbx --dry-run -- make test             # print the sandbox-exec command
 make sbx-test                          # check that the project is readable and ~/.ssh is denied
 ```
@@ -90,19 +90,37 @@ Escape hatch, one run at a time: `sbx --profile off -- CMD` runs CMD with no san
 
 **The AI CLIs' state dirs** are writable so the CLIs can save sessions, logs and caches: `~/.claude`, `~/.claude.json*`, `~/.local/share/claude`, `~/.local/state/claude`, `~/.cache/claude` and `~/.codex`.
 
-**Except what steers a CLI outside the sandbox.** Settings, hooks and binaries are loaded by later sessions, including unsandboxed ones, so an agent that could edit them would escape on your next run. Under `strict` and `standard` these stay read-only:
+**Except what steers a CLI outside the sandbox.** Settings, hooks, instructions, memory, agents, skills, plugins, scheduled work and binaries are loaded by later sessions, including unsandboxed ones, so an agent that could edit them would escape on your next run. A rule file in `~/.claude/rules/` loads into every Claude session, and a Codex agent in `~/.codex/agents/` can set its own `sandbox_mode = "danger-full-access"`. Under `strict` and `standard` these stay read-only:
 
 ```
-~/.claude/settings.json  ~/.claude/settings.local.json  ~/.claude/CLAUDE.md
-~/.claude/keybindings.json  ~/.claude/{hooks,commands,agents,skills,plugins}/
-~/.codex/config.toml  ~/.codex/*.config.toml  ~/.codex/{rules,packages}/
+~/.claude/settings.json  ~/.claude/settings.local.json  ~/.claude/keybindings.json
+~/.claude/launch.json  ~/.claude/scheduled_tasks.json
+~/.claude/*.md (CLAUDE.md, loop.md, files it imports)  ~/.claude/*.sh, *.py, *.js … (status-line and hook scripts)
+~/.claude/{hooks,commands,agents,skills,plugins,rules,output-styles,agent-memory}/
+~/.claude/{workflows,routines,dev-mods,cowork_plugins,chrome,local,downloads}/
+~/.claude/projects/*/memory/ (auto memory)
+~/.codex/*.toml (config.toml, profiles, managed_config.toml)  ~/.codex/.env  ~/.codex/hooks.json
+~/.codex/*.md (AGENTS.md, AGENTS.override.md)  ~/.codex/*.sh, *.py, *.js … (hook scripts)
+~/.codex/{hooks,rules,agents,prompts,skills,plugins,memories,automations,computer-use,packages}/
 ~/.local/share/claude/versions/
 the ~/.claude, ~/.codex and ~/.local/share/claude directories themselves (no rename-and-swap)
 ```
 
-So **update and configure the CLIs outside `sbx`**: `claude update`, `/config` changes that save to your settings, plugin installs, Codex trusting a new project (it writes `config.toml`) and the CLIs' self-updates all fail inside it. Run them from a plain shell.
+What each is for:
 
-**Residual risk: `~/.claude.json` stays writable.** Claude Code rewrites it on every start, so it can't be locked. It also holds user-scope MCP servers, so a sandboxed agent could register a server that runs the next time you start Claude outside `sbx`. Check `claude mcp list` if in doubt. And don't run `sbx` with `$HOME` itself as the project dir: that makes every other dotfile writable.
+- **Instructions** a later session reads as yours: `CLAUDE.md` and the files it imports, `~/.claude/rules/` (the orchestration pack installs one), `output-styles/`, `loop.md`, Claude's auto memory (`projects/*/memory/`) and subagent memory (`agent-memory/`); Codex's `AGENTS.md`, `AGENTS.override.md`, `prompts/` and `memories/`.
+- **Config:** Claude's settings, keybindings and `launch.json` (commands it starts); Codex's `*.toml` and `.env` (loaded into Codex's environment).
+- **Code a later session runs:** hooks (`hooks/`, `hooks.json` and scripts next to the settings), commands, agents, skills, plugins, `workflows/`, mods (`dev-mods/`), Codex's `agents/` and `rules/`.
+- **Work that runs later on its own:** `scheduled_tasks.json`, `routines/`, Codex's `automations/`.
+- **Binaries:** `local/` (the old local install), `downloads/` (updates before they install), `chrome/` (the native host Chrome starts), Codex's `packages/` and `computer-use/` app, and `~/.local/share/claude/versions/`.
+
+Sessions, transcripts, history, logs, caches, shell snapshots, todos and auth stay writable, so the CLIs run normally under `sbx`. Codex's user skills in `~/.agents/skills` were never writable: nothing in `$HOME` is, outside the state directories above.
+
+So **update and configure the CLIs outside `sbx`**: `claude update`, `/config` changes that save to your settings, plugin installs, Codex trusting a new project (it writes `config.toml`) and the CLIs' self-updates all fail inside it. So does saving memory: Claude's auto memory and Codex's memories are written from a plain shell only. Run those from outside.
+
+**Residual risk: `~/.claude.json` stays writable.** Claude Code rewrites it on every start, so it can't be locked. It also holds user-scope MCP servers, so a sandboxed agent could register a server that runs the next time you start Claude outside `sbx`. Check `claude mcp list` if in doubt. Likewise, a project's folder under `~/.claude/projects/` can't be moved away or made a symlink, but an agent can create the folder of a project Claude hasn't opened yet, so it could move a ready-made `memory/` folder in for it. Check `~/.claude/projects/*/memory/` if in doubt.
+
+**`sbx` refuses a project dir of `$HOME`, above it, or `/`.** The project dir is writable in full, so any of those would make `~/.zshrc`, `~/.local/bin` and `~/Library/LaunchAgents` writable, and the next shell or login would run what the command left there. `sbx` resolves symlinks and `..` first, and applies the same rule to the current directory when you give no `--project`, so `sbx -- CMD` run from `~` fails with exit code 2. `cd` into a project or pass `--project DIR`. If you really mean it, `--allow-home` overrides the check; there is no write sandbox left then. `--profile off` has nothing to guard and doesn't check.
 
 **The herdr socket** is closed under `strict` unless you opt in. Anything that can reach it can drive Herdr, and Herdr spawns panes *outside* the sandbox. Use `sbx --allow-herdr` only for agents you trust to orchestrate other agents. The allow covers `~/.config/herdr/` (the default socket and `sessions/<name>/herdr.sock`). A `HERDR_SOCKET_PATH` outside that directory is denied again.
 
@@ -141,7 +159,7 @@ Consequences to plan for:
 2. `~/.config/tuidev/sandbox/<profile>.sb` (`$XDG_CONFIG_HOME` is honored). This is where `--sandbox` installs the profiles.
 3. `<repo>/configs/sandbox/profiles/<profile>.sb`
 
-To change a policy, copy a profile and edit it rather than writing one from scratch. The syntax is TinyScheme (`;` starts a comment). `sbx` passes `PROJECT_DIR`, `HOME_DIR` and, for `--allow-herdr`, `ALLOW_HERDR`.
+To change a policy, copy a profile and edit it rather than writing one from scratch. The syntax is TinyScheme (`;` starts a comment). `sbx` passes `PROJECT_DIR`, `HOME_DIR` (both with symlinks resolved, since Seatbelt matches real paths) and, for `--allow-herdr`, `ALLOW_HERDR`.
 
 **Upgrades replace a profile only if you haven't edited it.** An installed profile that is byte-identical to any version tuidev shipped (fingerprinted in `configs/sandbox/profiles/shipped.sha256`) is backed up and replaced, so policy fixes reach you. One you edited is kept, and the installer prints the `diff` command to compare it with the shipped version. `make update-security` shows the same diff.
 

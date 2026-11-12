@@ -2,7 +2,7 @@
 # sbx — thin, uniform-UX wrapper around macOS `sandbox-exec`.
 #
 # Usage:
-#   sbx [--profile strict|standard|off] [--project DIR] [--allow-herdr] [--dry-run] -- cmd [args...]
+#   sbx [--profile strict|standard|off] [--project DIR] [--allow-herdr] [--allow-home] [--dry-run] -- cmd [args...]
 #
 # Profiles ship in the repo at configs/sandbox/profiles/ and install to
 # ${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/sandbox/. Lookup order (first hit wins):
@@ -49,11 +49,19 @@ OPTIONS
                       the only dir writable by the sandboxed command besides
                       /tmp and the AI CLIs' own state dirs (~/.claude,
                       ~/.claude.json, ~/.codex, ~/.local/share/claude, ...),
-                      minus their settings, hooks, plugins and binaries
+                      minus what steers them (settings, hooks, instructions,
+                      rules, memory, agents, skills, plugins and binaries).
+                      Refused when DIR is $HOME, above it, or / (symlinks and
+                      .. resolved first), and so is running from $HOME with
+                      no --project: that would make ~/.zshrc, ~/.local/bin and
+                      ~/Library/LaunchAgents writable.
   --allow-herdr       let the command reach the herdr control socket under
                       strict (standard always allows it). herdr spawns panes
                       OUTSIDE the sandbox, so this is an escape hatch: use it
                       only for agents you trust to drive herdr.
+  --allow-home        accept a project dir that is $HOME, above it, or /.
+                      Every dotfile becomes writable, so this is no longer a
+                      sandbox for writes: an escape hatch, like --allow-herdr.
   --dry-run           print the sandbox-exec invocation and exit
   -h, --help          show this help
 
@@ -110,8 +118,10 @@ fi
 # --- Argument parsing ---
 profile="strict"
 project="${PWD}"
+project_given=0
 dry_run=0
 allow_herdr="${SBX_ALLOW_HERDR:-0}"
+allow_home=0
 
 while (( $# > 0 )); do
   case "$1" in
@@ -127,14 +137,20 @@ while (( $# > 0 )); do
     --project)
       [[ $# -ge 2 ]] || { print_error "--project needs a value"; exit 2; }
       project="$2"
+      project_given=1
       shift 2
       ;;
     --project=*)
       project="${1#--project=}"
+      project_given=1
       shift
       ;;
     --allow-herdr)
       allow_herdr=1
+      shift
+      ;;
+    --allow-home)
+      allow_home=1
       shift
       ;;
     --dry-run)
@@ -191,6 +207,32 @@ if [[ "${profile}" == "off" ]]; then
   exec "$@"
 fi
 
+# --- $HOME, resolved the way the kernel sees paths ---
+# Seatbelt matches real paths, so pass the resolved home to the profile and
+# compare against it below.
+home_dir="$(cd -- "${HOME:-/}" 2>/dev/null && pwd -P)" || home_dir="${HOME%/}"
+[[ -n "${home_dir}" ]] || home_dir="/"
+
+# --- Refuse a project dir that opens $HOME for writing ---
+# The project dir is writable in full, so $HOME, any directory above it, or /
+# would make ~/.zshrc, ~/.local/bin and ~/Library/LaunchAgents writable: the
+# next unsandboxed shell or login would run what the command left there.
+case "${home_dir%/}/" in
+  "${project%/}/"*)
+    if [[ "${allow_home}" -eq 1 ]]; then
+      print_warning "sbx: --allow-home: ${project} is writable in full, dotfiles and ~/.local/bin included" >&2
+    else
+      if [[ "${project_given}" -eq 1 ]]; then
+        print_error "--project ${project} is \$HOME, above it, or /: that makes every dotfile writable" >&2
+      else
+        print_error "the current directory (${project}) is \$HOME, above it, or /: that makes every dotfile writable" >&2
+      fi
+      print_info "cd into a project or pass --project DIR; --allow-home overrides this (no write sandbox then)" >&2
+      exit 2
+    fi
+    ;;
+esac
+
 # --- Locate profile file ---
 repo_profile_dir="${_sbx_script_dir}/../configs/sandbox/profiles"
 user_profile_dir="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/sandbox"
@@ -213,9 +255,6 @@ if [[ -z "${profile_path}" ]]; then
 fi
 
 # --- Build and execute ---
-home_dir="${HOME%/}"
-[[ -n "${home_dir}" ]] || home_dir="/"
-
 sb_args=(-f "${profile_path}" -D "PROJECT_DIR=${project}" -D "HOME_DIR=${home_dir}")
 # The profiles test only whether ALLOW_HERDR is defined, so pass it for opt-in only.
 [[ "${allow_herdr}" == 1 ]] && sb_args+=(-D "ALLOW_HERDR=1")

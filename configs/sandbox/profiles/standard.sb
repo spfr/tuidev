@@ -111,36 +111,77 @@
   (subpath (string-append (param "HOME_DIR") "/.codex")))
 
 ;; --- ...except the files that steer a CLI from OUTSIDE this sandbox ---
-;; Settings, hooks, commands, agents, skills, plugins, global memory and the
-;; CLI binaries are loaded or run by later sessions, including unsandboxed ones
+;; Settings, hooks, instructions (CLAUDE.md, AGENTS.md, rules, memory, output
+;; styles, prompts), agents, skills, plugins, scheduled work and the CLI
+;; binaries are loaded or run by later sessions, including unsandboxed ones
 ;; (the CLI's native sandbox, a plain shell). An agent that could edit them
 ;; would escape on the next run (settings.json can turn the native sandbox
-;; off), so they stay read-only here: update, configure and install
-;; plugins for the CLIs outside sbx. The directory roots are listed too, so the
-;; agent cannot rename ~/.claude away, edit the copy and move it back.
+;; off, a Codex agent TOML can set sandbox_mode), so they stay read-only here:
+;; update, configure and install plugins for the CLIs outside sbx. The
+;; directory roots are listed too, so the agent cannot rename ~/.claude away,
+;; edit the copy and move it back. Top-level *.md, *.toml and script files are
+;; matched by pattern: they are instructions, config or hook and status-line
+;; scripts (CLAUDE.md, loop.md, AGENTS.md, config.toml, statusline.sh), never
+;; session state. Sessions, transcripts, logs, caches and auth stay writable.
 ;; Residual risk: ~/.claude.json stays writable (Claude Code rewrites it on
 ;; every start). It holds user-scope MCP servers and per-project state, so an
 ;; agent could register an MCP server that runs the next time you start Claude
-;; outside sbx; check `claude mcp list` if in doubt. A PROJECT_DIR of $HOME
-;; itself makes every other dotfile writable too; don't run sbx from there.
+;; outside sbx; check `claude mcp list` if in doubt. Likewise an agent can
+;; create the folder of a project Claude has not opened yet, so it could move
+;; a memory/ folder in for that project. sbx refuses a PROJECT_DIR of $HOME or
+;; above (it would make every other dotfile writable) unless --allow-home.
 (deny file-write*
+  ;; Claude Code (~/.claude)
   (literal (string-append (param "HOME_DIR") "/.claude"))
   (literal (string-append (param "HOME_DIR") "/.claude/settings.json"))
   (literal (string-append (param "HOME_DIR") "/.claude/settings.local.json"))
+  (literal (string-append (param "HOME_DIR") "/.claude/keybindings.json"))
+  (literal (string-append (param "HOME_DIR") "/.claude/launch.json"))
+  (literal (string-append (param "HOME_DIR") "/.claude/scheduled_tasks.json"))
+  (regex (string-append "^" (param "HOME_DIR") "/\\.claude/[^/]+\\.(md|sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl)$"))
   (subpath (string-append (param "HOME_DIR") "/.claude/hooks"))
   (subpath (string-append (param "HOME_DIR") "/.claude/commands"))
   (subpath (string-append (param "HOME_DIR") "/.claude/agents"))
   (subpath (string-append (param "HOME_DIR") "/.claude/skills"))
   (subpath (string-append (param "HOME_DIR") "/.claude/plugins"))
-  (literal (string-append (param "HOME_DIR") "/.claude/CLAUDE.md"))
-  (literal (string-append (param "HOME_DIR") "/.claude/keybindings.json"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/rules"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/output-styles"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/agent-memory"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/workflows"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/routines"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/dev-mods"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/cowork_plugins"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/chrome"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/local"))
+  (subpath (string-append (param "HOME_DIR") "/.claude/downloads"))
+  (regex (string-append "^" (param "HOME_DIR") "/\\.claude/projects/[^/]+/memory(/|$)"))
+  ;; Codex (~/.codex, CODEX_HOME)
   (literal (string-append (param "HOME_DIR") "/.codex"))
-  (literal (string-append (param "HOME_DIR") "/.codex/config.toml"))
-  (regex (string-append "^" (param "HOME_DIR") "/\\.codex/[^/]+\\.config\\.toml$"))
+  (literal (string-append (param "HOME_DIR") "/.codex/.env"))
+  (literal (string-append (param "HOME_DIR") "/.codex/hooks.json"))
+  (regex (string-append "^" (param "HOME_DIR") "/\\.codex/[^/]+\\.(toml|md|sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl)$"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/hooks"))
   (subpath (string-append (param "HOME_DIR") "/.codex/rules"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/agents"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/prompts"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/skills"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/plugins"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/memories"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/automations"))
+  (subpath (string-append (param "HOME_DIR") "/.codex/computer-use"))
   (subpath (string-append (param "HOME_DIR") "/.codex/packages"))
+  ;; Claude Code's native install
   (literal (string-append (param "HOME_DIR") "/.local/share/claude"))
   (subpath (string-append (param "HOME_DIR") "/.local/share/claude/versions")))
+;; A project's folder under ~/.claude/projects holds its transcripts (writable)
+;; and its auto memory (denied above). Keep an existing folder from being moved
+;; away and replaced, and a new one from being a symlink to a writable copy.
+(deny file-write-unlink
+  (regex (string-append "^" (param "HOME_DIR") "/\\.claude/projects/[^/]+$")))
+(deny file-write-create
+  (require-all
+    (regex (string-append "^" (param "HOME_DIR") "/\\.claude/projects/[^/]+$"))
+    (vnode-type SYMLINK)))
 
 ;; --- Network ---
 ;; See strict.sb for why Seatbelt cannot enforce per-hostname allowlists.

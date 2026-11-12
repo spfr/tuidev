@@ -52,11 +52,11 @@ Report the commands you ran and their results. If you couldn't run something, sa
 
 ## Environment (tuidev)
 
-- **Sandbox:** you usually run under your CLI's own native sandbox now (Claude Code's `sandbox.enabled`, Codex's `sandbox_mode = "workspace-write"`), not a wrapper. You can write only to this project, `/tmp` and your CLI's own state dirs. Credential stores (`~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.npmrc`, the Keychain, and others) are denied. Don't read or write secrets there. `sbx` (macOS Seatbelt) is also available as a general-purpose wrapper for anything else.
+- **Sandbox:** you usually run under your CLI's own native sandbox now (Claude Code's `sandbox.enabled`, Codex's `sandbox_mode = "workspace-write"`), not a wrapper. You can write only to this project, `/tmp` and your CLI's own state dirs, and not to the settings, hooks, instructions, rules, memory or agents a later session loads from them. Credential stores (`~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.npmrc`, the Keychain, and others) are denied. Don't read or write secrets there. `sbx` (macOS Seatbelt) is also available as a general-purpose wrapper for anything else.
 - **Network:** outbound TCP 443 and DNS only. If a package install needs more, ask the human to run it with `sbx --profile standard -- <cmd>`. `gh` doesn't work inside the sandbox, so ask the human.
 - **Long-running processes** (dev servers, watchers, test loops) go in a tmux pane, where they survive disconnects. A backgrounded `&` job dies with your session.
 - **Parallel work:** use your own git worktree. For Claude Code, `claude -w NAME` or `isolation: worktree`; with any other CLI, `git worktree add` by hand. Never share a dirty index with another agent.
-- **Scriptable tools to use:** `rg`, `fd`, `jq`, `yq`, `git`, `gh`, `delta`, `hyperfine`. The TUIs (`lazygit`, `btm`, `lazydocker`, `fzf`, `atuin`) are for the human. Don't drive them.
+- **Scriptable tools to use:** `rg`, `fd`, `jq`, `yq`, `git`, `gh`, `delta`, `hyperfine`. The TUIs (`lazygit`, `btm`, `fzf`, `atuin`) are for the human. Don't drive them.
 - **Herdr:** if `HERDR_ENV=1`, you are in a Herdr pane. Use `herdr agent list` / `herdr status`, never the TUI, and don't launch `herdr` again.
 - **Node** comes from fnm and switches per `.nvmrc` / `.node-version` on `cd`. Don't edit `PATH` for it.
 

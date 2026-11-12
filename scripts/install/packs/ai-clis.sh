@@ -53,6 +53,22 @@ _ai_clis_install_configs() {
             --shipped-name settings --merge-json
     fi
 
+    # The shipped settings fail closed (sandbox.failIfUnavailable): where the
+    # sandbox cannot start, Claude Code exits instead of running commands
+    # unsandboxed. On Linux the sandbox is bubblewrap plus socat, so say so now
+    # rather than at the first `claude`.
+    if is_linux; then
+        local dep missing=""
+        for dep in bwrap socat; do
+            command_exists "$dep" || missing="$missing $dep"
+        done
+        if [[ -n "$missing" ]]; then
+            print_warning "Claude Code's sandbox needs:$missing. Until they are installed, claude will refuse to start."
+            print_info "    Debian/Ubuntu: sudo apt-get install bubblewrap socat   Fedora: sudo dnf install bubblewrap socat   Arch: sudo pacman -S bubblewrap socat"
+            print_info "    To run unsandboxed instead (not recommended): set sandbox.failIfUnavailable to false in ~/.claude/settings.json"
+        fi
+    fi
+
     if [[ -f "$REPO_ROOT/configs/codex/config.toml" ]]; then
         [[ "${DRY_RUN:-false}" == true ]] || mkdir -p "$HOME/.codex"
         install_config "$HOME/.codex/config.toml" \
