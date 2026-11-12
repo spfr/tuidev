@@ -119,7 +119,7 @@ test-all: ## Run all tags including ui
 	@./scripts/test_suite.sh --all
 
 test-lib: ## Run the scripts/lib unit-test harnesses
-	@for t in scripts/lib/test_*.sh; do bash "$$t" || exit 1; done
+	@./scripts/test_lib.sh
 
 check: ## Health check for the active profile
 	@./scripts/health_check.sh
@@ -145,7 +145,7 @@ SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
 
 lint: ## Shellcheck every shell script (install, scripts, libs, packs, migrations, sbx)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found. brew install shellcheck"; exit 1; }
-	@shellcheck -x $(SHELL_FILES)
+	@printf '%s\n' $(SHELL_FILES) | xargs -P "$$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" -n 6 shellcheck -x
 	@echo -e "${GREEN}shellcheck clean${NC}"
 
 validate-configs: ## Validate JSON, TOML, Lua and shell config syntax
