@@ -121,7 +121,7 @@ jobs:
           echo "✓ sbx executes"
       # Stock macOS bash is 3.2; every script must run under it.
       - name: lib tests under /bin/bash 3.2
-        run: for t in scripts/lib/test_*.sh; do /bin/bash "$t" || exit 1; done
+        run: TUIDEV_TEST_BASH=/bin/bash /bin/bash scripts/test_lib.sh
       - name: install dry-run (desktop)
         run: |
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
@@ -144,7 +144,7 @@ jobs:
       - name: install tmux
         run: sudo apt-get update && sudo apt-get install -y tmux
       - name: scripts/lib harnesses
-        run: for t in scripts/lib/test_*.sh; do echo "::group::$t"; bash "$t" || exit 1; echo "::endgroup::"; done
+        run: ./scripts/test_lib.sh
       # Debian's awk refuses programs gawk takes, so the runner's awk isn't enough.
       - name: the agents views under mawk
         run: |

@@ -8,11 +8,22 @@
 # run reads the same as a serial one. Exit 1 if any failed; the failures are
 # named last, slowest harnesses with their times before them.
 # TUIDEV_TEST_JOBS (or -j) sets the number at once; 1 is the old serial run.
+# TUIDEV_TEST_BASH is the bash that runs each harness (CI: /bin/bash, 3.2).
 
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
+
+# --one FILE OUTDIR: one harness (how this script runs each of them): its
+# output, exit code and seconds go to files named after it.
+if [[ "${1:-}" == --one ]]; then
+    name="$(basename "$2" .sh)"; start="$(date +%s)"; rc=0
+    "${TUIDEV_TEST_BASH:-bash}" "$2" > "$3/$name.log" 2>&1 || rc=$?
+    printf '%s\n' "$rc" > "$3/$name.rc"
+    printf '%s\n' "$(( $(date +%s) - start ))" > "$3/$name.secs"
+    exit 0
+fi
 
 jobs="${TUIDEV_TEST_JOBS:-}"
 if [[ "${1:-}" == -j ]]; then jobs="${2:-}"; shift 2; fi
@@ -26,20 +37,8 @@ if (( $# > 0 )); then files=("$@"); else files=(scripts/lib/test_*.sh); fi
 out="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test-lib.XXXXXX")" || exit 1
 trap 'rm -rf "$out"' EXIT
 
-# One harness: its output, exit code and seconds go to files named after it.
-run_one() {
-    local f="$1" out="$2" name start rc=0
-    name="$(basename "$f" .sh)"
-    start="$(date +%s)"
-    bash "$f" > "$out/$name.log" 2>&1 || rc=$?
-    printf '%s\n' "$rc" > "$out/$name.rc"
-    printf '%s\n' "$(( $(date +%s) - start ))" > "$out/$name.secs"
-}
-export -f run_one
-
 began="$(date +%s)"
-# shellcheck disable=SC2016  # expanded by the inner bash, not here
-printf '%s\n' "${files[@]}" | xargs -P "$jobs" -I{} bash -c 'run_one "$1" "$2"' _ {} "$out"
+printf '%s\n' "${files[@]}" | xargs -P "$jobs" -I{} "$BASH" "$ROOT/scripts/test_lib.sh" --one {} "$out"
 
 failed=()
 for f in "${files[@]}"; do

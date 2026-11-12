@@ -10,7 +10,7 @@
 # object for an agent planning a cleanup; disk_apply prints a plan, then asks
 # before each of the tools' own cleanup commands, and logs what it ran.
 #
-# Safety, enforced here (and tested in test_disk.sh). The rule when in doubt
+# Safety, enforced here (and tested in test_disk.sh and test_disk_fix.sh). The rule when in doubt
 # is to offer nothing: an item that cannot be shown safe is report-only.
 #   - Reading writes nothing under $HOME: no tool that writes when asked is
 #     run (go, pnpm, fnm), npm runs with its debug log off, uv with
