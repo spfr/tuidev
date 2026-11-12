@@ -276,7 +276,7 @@ printf 'Filename Type Size Used Priority\n' > "$PERF_PROC/swaps"
 printf '# PRUNENAMES=".git .bzr .hg .svn"\n' > "$PERF_ETC/updatedb.conf"
 echo 270240 > "$tmp/state/indexed.store"
 audit
-[[ "$out" == *"inotify: 128 instances and 65536 watches"* && "$out" == *"sysctl.d/60-inotify.conf"* ]] || fail "inotify not flagged: $out"
+[[ "$out" == *"inotify: 128 instances and 65536 watches"* && "$out" == *"sysctl.d/zz-tuidev-inotify.conf"* ]] || fail "inotify not flagged: $out"
 [[ "$out" == *"⚠ No swap"* ]] || fail "missing swap not flagged: $out"
 [[ "$out" == *"ℹ locate: the nightly updatedb walks node_modules"* ]] || fail "updatedb not noted: $out"
 [[ "$out" != *"Spotlight"* && "$out" != *"Time Machine"* ]] || fail "a macOS check ran on Linux: $out"

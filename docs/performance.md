@@ -35,7 +35,7 @@ The same report closes every install, `make update-check` and `make update-all` 
 | `core.untrackedCache`, and a global `core.fsmonitor` | Sets the first, recorded for uninstall | Prints the command for the second | `git config --global --unset core.untrackedCache` |
 | The open-files limit in your shell | The shipped `.zshrc` raises it | Points at `update.sh --configs` | Delete the `ulimit` line |
 | Low Power Mode on the charger; repos in iCloud-synced folders; a store on another volume | | Says what to change | The same setting, back |
-| Linux: inotify limits, swap, `updatedb` | | Prints the drop-in or the line, for you to run with `sudo` | `sudo rm /etc/sysctl.d/60-inotify.conf && sudo sysctl --system` |
+| Linux: inotify limits, swap, `updatedb` | | Prints the drop-in or the line, for you to run with `sudo` | `sudo rm /etc/sysctl.d/zz-tuidev-inotify.conf && sudo sysctl --system` |
 | Measured, macOS: CPU since boot of `mds`, `mds_stores`, `mdworker*`, `fseventsd`, `syspolicyd`, `XprotectService`, `logd` and endpoint agents (`ps -Ao time,comm` over `kern.boottime`); memory pressure and swap (`sysctl`); local Time Machine snapshots | | Warns from 15% of one core averaged since boot (after the first hour), on pressure `warn` or `critical`; notes swap past a quarter of RAM | Nothing to undo: it only reads |
 | Measured, both: free space on your home's volume (`df -Pk`); a corporate endpoint agent (CrowdStrike, Sophos, SentinelOne, Jamf Protect, Defender) | | Warns below 10% free and points at `make disk`; for an endpoint agent, ask IT for exclusions, never turn it off | Nothing to undo |
 | Measured, Linux: load over 5 minutes against cores, swap in use, a `/tmp` in RAM (tmpfs) | | Warns when load exceeds the cores | Nothing to undo |
@@ -280,7 +280,7 @@ Most of this is for the box that stays on. Every `/etc` change needs root; undo 
 Every watcher (a dev server, tsserver, a test runner in watch mode) takes inotify instances and watches from one per-user budget. The defaults are 128 instances and a watch count scaled to RAM (8,192 to 1,048,576, [kernel source](https://github.com/torvalds/linux/blob/master/fs/notify/inotify/inotify_user.c)). Several agents in several worktrees hit the 128 instances first; the symptom is `ENOSPC` or a watcher that falls back to polling, which burns CPU.
 
 ```ini
-# /etc/sysctl.d/60-inotify.conf
+# /etc/sysctl.d/zz-tuidev-inotify.conf
 fs.inotify.max_user_instances = 1024
 fs.inotify.max_user_watches = 524288     # 262144 on an 8 GB machine
 ```

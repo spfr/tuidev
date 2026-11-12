@@ -592,10 +592,16 @@ _perf_check_inotify() {
     # file (or a large machine's default) already raised.
     (( ${inst:-0} < 1024 )) && lines="fs.inotify.max_user_instances = 1024\\n"
     (( ${watches:-0} < want_watches )) && lines="${lines}fs.inotify.max_user_watches = 524288\\n"
+    # sysctl applies drop-ins in name order and the last one wins, so the file
+    # is named to sort after every NN-name.conf; any that set these keys today
+    # are named, since one of them is where the low value comes from.
+    local f="$PERF_ETC/sysctl.d/zz-tuidev-inotify.conf" setters=""
     if [[ -n "$lines" ]]; then
-        _perf_add warn "inotify: $inst instances and $watches watches per user; watchers in several worktrees run out" \
-            "printf '$lines' | sudo tee $PERF_ETC/sysctl.d/60-inotify.conf && sudo sysctl --system" \
-            "" "" "sudo rm $PERF_ETC/sysctl.d/60-inotify.conf && sudo sysctl --system"
+        setters="$(grep -l '^[[:space:]]*fs\.inotify\.max_user_' "$PERF_ETC"/sysctl.d/*.conf 2>/dev/null \
+            | while IFS= read -r p; do basename "$p"; done | tr '\n' ' ')" || true
+        _perf_add warn "inotify: $inst instances and $watches watches per user; watchers in several worktrees run out${setters:+ (set today by: ${setters% })}" \
+            "printf '$lines' | sudo tee $f && sudo sysctl --system" \
+            "" "" "sudo rm $f && sudo sysctl --system"
     else
         _perf_add ok "inotify: $inst instances, $watches watches"
     fi
