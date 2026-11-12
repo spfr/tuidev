@@ -256,8 +256,14 @@ if command -v btm &>/dev/null; then
   function top { if [[ -t 1 ]]; then btm "$@"; else command top "$@"; fi; }   # bottom, for a person
 fi
 
-# Markdown viewer
-command -v glow &>/dev/null && alias md='glow'
+# Markdown viewer. glow wraps at 80 columns whatever the pane; at a terminal
+# it gets the pane's width (your own -w, given after, still wins).
+if (( $+commands[glow] )); then
+  function glow {
+    if [[ -t 1 ]]; then command glow -w "${COLUMNS:-80}" "$@"; else command glow "$@"; fi
+  }
+  alias md='glow'
+fi
 
 # Utility
 alias reload='source ~/.zshrc'
