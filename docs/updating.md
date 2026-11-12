@@ -65,7 +65,7 @@ in `$HOME`. That is what migrations are for.
 make update-check                 # lists pending migrations, runs nothing
 ./scripts/update.sh --migrations  # runs them
 ./scripts/update.sh --configs     # runs pending migrations first, then configs
-./scripts/update.sh --all         # packages, then migrations + configs, then repo
+./scripts/update.sh --all         # pull the repo, then packages, migrations + configs (a pull that brings a new tuidev continues with it)
 ```
 
 Each migration is a script in `scripts/migrations/`, named
@@ -175,7 +175,7 @@ you to review.
 make update-check          # preview: packages, migrations, drift, repo, performance
 make update-packages       # upgrade the packages of your active packs only
 make update-configs        # migrations, then re-apply managed blocks + pack configs
-make update-all            # non-interactive packages + configs + repo
+make update-all            # non-interactive: repo first, then packages + configs
 make update-security       # audit Tailscale, SSH permissions, Seatbelt profile drift
 make perf                  # performance audit: Spotlight, Time Machine, limits, git
 make perf-fix              # the same, then offer each fix that needs no root

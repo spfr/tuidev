@@ -97,6 +97,8 @@ Options:
 EOF
 }
 
+ORIG_ARGS=("$@")   # --all re-runs itself with these after a pull
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --check|-c)         set_mode check; shift ;;
@@ -937,7 +939,18 @@ run_repo_mode() {
     if [[ "$MODE" == "check" ]]; then
         _report_repo_status "$target"
     else
+        local before after
+        before="$(git -C "$target" rev-parse HEAD 2>/dev/null)" || true
         run_cmd git -C "$target" pull --ff-only || print_warning "Fast-forward failed — manual intervention needed"
+        after="$(git -C "$target" rev-parse HEAD 2>/dev/null)" || true
+        # --all pulls first, and a pull that brought new code hands over to it:
+        # the migrations and configs applied next must be the ones just pulled,
+        # not the ones this (older) process loaded. Once only.
+        if [[ "$MODE" == all && -n "$after" && "$before" != "$after" && -z "${TUIDEV_UPDATE_REEXEC:-}" \
+              && -x "$target/scripts/update.sh" ]]; then
+            print_info "tuidev updated (${before:0:7} → ${after:0:7}): continuing with the new version"
+            TUIDEV_UPDATE_REEXEC=1 exec "$target/scripts/update.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+        fi
     fi
 
     print_section "git clean --dry-run (untracked / ignored)"
@@ -1092,10 +1105,10 @@ run_mode() {
         security)      run_security_mode ;;
         perf)          run_perf_mode ;;
         all)
+            run_repo_mode          # first: what follows must come from the pulled code
             run_packages_mode
             run_migrations_mode
             run_configs_mode
-            run_repo_mode
             run_perf_mode report
             ;;
         *) print_error "Unhandled mode: $MODE"; exit 2 ;;

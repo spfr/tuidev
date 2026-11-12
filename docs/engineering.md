@@ -45,7 +45,8 @@ scripts/lib/            shared libraries + test_*.sh unit harnesses
 scripts/install/        built-in packs (core remote sandbox ui extras); packs/ = optional packs (includes nvim.sh, tmux.sh)
 scripts/migrations/     timestamped one-shot fixups
 scripts/*.sh            update, health_check, test_suite, theme, validate_configs,
-                        check_links, check_paths, container, notify, fix_completions, screenshots
+                        check_links, check_paths, container, notify, fix_completions, screenshots,
+                        perf, render_menu
 templates/              AGENTS_TEMPLATE.md for downstream projects
 docs/assets/            README images; tapes/ holds their VHS sources and demo fixtures
 ```

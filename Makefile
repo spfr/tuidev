@@ -17,7 +17,6 @@
         container-runtime container-build container-test container-clean \
         docker-build docker-test docker-clean \
         brew-upgrade ci-test \
-        quick-lazygit quick-sysinfo \
         theme theme-list screenshots
 
 .DEFAULT_GOAL := help
@@ -208,16 +207,6 @@ container-clean: ## Remove the test image
 docker-build: container-build
 docker-test: container-test
 docker-clean: container-clean
-
-# ----------------------------------------------------------------------------
-# Quick launchers
-# ----------------------------------------------------------------------------
-
-quick-lazygit: ## Launch lazygit
-	@command -v lazygit >/dev/null 2>&1 && lazygit || echo "lazygit not installed"
-
-quick-sysinfo: ## Show system info
-	@uname -a
 
 theme-list: ## List available color themes
 	@./scripts/theme.sh list

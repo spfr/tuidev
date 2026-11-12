@@ -65,8 +65,8 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 
 | Role | Tools | Rule |
 |------|-------|------|
-| **Both** | `rg`, `fd`, `jq`, `yq`, `git`, `gh`, `shellcheck`, `uv`, `hyperfine`, `sd`, `tokei`, `xh` | Scriptable, stable flags, quiet output. Agents call them by their own names. |
-| **Yours** | `bat`, `eza`, `fzf`, `zoxide`, `delta`, `atuin`, `lazygit`, `btm`, `lazydocker`, `broot`, `glow`, Starship | Interactive or decorative. They never stand between an agent and the command it typed. |
+| **Both** | `rg`, `fd`, `jq`, `yq`, `git`, `gh`, `shellcheck`, `uv`, `hyperfine` | Scriptable, stable flags, quiet output. Agents call them by their own names. |
+| **Yours** | `bat`, `eza`, `fzf`, `zoxide`, `delta`, `atuin`, `lazygit`, `btm`, `lazydocker`, `broot`, `glow`, `sd`, `tokei`, `xh`, Starship | Interactive or decorative. They never stand between an agent and the command it typed. |
 | **About agents** | `agents`, Herdr, `sbx`, `mcp-lazy`, `notify.sh`, `hunk` | They watch, confine or review what agents do. |
 
 ## The tools
@@ -99,9 +99,9 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 |------|-----------|----------------|----------------|
 | [jq](https://jqlang.org), [yq](https://github.com/mikefarah/yq) | `grep` and `sed` over JSON and YAML | A query reads the structure, so it does not break when the formatting changes. | Both. `jq` is allowed for agents; `agents json | jq` is how other tools read agent state. |
 | [shellcheck](https://www.shellcheck.net) | finding the bug at run time | Catches unquoted variables, wrong tests and unportable syntax in shell scripts. Agents write a lot of shell. | Both; allowed for agents. |
-| [xh](https://github.com/ducaale/xh) (extras) | `curl` with flags | `xh :3000/health` prints formatted, colored JSON. | Both. |
+| [xh](https://github.com/ducaale/xh) (extras) | `curl` with flags | `xh :3000/health` prints formatted, colored JSON. | Yours. Agents keep to `curl`. |
 | [hyperfine](https://github.com/sharkdp/hyperfine) (extras) | `time`, once | Runs a command many times, with warm-up, and reports the spread. "Is it faster?" gets a number. | Both: `bench CMD`. |
-| [sd](https://github.com/chmln/sd), [procs](https://github.com/dalance/procs), [tokei](https://github.com/XAMPPRocky/tokei), [tealdeer](https://github.com/tealdeer-rs/tealdeer), [glow](https://github.com/charmbracelet/glow) (extras) | `sed`, `ps`, `cloc`, `man`, a Markdown preview | Simpler syntax and faster answers. | `sd` and `tokei` suit agents; the rest are yours (`help CMD`, `md FILE`, `loc`). |
+| [sd](https://github.com/chmln/sd), [procs](https://github.com/dalance/procs), [tokei](https://github.com/XAMPPRocky/tokei), [tealdeer](https://github.com/tealdeer-rs/tealdeer), [glow](https://github.com/charmbracelet/glow) (extras) | `sed`, `ps`, `cloc`, `man`, a Markdown preview | Simpler syntax and faster answers. | Yours (`help CMD`, `md FILE`, `loc`). `sd` and `tokei` are scriptable, but agents keep to `sed` and `wc`. |
 
 ### Languages
 

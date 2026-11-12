@@ -607,7 +607,9 @@ bindkey '^[[3~' delete-char
 # can outlive its shell's cleanup, so the default alias follows it as a
 # fallback: when the link is gone, `node` is still the default version.
 if (( $+commands[fnm] )); then
-  eval "$(fnm env --use-on-cd)"
+  # --shell zsh: fnm otherwise infers the shell from its parent processes, and
+  # fails ("can't infer your shell") under launchd, a sandbox or an agent's shell.
+  eval "$(fnm env --use-on-cd --shell zsh)"
   if [[ -n "$FNM_DIR" && -d "$FNM_DIR/aliases/default/bin" ]]; then
     _fnm_i=${path[(i)$FNM_MULTISHELL_PATH/bin]}
     path[_fnm_i+1,_fnm_i]=("$FNM_DIR/aliases/default/bin")
