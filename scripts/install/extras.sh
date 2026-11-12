@@ -26,13 +26,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXTRAS_FORMULAE=(
     atuin
     broot
-    duf
     dust
     glow
     hyperfine
     lazygit
     procs
-    sd
     tealdeer
     tokei
     uv

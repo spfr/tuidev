@@ -338,6 +338,7 @@ pack_probe() {
         herdr)              echo "have_cmd herdr" ;;
         fnm)                echo "have_cmd fnm" ;;
         hunk)               echo "have_cmd hunk" ;;
+        ci)                 echo "have_cmd actionlint && have_cmd zizmor && have_cmd betterleaks" ;;
         ai-clis)            echo "have_cmd claude || have_cmd codex" ;;
         orchestration)      echo "[[ -f \"\$HOME/.claude/rules/tuidev-orchestration.md\" ]]" ;;
         nvim)               echo "have_cmd nvim" ;;

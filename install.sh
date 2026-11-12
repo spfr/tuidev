@@ -15,7 +15,7 @@
 #   desktop   → core + ui + sandbox          (macOS laptop/desktop default)
 #   remote    → core + remote + sandbox + --pack tmux   (headless/Tailscale node)
 #   full      → desktop + extras + the agent packs: ai-clis orchestration
-#               monitoring cooling herdr tmux release-age
+#               monitoring cooling herdr tmux release-age ci
 #               (the whole setup on a Mac)
 #
 # Packs (compose your own):
@@ -30,7 +30,8 @@
 #                configs, native sandboxes on), orchestration, nvim
 #                (Neovim + LazyVim), vim (plain Vim, zero-plugin vimrc), tmux
 #                (durable sessions + TPM), herdr, sandbox-container,
-#                fnm, hunk, monitoring, cooling (Apple Silicon fan control)
+#                fnm, hunk, ci (actionlint, zizmor, betterleaks), monitoring, cooling
+#                (Apple Silicon fan control)
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files

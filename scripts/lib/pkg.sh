@@ -69,6 +69,9 @@ pkg_manual_hint() {
         neovim)    echo "https://github.com/neovim/neovim/blob/master/INSTALL.md" ;;
         mosh)      echo "https://mosh.org/#getting" ;;
         hunk)      echo "https://github.com/modem-dev/hunk#install" ;;
+        actionlint) echo "https://github.com/rhysd/actionlint/blob/main/docs/install.md" ;;
+        zizmor)    echo "https://docs.zizmor.sh/installation/" ;;
+        betterleaks) echo "https://github.com/betterleaks/betterleaks#install" ;;
         uv)        echo "https://docs.astral.sh/uv/getting-started/installation/" ;;
         xh)        echo "https://github.com/ducaale/xh#installation" ;;
         podman)    echo "https://podman.io/docs/installation" ;;

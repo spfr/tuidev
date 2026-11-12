@@ -2,7 +2,7 @@
 #
 # Optional pack: monitoring
 #
-# Installs container and system monitoring TUIs (lazydocker, bottom) and
+# Installs container and system monitoring TUIs (bottom) and
 # `agents`, a command that shows and controls agentic-coding processes
 # (sessions, orphaned MCP servers, CPU hogs, keep-awake, thermal pressure),
 # with mcp-lazy, which `agents mcp lazy` puts in front of an MCP server so a
@@ -27,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # terminal-notifier makes notify.sh's banners clickable (a click jumps to the
 # session); it is macOS-only, so pkg_install skips it on Linux (pkg.sh).
-MONITORING_FORMULAE=(lazydocker bottom terminal-notifier)
+MONITORING_FORMULAE=(bottom terminal-notifier)
 MONITORING_CASKS=(swiftbar)   # macOS only; casks are Homebrew-on-macOS
 
 MONITORING_REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -165,7 +165,6 @@ monitoring_install() {
     fi
 
     print_info "bottom installs as 'btm' on your PATH."
-    print_info "lazydocker requires a running Docker (or Podman) daemon."
     print_info "agents: run 'agents' (or 'agents watch'); 'agents --help' lists kill, reap and awake."
     print_info "agents mcp lists your MCP servers; 'agents mcp lazy NAME' starts one on its first tool call instead of with every session."
 

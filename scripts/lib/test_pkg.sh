@@ -179,7 +179,7 @@ got="$(pack_array core formulae | tr '\n' ' ')"
 [[ "$got" == *" ripgrep "* && "$got" == *" git-delta "* ]] || fail "core formulae: $got"
 [[ "$(pack_array core casks)" == ghostty ]] || fail "core casks"
 [[ "$(pack_array sandbox-container formulae)" == podman ]] || fail "hyphenated pack array"
-[[ "$(pack_array monitoring formulae | tr '\n' ' ')" == "lazydocker bottom terminal-notifier " ]] \
+[[ "$(pack_array monitoring formulae | tr '\n' ' ')" == "bottom terminal-notifier " ]] \
     || fail "monitoring formulae (the macOS-only one included, on any OS): $(pack_array monitoring formulae)"
 [[ -z "$(pack_array ai-clis formulae)" ]] || fail "a config-only pack should declare nothing"
 [[ -z "$(pack_array no-such-pack formulae)" ]] || fail "unknown pack should print nothing"
