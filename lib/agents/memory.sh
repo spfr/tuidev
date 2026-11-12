@@ -1,9 +1,10 @@
 # shellcheck shell=bash
 # lib/agents/memory.sh — what holds the memory, and the guard against runaways.
 #
-# Owns: each process's footprint (macOS's top MEM, which keeps counting the
-#   pages the compressor squeezes and swap takes: ps's RSS falls while a
-#   runaway grows), the machine's memory (total, free %, pressure, swap), the
+# Owns: each process's footprint (macOS's phys_footprint, top's MEM, read
+#   with footprint or top: it keeps counting the pages the compressor
+#   squeezes and swap takes, while ps's RSS falls as a runaway grows), the
+#   machine's memory (total, free %, pressure, swap), the
 #   memory guard (`agents mem guard`: warn about, record and stop a runaway
 #   in an agent tree before macOS runs out of application memory), its
 #   state and its incident log, memory.tsv.
@@ -44,15 +45,55 @@ _agents_mem_parse_top() {
         $1 == "PID" { f = 1 }'
 }
 
-# _agents_mem_fp PID... — "pid<TAB>footprint_kib" for each that top reports;
-# nothing off macOS (RSS is the footprint there). One top sample costs about
-# a third of a second of CPU, however many pids: the guard asks only about
-# its few candidates.
+# _agents_mem_footprint PID... — macOS footprint's totals for those pids (the
+# tests replace it).
+_agents_mem_footprint() { LC_ALL=C footprint --noCategories -f bytes "$@" 2>/dev/null; }
+
+# _agents_mem_parse_footprint < footprint output — "pid<TAB>kib" for each
+# process's phys_footprint (what top's MEM shows), from `footprint
+# --noCategories -f bytes`: a "NAME [PID]: 64-bit  Footprint: …" header, then
+# "phys_footprint: BYTES B".
+_agents_mem_parse_footprint() {
+    LC_ALL=C awk '
+        /\]: [0-9]+-bit / { s = $0; sub(/\]: [0-9]+-bit .*/, "", s); sub(/.*\[/, "", s); p = (s ~ /^[0-9]+$/) ? s : "" }
+        p != "" && $1 == "phys_footprint:" && $2 ~ /^[0-9]+$/ { printf "%d\t%d\n", p, $2 / 1024; p = "" }'
+}
+
+# _agents_mem_fp PID... — "pid<TAB>footprint_kib" for each it can read;
+# nothing off macOS (RSS is the footprint there). footprint reads your own
+# processes for 20 to 90 ms of CPU each; top, for the rest (other users'),
+# samples every process whatever it is asked, about half a second.
 _agents_mem_fp() {
     [[ "$OSTYPE" == darwin* && $# -gt 0 ]] || return 0
-    local a=() p
-    for p in "$@"; do a+=(-pid "$p"); done
-    _agents_mem_top -stats pid,mem "${a[@]}" | _agents_mem_parse_top
+    local a=() p got
+    got="$(_agents_mem_footprint "$@" | _agents_mem_parse_footprint)"
+    [[ -z "$got" ]] || printf '%s\n' "$got"
+    for p in "$@"; do [[ $'\n'"$got" == *$'\n'"$p"$'\t'* ]] || a+=(-pid "$p"); done
+    [[ ${#a[@]} -eq 0 ]] || _agents_mem_top -stats pid,mem "${a[@]}" | _agents_mem_parse_top
+}
+
+# _agents_mem_measured — true where a footprint is not RSS and costs a sample
+# (macOS); elsewhere every look is RSS, for free. The tests replace it.
+_agents_mem_measured() { [[ "$OSTYPE" == darwin* ]]; }
+
+# _AGENTS_MEM_RECHECK — seconds before the guard samples again a candidate it
+# could never stop (an app, an agent itself, another user's process) whose RSS
+# has not moved.
+_AGENTS_MEM_RECHECK=300
+
+# _agents_mem_hot PID UID ROOT — true for a process the guard could stop: in
+# an agent tree, below the agent, yours.
+_agents_mem_hot() { [[ "$3" != - && "$3" != "$1" && "$2" == "$AGENTS_UID" ]]; }
+
+# _agents_mem_stale RSS — true when the caller's candidate (its ts and srss
+# from _agents_mem_state_get, and now) needs a new sample: never sampled, the
+# last sample older than _AGENTS_MEM_RECHECK, or its RSS moved by an eighth
+# (at least 512 MB) since.
+_agents_mem_stale() {
+    local d=$(($1 - srss)) m=$((srss / 8))
+    [[ $d -ge 0 ]] || d=$((-d))
+    [[ $m -ge 524288 ]] || m=524288
+    [[ $ts -eq 0 || $((now - ts)) -ge $_AGENTS_MEM_RECHECK || $d -ge $m ]]
 }
 
 # _agents_mem_total — the RAM in KiB (it never changes: cached in the run dir).
@@ -194,14 +235,17 @@ _agents_mem_say() {
     AGENTS_NOTIFY=true _agents_notify "$1" "$target" memory
 }
 
-# _agents_mem_state_get TOKEN — set the caller's step, last, ts and grew from
-# the guard's state (_AGENTS_MEM_STATE: "TOKEN step last_kib ts grew" lines).
+# _agents_mem_state_get TOKEN — set the caller's step, last, ts, grew and srss
+# from the guard's state (_AGENTS_MEM_STATE: "TOKEN step last_kib ts grew
+# srss_kib" lines; last and ts are the last sample's footprint and time, srss
+# the RSS then; 0 for anything unknown).
 _agents_mem_state_get() {
-    local t s l w g
-    step=0 last=0 ts=0 grew=0
-    while read -r t s l w g; do
+    local t s l w g r
+    step=0 last=0 ts=0 grew=0 srss=0
+    while read -r t s l w g r; do
         [[ "$t" == "$1" ]] || continue
         step="$s" last="$l" ts="$w" grew="$g"
+        [[ "$r" =~ ^[0-9]+$ ]] && srss="$r"
         return 0
     done <<<"${_AGENTS_MEM_STATE:-}"
 }
@@ -216,12 +260,17 @@ _agents_mem_step() {
 }
 
 # agents_mem_tick — one look by the memory guard (AGENTS_MEM_GUARD; `agents
-# mem check` runs one and prints what it decided). One ps; top only for the
-# few processes past half the warning (or the largest few while memory
-# pressure is up), never for the rest. Per process, by footprint (or RSS
-# when larger): in an agent tree, below its agent, yours, past the stop size
-# (or the largest such past the warning while pressure is critical), it is
-# stopped, tree and all, the usual way (SIGTERM, then SIGKILL after
+# mem check` runs one and prints what it decided). One ps; a footprint sample
+# (_agents_mem_fp) only for the few processes past half the warning (or the
+# largest few while memory pressure is up), never for the rest, and of those
+# only: each one the guard could stop, every look; any other once, then again
+# when its RSS moves (_agents_mem_stale) or after _AGENTS_MEM_RECHECK seconds;
+# all of them while memory pressure is warn or critical, or free memory falls
+# faster than AGENTS_MEM_RATE. One not sampled keeps its last footprint (or
+# its RSS, when larger). Per process, by footprint (or RSS when larger): in
+# an agent tree, below its agent, yours, past the stop size (or the largest
+# such past the warning while pressure is critical), it is stopped, tree and
+# all, the usual way (SIGTERM, then SIGKILL after
 # AGENTS_GRACE); past the warning, or a doubling of it, a warning; growing
 # faster than AGENTS_MEM_RATE MB/s, one warning. An agent itself is never
 # stopped, only warned about. Each is recorded (memory.tsv, a stop in
@@ -229,9 +278,9 @@ _agents_mem_step() {
 # level turning critical is recorded with the biggest process. With
 # AGENTS_DRY_RUN=true it only says what it would stop.
 agents_mem_tick() {
-    local total free level su stot warn stopkib screen floor snap cands fps now
-    local pid start rss uid name label root rkind fp f v tok step last ts grew rate news="" prev="" first=""
-    local what proj session msg stopped="" dry="${AGENTS_DRY_RUN:-false}"
+    local total free level su stot warn stopkib screen floor snap cands fps="" now
+    local pid start rss uid name label root rkind fp f v tok step last ts grew srss rate news="" prev="" first=""
+    local what proj session msg stopped="" dry="${AGENTS_DRY_RUN:-false}" meas=0 busy=0 want=" " pf pts seen
     [[ "$AGENTS_MEM_GUARD" != off ]] || { echo "the memory guard is off (AGENTS_MEM_GUARD=off)"; return 0; }
     _agents_now now
     IFS=$'\t' read -r total free level su stot <<<"$(agents_mem_machine)"
@@ -244,20 +293,39 @@ agents_mem_tick() {
         _agents_awk "lib_proc memory" -v self="$AGENTS_SELF" -v screen="$screen" -v floor="$floor" -v max=8)"
     [[ -n "${_AGENTS_MEM_STATE+set}" ]] || _agents_mem_state_load
     prev="${_AGENTS_MEM_LEVEL:--}"
-    if [[ -n "$cands" ]]; then
-        # shellcheck disable=SC2046  # one pid per word
-        fps="$(_agents_mem_fp $(printf '%s\n' "$cands" | cut -f1))"
+    # Which candidates get a footprint sample this look (want: " PID PID ").
+    if [[ -n "$cands" ]] && _agents_mem_measured; then
+        meas=1
+        [[ "$level" == warn || "$level" == critical ]] && busy=1
+        read -r pf pts _ <<<"${_AGENTS_MEM_FREE:-}"
+        if [[ "$free" =~ ^[0-9]+$ && "$pf" =~ ^[0-9]+$ && "$pts" =~ ^[0-9]+$ && $now -gt $pts && $pf -gt $free ]] \
+            && [[ $(((pf - free) * total / 100 / (now - pts))) -ge $((AGENTS_MEM_RATE * 1024)) ]]; then busy=1; fi
+        while IFS=$'\t' read -r pid start rss uid _ _ root _; do
+            [[ "$pid" =~ ^[0-9]+$ ]] || continue
+            _agents_mem_state_get "$pid@$start"
+            if [[ $busy == 1 ]] || _agents_mem_hot "$pid" "$uid" "$root" || _agents_mem_stale "$rss"; then want+="$pid "; fi
+        done <<<"$cands"
+        # shellcheck disable=SC2086  # one pid per word
+        [[ "$want" == " " ]] || fps="$(_agents_mem_fp $want)"
     fi
     while IFS=$'\t' read -r pid start rss uid name label root rkind; do
         [[ "$pid" =~ ^[0-9]+$ ]] || continue
-        fp="$rss"
-        while IFS=$'\t' read -r f v; do [[ "$f" == "$pid" && "$v" -gt "$fp" ]] && fp="$v"; done <<<"${fps:-}"
         tok="$pid@$start"; what="$(_agents_mem_what "$name" "$label")"
         session=-; [[ "$root" == - ]] || session="$rkind:$root"
+        _agents_mem_state_get "$tok"
+        fp="$rss"
+        if [[ $meas == 0 || "$want" == *" $pid "* ]]; then
+            while IFS=$'\t' read -r f v; do [[ "$f" == "$pid" && "$v" -gt "$fp" ]] && fp="$v"; done <<<"$fps"
+            seen="$fp $now" srss="$rss"
+        else
+            # Not sampled: its last footprint stands (RSS falls while a
+            # footprint grows), and so does the last sample, for the growth rate.
+            [[ "$last" -gt "$fp" ]] && fp="$last"
+            seen="$last $ts"
+        fi
         # The biggest one, for a pressure incident.
         [[ -n "$first" ]] || first="$pid"$'\t'"$name"$'\t'"$label"$'\t'"$session"$'\t'"$fp"$'\t'"$rss"
-        _agents_mem_state_get "$tok"
-        if [[ "$AGENTS_MEM_GUARD" == kill && "$root" != - && "$root" != "$pid" && "$uid" == "$AGENTS_UID" ]] \
+        if [[ "$AGENTS_MEM_GUARD" == kill ]] && _agents_mem_hot "$pid" "$uid" "$root" \
             && { [[ $fp -ge $stopkib ]] || { [[ "$level" == critical && $fp -ge $warn && -z "${stopped:-}" ]]; }; }; then
             proj="$(_agents_mem_project "$pid")"
             if [[ $fp -ge $stopkib ]]; then msg="past the $(_agents_mem_gb "$stopkib") limit"; else msg="while memory pressure is critical"; fi
@@ -272,7 +340,7 @@ agents_mem_tick() {
             else
                 _agents_mem_record refused "$pid" "$name" "$label" "$proj" "$session" "$fp" "$rss" "$free" "$su"
                 _agents_mem_say "Could not stop $what in $proj ($(_agents_mem_gb "$fp")): agents kill $tok" "$pid" "$snap"
-                news+="$tok $step $fp $now $grew"$'\n'
+                news+="$tok $step $seen $grew $srss"$'\n'
             fi
             continue
         fi
@@ -301,7 +369,7 @@ agents_mem_tick() {
                 fi
             fi
         fi
-        news+="$tok $step $fp $now $grew"$'\n'
+        news+="$tok $step $seen $grew $srss"$'\n'
     done <<<"${cands:-}"
     if [[ "$level" == critical && "$prev" != critical && -n "$first" && "$dry" != true ]]; then
         IFS=$'\t' read -r pid name label session fp rss <<<"$first"
@@ -310,24 +378,27 @@ agents_mem_tick() {
         _agents_mem_say "Memory pressure is critical: $(_agents_mem_what "$name" "$label") in $proj holds the most, $(_agents_mem_gb "$fp")" "$pid" "$snap"
     fi
     [[ "$dry" == true ]] && return 0
-    _AGENTS_MEM_STATE="$news" _AGENTS_MEM_LEVEL="$level"
+    _AGENTS_MEM_STATE="$news" _AGENTS_MEM_LEVEL="$level" _AGENTS_MEM_FREE="$free $now"
     _agents_mem_state_save
 }
 
 # The guard's state, kept across its looks and restarts in the run dir:
-# "level LEVEL", then one "TOKEN step last_kib ts grew" line per candidate.
+# "level LEVEL", "free FREE_PCT EPOCH" (the last look's), then one "TOKEN
+# step last_kib ts grew srss_kib" line per candidate.
 _agents_mem_state_load() {
     local line
-    _AGENTS_MEM_STATE="" _AGENTS_MEM_LEVEL=-
+    _AGENTS_MEM_STATE="" _AGENTS_MEM_LEVEL=- _AGENTS_MEM_FREE=""
     while IFS= read -r line; do
         case "$line" in
             "level "*) _AGENTS_MEM_LEVEL="${line#level }" ;;
+            "free "*) _AGENTS_MEM_FREE="${line#free }" ;;
             *@*) _AGENTS_MEM_STATE+="$line"$'\n' ;;
         esac
     done < <(cat "$AGENTS_RUN_DIR/memguard.state" 2>/dev/null)
 }
 _agents_mem_state_save() {
-    { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$AGENTS_RUN_DIR/memguard.state" "level $_AGENTS_MEM_LEVEL"$'\n'"${_AGENTS_MEM_STATE%$'\n'}"; } 2>/dev/null
+    { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$AGENTS_RUN_DIR/memguard.state" \
+        "level $_AGENTS_MEM_LEVEL"$'\n'"free ${_AGENTS_MEM_FREE:--}"$'\n'"${_AGENTS_MEM_STATE%$'\n'}"; } 2>/dev/null
     return 0
 }
 

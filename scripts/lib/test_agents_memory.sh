@@ -30,6 +30,43 @@ out="$(printf '%s\n' 'Processes: 3 total' 'PID    MEM   ' '607    840M  ' '74922
 [[ "$out" == $'607\t860160\n74922\t2621440\n12\t512\n13\t0' ]] || fail "top MEM parse: $out"
 pass "top's MEM column parses (M, G, K, B, with a trailing + or -)"
 
+# 1b. footprint's phys_footprint, and the sample: footprint for the pids it
+#     reads (yours), top only for the rest, both stubbed on PATH.
+out="$(printf '%s\n' 'footprint: Unable to find pid for process matching '"'"'604'"'"'' \
+    '======' 'com.apple.Virtualization.VirtualMachine [38526]: 64-bit    Footprint: 4502624760 B (16384 bytes per page)' '======' '' \
+    'Auxiliary data:' '    phys_footprint: 4503624184 B' '    phys_footprint_peak: 4503689720 B' '' \
+    'Odd [name] [4585]: 64-bit    Footprint: 256329600 B (16384 bytes per page)' '    phys_footprint: 256329600 B' \
+    '======' 'Summary Footprint: 4758872440 B' | _agents_mem_parse_footprint)"
+[[ "$out" == $'38526\t4398070\n4585\t250321' ]] || fail "footprint parse: $out"
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/footprint" <<'EOF'
+#!/bin/sh
+echo "footprint $*" >> "$CALLS"
+for a in "$@"; do
+    case "$a" in
+        700) printf '%s\n' 'Google Chrome [700]: 64-bit    Footprint: 6442450944 B' '    phys_footprint: 6442450944 B' ;;
+        900) echo "footprint: Unable to find pid for process matching '900'" >&2 ;;
+    esac
+done
+EOF
+cat > "$tmp/bin/top" <<'EOF'
+#!/bin/sh
+echo "top $*" >> "$CALLS"
+printf '%s\n' 'Processes: 2 total' 'PID    MEM' '900    6144M'
+EOF
+chmod +x "$tmp/bin/footprint" "$tmp/bin/top"
+export CALLS="$tmp/calls"
+out="$(PATH="$tmp/bin:$PATH" OSTYPE=darwin25 _agents_mem_fp 700 900)"
+[[ "$out" == $'700\t6291456\n900\t6291456' ]] || fail "footprint, then top for the rest: $out"
+[[ "$(cat "$CALLS")" == $'footprint --noCategories -f bytes 700 900\ntop -l 1 -stats pid,mem -pid 900' ]] || fail "calls: $(cat "$CALLS")"
+rm -f "$CALLS"
+out="$(PATH="$tmp/bin:$PATH" OSTYPE=darwin25 _agents_mem_fp 700)"
+[[ "$out" == $'700\t6291456' && "$(cat "$CALLS")" == "footprint --noCategories -f bytes 700" ]] || fail "no top when footprint read them all: $(cat "$CALLS")"
+rm -f "$CALLS"
+out="$(PATH="$tmp/bin:$PATH" OSTYPE=linux-gnu _agents_mem_fp 700)"
+[[ -z "$out" && ! -e "$CALLS" ]] || fail "off macOS nothing runs: $out"
+pass "footprint's phys_footprint parses; a sample runs top only for the pids footprint can't read"
+
 # 2. Candidates: biggest first, the script an interpreter runs, the agent
 #    tree's root and kind; an app's bundle path is no label; small ones out.
 psfix="$(cat <<EOF
@@ -69,12 +106,16 @@ MACH=$'50331648\t40\tnormal\t1048576\t2097152'   # 48 GB, 40% free
 FPS=""
 agents_snapshot() { printf '%s\n' "$psfix"; }
 agents_mem_machine() { printf '%s\n' "$MACH"; }
-_agents_mem_fp() { [[ -z "$FPS" ]] || printf '%s\n' "$FPS"; }
+# A footprint sample (macOS's path on every platform, MEASURED=0 for Linux's):
+# each pid sampled is logged.
+_agents_mem_measured() { [[ "${MEASURED:-1}" == 1 ]]; }
+_agents_mem_fp() { [[ $# -eq 0 ]] || echo "$*" >> "$tmp/sampled"; [[ -z "$FPS" ]] || printf '%s\n' "$FPS"; }
 _agents_cwds() { local p; for p in "$@"; do printf '%s\t/Users/NAME/work/cairn\n' "$p"; done; }
 agents_root_of() { return 1; }
 _agents_kill_unattended() { echo "$*" >> "$tmp/killed"; agents_event "$_AGENTS_EV_KIND" memory "${1%%@*}" node cairn -; }
-reset() { rm -rf "$AGENTS_RUN_DIR" "$AGENTS_DATA_DIR" "$tmp/killed"; unset _AGENTS_MEM_STATE _AGENTS_MEM_LEVEL; }
-tick() { AGENTS_NOW="$1" agents_mem_tick; }
+reset() { rm -rf "$AGENTS_RUN_DIR" "$AGENTS_DATA_DIR" "$tmp/killed" "$tmp/sampled"; unset _AGENTS_MEM_STATE _AGENTS_MEM_LEVEL _AGENTS_MEM_FREE; }
+# One look, in a subshell: each reads the state the last one saved.
+tick() { ( AGENTS_NOW="$1" agents_mem_tick ); }
 
 reset
 out="$(tick 1000)"
@@ -154,6 +195,111 @@ pass "dry run: says what it would stop; records, saves and stops nothing"
 [[ "$(AGENTS_MEM_KILL=12 _agents_mem_kill_kib 50331648)" == $((12 * G)) ]] || fail "AGENTS_MEM_KILL=12"
 [[ "$(_agents_mem_kill_kib 50331648)" == $((24 * G)) ]] || fail "default: half the RAM"
 pass "the stop size: AGENTS_MEM_KILL GB, else half the RAM"
+
+# 4b. How often the guard samples a footprint (top costs about half a second
+#     of CPU): fix SIZE_620 SIZE_700 — the fixture with node (in claude's
+#     tree) and Chrome (yours, in no tree) at those RSS KiB, plus a VM of
+#     root's at 6 GB; samples PID — how many looks sampled PID.
+vmline="  900     1     0 root    0.0 $((6 * G))   0:10.00 03:00:00 Wed Oct 14 06:00:00 2026     /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+fix() { printf '%s\n' "$psfix_small" | awk -v a="$1" -v b="$2" '$1 == 620 { $6 = a } $1 == 700 { $6 = b } { print }'; printf '%s\n' "$vmline"; }
+samples() { tr ' ' '\n' < "$tmp/sampled" 2>/dev/null | grep -c "^$1\$" || true; }
+
+# (a) Large processes the guard can never stop: sampled once, not every look;
+#     again when RSS moves by an eighth (512 MB at least) or after 5 minutes.
+reset
+psfix="$(fix 1000 $((6 * G)))"; FPS=""
+for t in 6000 6005 6010 6015 6020 6025 6030 6035 6040 6045 6050 6055; do tick "$t" >/dev/null; done
+[[ "$(samples 700) $(samples 900)" == "1 1" ]] || fail "12 looks at an app and root's VM: $(samples 700) and $(samples 900) samples, want 1 and 1"
+psfix="$(fix 1000 $((6 * G + 300000)))"
+tick 6060 >/dev/null
+[[ "$(samples 700)" == 1 ]] || fail "300 MB of RSS jitter is no reason to sample: $(samples 700)"
+psfix="$(fix 1000 $((7 * G)))"
+tick 6065 >/dev/null
+[[ "$(samples 700) $(samples 900)" == "2 1" ]] || fail "1 GB more RSS samples it again: $(samples 700) $(samples 900)"
+tick 6370 >/dev/null
+[[ "$(samples 700) $(samples 900)" == "3 2" ]] || fail "after 5 minutes both are sampled again: $(samples 700) $(samples 900)"
+pass "a large process the guard can't stop is sampled once, then on an RSS move or after 5 minutes, not every look"
+
+# (b) In an agent tree: sampled every look while it grows, even with its RSS
+#     flat (the compressor), and stopped past AGENTS_MEM_KILL as before.
+reset
+psfix="$(fix $((5 * G)) $((6 * G)))"
+n=0
+for gb in 6 10 14 18; do
+    FPS=$'620\t'$((gb * G)); n=$((n + 1))
+    AGENTS_MEM_KILL=20 tick $((7000 + n * 5)) >/dev/null
+    [[ "$(samples 620)" == "$n" ]] || fail "node in claude's tree at ${gb} GB: $(samples 620) samples in $n looks"
+done
+[[ ! -s "$tmp/killed" ]] || fail "18 GB is under a 20 GB stop size"
+FPS=$'620\t'$((22 * G))
+out="$(AGENTS_MEM_KILL=20 tick 7025)"
+[[ "$(samples 620)" == 5 ]] || fail "sampled on the fifth look too: $(samples 620)"
+[[ "$(cat "$tmp/killed")" == "620@Wed_Oct_14_09:00:05_2026" ]] || fail "22 GB past AGENTS_MEM_KILL=20 stops it: $(cat "$tmp/killed" 2>/dev/null)"
+[[ "$out" == *"Stopped node (clientFuelToday.test.js) in cairn: it held 22.0G past the 20.0G limit (claude:600)"* ]] || fail "stop text: $out"
+[[ "$(samples 700)" == 1 ]] || fail "Chrome, beside it, sampled once: $(samples 700)"
+pass "a process the guard could stop is sampled every look while large, and stopped past AGENTS_MEM_KILL"
+
+# (c) One it can't stop that grows past the warning is still warned about,
+#     once: at once when RSS shows it, at the 5-minute look when only the
+#     footprint does.
+reset
+psfix="$(fix 1000 $((6 * G)))"; FPS=""
+out="$(tick 8000)"
+[[ "$out" != *"Google Chrome"* ]] || fail "6 GB is under the warning: $out"
+psfix="$(fix 1000 $((9 * G)))"
+out="$(tick 8005)"
+[[ "$out" == *"Google Chrome in cairn holds 9.0G (not stopped by the guard)"* ]] || fail "past the warning by RSS: $out"
+out="$(tick 8010)$(tick 8015)$(tick 8020)"
+[[ "$out" != *"Google Chrome"* ]] || fail "warned once: $out"
+grep -c $'\twarn\t700\t' "$AGENTS_DATA_DIR/memory.tsv" | grep -qx 1 || fail "one warn incident"
+reset
+psfix="$(fix 1000 $((6 * G)))"; FPS=""
+tick 8100 >/dev/null
+FPS=$'700\t'$((12 * G))
+out="$(tick 8105)$(tick 8110)"
+[[ "$out" != *"Google Chrome"* ]] || fail "not sampled again with RSS flat: $out"
+out="$(tick 8400)"
+[[ "$out" == *"Google Chrome in cairn holds 12.0G (not stopped by the guard)"* ]] || fail "the 5-minute look warns: $out"
+out="$(tick 8405)"
+[[ "$out" != *"Google Chrome"* ]] || fail "and only once: $out"
+FPS=""
+pass "one the guard can't stop is warned about once past the warning (by RSS at once, by footprint within 5 minutes)"
+
+# (d) Under critical pressure every candidate is sampled, and the largest
+#     agent-tree process past the warning is stopped; free memory falling
+#     faster than AGENTS_MEM_RATE samples them all too.
+reset
+psfix="$(fix $((6 * G)) $((6 * G)))"
+FPS=$'620\t'$((7 * G))
+tick 9000 >/dev/null; tick 9005 >/dev/null
+[[ "$(samples 700) $(samples 620)" == "1 2" ]] || fail "before the pressure: $(samples 700) $(samples 620)"
+MACH=$'50331648\t3\tcritical\t2097152\t2097152'
+FPS=$'620\t'$((10 * G))
+out="$(tick 9010)"
+[[ "$(samples 700) $(samples 900) $(samples 620)" == "2 2 3" ]] || fail "critical samples them all: $(samples 700) $(samples 900) $(samples 620)"
+[[ "$(cat "$tmp/killed")" == "620@Wed_Oct_14_09:00:05_2026" ]] || fail "critical pressure stops node at a 10 GB footprint (6 GB RSS)"
+[[ "$out" == *"while memory pressure is critical"* ]] || fail "critical stop text: $out"
+reset
+MACH=$'50331648\t40\tnormal\t1048576\t2097152'
+psfix="$(fix 1000 $((6 * G)))"; FPS=""
+tick 9100 >/dev/null; tick 9105 >/dev/null
+[[ "$(samples 700)" == 1 ]] || fail "steady: $(samples 700)"
+MACH=$'50331648\t30\tnormal\t1048576\t2097152'   # 4.8 GB gone in 5 s
+tick 9110 >/dev/null
+[[ "$(samples 700) $(samples 900)" == "2 2" ]] || fail "free memory falling fast samples them all: $(samples 700) $(samples 900)"
+tick 9115 >/dev/null
+[[ "$(samples 700)" == 2 ]] || fail "and steady again: $(samples 700)"
+MACH=$'50331648\t40\tnormal\t1048576\t2097152'
+pass "critical pressure or fast-falling free memory samples every candidate; the largest agent-tree one past the warning is stopped"
+
+# Where RSS is the footprint (Linux), nothing is ever sampled; RSS decides.
+reset
+psfix="$(fix $((30 * G)) $((6 * G)))"
+out="$(MEASURED=0 tick 9200)"
+[[ ! -e "$tmp/sampled" ]] || fail "sampled off macOS: $(cat "$tmp/sampled")"
+[[ "$(cat "$tmp/killed")" == "620@Wed_Oct_14_09:00:05_2026" ]] || fail "30 GB of RSS stops it off macOS"
+psfix="$psfix_small"
+pass "off macOS no footprint is sampled and RSS decides, every look"
 
 # 5. The menu's memg row: the guard's state and the last incident.
 reset
