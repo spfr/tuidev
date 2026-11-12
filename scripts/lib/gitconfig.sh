@@ -54,6 +54,11 @@ tuidev_git_defaults() {
     tuidev_git_default push.followTags true
     tuidev_git_default fetch.prune true
 
+    # Status on a large tree: git remembers which directories hold no untracked
+    # files. Not core.fsmonitor: that is a daemon per worktree, which outlives
+    # short-lived agent worktrees.
+    tuidev_git_default core.untrackedCache true
+
     if command_exists delta; then
         tuidev_git_default core.pager delta
         tuidev_git_default interactive.diffFilter "delta --color-only"

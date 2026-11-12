@@ -57,6 +57,8 @@ TUIDEV_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$TUIDEV_REPO/scripts/lib/manifest.sh"
 # shellcheck source=scripts/lib/gitconfig.sh disable=SC1091
 . "$TUIDEV_REPO/scripts/lib/gitconfig.sh"
+# shellcheck source=scripts/lib/perf.sh disable=SC1091
+. "$TUIDEV_REPO/scripts/lib/perf.sh"
 # shellcheck source=scripts/lib/migrate.sh disable=SC1091
 . "$TUIDEV_REPO/scripts/lib/migrate.sh"
 # shellcheck source=scripts/lib/packs.sh disable=SC1091
@@ -361,6 +363,13 @@ if [[ "$DRY_RUN" != true ]]; then
 fi
 
 # ----------------------------------------------------------------------------
+# Performance: what the OS does behind your agents (read-only; never fatal).
+# ----------------------------------------------------------------------------
+
+print_step "Performance check (changes nothing; 'make perf-fix' offers the fixes)"
+{ perf_collect && perf_report --brief; } || print_info "performance check skipped"
+
+# ----------------------------------------------------------------------------
 # Done
 # ----------------------------------------------------------------------------
 
@@ -369,13 +378,14 @@ printf '%b\n' "${GREEN}Next steps:${NC}
   1. Restart your shell:  ${YELLOW}exec zsh -l${NC}
   2. Agent CLI configs:   ${YELLOW}./install.sh --pack ai-clis${NC}  (Claude Code + Codex, native sandboxes on)
   3. Run an agent:        ${YELLOW}claude${NC}  or  ${YELLOW}codex${NC}  in a project, next to your editor
-  4. Verify health:       ${YELLOW}make check${NC}
+  4. Verify health:       ${YELLOW}make check${NC}   and   ${YELLOW}make perf${NC}  (Spotlight, backups, limits)
 
 ${CYAN}Docs:${NC}
   docs/profiles.md         what each profile and pack installs
   docs/sandboxing.md       native sandboxes, sbx, escape hatches
   docs/remote.md           Tailscale + tmux + mosh workflow
   docs/agent-workflows.md  AI CLIs, editors, worktrees, Herdr
+  docs/performance.md      what the OS does behind your agents, and what to change
 
 ${CYAN}Your profile manifest:${NC} $TUIDEV_PROFILE_FILE_DEFAULT
 ${CYAN}What was installed:${NC}    $TUIDEV_MANIFEST_FILE  (read by ./uninstall.sh)"

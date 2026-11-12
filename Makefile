@@ -8,7 +8,7 @@
         install install-minimal install-desktop install-remote install-dry \
         uninstall \
         update update-check update-packages update-configs update-migrations update-all \
-        update-security \
+        update-security perf perf-fix \
         test test-core test-ui test-all test-lib \
         check check-minimal check-desktop check-remote \
         lint validate-configs validate check-links check-paths \
@@ -87,6 +87,12 @@ update-all: ## Non-interactive: packages + configs + repo
 
 update-security: ## Audit Tailscale + SSH perms + Seatbelt profile drift
 	@./scripts/update.sh --security
+
+perf: ## Performance audit: Spotlight, Time Machine, limits, git (changes nothing)
+	@./scripts/perf.sh
+
+perf-fix: ## Performance audit, then offer each fix that needs no root
+	@./scripts/perf.sh --fix
 
 brew-upgrade: ## Raw `brew update && brew upgrade` (bypasses profile)
 	@brew update && brew upgrade

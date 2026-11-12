@@ -52,6 +52,8 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/fnm.sh"
 # shellcheck source=lib/uv.sh disable=SC1091
 . "$SCRIPT_DIR/lib/uv.sh"
+# shellcheck source=lib/perf.sh disable=SC1091
+. "$SCRIPT_DIR/lib/perf.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -60,7 +62,7 @@ print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
 # Argument parsing
 # ----------------------------------------------------------------------------
 
-MODE=""              # check|packages|configs|migrations|repo|security|all|menu
+MODE=""              # check|packages|configs|migrations|repo|security|perf|all|menu
 NON_INTERACTIVE=false
 
 set_mode() {
@@ -84,7 +86,9 @@ Modes (pick one; default is an interactive menu):
   --migrations        Run pending one-shot migrations only
   --repo              git pull the tuidev repo and show git-clean dry-run
   --security          Audit tailscale/ssh perms/seatbelt profiles
-  --all               packages + configs + repo (NOT security)
+  --perf              Performance audit (Spotlight, Time Machine, limits, git),
+                      then offer the fixes that need no root
+  --all               packages + configs + repo + performance report (NOT security)
 
 Options:
   --dry-run           Print commands instead of executing them (honored in every mode)
@@ -101,6 +105,7 @@ while [[ $# -gt 0 ]]; do
         --migrations|-m)    set_mode migrations; shift ;;
         --repo|-r)          set_mode repo; shift ;;
         --security)         set_mode security; shift ;;
+        --perf)             set_mode perf; shift ;;
         --all|-a)           set_mode all; NON_INTERACTIVE=true; shift ;;
         --dry-run|-d)       DRY_RUN=true; shift ;;
         --yes|-y)           NON_INTERACTIVE=true; shift ;;
@@ -1012,6 +1017,27 @@ run_security_mode() {
 }
 
 # ----------------------------------------------------------------------------
+# Mode: --perf  (scripts/lib/perf.sh; docs/performance.md)
+# ----------------------------------------------------------------------------
+
+# run_perf_mode [report] — the audit. With `report` (in --check and --all) it
+# only reports, and leaves out what is fine; --perf lists everything and then
+# offers each fix that needs no root.
+run_perf_mode() {
+    print_section "Performance"
+    perf_collect
+    if [[ "${1:-}" == report ]]; then
+        perf_report --brief
+        return 0
+    fi
+    perf_report
+    if (( PERF_AUTO_TOTAL > 0 )); then
+        tuidev_manifest_enable
+        perf_apply confirm
+    fi
+}
+
+# ----------------------------------------------------------------------------
 # Interactive menu (default when no flags given)
 # ----------------------------------------------------------------------------
 
@@ -1025,6 +1051,7 @@ run_menu() {
     5) Security audit
     6) Update all (packages + configs + repo)
     7) Run pending migrations
+    8) Performance audit (and fixes that need no root)
     q) Quit
 EOF
     local reply
@@ -1038,6 +1065,7 @@ EOF
         5) MODE=security;       run_mode ;;
         6) MODE=all;            run_mode ;;
         7) MODE=migrations;     run_mode ;;
+        8) MODE=perf;           run_mode ;;
         q|Q|"") print_info "No action selected." ;;
         *) print_error "Unknown choice: $reply"; exit 2 ;;
     esac
@@ -1055,17 +1083,20 @@ run_mode() {
             run_migrations_mode
             run_configs_mode
             run_repo_mode
+            run_perf_mode report
             ;;
         packages)      run_packages_mode ;;
         migrations)    run_migrations_mode ;;
         configs)       run_migrations_mode; run_configs_mode ;;
         repo)          run_repo_mode ;;
         security)      run_security_mode ;;
+        perf)          run_perf_mode ;;
         all)
             run_packages_mode
             run_migrations_mode
             run_configs_mode
             run_repo_mode
+            run_perf_mode report
             ;;
         *) print_error "Unhandled mode: $MODE"; exit 2 ;;
     esac

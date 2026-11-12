@@ -50,6 +50,8 @@ pass "user values (direct and [include]d) win"
 # 3. Unset keys get the default and are recorded for uninstall.
 [[ "$(get rebase.updateRefs)" == true ]] || fail "rebase.updateRefs not set"
 [[ "$(get push.autoSetupRemote)" == true ]] || fail "push.autoSetupRemote not set"
+[[ "$(get core.untrackedCache)" == true ]] || fail "core.untrackedCache not set"
+[[ "$(get core.fsmonitor)" == "" ]] || fail "core.fsmonitor set: a daemon per worktree"
 tuidev_manifest_values gitconfig | grep -q '^rebase.updateRefs true$' || fail "set key not recorded"
 tuidev_manifest_values gitconfig | grep -q '^diff.algorithm ' && fail "recorded a key it did not set"
 pass "unset keys are defaulted and recorded"
