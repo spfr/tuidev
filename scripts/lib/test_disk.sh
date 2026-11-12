@@ -204,5 +204,35 @@ else
 fi
 unset PLAYWRIGHT_BROWSERS_PATH
 
+# 11. The summary a person starts from: one line per item, grouped by what
+#     to do, build output and worktrees one line each, then the next step.
+#     Brief progress is one line per stage; --agent hands the JSON to the
+#     agent CLI with the rules, and runs nothing else.
+DISK_PROGRESS=brief DISK_FD="" disk_collect 2> "$tmp/progress.txt"; out="$(disk_summary)"
+[[ "$(grep -c '^  [1-5]/5 ' "$tmp/progress.txt")" == 5 ]] || fail "brief progress is not five stages: $(cat "$tmp/progress.txt")"
+! grep -q "found with\|worktree ~" "$tmp/progress.txt" || fail "brief progress lists every place: $(cat "$tmp/progress.txt")"
+[[ "$out" == *"Ready to clear"*"Go build cache"*"go-build"*"go clean -cache"*"Safe to clear, by hand"*"Go module cache"*"go-mod"*"go clean -modcache"* ]] \
+    || fail "summary: ready and by-hand groups: $out"
+[[ "$out" == *"Held back right now"*"Node v18.0.0 (fnm)"*"global npm packages"*"Another tool's storage"*"Yours"*"Claude Code transcripts"* ]] \
+    || fail "summary: held, managed and yours groups: $out"
+[[ "$out" == *"build output and dependencies in 2 folder(s) of repos untouched for 30 days (--details lists them)"* \
+    && "$out" == *"2 clean, idle worktree(s) (--details lists them)"* ]] || fail "summary: build output and worktrees are not one line each: $out"
+[[ "$out" != *"what: "* && "$out" != *"old app/node_modules"* && "$out" != *"worktrees/done"* ]] || fail "the summary carries the details: $out"
+[[ "$out" == *"Next"*"--fix "*"--explain ID"*"--details"*"--agent"* ]] || fail "summary: no next step: $out"
+(( $(printf '%s\n' "$out" | wc -l) < 60 )) || fail "the summary is $(printf '%s\n' "$out" | wc -l) lines"
+[[ "$(disk_report)" == *"what: "*"old app/node_modules"* ]] || fail "--details lost the details"
+# shellcheck disable=SC2016
+stub agentcli 'printf "%s\n" "$1" > "'"$tmp"'/state/agent.prompt"; echo "PLAN: clear the go build cache"'
+out="$(TUIDEV_DISK_AGENT=agentcli disk_agent 2>&1)"
+[[ "$out" == *"Asking agentcli for a plan, read-only"*"PLAN: clear the go build cache"* ]] || fail "--agent did not run the CLI: $out"
+grep -q "Delete nothing and change nothing" "$tmp/state/agent.prompt" && grep -q '"id":"go-build"' "$tmp/state/agent.prompt" \
+    || fail "--agent's prompt lacks the rules or the audit"
+[[ ! -s "$tmp/state/calls" ]] || fail "--agent ran a cleanup: $(cat "$tmp/state/calls")"
+rc=0; out="$(PATH="$tmp/empty:/usr/bin:/bin" TUIDEV_DISK_AGENT="" disk_agent 2>&1)" || rc=$?
+if ! command -v claude >/dev/null 2>&1 && ! command -v codex >/dev/null 2>&1; then
+    [[ "$rc" == 1 && "$out" == *"needs Claude Code or Codex"* ]] || fail "--agent without a CLI: $rc $out"
+fi
+pass "summary: grouped by what to do, dozens folded into one line, next step named; --agent sends the audit and the rules, read-only"
+
 echo ""
 echo "All disk lib tests passed."

@@ -47,18 +47,49 @@ It finds your package stores by asking pnpm, Go, uv and npm, and looks for repos
 ## Disk
 
 ```bash
-make disk          # what dev tools and agents left on disk, with the command for each; deletes nothing
+make disk          # a summary: one line per item, grouped by what to do, then the next step; deletes nothing
 make disk-fix      # the same, then the plan, then one question per tool cleanup command
+make disk-agent    # ask Claude Code or Codex to look and write a cleanup plan (read-only; sends them the audit)
+./scripts/disk.sh --details       # every item in full: what, why, cost, command
+./scripts/disk.sh --explain ID    # one item in full (the ID is the summary's third column)
 ./scripts/disk.sh --json          # one JSON object, for an agent you ask to plan a cleanup
-./scripts/disk.sh --explain ID    # one item in full (the IDs are in --json)
 ./scripts/disk.sh --quick         # leave out the repos in your code folders
 ./scripts/disk.sh --min 1G        # hide what is smaller (default 100 MB)
-./scripts/disk.sh --verbose       # also say which places are not there
+./scripts/disk.sh --verbose       # say every place looked at and how, and which are not there
 ```
 
-It is not a Mac cleaner. It looks only at what dev tools and agents leave behind, in places it names as it goes (on stderr, so `--json` stays clean): the Go build and module caches, the npm, pnpm, bun, uv and pip caches, Homebrew's downloads, the Cargo registry, Gradle's caches, Playwright's and Cypress's browsers, CocoaPods, Xcode's DerivedData, iOS DeviceSupport and simulators, Podman, Docker and Apple `container` storage, Node versions fnm installed and Pythons uv installed that a newer patch has superseded, Claude Code transcripts and Codex sessions, tuidev's own backups, and in each git repo in your code folders (to a depth of 4, `TUIDEV_DISK_DEPTH`) the untracked `node_modules`, `target`, `.next`, `.turbo`, `dist` and `.venv` at its root and its linked worktrees. Each is sized with one `du -sk`, eight at a time. On the test Mac a full run took 15 to 40 seconds depending on what else was running, and `--quick` about 8. It never walks the home folder, and never looks at app data, browser or system caches, Downloads or Trash. A code folder reached twice (a symlink, or `~/projects` and `~/Projects` on a case-insensitive disk) is scanned once.
+It is not a Mac cleaner. It looks only at what dev tools and agents leave behind, in places it names with `--verbose` (on stderr, so `--json` stays clean; without it, one line per stage of the scan): the Go build and module caches, the npm, pnpm, bun, uv and pip caches, Homebrew's downloads, the Cargo registry, Gradle's caches, Playwright's and Cypress's browsers, CocoaPods, Xcode's DerivedData, iOS DeviceSupport and simulators, Podman, Docker and Apple `container` storage, Node versions fnm installed and Pythons uv installed that a newer patch has superseded, Claude Code transcripts and Codex sessions, tuidev's own backups, and in each git repo in your code folders (to a depth of 4, `TUIDEV_DISK_DEPTH`) the untracked `node_modules`, `target`, `.next`, `.turbo`, `dist` and `.venv` at its root and its linked worktrees. Each is sized with one `du -sk`, eight at a time. On the test Mac a full run took 15 to 40 seconds depending on what else was running, and `--quick` about 8. It never walks the home folder, and never looks at app data, browser or system caches, Downloads or Trash. A code folder reached twice (a symlink, or `~/projects` and `~/Projects` on a case-insensitive disk) is scanned once.
 
-Every item says what it is, why it got its verdict (who owns it, when it was last written, whether anything uses it now), what reclaiming it costs you, and the exact command:
+A plain run answers "what do I do": one line per item, in five groups, and the next command.
+
+```text
+Ready to clear   6.3 GB   '--fix' asks before each one, default No
+     5.1 GB  npm cache                  npm                    npm cache clean --force
+     1.1 GB  CocoaPods cache            cocoapods              pod cache clean --all
+
+Safe to clear, by hand   24 GB   rebuilt or downloaded again when needed; --fix never runs these
+      13 GB  iOS DeviceSupport          xcode-devicesupport    rm -rf ~/Library/Developer/Xcode/iOS\ DeviceSupport
+     2.8 GB  build output and dependencies in 5 folder(s) of repos untouched for 30 days (--details lists them)
+
+Held back right now   8.3 GB   --fix would offer these, but not as things stand
+     7.2 GB  pnpm store                 pnpm                   pnpm's store could not be confirmed: ~/.npmrc may name anothe...
+
+Another tool's storage   74 GB   clear it with that tool's own command
+      29 GB  Podman storage             podman                 podman image prune -a
+
+Yours   11 GB   listed for information, never offered
+      11 GB  Claude Code transcripts    claude                 ~/.claude/projects
+
+Next
+  ./scripts/disk.sh --fix          clear what is ready: the plan first, then one question each
+  ./scripts/disk.sh --explain ID   one item: what it is, what clearing it costs, its command (ID: third column)
+  ./scripts/disk.sh --details      every item in full
+  ./scripts/disk.sh --agent        ask Claude Code or Codex to look and write you a cleanup plan (read-only)
+```
+
+**`--agent` gets a second opinion.** It hands the audit, as JSON, to the agent CLI on your machine (`claude -p --permission-mode plan`, else `codex exec --sandbox read-only`; `TUIDEV_DISK_AGENT` names another) with rules: delete nothing, look to confirm, group into clear now, look first and leave alone, and use only the commands in the audit. The agent can check what the audit cannot, such as which projects pin a Node version it calls superseded. The audit's paths and sizes go to that CLI's provider, which the tool says before it starts; nothing is sent without `--agent`.
+
+With `--details`, every item says what it is, why it got its verdict (who owns it, when it was last written, whether anything uses it now), what reclaiming it costs you, and the exact command:
 
 ```text
 regenerable: caches a tool rebuilds; safe to clear   35 GB in all

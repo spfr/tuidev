@@ -134,6 +134,12 @@ _disk_git() { git -c core.fsmonitor=false --no-optional-locks "$@"; }
 
 # _disk_say TEXT — a progress line on stderr; --json stays clean.
 _disk_say() { if [[ "$DISK_PROGRESS" == true ]]; then echo "  $1" >&2; fi; return 0; }
+# _disk_step TEXT — one line per stage of the scan, also when DISK_PROGRESS is
+# "brief" (the default of scripts/disk.sh; --verbose turns the lines above on).
+_disk_step() {
+    case "$DISK_PROGRESS" in true|brief) echo "  $1" >&2 ;; esac
+    return 0
+}
 
 # _disk_add ID LABEL PATH VERDICT WHAT WHY COST RECLAIM [FIX [KB [REPO]]] —
 # once per path; says on stderr what it found and how it will be measured.
@@ -1041,7 +1047,7 @@ disk_collect() {
     DISK_VENVS=""; DISK_VENVS_SCANNED=false; _DISK_SEEN=$'\n'
     DISK_QUICK=false; [[ "${1:-}" == --quick ]] && DISK_QUICK=true
     _DISK_HOME_REAL="$(cd "$HOME" 2>/dev/null && pwd -P)" || _DISK_HOME_REAL=""
-    _disk_say "Looking, read-only: each place below is sized with one du -sk; nothing under your home is written."
+    _disk_step "Looking, read-only: each place is sized with one du -sk; nothing under your home is written."
     line="$(df -Pk "$HOME" 2>/dev/null | awk 'NR == 2 { printf "%.0f %.0f\n", $2 * 1024, $4 * 1024 }')" || true
     read -r DISK_TOTAL_BYTES DISK_FREE_BYTES <<< "${line:-0 0}" || true
     [[ "$DISK_TOTAL_BYTES" =~ ^[0-9]+$ ]] || DISK_TOTAL_BYTES=0
@@ -1052,15 +1058,20 @@ disk_collect() {
     else
         _disk_say "processes: ps could not be read, so nothing will be offered for --fix"
     fi
+    _disk_step "1/5 tool caches and package stores"
     _disk_scan_caches
+    _disk_step "2/5 container storage"
     _disk_scan_containers
     if [[ "$DISK_QUICK" == true ]]; then
-        _disk_say "repos: skipped (--quick)"
+        _disk_step "3/5 repos: skipped (--quick)"
     else
+        _disk_step "3/5 repos and worktrees in your code folders (the slow part)"
         _disk_scan_trees
     fi
+    _disk_step "4/5 Node and Python versions, agent transcripts"
     _disk_scan_runtimes
     _disk_scan_agents
+    _disk_step "5/5 measuring ${#DISK_ID[@]} place(s) with du -sk"
     _disk_measure
     _disk_say "Not looked at: the rest of your home folder (there is no home-wide walk), app data, browser and system caches, Downloads, Trash, anything outside the places above, and repos deeper than ${TUIDEV_DISK_DEPTH:-4} levels in the code folders."
     return 0
@@ -1244,6 +1255,157 @@ disk_report() {
         print_info "'./scripts/disk.sh --fix' shows the plan for the $offered 'run (--fix offers this)' line(s), then asks for each. '--explain ID' says more about one; '--json' lists the IDs."
     fi
     return 0
+}
+
+# _disk_group I — where item I goes in the summary, by what you can do about
+# it: ready (--fix offers it now), held (--fix would, but not now), hand (safe
+# to clear, with a command only you run), managed, yours.
+_disk_group() {
+    local r
+    case "${DISK_VERDICT[$1]}" in
+        managed) echo managed; return 0 ;;
+        yours)   echo yours; return 0 ;;
+    esac
+    if _disk_offerable "$1"; then
+        r="$(_disk_fix_reason "$1")"
+        if [[ -z "$r" ]]; then echo ready; else echo held; fi
+    else
+        echo hand
+    fi
+}
+
+_disk_group_title() {
+    case "$1" in
+        ready)   echo "Ready to clear|'--fix' asks before each one, default No" ;;
+        hand)    echo "Safe to clear, by hand|rebuilt or downloaded again when needed; --fix never runs these" ;;
+        held)    echo "Held back right now|--fix would offer these, but not as things stand" ;;
+        managed) echo "Another tool's storage|clear it with that tool's own command" ;;
+        yours)   echo "Yours|listed for information, never offered" ;;
+    esac
+}
+
+# _disk_short TEXT — TEXT cut to 64 characters for a one-line row.
+_disk_short() {
+    if (( ${#1} > 64 )); then printf '%s...\n' "${1:0:61}"; else printf '%s\n' "$1"; fi
+}
+
+# disk_summary — the report a person starts from: one line per item, grouped
+# by what to do about it, then the next step. Build output and worktrees, which
+# come by the dozen, are one line each; disk_report (--details) and
+# disk_explain (--explain ID) carry the what, why, cost and command.
+disk_summary() {
+    local i g rows="" order pct=0 title sum n kb right bkb=0 bn=0 wkb=0 wn=0 hidden=0 ready=0 printed=0
+    order="$(_disk_order)"
+    if (( DISK_TOTAL_BYTES > 0 )); then
+        pct=$(( DISK_FREE_BYTES * 100 / DISK_TOTAL_BYTES ))
+        print_info "Free: $(_perf_human "$DISK_FREE_BYTES") of $(_perf_human "$DISK_TOTAL_BYTES") ($pct%) on the volume your home is on"
+    fi
+    while IFS= read -r i; do
+        [[ -n "$i" ]] || continue
+        g="$(_disk_group "$i")"
+        if [[ "$g" == hand ]]; then
+            case "${DISK_ID[$i]}" in
+                build:*)    bkb=$((bkb + DISK_KB[i])); bn=$((bn + 1)); continue ;;
+                worktree:*) wkb=$((wkb + DISK_KB[i])); wn=$((wn + 1)); continue ;;
+            esac
+        fi
+        rows="$rows$g	${DISK_KB[$i]}	$i
+"
+    done <<< "$order"
+    for g in ready hand held managed yours; do
+        sum=0; n=0
+        while IFS='	' read -r _ kb i; do
+            [[ -n "$i" ]] || continue
+            sum=$((sum + kb)); n=$((n + 1))
+        done <<< "$(printf '%s' "$rows" | grep "^$g	" || true)"
+        if [[ "$g" == hand ]]; then sum=$((sum + bkb + wkb)); n=$((n + bn + wn)); fi
+        (( n > 0 )) || continue
+        [[ "$g" == ready ]] && ready=$n
+        title="$(_disk_group_title "$g")"
+        echo ""
+        echo -e "${BOLD}${title%%|*}${NC}   $(_perf_human $((sum * 1024)))   ${title#*|}"
+        while IFS='	' read -r _ kb i; do
+            [[ -n "$i" ]] || continue
+            case "$g" in
+                ready)   right="${DISK_RECLAIM[$i]}" ;;
+                held)    right="$(_disk_short "$(_disk_fix_reason "$i")")" ;;
+                managed) right="${DISK_RECLAIM[$i]:-$(_perf_tilde "${DISK_PATH[$i]}")}" ;;
+                yours)   right="$(_perf_tilde "${DISK_PATH[$i]}")" ;;
+                *)       right="$(_disk_short "${DISK_RECLAIM[$i]}")" ;;
+            esac
+            printf '  %9s  %-26s %-22s %s\n' "$(_perf_human $((kb * 1024)))" "${DISK_LABEL[$i]}" "${DISK_ID[$i]}" "$right"
+            printed=$((printed + 1))
+        done <<< "$(printf '%s' "$rows" | grep "^$g	" | sort -t '	' -k2,2nr || true)"
+        if [[ "$g" == hand ]]; then
+            if (( bn > 0 )); then
+                printf '  %9s  %s\n' "$(_perf_human $((bkb * 1024)))" "build output and dependencies in $bn folder(s) of repos untouched for ${TUIDEV_DISK_STALE_DAYS:-30} days (--details lists them)"
+            fi
+            if (( wn > 0 )); then
+                printf '  %9s  %s\n' "$(_perf_human $((wkb * 1024)))" "$wn clean, idle worktree(s) (--details lists them)"
+            fi
+        fi
+    done
+    for i in ${DISK_ID[@]+"${!DISK_ID[@]}"}; do
+        [[ "${DISK_VERDICT[$i]}" == active ]] && continue
+        printf '%s\n' "$order" | grep -Fxq -- "$i" || hidden=$((hidden + 1))
+    done
+    echo ""
+    if (( printed + bn + wn == 0 )); then
+        print_success "Nothing over $(_perf_human $((DISK_MIN_KB * 1024))) that dev tools or agents left behind"
+    fi
+    if (( DISK_ACTIVE_REPOS > 0 )); then
+        print_info "Not listed: $(_perf_human $(( $(disk_sum active) * 1024 ))) of build output and worktrees in $DISK_ACTIVE_REPOS repo(s) you changed in the last ${TUIDEV_DISK_STALE_DAYS:-30} days"
+    fi
+    if (( hidden > 0 )); then
+        print_info "Not listed: $hidden item(s) under $(_perf_human $((DISK_MIN_KB * 1024))) ('--min 0' lists them)"
+    fi
+    echo ""
+    echo -e "${BOLD}Next${NC}"
+    if (( ready > 0 )); then
+        echo "  ./scripts/disk.sh --fix          clear what is ready: the plan first, then one question each"
+    else
+        echo "  Nothing is ready for --fix right now; the commands for the rest are in --explain ID."
+    fi
+    echo "  ./scripts/disk.sh --explain ID   one item: what it is, what clearing it costs, its command (ID: third column)"
+    echo "  ./scripts/disk.sh --details      every item in full"
+    echo "  ./scripts/disk.sh --agent        ask Claude Code or Codex to look and write you a cleanup plan (read-only)"
+    return 0
+}
+
+# disk_agent — hand the audit to the agent CLI on this machine for a plan.
+# The agent runs read-only (Claude Code in plan mode, Codex in its read-only
+# sandbox) and gets the audit as JSON: paths, sizes, verdicts and commands go
+# to that CLI's provider, which is said before it starts. TUIDEV_DISK_AGENT
+# names the CLI (claude, codex, or a command given the prompt as its one
+# argument).
+disk_agent() {
+    local cli="${TUIDEV_DISK_AGENT:-}" prompt
+    if [[ -z "$cli" ]]; then
+        if command_exists claude; then cli=claude
+        elif command_exists codex; then cli=codex
+        fi
+    fi
+    if [[ -z "$cli" ]]; then
+        print_error "--agent needs Claude Code or Codex on PATH (or TUIDEV_DISK_AGENT)"
+        return 1
+    fi
+    prompt="Below is a read-only disk audit of this developer machine, from tuidev's scripts/disk.sh, as JSON.
+Write me a cleanup plan. Rules:
+- Delete nothing and change nothing. You may look (ls, du, git status, git log) to confirm what an item is.
+- Group the items: clear now, worth a look first, leave alone. Give the size of each and a total per group.
+- For each item to clear, give the exact command from its 'reclaim' field. Items with fix_offered true are
+  cleared by './scripts/disk.sh --fix', which asks before each. Never suggest rm for an item whose verdict
+  is yours or managed, and never a command that is not in the audit.
+- Say what looks surprising or risky, and what you would check before clearing it.
+- Plain text, under 50 lines, biggest wins first.
+
+$(disk_json)"
+    print_info "Asking $cli for a plan, read-only. It is sent the audit (paths, sizes, verdicts, commands) and runs no cleanup."
+    case "$cli" in
+        claude) claude -p --permission-mode plan "$prompt" ;;
+        codex)  codex exec --sandbox read-only "$prompt" ;;
+        *)      "$cli" "$prompt" ;;
+    esac
 }
 
 _disk_index_of() {

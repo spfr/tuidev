@@ -11,8 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **An install prompt for your agent.** The README's quick start has a block to paste into Claude Code or Codex: it clones tuidev, recommends a profile, shows the dry run, waits for your yes, runs the same `install.sh`, then `make check` and `make perf`. It stops and hands you the command when something needs sudo or a path its sandbox denies.
 
+- **`make disk-agent` (`disk.sh --agent`): a second opinion from your agent.** It hands the audit as JSON to Claude Code (plan mode) or Codex (read-only sandbox) with rules: delete nothing, look to confirm, use only the audit's commands. On the machine it was built on, the agent found eight projects pinning Node versions the audit called superseded. The audit's paths and sizes go to that CLI's provider, said before it starts; nothing is sent without the flag.
+
 ### Changed
 
+- **`make disk` leads with what to do.** A run printed about 360 lines: every place looked at, then four lines per item. It now prints one line per stage while it looks and a summary of about 45 lines: items grouped into ready to clear (`--fix` offers them), safe by hand, held back right now, another tool's storage, and yours, each with its command or reason, dozens of build folders and worktrees folded into one line each, and the next command to run. `--details` is the full report, `--verbose` the full list of places and how each was found.
 - **The disk audit's tests run as two files at once.** `test_disk.sh` (what a read finds) and `test_disk_fix.sh` (what `--fix` does) share `disk_fixture.sh`. The slowest harness set the pace of the whole gate; it is now half as long. CI's unit-test jobs use the parallel runner too (`TUIDEV_TEST_BASH=/bin/bash` for the bash 3.2 job).
 
 ## [3.21.1] - 2026-11-12

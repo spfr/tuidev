@@ -185,7 +185,7 @@ make update-check / make update    # preview / apply updates (update-all is non-
 make update-migrations             # pending one-shot migrations only
 make update-security               # Tailscale, SSH permissions, Seatbelt drift
 make perf | perf-fix               # performance audit; then the fixes that need no root
-make disk | disk-fix               # what dev tools left on disk (deletes nothing); then a plan and one question per cleanup
+make disk | disk-fix | disk-agent  # what dev tools left on disk, grouped by what to do; a plan with one question each; an agent's plan
 make lint                          # shellcheck every shell script
 make validate-configs              # JSON / TOML / Lua / shell syntax
 make test-lib                      # unit harnesses

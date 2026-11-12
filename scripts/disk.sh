@@ -6,16 +6,19 @@
 # superseded runtimes, container storage, agent transcripts, build output of
 # repos no one touches, leftover worktrees. Each with its size, a verdict
 # (regenerable, stale, managed, yours), what it is, why, what reclaiming it
-# costs, and the command. It says on stderr what it looks at and how.
+# costs, and the command. It says on stderr what it is doing (--verbose: every
+# place and how).
 # Reading changes nothing; nothing is deleted without a yes.
 #
 # Usage:
-#   ./scripts/disk.sh               # report, grouped by verdict
+#   ./scripts/disk.sh               # summary: one line per item, grouped by what to do, then the next step
+#   ./scripts/disk.sh --details     # every item in full: what, why, cost, command
+#   ./scripts/disk.sh --explain ID  # one item in full (ID: the summary's third column)
+#   ./scripts/disk.sh --agent       # ask Claude Code or Codex for a cleanup plan (read-only; sends them the audit)
 #   ./scripts/disk.sh --json        # one JSON object, for an agent planning a cleanup
-#   ./scripts/disk.sh --explain ID  # one item in full (IDs: --json)
 #   ./scripts/disk.sh --quick       # skip the repos in your code folders
 #   ./scripts/disk.sh --min 1G      # hide items below a size (default 100M)
-#   ./scripts/disk.sh --verbose     # also say which places are not there
+#   ./scripts/disk.sh --verbose     # say every place looked at and how, and which are not there
 #   ./scripts/disk.sh --fix         # the plan, then ask before each tool's own cleanup command
 #   ./scripts/disk.sh --fix --yes   # run the plan without asking (required without a terminal)
 #   ./scripts/disk.sh --dry-run     # with --fix: print the plan, commands and log lines only
@@ -37,6 +40,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 FIX=false
 JSON=false
+DETAILS=false
+AGENT=false
 QUICK=""
 EXPLAIN=""
 
@@ -47,6 +52,8 @@ while [[ $# -gt 0 ]]; do
         --yes|-y)     DISK_ASSUME_YES=true; shift ;;
         --dry-run|-d) export DRY_RUN=true; shift ;;
         --json)       JSON=true; shift ;;
+        --details)    DETAILS=true; shift ;;
+        --agent)      AGENT=true; shift ;;
         --quick|-q)   QUICK=--quick; shift ;;
         --verbose|-v) DISK_VERBOSE=true; shift ;;
         --explain)
@@ -55,18 +62,19 @@ while [[ $# -gt 0 ]]; do
         --min)
             kb="$(disk_parse_size "${2:-}")" || { print_error "--min takes a size: 0, 500M, 1G"; exit 2; }
             DISK_MIN_KB="$kb"; DISK_YOURS_MIN_KB="$kb"; shift 2 ;;
-        --help|-h)    sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --help|-h)    sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) print_error "Unknown option: $1"; exit 2 ;;
     esac
 done
 
-if $FIX && { $JSON || [[ -n "$EXPLAIN" ]]; }; then
-    print_error "--fix goes alone: --json and --explain are for reading"
+if $FIX && { $JSON || $AGENT || [[ -n "$EXPLAIN" ]]; }; then
+    print_error "--fix goes alone: --json, --agent and --explain are for reading"
     exit 2
 fi
 
+# One line per stage; --verbose adds every place looked at and how.
 # shellcheck disable=SC2034
-DISK_PROGRESS=true
+if [[ "$DISK_VERBOSE" == true ]]; then DISK_PROGRESS=true; else DISK_PROGRESS=brief; fi
 # shellcheck disable=SC2034
 if [[ -t 0 ]]; then DISK_INTERACTIVE=true; fi
 
@@ -81,8 +89,13 @@ if [[ -n "$EXPLAIN" ]]; then
     exit 0
 fi
 
+if $AGENT; then
+    disk_agent || exit 1
+    exit 0
+fi
+
 print_header "tuidev Disk"
-disk_report
+if $DETAILS; then disk_report; else disk_summary; fi
 
 if $FIX; then
     echo ""

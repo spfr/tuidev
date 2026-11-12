@@ -187,6 +187,13 @@ export GOCACHE="$L/Caches/go-build"
 "$SCRIPT_DIR/../disk.sh" --json --quick --min 0 > "$tmp/script.json" 2> "$tmp/script.err" || fail "disk.sh --json failed"
 [[ -z "$real_jq" ]] || jq -e '.items | length > 0' "$tmp/script.json" >/dev/null || fail "disk.sh --json: $(cat "$tmp/script.json")"
 grep -q "du -sk" "$tmp/script.err" && ! grep -q "du -sk" "$tmp/script.json" || fail "progress is not on stderr only"
+"$SCRIPT_DIR/../disk.sh" --quick > "$tmp/script.txt" 2> "$tmp/script.err" || fail "disk.sh failed"
+grep -q "Ready to clear" "$tmp/script.txt" && grep -q "^Next" "$tmp/script.txt" && ! grep -q "what: " "$tmp/script.txt" || fail "disk.sh does not print the summary: $(cat "$tmp/script.txt")"
+grep -q "1/5 tool caches" "$tmp/script.err" && ! grep -q "found with" "$tmp/script.err" || fail "disk.sh progress is not brief: $(cat "$tmp/script.err")"
+"$SCRIPT_DIR/../disk.sh" --quick --details > "$tmp/script.txt" 2>/dev/null || fail "disk.sh --details failed"
+grep -q "what: " "$tmp/script.txt" || fail "--details does not print the details"
+"$SCRIPT_DIR/../disk.sh" --quick --verbose > /dev/null 2> "$tmp/script.err" || fail "disk.sh --verbose failed"
+grep -q "found with" "$tmp/script.err" || fail "--verbose does not say how each place was found"
 "$SCRIPT_DIR/../disk.sh" --quick --explain go-build > "$tmp/explain.txt" 2>/dev/null || fail "--explain failed"
 grep -q "what:    Compiled Go packages" "$tmp/explain.txt" && grep -q "cost:    the next build recompiles" "$tmp/explain.txt" \
     && grep -q "command: go clean -cache" "$tmp/explain.txt" && grep -q -- "--fix:   would ask" "$tmp/explain.txt" \
@@ -200,7 +207,7 @@ rc=0; "$SCRIPT_DIR/../disk.sh" --quick --explain nope >/dev/null 2>&1 || rc=$?
     || fail "non-interactive --fix without --yes: $(cat "$tmp/script.txt") $(cat "$tmp/state/calls")"
 "$SCRIPT_DIR/../disk.sh" --fix --yes --dry-run --quick < /dev/null > "$tmp/script.txt" 2>/dev/null || fail "disk.sh --fix --dry-run failed"
 [[ ! -s "$tmp/state/calls" ]] && grep -q "Dry run: nothing changed" "$tmp/script.txt" || fail "disk.sh dry run: $(cat "$tmp/script.txt")"
-for bad in "--json --fix" "--min lots" "--explain"; do
+for bad in "--json --fix" "--agent --fix" "--min lots" "--explain"; do
     rc=0
     # shellcheck disable=SC2086  # the options are split on purpose
     "$SCRIPT_DIR/../disk.sh" $bad >/dev/null 2>&1 || rc=$?
