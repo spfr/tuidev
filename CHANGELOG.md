@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.21.1] - 2026-11-12
+
+### Changed
+
+- **The local gate runs on every core.** `make test-lib` ran 34 harnesses one after another; `scripts/test_lib.sh` now runs them in parallel (`-j N` or `TUIDEV_TEST_JOBS`, 1 for the old serial run), prints their output in name order and names the slowest. `make lint` splits shellcheck across cores too. On a 14-core Mac `make ci-test` went from about 5.5 minutes to under 2.
+- **`glow` uses the pane's width.** It wrapped at 80 columns whatever the terminal; at a terminal `glow`, `md` and `mdp` now pass the current width (your own `-w` still wins).
+
+### Fixed
+
+- **The inotify drop-in `make perf` prints lost to any `99-*.conf`.** sysctl applies drop-ins in name order, so `60-inotify.conf` was overridden by a later file that set the same key. The file is now `zz-tuidev-inotify.conf`, and the finding names the files that set the limit today. If you created the old one: `sudo mv /etc/sysctl.d/60-inotify.conf /etc/sysctl.d/zz-tuidev-inotify.conf && sudo sysctl --system`.
+- **The disk test failed where the system ships `go`,** and `release-age` no longer sets `IFS` to split a path list.
+
 ## [3.21.0] - 2026-11-12
 
 A security and precision release, from an audit of the whole repo: two sandbox escapes closed, a data-loss bug in the config writer fixed, the memory guard six times cheaper, and everything optional or stale either removed or moved to where it is needed.
