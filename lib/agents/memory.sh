@@ -476,11 +476,11 @@ _agents_mem_show() {
         $1 ~ /^[0-9]+$/ { v = ($1 in rss && rss[$1] > $2) ? rss[$1] : $2; print $1 "\t" v }' | sort -t "$(printf '\t')" -k2,2nr)"
     while IFS=$'\t' read -r pid fp; do
         [[ "$pid" =~ ^[0-9]+$ ]] || continue
-        line="$(printf '%s\n' "$rows" | awk -F '\t' -v p="$pid" '$1 == p { print; exit }')"
+        line="$(awk -F '\t' -v p="$pid" '$1 == p { print; exit }' <<< "$rows")"
         [[ -n "$line" ]] || continue
         IFS=$'\t' read -r _ _ rss _ name label root rkind <<<"$line"
         [[ $rss -gt $fp ]] && fp="$rss"
-        proj="$(printf '%s\n' "$cwds" | awk -F '\t' -v p="$pid" '$1 == p { print $2; exit }')"
+        proj="$(awk -F '\t' -v p="$pid" '$1 == p { print $2; exit }' <<< "$cwds")"
         if [[ "$proj" == /* ]]; then proj="$(agents_project "$proj")"; else proj=-; fi
         session=-; [[ "$root" == - ]] || session="$rkind:$root"
         what="$(_agents_mem_what "$name" "$label")"

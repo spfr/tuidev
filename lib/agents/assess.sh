@@ -56,8 +56,8 @@ _agents_why_text() {
             auto) autot="  $text"$'\n' ;;
         esac
     done <<<"$1"
-    IFS=$'\t' read -r type pid start flag _ conf _ _ _ _ verdict _ <<<"$(printf '%s\n' "$1" | awk -F '\t' '$1 == "need" { print; exit }')"
-    cmd="$(printf '%s\n' "$2" | awk -F '\t' -v p="$pid" -v t="$flag" 'NF >= 14 && $2 == p && (t == "hog") == ($1 == "hog") { print ($1 == "hog" ? $3 : $14); exit }')"
+    IFS=$'\t' read -r type pid start flag _ conf _ _ _ _ verdict _ <<<"$(awk -F '\t' '$1 == "need" { print; exit }' <<< "$1")"
+    cmd="$(awk -F '\t' -v p="$pid" -v t="$flag" 'NF >= 14 && $2 == p && (t == "hog") == ($1 == "hog") { print ($1 == "hog" ? $3 : $14); exit }' <<< "$2")"
     case "$flag" in
         stale) what="stale process (its session ended)" ;;
         stuck) what="stuck polling loop" ;;
@@ -95,7 +95,7 @@ agents_why() {
     fi
     pid="${BASH_REMATCH[1]}" want="${BASH_REMATCH[3]}"
     recs="$(AGENTS_HERDR_MODE="${copy:+async}" agents_collect)" || return 1
-    now="$(printf '%s\n' "$recs" | awk -F '\t' -v p="$pid" 'NF >= 14 && $2 == p { print $9; exit }')"
+    now="$(awk -F '\t' -v p="$pid" 'NF >= 14 && $2 == p { print $9; exit }' <<< "$recs")"
     if [[ -n "$want" && -n "$now" && "$now" != "$want" ]]; then
         echo "agents: pid $pid now names another process (not the one listed)" >&2; return 1
     fi

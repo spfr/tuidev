@@ -82,9 +82,9 @@ _agents_show_once() {
         open="$(_agents_show_open "$proc")"   # where Codex's rollout file is
         [[ "$root" == "$pid" || "$rkind" != codex ]] || open="$(_agents_show_files "$root")"
         extra+="$(_agents_session_of "$root" "$rkind" "$rage" "$open" | _agents_show_f)"$'\n'
-        t="$(printf '%s' "$extra" | awk -F '\t' '$2 == "transcript" { print $3; exit }')"
+        t="$(awk -F '\t' '$2 == "transcript" { print $3; exit }' <<< "$extra")"
         [[ -z "$t" ]] || extra+="$(_agents_activity "$t" | _agents_show_f)"$'\n'
-        info="$(_agents_session_info "$(printf '%s' "$extra" | awk -F '\t' '$2 == "session" { print $3; exit }')")"
+        info="$(_agents_session_info "$(awk -F '\t' '$2 == "session" { print $3; exit }' <<< "$extra")")"
     fi
     [[ -z "$cwd" ]] || extra+="f"$'\t'"branch"$'\t'"$(_agents_git_branch "$cwd")"$'\n'
     if [[ "$cls" == mcp && "$label" != - ]]; then

@@ -202,8 +202,8 @@ _agents_herdr_pane() {
         [(.pane_id // "-"), (.agent // "-"), (.cwd // "-"), (.agent_session.value // "-")] | map(tostring) | @tsv' 2>/dev/null)"
     [[ -n "$list" ]] || return 0
     [[ "$root" =~ ^[0-9]+$ ]] && env="$(_agents_pane_env "$root" | cut -f2)"
-    [[ -z "$env" ]] || pane="$(printf '%s\n' "$list" | awk -F '\t' -v e="$env" '$1 == e { print $1; exit }')"
-    [[ -n "$pane" || -z "$sid" || "$sid" == - ]] || pane="$(printf '%s\n' "$list" | awk -F '\t' -v s="$sid" '$4 == s { print $1; exit }')"
+    [[ -z "$env" ]] || pane="$(awk -F '\t' -v e="$env" '$1 == e { print $1; exit }' <<< "$list")"
+    [[ -n "$pane" || -z "$sid" || "$sid" == - ]] || pane="$(awk -F '\t' -v s="$sid" '$4 == s { print $1; exit }' <<< "$list")"
     if [[ -z "$pane" ]]; then
         while IFS=$'\t' read -r p _; do
             [[ "$p" =~ ^[A-Za-z0-9:_-]+$ ]] || continue
@@ -254,7 +254,7 @@ _agents_jump_to() {
             _agents_herdr_target pane "$pid" "$root" "$kind" guess
             [[ -z "$pane" ]] || _agents_timeout 2 herdr agent focus "$pane" >/dev/null 2>&1 || pane=""
             # The terminal a Herdr client runs in.
-            IFS=$'\t' read -r _ client app <<<"$(printf '%s\n' "$where" | awk -F '\t' '$1 == "client" { print; exit }')"
+            IFS=$'\t' read -r _ client app <<<"$(awk -F '\t' '$1 == "client" { print; exit }' <<< "$where")"
             [[ -z "$client" ]] || tty="$(_agents_tty "$client")"
             if [[ -n "$pane" ]]; then echo "Herdr pane $pane"; else echo "Herdr (its pane not found)"; fi ;;
         app)

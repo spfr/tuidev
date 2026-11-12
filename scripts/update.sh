@@ -229,7 +229,7 @@ detect_outside_duplication() {
 
     # First 5 consecutive non-blank lines of source — a fingerprint that's
     # extremely unlikely to appear in genuine user content by coincidence.
-    signature="$(printf '%s\n' "$source_content" | awk 'NF {print; if (++n == 5) exit}')"
+    signature="$(awk 'NF {print; if (++n == 5) exit}' <<< "$source_content")"
 
     if [[ -n "$pre" && "$pre" == *"$source_content"* ]]; then
         echo "exact-pre"; return 0

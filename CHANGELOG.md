@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **A hung `terminal-notifier` could show the banner twice.** When the 5 s cut-off fired, its timer could still be alive for an instant, so the notifier was read as failed rather than timed out and `osascript` showed the banner again. A command ended by the cut-off's signal is now always a timeout (the same helper in `agents` too). For the same reason `agents open-term` could start a second Ghostty instance after its AppleScript ran out of time; it now waits for the window that may still come. Found by running the tests in parallel.
+- **`agents why` could print "Broken pipe" where the parent process ignores that signal** (CI runners, some launchers). Eleven lookups that stop at the first match now read their input directly instead of through a pipe.
 
 ### Changed
 
