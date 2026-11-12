@@ -372,6 +372,113 @@ HOME="$v3_home" TUIDEV_STATE_DIR='' TUIDEV_MANIFEST_FILE='' bash "$ts_mig" >/dev
 rm -f "$ts_manifest"
 pass "tailscale-app migration renames the cask record, idempotently"
 
+# 14l. Toolchains leave the shipped .zshrc: the ones on this machine move to
+# ~/.zshrc.local once, under one marked section; nothing else is written.
+tc_mig="$SCRIPT_DIR/../migrations/202611121200_zshrc_toolchains_to_local.sh"
+tc_home="$tmp/tc-home"
+# A fake brew prefix without Ruby, and a PATH without jenv: the developer's
+# own Homebrew must not leak in.
+tc_run() {
+    env -u ANDROID_HOME -u JENV_ROOT HOME="$tc_home" HOMEBREW_PREFIX="$tmp/tc-brew" \
+        PATH=/usr/bin:/bin TUIDEV_STATE_DIR='' TUIDEV_BACKUP_DIR='' bash "$tc_mig"
+}
+# shellcheck disable=SC2016  # zsh lines, written out unexpanded
+tc_reset() {   # tc_reset [OWN LINE FOR ~/.zshrc]: a home with the old shipped block
+    rm -rf "$tc_home"; mkdir -p "$tc_home" "$tmp/tc-brew"
+    {
+        printf '%s\n' "${1:-# my own line}"
+        printf '%s\n' "# >>> tuidev managed (tuidev-zshrc) >>>"
+        printf '%s\n' 'eval "$(jenv init -)"' 'export ANDROID_HOME="$HOME/Library/Android/sdk"' \
+            'export PATH="$PATH:$ANDROID_HOME/platform-tools"' 'export PATH="$HOME/.yarn/bin:$PATH"'
+        printf '%s\n' "# <<< tuidev managed (tuidev-zshrc) <<<"
+    } > "$tc_home/.zshrc"
+}
+tc_sections() {   # the first word of each section's heading comment
+    grep -E '^# (Ruby|Java|Yarn|RVM|Android|Google Cloud|iTerm2)' "$tc_home/.zshrc.local" \
+        | sed -E 's/^# ([A-Za-z0-9]+).*/\1/' | tr '\n' ' '
+}
+tc_backups() { find "$tc_home/.config/tuidev/backups" -name '.zshrc.local.*' 2>/dev/null | wc -l | tr -d ' '; }
+
+tc_reset
+mkdir -p "$tc_home/.jenv/bin" "$tc_home/Library/Android/sdk/platform-tools"
+tc_run >/dev/null || fail "toolchains migration failed"
+[[ "$(tc_sections)" == "Java Android " ]] || fail "jenv + Android: sections '$(tc_sections)'"
+grep -qF 'jenv init' "$tc_home/.zshrc.local" || fail "jenv init not carried"
+grep -qxF "# >>> tuidev managed (tuidev-moved-toolchains) >>>" "$tc_home/.zshrc.local" || fail "no marked section"
+grep -q 'LDFLAGS=' "$tc_home/.zshrc.local" && fail "an LDFLAGS line was written"
+[[ "$(tc_backups)" == 0 ]] || fail "a new .zshrc.local was backed up"
+grep -q tuidev-moved-toolchains "$TUIDEV_MANIFEST_FILE" 2>/dev/null && fail "moved section recorded for uninstall"
+zsh_ok=false; command -v zsh >/dev/null 2>&1 && zsh_ok=true
+if $zsh_ok; then zsh -n "$tc_home/.zshrc.local" || fail "moved section is not valid zsh"; fi
+sum="$(cksum < "$tc_home/.zshrc.local")"
+out="$(tc_run 2>&1)" || fail "toolchains migration not re-runnable"
+[[ "$(cksum < "$tc_home/.zshrc.local")" == "$sum" && -z "$out" ]] || fail "rerun changed something: $out"
+pass "toolchains migration: jenv + Android get exactly those two sections; a rerun changes nothing"
+
+# The new shipped .zshrc plus that ~/.zshrc.local: java, adb on PATH where the
+# old block put them (shims before the system dirs, the SDK after), and no
+# Ruby build flags, even with Homebrew's Ruby installed.
+if $zsh_ok; then
+    printf '#!/bin/sh\n' > "$tc_home/.jenv/bin/jenv"; chmod +x "$tc_home/.jenv/bin/jenv"
+    cp "$SCRIPT_DIR/../../configs/zsh/.zshrc" "$tc_home/.zshrc"
+    # shellcheck disable=SC2016  # expanded by zsh
+    zout="$(env -i HOME="$tc_home" ZDOTDIR="$tc_home" PATH=/usr/bin:/bin TERM=dumb \
+        zsh -i -c 'print -l -- $path; print -- "ANDROID_HOME=$ANDROID_HOME"; env | grep -E "^(LDFLAGS|CPPFLAGS)="' \
+        </dev/null 2>/dev/null)" || true
+    tc_at() { printf '%s\n' "$zout" | grep -nxF -- "$1" | head -1 | cut -d: -f1; }
+    shims="$(tc_at "$tc_home/.jenv/shims")"; usr="$(tc_at /usr/bin)"; adb="$(tc_at "$tc_home/Library/Android/sdk/platform-tools")"
+    [[ -n "$shims" && -n "$usr" && -n "$adb" && -n "$(tc_at "$tc_home/.jenv/bin")" ]] \
+        || fail "zsh PATH lacks the moved entries: $zout"
+    (( shims < usr && usr < adb )) || fail "zsh PATH order: shims $shims, /usr/bin $usr, platform-tools $adb"
+    printf '%s\n' "$zout" | grep -qxF "ANDROID_HOME=$tc_home/Library/Android/sdk" || fail "ANDROID_HOME not set: $zout"
+    printf '%s\n' "$zout" | grep -qE '^(LDFLAGS|CPPFLAGS)=' && fail "Ruby build flags exported: $zout"
+    pass "toolchains migration: the new .zshrc + .zshrc.local resolve jenv and the SDK, no LDFLAGS/CPPFLAGS"
+else
+    echo "SKIP: zsh not installed (toolchains PATH check)"
+fi
+
+# A user who runs `jenv init` in their own ~/.zshrc gets no second copy.
+# shellcheck disable=SC2016
+tc_reset 'eval "$(jenv init -)"'
+mkdir -p "$tc_home/.jenv/bin" "$tc_home/Library/Android/sdk"
+tc_run >/dev/null || fail "toolchains migration failed (own jenv)"
+[[ "$(tc_sections)" == "Android " ]] || fail "own jenv init: sections '$(tc_sections)'"
+pass "toolchains migration: a tool the user sets up is not duplicated"
+
+# None of the tools: no file. A ~/.zshrc without the shipped block: no file.
+tc_reset
+tc_run >/dev/null || fail "toolchains migration failed (none)"
+[[ ! -e "$tc_home/.zshrc.local" ]] || fail "a machine with no toolchains got a .zshrc.local"
+tc_reset; mkdir -p "$tc_home/.jenv/bin"
+printf '# not tuidev\n' > "$tc_home/.zshrc"
+tc_run >/dev/null || fail "toolchains migration failed (no block)"
+[[ ! -e "$tc_home/.zshrc.local" ]] || fail "a .zshrc without the shipped block got a .zshrc.local"
+pass "toolchains migration: nothing to carry writes nothing"
+
+# Dry run writes nothing; a real run on an existing file backs it up first and
+# keeps the user's lines; through a symlink, the user's lines and the section
+# both read back from ~/.zshrc.local.
+tc_reset; mkdir -p "$tc_home/.rvm/bin" "$tc_home/tools/google-cloud-sdk"
+: > "$tc_home/tools/google-cloud-sdk/path.zsh.inc"
+printf 'export MINE=1\n' > "$tc_home/.zshrc.local"
+DRY_RUN=true tc_run >/dev/null || fail "toolchains migration failed (dry run)"
+[[ "$(cat "$tc_home/.zshrc.local")" == "export MINE=1" ]] || fail "dry run wrote .zshrc.local"
+[[ ! -e "$tc_home/.config/tuidev/backups" ]] || fail "dry run made a backup"
+tc_run >/dev/null || fail "toolchains migration failed (existing file)"
+[[ "$(tc_backups)" == 1 ]] || fail "existing .zshrc.local not backed up"
+[[ "$(cat "$tc_home/.config/tuidev/backups"/.zshrc.local.*)" == "export MINE=1" ]] || fail "backup content"
+[[ "$(head -1 "$tc_home/.zshrc.local")" == "export MINE=1" ]] || fail "user's line lost"
+[[ "$(tc_sections)" == "RVM Google " ]] || fail "rvm + gcloud: sections '$(tc_sections)'"
+tc_reset; mkdir -p "$tc_home/.yarn" "$tmp/tc-dotfiles"
+printf 'export MINE=1\n' > "$tmp/tc-dotfiles/zshrc.local"
+ln -s "$tmp/tc-dotfiles/zshrc.local" "$tc_home/.zshrc.local"
+tc_run >/dev/null || fail "toolchains migration failed (symlink)"
+[[ "$(head -1 "$tc_home/.zshrc.local")" == "export MINE=1" && "$(tc_sections)" == "Yarn " ]] \
+    || fail "symlinked .zshrc.local: $(cat "$tc_home/.zshrc.local")"
+[[ "$(tc_backups)" == 1 ]] || fail "symlinked .zshrc.local not backed up"
+[[ -L "$tc_home/.zshrc.local" ]] || fail "the migration replaced a symlinked .zshrc.local"
+pass "toolchains migration: dry run writes nothing; an existing file is backed up and kept"
+
 # ---------------------------------------------------------------------------
 # manifest.sh
 # ---------------------------------------------------------------------------

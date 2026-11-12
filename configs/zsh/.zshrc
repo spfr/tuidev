@@ -1,8 +1,5 @@
-# ============================================================================
-# Modern ZSH Configuration for AI-Powered Development
-# Optimized for multi-agent workflows and TUI productivity
-# Created: 2026-01-05
-# ============================================================================
+# tuidev's shipped zsh config, installed as the managed block `tuidev-zshrc`.
+# Your own lines go outside the block or in ~/.zshrc.local, which is sourced last.
 
 # tuidev env: written by install.sh, exports TUIDEV_REPO and TUIDEV_PROFILE.
 # Kept at the top so every downstream block (update helpers, pack fragments)
@@ -65,36 +62,6 @@ fi
 _tuidev_brew_prefix=${HOMEBREW_PREFIX:-}
 [[ -z $_tuidev_brew_prefix && -n ${commands[brew]} ]] && _tuidev_brew_prefix=${commands[brew]:h:h}
 
-# Ruby (Homebrew keg-only) - if installed
-if [[ -n $_tuidev_brew_prefix && -d $_tuidev_brew_prefix/opt/ruby ]]; then
-  export PATH="$_tuidev_brew_prefix/opt/ruby/bin:$PATH"
-  export LDFLAGS="-L$_tuidev_brew_prefix/opt/ruby/lib"
-  export CPPFLAGS="-I$_tuidev_brew_prefix/opt/ruby/include"
-fi
-
-# Java (jenv) - if installed. Shims go on PATH now; the full `jenv init`
-# (~60 ms: rehash + refresh-plugins) runs on the first `jenv` call. Enabled
-# jenv plugins (e.g. export, which sets JAVA_HOME) need their init hooks at
-# startup, so that setup keeps the eager init.
-[[ -d "$HOME/.jenv/bin" ]] && export PATH="$HOME/.jenv/bin:$PATH"
-_tuidev_jenv_plugins=("${JENV_ROOT:-$HOME/.jenv}"/plugins/*(N))
-if (( $+commands[jenv] )); then
-  if (( ${#_tuidev_jenv_plugins} )); then
-    eval "$(jenv init -)"
-  else
-    export PATH="${JENV_ROOT:-$HOME/.jenv}/shims:$PATH" JENV_SHELL=zsh JENV_LOADED=1
-    unset JAVA_HOME JDK_HOME
-    jenv() { unfunction jenv; eval "$(command jenv init - zsh)"; jenv "$@"; }
-  fi
-fi
-unset _tuidev_jenv_plugins
-
-# Yarn - if installed
-[[ -d "$HOME/.yarn" ]] && export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
-
-# RVM (Ruby Version Manager) - if installed
-[[ -d "$HOME/.rvm/bin" ]] && export PATH="$PATH:$HOME/.rvm/bin"
-
 # Rust (cargo) - if installed; exposes `cargo install`ed tools
 [[ -d "$HOME/.cargo/bin" ]] && export PATH="$HOME/.cargo/bin:$PATH"
 
@@ -109,11 +76,9 @@ typeset -U path PATH
 path=("$HOME/.local/bin" $path)
 export PATH
 
-# Android SDK - if installed (cmdline-tools replaces the retired `tools` dir)
-[[ -d "$HOME/Library/Android/sdk" ]] && export ANDROID_HOME="$HOME/Library/Android/sdk"
-[[ -n "$ANDROID_HOME" ]] && export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin"
-
-# Custom tool paths belong in ~/.zshrc.local (sourced last).
+# Language toolchains and SDKs (Ruby, Java, Android, Google Cloud, ...) are
+# not part of the agent terminal: set them up in ~/.zshrc.local, which is
+# sourced last, so its PATH entries come before everything here.
 
 # ============================================================================
 # Completions
@@ -266,43 +231,39 @@ alias gd='git diff'
 alias gco='git checkout'
 alias gb='git branch'
 
-# Elite TUI Tools
-command -v lazydocker &>/dev/null && alias lzd='lazydocker'   # not `ld`: that shadows the linker for agents and builds
-
-# Note: broot uses its own shell function 'br' (installed via `broot --install`)
-
 # tldr pages
 command -v tldr &>/dev/null && alias help='tldr'
 
-# NOTE: sd, procs, dust, and duf are NOT aliased over sed/ps/du/df.
-# Their flags are incompatible (e.g. `sed -n '1,5p'` breaks under sd), which
-# silently breaks scripts and AI agents that inherit shell aliases.
-# Call them by their own names: sd, procs, dust, duf.
+# procs and dust are NOT aliased over ps and du: their flags differ, which
+# silently breaks scripts and the agents that inherit this shell. Call them by
+# their own names.
 
 # Navigation
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
-[[ -o interactive ]] && alias cd='z'  # Use zoxide (only in interactive shells)
+# cd is zoxide for a person. Agents inherit this shell, and `z` takes none of
+# cd's flags, so anything that is not a terminal, or passes a flag, gets cd.
+unalias cd 2>/dev/null
+if [[ -o interactive ]]; then
+  function cd {
+    if [[ -t 1 && "${1:-}" != -?* ]] && (( $+functions[z] )); then z "$@"; else builtin cd "$@"; fi
+  }
+fi
 
 # System
 if command -v btm &>/dev/null; then
   function top { if [[ -t 1 ]]; then btm "$@"; else command top "$@"; fi; }   # bottom, for a person
-  alias bottom='btm'  # explicit bottom command
 fi
 
 # Markdown viewer
 command -v glow &>/dev/null && alias md='glow'
 
-# Development
-alias serve='python3 -m http.server'
-
 # Utility
 alias reload='source ~/.zshrc'
 # Functions, not aliases: $EDITOR may carry arguments (code --wait).
-unalias zshconfig mde 2>/dev/null
+unalias zshconfig 2>/dev/null
 function zshconfig { ${=EDITOR} ~/.zshrc; }
-alias cleanup='brew cleanup && brew autoremove'
 
 # Code stats
 command -v tokei &>/dev/null && alias loc='tokei'
@@ -351,63 +312,12 @@ mdp() {
   fi
 }
 
-# Edit a markdown file in $EDITOR
-function mde { ${=EDITOR} "$@"; }
-
-# Quick project stats
-pstats() {
-  echo "📊 Project Statistics"
-  echo "===================="
-  if command -v tokei &>/dev/null; then
-    tokei .
-  else
-    find . -type f -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.java" -o -name "*.scala" | wc -l | xargs -I {} echo "Source files: {}"
-  fi
-  echo ""
-  echo "📁 Directory size:"
-  if command -v dust &>/dev/null; then
-    dust -d 1
-  else
-    du -sh . 2>/dev/null
-  fi
-}
-
 # Quick benchmark command
 bench() {
   if command -v hyperfine &>/dev/null; then
     hyperfine "$@"
   else
     time "$@"
-  fi
-}
-
-# Start tunnel for remote access
-tunnel() {
-  local port=${1:-22}
-
-  # Show Tailscale info if available
-  if command -v tailscale &>/dev/null; then
-    local ts_ip
-    ts_ip=$(tailscale ip -4 2>/dev/null)
-    if [[ -n "$ts_ip" ]]; then
-      echo "Tailscale IP: $ts_ip (direct access via: ssh $(whoami)@$ts_ip)"
-      echo "For mobile: use mosh $(whoami)@$ts_ip"
-      echo ""
-      echo "If Tailscale access is sufficient, no tunnel needed."
-      echo "Starting public tunnel anyway..."
-      echo ""
-    fi
-  fi
-
-  if command -v cloudflared &>/dev/null; then
-    echo "Starting Cloudflare tunnel on port $port..."
-    cloudflared tunnel --url tcp://localhost:$port
-  elif command -v ngrok &>/dev/null; then
-    echo "Starting ngrok tunnel on port $port..."
-    ngrok tcp $port
-  else
-    echo "No tunnel tool found. Install cloudflared or ngrok."
-    echo "Or use Tailscale for direct access (recommended)."
   fi
 }
 
@@ -529,24 +439,6 @@ remote-status() {
 }
 
 # ============================================================================
-# Tool-Specific Configuration
-# ============================================================================
-
-# Google Cloud SDK - if installed
-if [ -f "$HOME/tools/google-cloud-sdk/path.zsh.inc" ]; then
-  . "$HOME/tools/google-cloud-sdk/path.zsh.inc"
-fi
-if [ -f "$HOME/tools/google-cloud-sdk/completion.zsh.inc" ]; then
-  . "$HOME/tools/google-cloud-sdk/completion.zsh.inc"
-fi
-
-# iTerm2 shell integration — only inside iTerm2; elsewhere it just prints
-# iTerm-private escape codes.
-if [[ $TERM_PROGRAM == iTerm.app && -f "$HOME/.iterm2_shell_integration.zsh" ]]; then
-  source "$HOME/.iterm2_shell_integration.zsh"
-fi
-
-# ============================================================================
 # History Configuration
 # ============================================================================
 
@@ -569,7 +461,6 @@ setopt AUTO_CD                  # cd by typing directory name
 setopt AUTO_PUSHD              # Make cd push old directory onto directory stack
 setopt PUSHD_IGNORE_DUPS       # Don't push duplicates
 setopt PUSHD_SILENT            # Don't print directory stack after pushd/popd
-setopt CORRECT                 # Spelling correction
 setopt INTERACTIVE_COMMENTS    # Allow comments in interactive shells
 
 # ============================================================================
