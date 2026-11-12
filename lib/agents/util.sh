@@ -108,6 +108,9 @@ _agents_timeout() {
         wait "$pid" 2>/dev/null; rc=$?
         # The watcher gone means it fired: CMD was killed for taking too long.
         kill -TERM -- "-$watcher" 2>/dev/null || [[ $rc -lt 128 ]] || rc=124
+        # A watcher that has just fired may still be alive for that kill to
+        # reach; CMD ended by SIGTERM (143) is the cut-off all the same.
+        [[ $rc -ne 143 ]] || rc=124
         exit "$rc"
     )
 }

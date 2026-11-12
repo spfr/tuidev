@@ -103,7 +103,8 @@ _agents_ghostty_window() {
     local out rc=0
     out="$(_agents_timeout 10 "$@" 2>/dev/null)" || rc=$?
     [[ "$out" == ok ]] && return 0
-    [[ $rc -gt 128 ]] && return 2
+    # 124 is _agents_timeout's cut-off; above 128 the script died of a signal.
+    [[ $rc -eq 124 || $rc -gt 128 ]] && return 2
     return 1
 }
 

@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`make disk-agent` (`disk.sh --agent`): a second opinion from your agent.** It hands the audit as JSON to Claude Code (plan mode) or Codex (read-only sandbox) with rules: delete nothing, look to confirm, use only the audit's commands. On the machine it was built on, the agent found eight projects pinning Node versions the audit called superseded. The audit's paths and sizes go to that CLI's provider, said before it starts; nothing is sent without the flag.
 
+### Fixed
+
+- **A hung `terminal-notifier` could show the banner twice.** When the 5 s cut-off fired, its timer could still be alive for an instant, so the notifier was read as failed rather than timed out and `osascript` showed the banner again. A command ended by the cut-off's signal is now always a timeout (the same helper in `agents` too). For the same reason `agents open-term` could start a second Ghostty instance after its AppleScript ran out of time; it now waits for the window that may still come. Found by running the tests in parallel.
+
 ### Changed
 
 - **`make disk` leads with what to do.** A run printed about 360 lines: every place looked at, then four lines per item. It now prints one line per stage while it looks and a summary of about 45 lines: items grouped into ready to clear (`--fix` offers them), safe by hand, held back right now, another tool's storage, and yours, each with its command or reason, dozens of build folders and worktrees folded into one line each, and the next command to run. `--details` is the full report, `--verbose` the full list of places and how each was found.

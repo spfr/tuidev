@@ -103,6 +103,9 @@ with_timeout() {
         watcher=$!
         wait "$pid" 2>/dev/null; rc=$?
         kill -TERM -- "-$watcher" 2>/dev/null || [[ $rc -lt 128 ]] || rc=124
+        # A watcher that has just fired may still be alive for that kill to
+        # reach; CMD ended by SIGTERM (143) is the cut-off all the same.
+        [[ $rc -ne 143 ]] || rc=124
         exit "$rc"
     )
 }
