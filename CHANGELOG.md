@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.21.2] - 2026-11-12
+
+### Added
+
+- **An install prompt for your agent.** The README's quick start has a block to paste into Claude Code or Codex: it clones tuidev, recommends a profile, shows the dry run, waits for your yes, runs the same `install.sh`, then `make check` and `make perf`. It stops and hands you the command when something needs sudo or a path its sandbox denies.
+
+### Changed
+
+- **The disk audit's tests run as two files at once.** `test_disk.sh` (what a read finds) and `test_disk_fix.sh` (what `--fix` does) share `disk_fixture.sh`. The slowest harness set the pace of the whole gate; it is now half as long. CI's unit-test jobs use the parallel runner too (`TUIDEV_TEST_BASH=/bin/bash` for the bash 3.2 job).
+
 ## [3.21.1] - 2026-11-12
 
 ### Changed
