@@ -14,7 +14,7 @@ What `--profile full` puts on a machine, by what it replaces. The [tables below]
 - `bat` replaces `cat`: syntax highlighting, line numbers and git change marks.
 - `eza` replaces `ls` and `tree`: a git status column, icons and a tree view (`ll`, `la`, `lt`).
 - `zoxide` replaces long `cd` paths: `z api` jumps to the directory you use most.
-- `broot`, `dust` and `duf` replace `tree`, `du` and `df` with output you can read.
+- `broot` and `dust` replace `tree` and `du` with output you can read.
 
 **[Git and review](#git-and-review)**
 
@@ -23,13 +23,17 @@ What `--profile full` puts on a machine, by what it replaces. The [tables below]
 - `lazygit` (`lg`) stages hunks, rebases and stashes in one screen.
 - Git gets better defaults: histogram diffs, `zdiff3` conflicts, `rerere`, a remote set up on first push, prune on fetch.
 
+**[CI and secrets](#ci-and-secrets)**
+
+- `actionlint` lints GitHub Actions workflows, `zizmor` audits them for security problems, and `betterleaks` scans for committed secrets. Agents run them before a commit.
+
 **[Data, HTTP and quality](#data-http-and-quality)**
 
 - `jq` and `yq` query JSON and YAML instead of grepping them.
 - `shellcheck` catches shell script bugs before they run.
 - `xh` replaces `curl` for APIs, with formatted JSON.
 - `hyperfine` benchmarks a command properly (`bench CMD`).
-- `sd`, `procs`, `tokei`, `tealdeer` and `glow` replace `sed`, `ps`, `cloc`, `man` and a Markdown preview.
+- `procs`, `tokei`, `tealdeer` and `glow` replace `ps`, `cloc`, `man` and a Markdown preview.
 
 **[Languages](#languages)**
 
@@ -44,7 +48,7 @@ What `--profile full` puts on a machine, by what it replaces. The [tables below]
 
 **[Monitoring and agents](#tuidevs-own-commands)**
 
-- `btm` replaces `top`, and `lazydocker` (`lzd`) covers containers.
+- `btm` replaces `top`.
 - `agents` shows who needs you, what sessions left running, and where the CPU, the memory and the tokens went.
 - `sbx -- CMD` runs anything with no access to your credentials.
 - `mcp-lazy` starts an MCP server on its first use, not once per session.
@@ -65,8 +69,8 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 
 | Role | Tools | Rule |
 |------|-------|------|
-| **Both** | `rg`, `fd`, `jq`, `yq`, `git`, `gh`, `shellcheck`, `uv`, `hyperfine` | Scriptable, stable flags, quiet output. Agents call them by their own names. |
-| **Yours** | `bat`, `eza`, `fzf`, `zoxide`, `delta`, `atuin`, `lazygit`, `btm`, `lazydocker`, `broot`, `glow`, `sd`, `tokei`, `xh`, Starship | Interactive or decorative. They never stand between an agent and the command it typed. |
+| **Both** | `rg`, `fd`, `jq`, `yq`, `git`, `gh`, `shellcheck`, `uv`, `hyperfine`, `actionlint`, `zizmor`, `betterleaks` | Scriptable, stable flags, quiet output. Agents call them by their own names. |
+| **Yours** | `bat`, `eza`, `fzf`, `zoxide`, `delta`, `atuin`, `lazygit`, `btm`, `broot`, `glow`, `tokei`, `xh`, Starship | Interactive or decorative. They never stand between an agent and the command it typed. |
 | **About agents** | `agents`, Herdr, `sbx`, `mcp-lazy`, `notify.sh`, `hunk` | They watch, confine or review what agents do. |
 
 ## The tools
@@ -81,7 +85,7 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 | [bat](https://github.com/sharkdp/bat) | `cat`, `less` | Syntax highlighting, line numbers and git change marks. | Yours: `cat FILE` at a terminal runs it. |
 | [eza](https://github.com/eza-community/eza) | `ls`, `tree` | A git status column, icons, and a tree view. | Yours: `ls`, `ll`, `la`, `lt`. |
 | [zoxide](https://github.com/ajeetdsouza/zoxide) | `cd` with long paths | Jumps to the directory you use most that matches a few letters. | Yours: `z api`. Interactive shells only. |
-| [broot](https://github.com/Canop/broot), [dust](https://github.com/bootandy/dust), [duf](https://github.com/muesli/duf) (extras) | `tree`, `du`, `df` | A navigable tree, and disk use you can read at a glance. | Yours. They keep their own names. |
+| [broot](https://github.com/Canop/broot), [dust](https://github.com/bootandy/dust) (extras) | `tree`, `du` | A navigable tree, and disk use you can read at a glance. | Yours. They keep their own names. |
 
 ### Git and review
 
@@ -93,6 +97,14 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 | [lazygit](https://github.com/jesseduffield/lazygit) (extras) | `git add -p` by hand | Staging hunks, rebases and stashes in one screen. | Yours: `lg`, or `Ctrl+a g` in tmux. |
 | [hunk](https://hunk.dev) (`--pack hunk`) | scrolling a long `git diff` | A review-first viewer for a change set an agent wrote, with `--watch` while it works. | Yours. |
 
+### CI and secrets
+
+| Tool | Instead of | Why it is here | How it is used |
+|------|-----------|----------------|----------------|
+| [actionlint](https://github.com/rhysd/actionlint) (`--pack ci`) | finding a broken workflow after the push | Checks workflow syntax, `${{ }}` expressions and the shell in `run:` steps. Agents write CI files, and a failed run costs a round trip. | Both: `actionlint` before committing a workflow. |
+| [zizmor](https://github.com/zizmorcore/zizmor) (`--pack ci`) | reading a workflow for injection by eye | Audits workflows for script injection, over-broad `permissions` and actions pinned to a tag instead of a commit. | Both: `zizmor .github/workflows`. |
+| [betterleaks](https://github.com/betterleaks/betterleaks) (`--pack ci`) | hoping no key was committed | Scans the working tree and git history for secrets, and reads a repo's `.gitleaks.toml`. Agents commit code, and a pushed key is already leaked. | Both: `betterleaks git` before a push. |
+
 ### Data, HTTP and quality
 
 | Tool | Instead of | Why it is here | How it is used |
@@ -101,7 +113,7 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 | [shellcheck](https://www.shellcheck.net) | finding the bug at run time | Catches unquoted variables, wrong tests and unportable syntax in shell scripts. Agents write a lot of shell. | Both; allowed for agents. |
 | [xh](https://github.com/ducaale/xh) (extras) | `curl` with flags | `xh :3000/health` prints formatted, colored JSON. | Yours. Agents keep to `curl`. |
 | [hyperfine](https://github.com/sharkdp/hyperfine) (extras) | `time`, once | Runs a command many times, with warm-up, and reports the spread. "Is it faster?" gets a number. | Both: `bench CMD`. |
-| [sd](https://github.com/chmln/sd), [procs](https://github.com/dalance/procs), [tokei](https://github.com/XAMPPRocky/tokei), [tealdeer](https://github.com/tealdeer-rs/tealdeer), [glow](https://github.com/charmbracelet/glow) (extras) | `sed`, `ps`, `cloc`, `man`, a Markdown preview | Simpler syntax and faster answers. | Yours (`help CMD`, `md FILE`, `loc`). `sd` and `tokei` are scriptable, but agents keep to `sed` and `wc`. |
+| [procs](https://github.com/dalance/procs), [tokei](https://github.com/XAMPPRocky/tokei), [tealdeer](https://github.com/tealdeer-rs/tealdeer), [glow](https://github.com/charmbracelet/glow) (extras) | `ps`, `cloc`, `man`, a Markdown preview | Simpler syntax and faster answers. | Yours (`help CMD`, `md FILE`, `loc`). `tokei` is scriptable, but agents keep to `wc`. |
 
 ### Languages
 
@@ -140,7 +152,7 @@ Not by a long list of instructions. Every line in an instruction file is loaded 
 
 1. **The CLI does it already.** Claude Code's search tool is ripgrep, and inside its shell it replaces `grep` and `find` with versions that honor ignore files while taking the same flags (checked on Claude Code 2.1.322). tuidev adds nothing here, on purpose.
 
-2. **The shell stays honest.** Claude Code captures your aliases and functions into the shell its commands run in. An alias that changes a command's flags is then a trap: `ls -lt`, `cat -v` and `top -l 1` are all errors under `eza`, `bat` and `btm`. So the shipped `.zshrc` makes `cat`, `ls` and `top` functions that use the modern tool only when stdout is a terminal, and the real command otherwise (an agent, a pipe, a script). `sd`, `procs`, `dust` and `duf` are never aliased over `sed`, `ps`, `du` and `df` for the same reason, and `cd` is zoxide only in an interactive shell.
+2. **The shell stays honest.** Claude Code captures your aliases and functions into the shell its commands run in. An alias that changes a command's flags is then a trap: `ls -lt`, `cat -v` and `top -l 1` are all errors under `eza`, `bat` and `btm`. So the shipped `.zshrc` makes `cat`, `ls` and `top` functions that use the modern tool only when stdout is a terminal, and the real command otherwise (an agent, a pipe, a script). `procs` and `dust` are never aliased over `ps` and `du` for the same reason, and `cd` is zoxide only in an interactive shell.
 
    The rule: **replace a command for an agent only with something that takes the same flags.** Everything else keeps its own name.
 

@@ -24,11 +24,11 @@ Troubleshooting, one question at a time. Each topic's full reference is in its o
 
 **`work`, `dev`, `ai`, `ai-triple` and the other tmux layouts are gone.** 3.0 dropped every tmux-wrapper function and its ten layouts, along with `tk`/`tka` and `make test-layouts`. tmux itself is now optional (`--pack tmux`), not baked into any profile except `remote`. `.zshrc` keeps only a small attach-or-create helper: `t [NAME]` (default session name `main`) and `tls` to list sessions. See [remote.md](remote.md#connect-and-re-attach).
 
-**`ld` no longer opens lazydocker.** It is `lzd` now. An `ld` alias shadowed the linker for builds and agents.
+**Where did Ruby, jenv, Yarn, RVM, the Android SDK, gcloud and iTerm2's integration go?** Out of the shipped `.zshrc`: they are personal toolchains, not part of an agent terminal, and Ruby's global `LDFLAGS`/`CPPFLAGS` leaked into unrelated native builds. On an existing machine, `update.sh --configs` first moved the ones it found into a marked section of `~/.zshrc.local`, which is yours to keep or trim; Ruby keeps only its `PATH` line. On a new machine, set up the ones you use in `~/.zshrc.local`.
 
 **Up arrow doesn't open atuin.** By design: Up recalls history entries that start with what you have typed. `Ctrl+r` opens atuin.
 
-**The shell is slow to start.** A stock shell starts in about 70 ms. Measure it with `time zsh -i -c exit`. Tool init scripts (starship, zoxide, atuin, fzf) are cached in `~/.cache/zsh/init-*.zsh` and regenerate when the tool's binary changes. jenv loads lazily, on first use. Look in `~/.zshrc.local` for anything that sources `nvm.sh` or runs `eval "$(tool init)"` eagerly. After installing new completions, run `rm ~/.cache/zsh/zcompdump-*`.
+**The shell is slow to start.** A stock shell starts in about 70 ms. Measure it with `time zsh -i -c exit`. Tool init scripts (starship, zoxide, atuin, fzf) are cached in `~/.cache/zsh/init-*.zsh` and regenerate when the tool's binary changes. Look in `~/.zshrc.local` for anything that sources `nvm.sh` or runs `eval "$(tool init)"` eagerly. After installing new completions, run `rm ~/.cache/zsh/zcompdump-*`.
 
 **Word jumps, Home or End print garbage.** In Ghostty, Option acts as Alt (`macos-option-as-alt = true`), so `Alt+b` / `Alt+f` move by word, and the shipped `.zshrc` binds Home, End and Delete. In iTerm2, set Preferences → Profiles → Keys → Left/Right Option key to `Esc+`. To see what a key actually sends, run `cat -v` and press it.
 

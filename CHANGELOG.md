@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.21.0] - 2026-11-12
+
+A security and precision release, from an audit of the whole repo: two sandbox escapes closed, a data-loss bug in the config writer fixed, the memory guard six times cheaper, and everything optional or stale either removed or moved to where it is needed.
+
+### Security
+
+- **`sbx` (strict and standard) no longer lets a sandboxed command write what a later, unsandboxed session loads.** Newly read-only under `~/.claude`: `rules/`, `output-styles/`, `agent-memory/`, auto memory (`projects/*/memory/`), `workflows/`, `routines/`, `scheduled_tasks.json`, `launch.json`, `dev-mods/`, `cowork_plugins/`, `chrome/`, `local/`, `downloads/`, and top-level `*.md` and script files. Under `~/.codex`: `AGENTS.md` and other top-level `*.md`, every top-level `*.toml`, `.env`, `hooks.json`, `hooks/`, top-level scripts, `agents/`, `prompts/`, `skills/`, `plugins/`, `memories/`, `automations/` and `computer-use/`. A project's folder under `~/.claude/projects/` can no longer be moved away or replaced by a symlink. Sessions, transcripts, logs, caches and auth stay writable. Saving Claude's auto memory or Codex's memories now needs a plain shell.
+- **`sbx` refuses a project directory of `$HOME`, above it, or `/`** (symlinks and `..` resolved), including the current directory when there is no `--project`: it made `~/.zshrc`, `~/.local/bin` and `~/Library/LaunchAgents` writable. `--allow-home` overrides it. `sbx` also passes the profiles `$HOME` with symlinks resolved, so the home rules hold when `$HOME` has a symlink in it.
+- **Claude Code's sandboxed commands no longer see your publish and account tokens.** The shipped settings unset `GITHUB_TOKEN`, `GH_TOKEN`, `HOMEBREW_GITHUB_API_TOKEN`, `NPM_TOKEN`, `NODE_AUTH_TOKEN`, `UV_PUBLISH_TOKEN`, `CARGO_REGISTRY_TOKEN`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` and `CLAUDE_CODE_OAUTH_TOKEN` before each one (`sandbox.credentials`). Checked on Claude Code 2.1.322: the same command read `GITHUB_TOKEN` under the 3.20.0 settings and not under these. Model API keys are left alone, since the app under test needs them. `gh`, which runs outside the sandbox, keeps its token.
+- **Claude Code fails closed.** With `sandbox.failIfUnavailable`, it exits at startup when the sandbox cannot start instead of running commands unsandboxed. On Linux that means `bubblewrap` and `socat` must be installed; `--pack ai-clis` says so, with the command, when they are missing.
+
+### Added
+
+- **`make disk`: what your tools and agents left on disk, explained.** Tool caches, package stores, superseded Node and Python patches, container storage, agent transcripts, build output in repos you have not touched, merged or idle worktrees. Each item has its size, a verdict (`regenerable`, `stale`, `managed`, `yours`), what it is, why, what reclaiming costs you and the exact command, and it says what it looks at and how as it works. `--json` carries the same for an agent you ask to plan a cleanup; `--explain ID` gives the long form. `make disk-fix` prints the whole plan, then asks once per command, default No. It only ever runs a tool's own cache or version command (`go clean -cache`, `npm cache clean --force`, `pnpm store prune`, `bun pm cache rm`, `uv cache prune`, `pip3 cache purge`, `pod cache clean --all`, `fnm uninstall`, `uv python uninstall`), never `rm`, never anything outside your home; worktrees, Homebrew and the Go module cache are report-only, shown with the command to run by hand; never touches `yours` or `managed` items; never reads `~/.npmrc`; skips anything in use and says why; needs `--yes` without a terminal; and logs every command to `~/.config/tuidev/disk.log` with the bytes before and after.
+- **`make perf` measures, too.** Background daemons' CPU since boot (Spotlight, `fseventsd`, `syspolicyd`), memory pressure and swap, free disk and local snapshots, a corporate endpoint agent, and on Linux load, swap in use and a tmpfs `/tmp`. Every line says how it was measured and against what threshold, every fix its undo. `--fix` prints the plan first, needs `--yes` without a terminal and logs each change with its undo.
+- **`--pack ci`** (in `--profile full`): `actionlint` (lints GitHub Actions workflows), `zizmor` (audits them for security problems) and `betterleaks` (a secret scanner that reads `.gitleaks.toml`). Agents write workflows and commit code, and nothing else in the set checked either. Nothing is written to `$HOME`.
+
+### Changed
+
+- **The shipped `.zshrc` no longer sets up personal toolchains.** Homebrew's keg-only Ruby, jenv, Yarn's global bin, RVM, the Android SDK, a Google Cloud SDK under `~/tools` and iTerm2's shell integration are gone from the `tuidev-zshrc` block. They are not part of an agent terminal, and Ruby's block exported `LDFLAGS` and `CPPFLAGS` into every shell, which leaked into unrelated native builds. On an upgrade, a migration moves the ones it finds on the machine into one marked section of `~/.zshrc.local`, backs that file up first and skips any you already set up yourself, so `java`, `adb`, `gcloud`, `rvm` and Yarn's bins still resolve. Ruby keeps only its `PATH` line.
+- **`cd` is zoxide only for a person.** Like `ls`, `cat` and `top` in 3.20.0, it is now a function that hands over to the real `cd` when stdout is not a terminal or a flag is passed, so an agent's `cd -P` works.
+- **`update.sh --all` pulls first.** It ran migrations and configs from the old checkout and pulled last, so every fix landed one run late. It now pulls, and when the pull brought a new tuidev, continues with that version.
+- **`make validate-configs` parses every script with macOS's bash 3.2 too,** when the bash on `PATH` is newer.
+
+### Fixed
+
+- **The `agents` test suite could raise an administrator password dialog.** Its keep-awake tests read the machine's real lid setting and tried to restore it. They now run against stubs, and under test `agents` can no longer reach `osascript` at all.
+- **A managed block with a missing end marker cost you the rest of the file.** If a begin marker had lost its end marker (deleted by hand, mangled by a merge), the next install, update or theme change dropped every line after it without a backup, and uninstall could delete the file. tuidev now checks the markers first: unless the block's begin and end lines pair up exactly once and in order, it leaves the file untouched and tells you which file to fix and how. A file a block write changes is backed up first.
+- **Writing a managed block replaced a dotfiles symlink with a private copy.** Blocks went through a temp file in `$TMPDIR` that was moved over the file, so a link into your dotfiles repo became a regular 0600 file and the repo copy went stale (and on Linux the move was not atomic). Block writes, `--overwrite` and the JSON merge now follow the link, write next to the real file, keep its mode and rename it into place.
+- **`uninstall.sh` ignored a failed backup.** It now keeps the config file and says so instead of deleting it unsaved, and an unpaired block no longer stops the uninstall.
+- **Backups of `config` could rotate away backups of `config.toml`,** and two backups of one file in the same second overwrote each other. Each now keeps its own.
+- **The memory guard used 12 to 16% of a core whenever any large process ran.** Each look ran `top -l 1`, which samples every process on the Mac for about half a second of CPU; a 6 GB VM or app it could never stop made that happen every 5 seconds. Footprints of your own processes now come from `footprint`, which matches top to the megabyte for 0.02 to 0.09 s each. A process the guard could stop is still sampled on every look; anything else once, then when its RSS moves by an eighth or after 5 minutes; everything on every look while memory pressure is up or free memory falls fast. With a 6 GB VM running, the guard uses about 2% of a core, down from 13%.
+- **`fnm env` failed to infer the shell** under launchd, a sandbox or an agent's shell. The shipped `.zshrc` now names it.
+- **One test file did not parse under bash 3.2** and silently skipped most of its checks there.
+
+### Removed
+
+- **`duf` and `sd` from the extras, `lazydocker` and its `lzd` alias from the monitoring pack.** `duf` has had no release in over a year and `df -h` does the job; agents never called `sd` (they use `sed`); `lazydocker` assumes Docker, while the container path here is Apple `container` and Podman. Installed copies stay; `uninstall.sh` still removes what the manifest recorded.
+- **From the shipped `.zshrc`:** `tunnel` (it opened a public tunnel to port 22 by default), `pstats`, `mde`, `cleanup`, `serve`, the `bottom` alias and zsh's spelling correction. Keep any you use in `~/.zshrc.local`.
+- **Makefile:** `quick-lazygit` and `quick-sysinfo`. The last Zellij leftovers.
+
 ## [3.20.0] - 2026-11-12
 
 `make perf` checks what the OS does behind your agents and fixes what is safe. An agent's `ls -lt` works again. Two new docs: every tool and why it is here, and the performance guide the audit follows.

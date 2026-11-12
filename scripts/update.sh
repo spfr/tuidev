@@ -363,7 +363,7 @@ reapply_drift() {
     local entry dest src id
     for entry in "${DRIFT_ITEMS[@]}"; do
         IFS='|' read -r dest src id <<<"$entry"
-        write_managed_block "$dest" "$id" "$(extract_source_block "$src" "$id")"
+        write_managed_block "$dest" "$id" "$(extract_source_block "$src" "$id")" || true
     done
 }
 

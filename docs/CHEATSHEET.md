@@ -64,19 +64,18 @@ Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi 
 | `lg` | `lazygit` |
 | `hunk diff`, `hunk show` | review the working tree or a commit in hunk (`--pack hunk`); `--watch` reloads on change |
 | `gs` `ga` `gc` `gp` `gl` `gd` `gco` `gb` | `git status` / `add` / `commit` / `push` / `pull` / `diff` / `checkout` / `branch` |
-| `lzd` | `lazydocker` (`--pack monitoring`) |
-| `top`, `bottom` | `btm` (`--pack monitoring`) |
+| `top` | `btm` at a terminal (`--pack monitoring`) |
 | `agents`, `agents watch` | agent sessions, stale processes, hogs; `agents reap`, `agents awake on 2h` (`--pack monitoring`) |
 | `md`, `mdp FILE` | glow (`--extras`) |
 | `help CMD` | `tldr` (`--extras`) |
 | `loc` | tokei (`--extras`) |
 | `fcd`, `fif TEXT`, `fshow` | fzf: cd into a directory / grep files / browse commits |
-| `mkcd DIR`, `serve`, `bench CMD` | mkdir+cd / `python3 -m http.server` / hyperfine |
+| `mkcd DIR`, `bench CMD` | mkdir+cd / hyperfine |
 | `ts-status`, `ts-ip`, `remote-status` | Tailscale and SSH status |
 | `tui-update`, `tui-check` | `scripts/update.sh` / `update.sh --check` |
 | `reload`, `zshconfig` | Re-source / edit `~/.zshrc` |
 
-`sd`, `procs`, `dust` and `duf` keep their own names: they are never aliased over `sed`, `ps`, `du` or `df`, because their flags differ. Personal aliases go in `~/.zshrc.local`.
+`procs` and `dust` keep their own names: they are never aliased over `ps` or `du`, because their flags differ. Personal aliases go in `~/.zshrc.local`.
 
 ## AI CLIs
 
@@ -186,6 +185,7 @@ make update-check / make update    # preview / apply updates (update-all is non-
 make update-migrations             # pending one-shot migrations only
 make update-security               # Tailscale, SSH permissions, Seatbelt drift
 make perf | perf-fix               # performance audit; then the fixes that need no root
+make disk | disk-fix               # what dev tools left on disk (deletes nothing); then a plan and one question per cleanup
 make lint                          # shellcheck every shell script
 make validate-configs              # JSON / TOML / Lua / shell syntax
 make test-lib                      # unit harnesses

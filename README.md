@@ -101,14 +101,15 @@ Agents keep a MacBook's chip at 75–85 °C for hours, and macOS keeps its fans 
 | `grep` over JSON and YAML | `jq`, `yq` | A query reads the structure |
 | bugs found at run time | `shellcheck` | Shell script mistakes caught before they run |
 | `git add -p`, `curl`, `time` | `lazygit`, `xh`, `hyperfine` (extras) | Hunk staging in one screen; formatted JSON; a benchmark with a spread |
-| `sed`, `ps`, `du`, `df`, `man`, `cloc` | `sd`, `procs`, `dust`, `duf`, `tealdeer`, `tokei` (extras) | Simpler syntax, readable output |
+| `ps`, `du`, `man`, `cloc` | `procs`, `dust`, `tealdeer`, `tokei` (extras) | Simpler syntax, readable output |
 | pyenv, virtualenv, pip, pipx | `uv` (extras) | One binary for Python versions, venvs, lockfiles and tools |
 | nvm | `fnm` (`--pack fnm`) | Node per `.nvmrc` on `cd`, without the shell start-up cost |
 | reverse-search | `atuin` (extras) | History you search by directory and exit code, on Ctrl-R |
-| `top`, `docker ps` | `btm`, `lazydocker` (`--pack monitoring`) | A system monitor and a container view you can read |
+| `top` | `btm` (`--pack monitoring`) | A system monitor you can read |
+| nothing: workflows and secrets went unchecked | `actionlint`, `zizmor`, `betterleaks` (`--pack ci`) | CI workflows linted and audited, and a secret scan, before a commit |
 | a long `git diff` | `hunk` (`--pack hunk`) | A review-first viewer for what an agent wrote |
 
-Tools with no label are in core. The extras (`--extras`) are optional, and whatever your package manager lacks is skipped. What each one replaces, why, and how an agent comes to use it is in [the toolbox](docs/toolbox.md); `make perf` checks what the OS does behind your agents (package stores in the Spotlight index or in backups, file limits, Low Power Mode, inotify on Linux), fixes what is safe and names the rest: [performance](docs/performance.md).
+Tools with no label are in core. The extras (`--extras`) are optional, and whatever your package manager lacks is skipped. What each one replaces, why, and how an agent comes to use it is in [the toolbox](docs/toolbox.md); `make perf` checks what the OS does behind your agents (package stores in the Spotlight index or in backups, file limits, Low Power Mode, inotify on Linux), fixes what is safe and names the rest. `make disk` shows what your tools and agents have left on disk (caches, old runtimes, stale build trees and worktrees), explains each one, and only ever runs a tool's own cleanup command, one yes at a time: [performance](docs/performance.md).
 
 ## Subagents on the cheapest tier that works
 
@@ -184,11 +185,12 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 |---------------|------|
 | `ai-clis` | Claude Code and Codex settings with their native sandboxes on, and git and gh write gates |
 | `orchestration` | Tiered subagents and the delegation skill for Claude Code and Codex |
-| `monitoring` | `agents` (cleanup verdicts, CPU by job, tokens by model and agent), its SwiftBar menu (macOS), `lazydocker` and `bottom` |
+| `monitoring` | `agents` (cleanup verdicts, CPU by job, tokens by model and agent), its SwiftBar menu (macOS) and `bottom` |
 | `tmux`, `herdr` | Durable sessions; Herdr's agent-aware runtime |
 | `nvim`, `vim` | LazyVim, or a zero-plugin vimrc for servers |
 | `sandbox-container` | Tier 2 sandboxing in a container runtime (Apple `container`, Podman or Docker) |
 | `fnm`, `hunk` | Node via fnm; a review-first diff viewer |
+| `ci` | `actionlint` and `zizmor` for GitHub Actions workflows, `betterleaks` for secrets: what agents run before a commit |
 | `cooling` | Fans that follow the chip's temperature on Apple Silicon MacBooks, so the palm rest stays cool; Cool, Balanced and Quiet in the menu |
 
 What each profile and pack installs is in [docs/profiles.md](docs/profiles.md). macOS needs Homebrew. On Linux, `minimal` and `remote` also install without it, and anything the distro lacks is skipped with a link to its upstream installer. `sbx` and the `ui` pack are macOS only.
@@ -204,6 +206,7 @@ sbx -- CMD                               # any command under the strict Seatbelt
 t [NAME]                                 # attach-or-create a tmux session (--pack tmux)
 make check                               # health check for the installed profile
 make perf                                # what the OS does behind your agents, and what to change
+make disk                                # what tools and agents left on disk, explained (deletes nothing)
 make update                              # profile-aware, drift-detecting update
 make theme NAME=catppuccin-mocha         # re-theme tmux, Ghostty and Starship
 make help                                # every target
