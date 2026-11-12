@@ -347,7 +347,7 @@ _reserve_last_slot() {
         return 0
     fi
     print_step "theme block is no longer last in $(basename "$file") — moving it to the end"
-    remove_managed_block "$file" "$THEME_BLOCK_ID" >/dev/null
+    remove_managed_block "$file" "$THEME_BLOCK_ID" >/dev/null || true
 }
 
 # ============================================================================
@@ -368,13 +368,13 @@ _tmux_sources_theme() {
 # autosave. So the theme is not appended to tmux.conf; tmux.conf sources this
 # file above its TPM block instead.
 _write_tmux_theme() {
-    write_managed_block "$TMUX_THEME_FILE" "$THEME_BLOCK_ID" "$(cat "$1")"
+    write_managed_block "$TMUX_THEME_FILE" "$THEME_BLOCK_ID" "$(cat "$1")" || true
 
     # A pre-2.4 apply appended the block to tmux.conf itself. theme.conf now
     # holds the same content, so the old copy only does harm.
     if _has_block "$TMUX_CONF" "$THEME_BLOCK_ID"; then
         print_step "moving the theme out of $(basename "$TMUX_CONF") into $(basename "$TMUX_THEME_FILE")"
-        remove_managed_block "$TMUX_CONF" "$THEME_BLOCK_ID" >/dev/null
+        remove_managed_block "$TMUX_CONF" "$THEME_BLOCK_ID" >/dev/null || true
     fi
 
     if [[ -f "$TMUX_CONF" ]] && ! _tmux_sources_theme; then
@@ -471,7 +471,7 @@ _herdr_writable() {
             if [[ "$DRY_RUN" == true ]]; then
                 print_info "[DRY RUN] would remove tuidev's theme block from $file: it would override your theme"
             else
-                remove_managed_block "$file" "$THEME_BLOCK_ID" >/dev/null
+                remove_managed_block "$file" "$THEME_BLOCK_ID" >/dev/null || true
                 print_info "removed tuidev's theme block from $file: it was overriding your theme"
             fi
         fi
@@ -537,15 +537,15 @@ cmd_apply() {
 
     _write_tmux_theme "$stage/tmux.conf"
     _reserve_last_slot "$ghostty_dest"
-    write_managed_block "$ghostty_dest" "$THEME_BLOCK_ID" "$(cat "$stage/ghostty.conf")"
+    write_managed_block "$ghostty_dest" "$THEME_BLOCK_ID" "$(cat "$stage/ghostty.conf")" || true
 
     if $do_starship; then
         _reserve_last_slot "$starship_dest"
-        write_managed_block "$starship_dest" "$THEME_BLOCK_ID" "$(cat "$stage/starship.toml")"
+        write_managed_block "$starship_dest" "$THEME_BLOCK_ID" "$(cat "$stage/starship.toml")" || true
     fi
 
     if $do_herdr; then
-        write_managed_block "$HERDR_CONF" "$THEME_BLOCK_ID" "$(cat "$stage/herdr.toml")"
+        write_managed_block "$HERDR_CONF" "$THEME_BLOCK_ID" "$(cat "$stage/herdr.toml")" || true
     fi
 
     if [[ "$DRY_RUN" == true ]]; then

@@ -129,7 +129,7 @@ _orchestration_install_instructions() {
         print_warning "$HOME/.codex/AGENTS.override.md exists, so Codex ignores $dest and the orchestration policy in it"
     fi
     write_managed_block "$dest" "$ORCHESTRATION_BLOCK" \
-        "$(cat "$src"; echo; cat "$ORCHESTRATION_SRC/codex/global-instructions.md")"
+        "$(cat "$src"; echo; cat "$ORCHESTRATION_SRC/codex/global-instructions.md")" || true
 }
 
 # _orchestration_install_file SRC DEST

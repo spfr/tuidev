@@ -79,7 +79,7 @@ sandbox_install() {
     #    put binaries in that directory on every platform. The export now ships
     #    in the tuidev-zshrc block. Drop the old block so existing installs
     #    converge instead of carrying a duplicate PATH entry.
-    remove_managed_block "$HOME/.zshrc" "tuidev-sandbox-path"
+    remove_managed_block "$HOME/.zshrc" "tuidev-sandbox-path" || true
 
     # 4. Verification hint.
     print_info "verify Seatbelt is available:"

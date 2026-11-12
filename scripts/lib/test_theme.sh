@@ -23,6 +23,11 @@ mkdir -p "$TMUX_TMPDIR"
 trap 'tmux kill-server >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT
 export TUIDEV_NO_COLOR=1
 unset XDG_CONFIG_HOME TUIDEV_STATE_DIR
+# Block rewrites in this shell take backups: keep them out of the real
+# ~/.config/tuidev. Not exported: theme.sh and the migration derive theirs
+# from the scratch HOME, and a test checks that.
+# shellcheck disable=SC2034  # read by config_write.sh's tuidev_backup
+TUIDEV_BACKUP_DIR="$tmp/backups"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }

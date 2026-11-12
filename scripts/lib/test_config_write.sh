@@ -347,5 +347,178 @@ else
     echo "SKIP: --merge-json tests (jq not installed)"
 fi
 
+# nfiles DIR — how many entries DIR holds (hidden ones included).
+nfiles() { find "$1" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '; }
+B="$(tuidev_block_begin um)"
+E="$(tuidev_block_end um)"
+
+# 14. Markers that do not pair up: write and remove leave the file
+#     byte-identical, warn on stderr naming the file, take no backup, leave
+#     no temp file and fail; install_config warns and goes on.
+um="$tmp/um"
+mkdir -p "$um"
+# refused NAME CONTENT [BLOCK_ID] — the whole check for one malformed file.
+refused() {
+    local f="$um/$1" id="${3:-um}" rc out op backups
+    printf '%b' "$2" > "$f"
+    cp "$f" "$um/.orig"
+    backups="$(nfiles "$tmp/backups")"
+    for op in write remove; do
+        rc=0
+        if [[ "$op" == write ]]; then
+            out="$(write_managed_block "$f" "$id" "new content" 2>&1 >/dev/null)" || rc=$?
+        else
+            out="$(remove_managed_block "$f" "$id" 2>&1 >/dev/null)" || rc=$?
+        fi
+        [[ "$rc" != 0 ]] || fail "$1: $op of an unpaired block returned 0"
+        cmp -s "$f" "$um/.orig" || fail "$1: $op changed the file: $(cat "$f")"
+        grep -qF "$f" <<< "$out" || fail "$1: $op warned without naming the file: <$out>"
+        grep -qF "left as it is" <<< "$out" || fail "$1: $op gave no warning: <$out>"
+    done
+    rc=0
+    out="$(install_config "$f" "$tmp/src" --managed-block "$id" 2>&1)" || rc=$?
+    [[ "$rc" == 0 ]] || fail "$1: install_config --managed-block did not go on (rc $rc)"
+    cmp -s "$f" "$um/.orig" || fail "$1: install_config changed the file"
+    grep -qF "left as it is" <<< "$out" || fail "$1: install_config gave no warning"
+    [[ "$(nfiles "$tmp/backups")" == "$backups" ]] || fail "$1: a refused write made a backup"
+    [[ -z "$(find "$um" -name '*.tuidev.*')" ]] || fail "$1: a temp file was left behind: $(ls -A "$um")"
+}
+refused begin-only  "user 1\n$B\nold\nuser after\n"
+refused end-only    "user 1\n$E\nuser after\n"
+refused dup-begin   "$B\na\n$B\nb\n$E\nuser after\n"
+refused dup-end     "$B\na\n$E\nmine\n$E\nuser after\n"
+refused wrong-order "$E\nuser middle\n$B\nuser after\n"
+refused crlf        "$B\r\nold\r\n$E\r\nuser after\r\n"
+refused trailing-sp "$B  \nold\n$E\nuser after\n"
+refused agents.md   "notes\n$(tuidev_block_begin um x.md)\nold\nmy rules\n"
+# The uninstall case: a begin marker and blank lines only. The old remover
+# blanked the file and then deleted it.
+refused blanks      "$B\n\n\n"
+pass "unpaired markers: write, remove and install_config leave the file byte-identical, with a warning"
+
+# 15. A symlinked target (dotfiles): the link stays a link, the real file gets
+#     the content and keeps its mode, both on a write and on a removal.
+for m in 644 600; do
+    sl="$tmp/sl$m"
+    mkdir -p "$sl/dotfiles" "$sl/home"
+    printf 'mine\n' > "$sl/dotfiles/rc"
+    chmod "$m" "$sl/dotfiles/rc"
+    ln -s ../dotfiles/rc "$sl/home/rc"    # relative, as dotfiles managers make them
+    write_managed_block "$sl/home/rc" um "block $m" >/dev/null
+    [[ -L "$sl/home/rc" ]] || fail "symlink $m: the write replaced the link"
+    grep -qxF "block $m" "$sl/dotfiles/rc" || fail "symlink $m: the target did not get the block"
+    grep -qxF mine "$sl/dotfiles/rc" || fail "symlink $m: the target lost the user's line"
+    [[ "$(file_mode "$sl/dotfiles/rc")" == "$m" ]] || fail "symlink $m: write changed the mode to $(file_mode "$sl/dotfiles/rc")"
+    write_managed_block "$sl/home/rc" um "block $m v2" >/dev/null
+    grep -qxF "block $m v2" "$sl/dotfiles/rc" || fail "symlink $m: a re-write did not reach the target"
+    [[ -L "$sl/home/rc" && "$(file_mode "$sl/dotfiles/rc")" == "$m" ]] || fail "symlink $m: the re-write broke the link or mode"
+    remove_managed_block "$sl/home/rc" um >/dev/null
+    [[ -L "$sl/home/rc" ]] || fail "symlink $m: the removal replaced the link"
+    [[ "$(cat "$sl/dotfiles/rc")" == mine ]] || fail "symlink $m: removal left: $(cat "$sl/dotfiles/rc")"
+    [[ "$(file_mode "$sl/dotfiles/rc")" == "$m" ]] || fail "symlink $m: removal changed the mode"
+    [[ "$(nfiles "$sl/dotfiles")" == 1 && "$(nfiles "$sl/home")" == 1 ]] \
+        || fail "symlink $m: temp files left behind: $(ls -A "$sl/dotfiles" "$sl/home")"
+done
+# A link to a file that only held the block: the removal empties the target
+# but deletes neither the link nor the user's dotfiles copy.
+printf '' > "$sl/dotfiles/only"
+ln -s ../dotfiles/only "$sl/home/only"
+write_managed_block "$sl/home/only" um "x" >/dev/null
+remove_managed_block "$sl/home/only" um >/dev/null
+[[ -L "$sl/home/only" && -f "$sl/dotfiles/only" ]] || fail "symlink: removing the only block deleted the link or its target"
+# A dangling link is refused, not replaced.
+ln -s ../dotfiles/missing "$sl/home/dangling"
+write_managed_block "$sl/home/dangling" um "x" >/dev/null 2>&1 && fail "symlink: a dangling link was written"
+[[ -L "$sl/home/dangling" && ! -e "$sl/dotfiles/missing" ]] || fail "symlink: a dangling link was replaced or followed"
+pass "symlinked target: link kept, real file written, mode kept (0644, 0600)"
+
+# 16. The temp file lives next to the target: writes work with TMPDIR
+#     missing or read-only, and nothing is left behind. A new file gets the
+#     umask's mode, not mktemp's 0600; a changed file is backed up.
+tt="$tmp/tt"
+mkdir -p "$tt/dir" "$tt/ro"
+chmod 555 "$tt/ro"
+for t in "$tt/nonexistent" "$tt/ro"; do
+    (
+        export TMPDIR="$t"
+        umask 022
+        rm -f "$tt/dir/rc"
+        write_managed_block "$tt/dir/rc" um "one" >/dev/null || fail "write with TMPDIR=$t failed"
+        [[ "$(file_mode "$tt/dir/rc")" == 644 ]] || fail "new file mode $(file_mode "$tt/dir/rc"), not 644"
+        echo "mine" >> "$tt/dir/rc"
+        write_managed_block "$tt/dir/rc" um "two" >/dev/null || fail "re-write with TMPDIR=$t failed"
+        [[ "$(cat "$tt/dir/rc")" == "$B"$'\n'two$'\n'"$E"$'\n'mine ]] || fail "re-write with TMPDIR=$t: got $(cat "$tt/dir/rc")"
+        remove_managed_block "$tt/dir/rc" um >/dev/null || fail "remove with TMPDIR=$t failed"
+        [[ "$(cat "$tt/dir/rc")" == mine ]] || fail "remove with TMPDIR=$t: left $(cat "$tt/dir/rc")"
+        [[ "$(ls -A "$tt/dir")" == rc ]] || fail "temp files left next to the target: $(ls -A "$tt/dir")"
+        [[ -z "$(ls -A "$tt/ro")" ]] || fail "a temp file went to TMPDIR"
+    )
+done
+chmod 755 "$tt/ro"
+ls "$tmp/backups"/*tt_dir_rc.* >/dev/null 2>&1 || fail "a changed managed-block file was not backed up"
+pass "temp file beside the target: TMPDIR unused, nothing left behind, new files 0644"
+
+# 17. Idempotent: the same write twice leaves the file byte-identical with no
+#     new backup; a dry run writes, removes and backs up nothing.
+id="$tmp/idem"
+printf 'user\n' > "$id"
+write_managed_block "$id" um "a"$'\n'"b" >/dev/null
+cp "$id" "$id.1"
+before="$(nfiles "$tmp/backups")"
+write_managed_block "$id" um "a"$'\n'"b" >/dev/null
+cmp -s "$id" "$id.1" || fail "a second identical write changed the file"
+[[ "$(nfiles "$tmp/backups")" == "$before" ]] || fail "an identical write made a backup"
+[[ "$(grep -c 'tuidev managed (um)' "$id")" == 2 ]] || fail "the block was duplicated"
+DRY_RUN=true write_managed_block "$id" um "changed" >/dev/null
+DRY_RUN=true remove_managed_block "$id" um >/dev/null
+DRY_RUN=true write_managed_block "$tmp/idem-new" um "x" >/dev/null
+cmp -s "$id" "$id.1" || fail "a dry run changed the file"
+[[ ! -e "$tmp/idem-new" ]] || fail "a dry run created a file"
+[[ "$(nfiles "$tmp/backups")" == "$before" ]] || fail "a dry run made a backup"
+pass "idempotent re-write; dry run writes nothing"
+
+# 18. --overwrite through a symlink keeps the link and the target's mode; a
+#     new file takes the source's mode (an executable stays executable).
+ow="$tmp/ow"
+mkdir -p "$ow/dotfiles"
+printf 'old\n' > "$ow/dotfiles/tool"
+chmod 600 "$ow/dotfiles/tool"
+ln -s dotfiles/tool "$ow/tool"
+printf '#!/bin/sh\necho new\n' > "$ow/src"
+chmod 755 "$ow/src"
+install_config "$ow/tool" "$ow/src" --overwrite >/dev/null
+[[ -L "$ow/tool" ]] || fail "--overwrite replaced a symlink"
+cmp -s "$ow/dotfiles/tool" "$ow/src" || fail "--overwrite did not reach the link target"
+[[ "$(file_mode "$ow/dotfiles/tool")" == 600 ]] || fail "--overwrite changed the target's mode"
+( umask 022; install_config "$ow/new/tool" "$ow/src" --overwrite >/dev/null )
+[[ "$(file_mode "$ow/new/tool")" == 755 ]] || fail "--overwrite: new file mode $(file_mode "$ow/new/tool"), not 755"
+[[ "$(nfiles "$ow/dotfiles")" == 1 ]] || fail "--overwrite left a temp file: $(ls -A "$ow/dotfiles")"
+pass "--overwrite: link and mode kept, new files take the source's mode"
+
+# 19. uninstall.sh with a failing backup removes nothing: the config file it
+#     would delete stays, with a warning. The backup dir sits under a regular
+#     file, so tuidev_backup cannot create it.
+(
+    for v in XDG_CONFIG_HOME XDG_STATE_HOME TUIDEV_MANIFEST_FILE TUIDEV_MANIFEST_ENABLED; do unset "$v"; done
+    export HOME="$tmp/un home" TUIDEV_NO_COLOR=1 NO_COLOR=1 DRY_RUN=false
+    export TUIDEV_STATE_DIR="$HOME/.config/tuidev"
+    mkdir -p "$HOME/.config/app" "$TUIDEV_STATE_DIR" "$tmp/un-stub"
+    : > "$tmp/un-blocker"
+    # Nothing outside this HOME: no sudo, brew, launchctl or defaults.
+    for c in sudo brew launchctl defaults; do printf '#!/bin/sh\nexit 1\n' > "$tmp/un-stub/$c"; done
+    chmod +x "$tmp/un-stub"/*
+    export PATH="$tmp/un-stub:$PATH"
+    printf 'mine\n' > "$HOME/.config/app/cfg"
+    printf 'keep\n%s\nold\n' "$B" > "$HOME/.zshrc"
+    cp "$HOME/.zshrc" "$tmp/un-zshrc"
+    { echo "file $HOME/.config/app/cfg"; echo "block um $HOME/.zshrc"; } > "$TUIDEV_STATE_DIR/manifest"
+    out="$(TUIDEV_BACKUP_DIR="$tmp/un-blocker/backups" bash "$SCRIPT_DIR/../../uninstall.sh" --all </dev/null 2>&1)" || fail "uninstall.sh failed: $(tail -5 <<< "$out")"
+    [[ "$(cat "$HOME/.config/app/cfg" 2>/dev/null)" == mine ]] || fail "uninstall removed a file it could not back up"
+    grep -qF "could not back up $HOME/.config/app/cfg" <<< "$out" || fail "uninstall: no warning for the failed backup"
+    cmp -s "$HOME/.zshrc" "$tmp/un-zshrc" || fail "uninstall changed a file whose block has no end marker"
+    grep -qF "left as it is" <<< "$out" || fail "uninstall: no warning for the unpaired block"
+)
+pass "uninstall: a failed backup removes nothing; an unpaired block is kept, and uninstall goes on"
+
 echo ""
 echo "All config_write tests passed."

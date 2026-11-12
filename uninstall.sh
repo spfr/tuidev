@@ -126,25 +126,29 @@ ask "continue?"
 
 print_header "removing tuidev managed blocks and settings"
 
+# A file whose markers do not pair up is left as it is: remove_managed_block
+# has said so and how to fix it, and the uninstall goes on.
+_remove_block() { remove_managed_block "$1" "$2" || return 0; }
+
 # Records are `<block_id> <path>`; the id has no spaces, the path may.
-_remove_block_record() { remove_managed_block "${1#* }" "${1%% *}"; }
+_remove_block_record() { _remove_block "${1#* }" "${1%% *}"; }
 
 if $MANIFEST_MODE; then
     each_line "$M_BLOCKS" _remove_block_record
 else
-    remove_managed_block "$HOME/.zshrc"                 tuidev-zshrc
-    remove_managed_block "$HOME/.zshrc"                 tuidev-sandbox-path
-    remove_managed_block "$HOME/.config/starship.toml"  tuidev-starship
-    remove_managed_block "$HOME/.config/tmux/tmux.conf" tuidev-tmux
+    _remove_block "$HOME/.zshrc"                 tuidev-zshrc
+    _remove_block "$HOME/.zshrc"                 tuidev-sandbox-path
+    _remove_block "$HOME/.config/starship.toml"  tuidev-starship
+    _remove_block "$HOME/.config/tmux/tmux.conf" tuidev-tmux
 fi
 
 # Theme blocks are stripped in both modes: scripts/theme.sh writes them after
 # install without manifest recording. A no-op where they are absent.
-remove_managed_block "$HOME/.config/tmux/tmux.conf" tuidev-theme
-remove_managed_block "$HOME/.config/tmux/theme.conf" tuidev-theme
-remove_managed_block "$HOME/.config/ghostty/config" tuidev-theme
-remove_managed_block "$HOME/.config/starship.toml"  tuidev-theme
-remove_managed_block "$HOME/.config/herdr/config.toml" tuidev-theme
+_remove_block "$HOME/.config/tmux/tmux.conf" tuidev-theme
+_remove_block "$HOME/.config/tmux/theme.conf" tuidev-theme
+_remove_block "$HOME/.config/ghostty/config" tuidev-theme
+_remove_block "$HOME/.config/starship.toml"  tuidev-theme
+_remove_block "$HOME/.config/herdr/config.toml" tuidev-theme
 
 # Records are `<key> <value>`. A key the user has since changed is theirs now.
 # Install checked with --includes (is the key set anywhere the user's global
@@ -277,7 +281,10 @@ _remove_config_path() {
     esac
     [[ -e "$path" ]] || return 0
     local rel="${path#"$HOME"/}"
-    tuidev_backup "$path" "uninstall-$(printf '%s' "$rel" | tr '/' '_')" >/dev/null
+    if ! tuidev_backup "$path" "uninstall-$(printf '%s' "$rel" | tr '/' '_')" >/dev/null; then
+        print_warning "could not back up $path to $TUIDEV_BACKUP_DIR, so it was kept (remove it yourself once it is saved)"
+        return 0
+    fi
     run_cmd rm -rf "$path"
     done_msg "removed $path"
 }

@@ -23,7 +23,12 @@
 # there is a heading the agent reads) and rewrites only the region between
 # markers on subsequent installs. User
 # edits outside the block survive. A header comment points the user at the
-# marker pattern so it's self-documenting.
+# marker pattern so it's self-documenting. A file whose markers do not pair
+# up is never rewritten (see _tuidev_block_check).
+#
+# Every rewrite follows a symlinked file to its target, writes a temp file in
+# the target's own directory, keeps the target's mode and renames the temp
+# file into place; a file a managed-block write changes is backed up first.
 #
 # Requires scripts/lib/ui.sh sourced for print_* helpers and DRY_RUN.
 
@@ -68,7 +73,8 @@ tuidev_block_end() {
 #
 # A file is copied by content (a symlink is followed, so the backup is a real
 # copy even when PATH is a dotfiles link), keeping its mode; a directory is
-# copied as a tree with `cp -R`.
+# copied as a tree with `cp -R`. A second backup of the same prefix within
+# the same second gets a `-2`, `-3`, ... suffix instead of replacing the first.
 #
 # Echoes the backup target path on success. On failure, echoes nothing and
 # returns non-zero.
@@ -77,7 +83,7 @@ tuidev_backup() {
     local prefix="${2:-$(basename "$src")}"
     [[ -e "$src" ]] || return 1
 
-    local stamp target
+    local stamp target n=1
     stamp="$(date +%Y%m%d-%H%M%S)"
     target="$TUIDEV_BACKUP_DIR/$prefix.$stamp"
 
@@ -88,6 +94,10 @@ tuidev_backup() {
     fi
 
     mkdir -p "$TUIDEV_BACKUP_DIR" || return 1
+    while [[ -e "$target" || -L "$target" ]]; do
+        n=$((n + 1))
+        target="$TUIDEV_BACKUP_DIR/$prefix.$stamp-$n"
+    done
     if [[ -f "$src" ]]; then
         # -L: follow a symlink; -p: keep the mode (and times).
         cp -L -p "$src" "$target" || { rm -f "$target"; return 1; }
@@ -97,8 +107,10 @@ tuidev_backup() {
 
     # Retention: drop everything past the N most-recent entries for this prefix.
     # Backup names include sortable timestamps, which keeps this portable across
-    # BSD and GNU userlands without relying on incompatible stat flags.
-    find "$TUIDEV_BACKUP_DIR" -mindepth 1 -maxdepth 1 -name "${prefix}.*" -print \
+    # BSD and GNU userlands without relying on incompatible stat flags. The
+    # timestamp starts with a digit, so prefix `config` never rotates away the
+    # backups of prefix `config.toml`.
+    find "$TUIDEV_BACKUP_DIR" -mindepth 1 -maxdepth 1 -name "${prefix}.[0-9]*" -print \
         2>/dev/null |
         sort -r |
         awk -v keep="$TUIDEV_BACKUP_KEEP" 'NR>keep {print}' |
@@ -109,24 +121,216 @@ tuidev_backup() {
     echo "$target"
 }
 
+# ---------------------------------------------------------------------------
+# Safe file replacement, shared by every writer below
+# ---------------------------------------------------------------------------
+# A rewrite never goes through $TMPDIR and never replaces a symlink: the new
+# content is written to a temp file in the real target's own directory (same
+# filesystem, so the final rename is atomic), given the target's mode, and
+# renamed over the target. A dotfiles link stays a link and its target gets
+# the content.
+
+# _tuidev_real_path FILE — FILE with every symlink followed, to the final
+# target (which may not exist). Fails on a link loop.
+_tuidev_real_path() {
+    local path="$1" link hops=0
+    while [[ -L "$path" ]]; do
+        hops=$((hops + 1))
+        [[ $hops -le 40 ]] || return 1
+        link="$(readlink "$path")" || return 1
+        case "$link" in
+            /*) path="$link" ;;
+            *)  path="$(dirname "$path")/$link" ;;
+        esac
+    done
+    printf '%s\n' "$path"
+}
+
+# _tuidev_mktemp_beside REAL — an empty temp file in REAL's directory; prints
+# its path. Hidden, and named after REAL, so a leftover is recognisable.
+_tuidev_mktemp_beside() {
+    mktemp "$(dirname "$1")/.$(basename "$1").tuidev.XXXXXX"
+}
+
+# _tuidev_umask_mode [MODE] — MODE (octal, default 666) less the umask: what
+# a plain `>` or `cp` would give a new file.
+_tuidev_umask_mode() {
+    printf '%o\n' "$(( 0${1:-666} & ~$(umask) ))"
+}
+
+# _tuidev_rename_into TMP REAL [NEWMODE]
+# Give TMP REAL's mode (or NEWMODE, default the umask's, when REAL does not
+# exist yet) and rename it over REAL. TMP is removed on failure.
+_tuidev_rename_into() {
+    local tmp="$1" real="$2" mode="${3-}"
+    if [[ -e "$real" ]]; then
+        mode="$(file_mode "$real")" || mode=""
+    fi
+    [[ -n "$mode" ]] || mode="$(_tuidev_umask_mode)"
+    if chmod "$mode" "$tmp" && mv -f "$tmp" "$real"; then
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
+
+# _tuidev_commit TMP FILE REAL
+# Put TMP (the new content of FILE, whose resolved path is REAL) in place.
+# Identical content: TMP is dropped and FILE not touched. Otherwise a
+# non-empty REAL is backed up first; when the backup or the rename fails,
+# FILE is left as it was, with a warning, and this fails.
+_tuidev_commit() {
+    local tmp="$1" file="$2" real="$3"
+    if [[ -f "$real" ]] && cmp -s "$tmp" "$real"; then
+        rm -f "$tmp"
+        return 0
+    fi
+    if [[ -s "$real" ]] && ! tuidev_backup "$file" "$(_tuidev_backup_prefix "$file")" >/dev/null; then
+        rm -f "$tmp"
+        print_warning "could not back up $file, so it was left as it is" >&2
+        return 1
+    fi
+    if ! _tuidev_rename_into "$tmp" "$real"; then
+        print_warning "could not write $file, so it was left as it is" >&2
+        return 1
+    fi
+}
+
+# _tuidev_backup_prefix FILE — the backup name for a managed-block file: its
+# path under $HOME with `/` as `_` (.config_ghostty_config), so files that
+# share a basename never share a backup slot or its rotation.
+_tuidev_backup_prefix() {
+    printf '%s\n' "${1#"$HOME"/}" | tr '/' '_'
+}
+
+# _tuidev_place_copy SOURCE DEST
+# Copy SOURCE onto DEST the safe way (links followed, temp file beside the
+# target, atomic rename). An existing target keeps its mode; a new one gets
+# SOURCE's mode less the umask, as `cp` would give it. A DEST that is a
+# dangling symlink fails: its target's place is not ours to create.
+_tuidev_place_copy() {
+    local source="$1" dest="$2" real tmp mode=""
+    [[ -L "$dest" && ! -e "$dest" ]] && return 1
+    real="$(_tuidev_real_path "$dest")" || return 1
+    if [[ ! -e "$real" ]] && mode="$(file_mode "$source")"; then
+        mode="$(_tuidev_umask_mode "$mode")"
+    fi
+    mkdir -p "$(dirname "$real")" || return 1
+    tmp="$(_tuidev_mktemp_beside "$real")" || return 1
+    if ! cat "$source" > "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    _tuidev_rename_into "$tmp" "$real" "$mode"
+}
+
+# ---------------------------------------------------------------------------
+# Managed blocks
+# ---------------------------------------------------------------------------
+
+# _tuidev_block_check FILE BLOCK_ID
+# Do FILE's markers for BLOCK_ID pair up? Prints `none` (no marker at all) or
+# `one` (exactly one begin line, then exactly one end line) and succeeds.
+# Anything else (a begin without an end, an end without a begin, duplicates,
+# the wrong order, or a marker line with extra text such as trailing spaces
+# or a CR) prints what is wrong and fails: the writers then change nothing,
+# because rewriting a half-marked file drops the user's lines after it.
+_tuidev_block_check() {
+    local begin end
+    begin="$(tuidev_block_begin "$2" "$1")"
+    end="$(tuidev_block_end "$2" "$1")"
+    awk -v b="$begin" -v e="$end" '
+        $0 == b { nb++; if (!fb) fb = NR; next }
+        $0 == e { ne++; if (!fe) fe = NR; next }
+        index($0, b) || index($0, e) { bad++ }
+        END {
+            if (bad) { print "a marker line with extra text on it (trailing spaces or Windows line endings?)"; exit 1 }
+            if (!nb && !ne) { print "none"; exit 0 }
+            if (nb == 1 && ne == 1 && fb < fe) { print "one"; exit 0 }
+            if (!ne)                 print "a begin marker with no end marker"
+            else if (!nb)            print "an end marker with no begin marker"
+            else if (nb > 1 || ne > 1) print nb " begin and " ne " end markers"
+            else                     print "its end marker above its begin marker"
+            exit 1
+        }' "$1"
+}
+
+# _tuidev_block_refuse FILE BLOCK_ID PROBLEM — the warning for a file whose
+# markers do not pair up. On stderr: callers often silence stdout.
+_tuidev_block_refuse() {
+    print_warning "$1: tuidev's managed block '$2' has ${3:-markers tuidev could not read}, so the file was left as it is.
+   Fix it by hand: tuidev's lines go between one '$(tuidev_block_begin "$2" "$1")' line
+   and one '$(tuidev_block_end "$2" "$1")' line below it (or delete the markers and those lines), then re-run." >&2
+}
+
+# _tuidev_block_body CONTENT — CONTENT as the lines between the markers: one
+# trailing newline at most, nothing at all for empty CONTENT.
+_tuidev_block_body() {
+    case "$1" in
+        "")      ;;
+        *$'\n')  printf '%s' "$1" ;;
+        *)       printf '%s\n' "$1" ;;
+    esac
+}
+
+# _tuidev_block_render FILE STATE BEGIN END CONTENT
+# Print FILE with the block set to CONTENT. STATE is _tuidev_block_check's:
+# `one` replaces the block where it stands, `none` appends one (after a blank
+# line, unless FILE is empty or already ends in one).
+_tuidev_block_render() {
+    local file="$1" state="$2" begin="$3" end="$4" content="$5"
+    if [[ "$state" == one ]]; then
+        awk -v b="$begin" '{ print } $0 == b { exit }' "$file" || return 1
+        _tuidev_block_body "$content"
+        awk -v e="$end" 'p { print; next } $0 == e { p = 1; print }' "$file" || return 1
+        return 0
+    fi
+    if [[ -s "$file" ]]; then
+        cat "$file" || return 1
+        if [[ "$(tail -c1 "$file" | wc -l | tr -d ' ')" -eq 0 || "$(tail -n1 "$file")" != "" ]]; then
+            echo ""
+        fi
+    fi
+    printf '%s\n' "$begin"
+    _tuidev_block_body "$content"
+    printf '%s\n' "$end"
+}
+
 # write_managed_block FILE BLOCK_ID [CONTENT]
 # If CONTENT is omitted, reads from stdin. Creates FILE if missing. Replaces
-# the existing block with matching BLOCK_ID; appends one if absent.
+# the existing block with matching BLOCK_ID; appends one if absent. A FILE
+# whose markers for BLOCK_ID do not pair up (see _tuidev_block_check) is left
+# byte-identical, with a warning on stderr, and this returns 1; so does a
+# failed backup or write. A FILE that changes is backed up first.
 write_managed_block() {
     local file="$1"
     local block_id="$2"
     local content="${3-}"
-    local begin end
-    begin="$(tuidev_block_begin "$block_id" "$file")"
-    end="$(tuidev_block_end "$block_id" "$file")"
 
     [[ -z "$file" || -z "$block_id" ]] && {
         print_error "write_managed_block: FILE and BLOCK_ID required"
         return 2
     }
 
+    local begin end state=none
+    begin="$(tuidev_block_begin "$block_id" "$file")"
+    end="$(tuidev_block_end "$block_id" "$file")"
+
     if [[ -z "$content" ]]; then
         content="$(cat)"
+    fi
+
+    if [[ -L "$file" && ! -e "$file" ]]; then
+        print_warning "$file is a symlink to a missing file, so it was left as it is (fix or remove the link, then re-run)" >&2
+        return 1
+    fi
+    if [[ -e "$file" && ! -f "$file" ]]; then
+        print_warning "$file is not a regular file, so no managed block was written to it" >&2
+        return 1
+    fi
+    if [[ -f "$file" ]] && ! state="$(_tuidev_block_check "$file" "$block_id")"; then
+        _tuidev_block_refuse "$file" "$block_id" "$state"
+        return 1
     fi
 
     if [[ "$DRY_RUN" == true ]]; then
@@ -134,45 +338,20 @@ write_managed_block() {
         return 0
     fi
 
-    mkdir -p "$(dirname "$file")"
-    touch "$file"
-
-    local tmp
-    tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-cfgw.XXXXXX")"
-
-    if grep -qF "$begin" "$file" 2>/dev/null; then
-        # Replace existing block in place. Pass content via a sidecar file
-        # because BSD awk on macOS rejects literal newlines in -v values.
-        local content_file
-        content_file="$(mktemp "${TMPDIR:-/tmp}/tuidev-cfgw-content.XXXXXX")"
-        printf '%s' "$content" > "$content_file"
-        awk -v begin="$begin" -v end="$end" -v content_file="$content_file" '
-            $0 == begin {
-                print
-                while ((getline line < content_file) > 0) print line
-                close(content_file)
-                in_block=1
-                next
-            }
-            $0 == end   { in_block=0; print; next }
-            !in_block   { print }
-        ' "$file" > "$tmp"
-        rm -f "$content_file"
-        mv "$tmp" "$file"
-    else
-        # Append (add leading blank line if file is non-empty and does not
-        # already end in one).
-        {
-            cat "$file"
-            if [[ -s "$file" ]] && [[ "$(tail -c1 "$file" | wc -l | tr -d ' ')" -eq 0 || "$(tail -n1 "$file")" != "" ]]; then
-                echo ""
-            fi
-            echo "$begin"
-            echo "$content"
-            echo "$end"
-        } > "$tmp"
-        mv "$tmp" "$file"
+    local real tmp
+    if ! { real="$(_tuidev_real_path "$file")" \
+            && mkdir -p "$(dirname "$real")" \
+            && tmp="$(_tuidev_mktemp_beside "$real")"; }; then
+        print_warning "could not create a temp file next to $file, so it was left as it is" >&2
+        return 1
     fi
+
+    if ! _tuidev_block_render "$file" "$state" "$begin" "$end" "$content" > "$tmp"; then
+        rm -f "$tmp"
+        print_warning "could not write $file, so it was left as it is" >&2
+        return 1
+    fi
+    _tuidev_commit "$tmp" "$file" "$real" || return 1
 
     tuidev_manifest_record block "$block_id" "$file"
     print_success "managed block '${block_id}' → ${file}"
@@ -253,7 +432,9 @@ install_config() {
     case "$mode" in
         managed-block)
             [[ -z "$block_id" ]] && { print_error "install_config: --managed-block needs ID"; return 2; }
-            write_managed_block "$dest" "$block_id" "$(cat "$source")"
+            # A refused write (markers that do not pair up, a failed backup)
+            # has left DEST as it was and said why; the install goes on.
+            write_managed_block "$dest" "$block_id" "$(cat "$source")" || true
             ;;
         upgrade-shipped)
             [[ -z "$hash_file" ]] && { print_error "install_config: --upgrade-shipped needs HASHFILE"; return 2; }
@@ -305,19 +486,20 @@ install_config() {
                 fi
                 if [[ "$DRY_RUN" == true ]]; then
                     print_info "[DRY RUN] would overwrite $dest with $source"
-                else
-                    cp "$source" "$dest"
+                elif _tuidev_place_copy "$source" "$dest"; then
                     tuidev_manifest_record file "$dest"
                     print_success "overwrote $dest (backup in $TUIDEV_BACKUP_DIR)"
+                else
+                    print_warning "could not write $dest: left as it is"
                 fi
             else
                 if [[ "$DRY_RUN" == true ]]; then
                     print_info "[DRY RUN] would copy $source -> $dest"
-                else
-                    mkdir -p "$(dirname "$dest")"
-                    cp "$source" "$dest"
+                elif _tuidev_place_copy "$source" "$dest"; then
                     tuidev_manifest_record file "$dest"
                     print_success "installed $dest"
+                else
+                    print_warning "could not write $dest"
                 fi
             fi
             ;;
@@ -521,9 +703,10 @@ _tuidev_merge_json() {
             print_warning "could not back up $dest: left as it was, nothing merged ($hint)"
             return 0
         fi
-        # A redirect writes through a symlinked DEST and keeps DEST's mode.
-        # Not cp: BusyBox cp replaces the link with a regular file.
-        if ! cat "$tmp" > "$dest"; then
+        # Written through a symlinked DEST to its target, keeping the mode,
+        # and renamed into place (atomic). Not cp: BusyBox cp replaces the
+        # link with a regular file.
+        if ! _tuidev_place_copy "$tmp" "$dest"; then
             rm -f "$tmp"
             print_warning "could not write $dest: left as it was (backup in $TUIDEV_BACKUP_DIR)"
             return 0
@@ -562,33 +745,48 @@ read_managed_block() {
 }
 
 # remove_managed_block FILE BLOCK_ID
-# Removes the block (and its markers) if present. No-op if absent.
+# Removes the block (and its markers) if present. No-op if absent. FILE is
+# backed up first. A FILE whose markers for BLOCK_ID do not pair up is left
+# byte-identical, with a warning on stderr, and this returns 1; so does a
+# failed backup or write.
 remove_managed_block() {
     local file="$1"
     local block_id="$2"
-    local begin end
+    local begin end state
     begin="$(tuidev_block_begin "$block_id" "$file")"
     end="$(tuidev_block_end "$block_id" "$file")"
 
     [[ -f "$file" ]] || return 0
-    grep -qF "$begin" "$file" 2>/dev/null || return 0
+    if ! state="$(_tuidev_block_check "$file" "$block_id")"; then
+        _tuidev_block_refuse "$file" "$block_id" "$state"
+        return 1
+    fi
+    [[ "$state" == one ]] || return 0
 
     if [[ "$DRY_RUN" == true ]]; then
         print_info "[DRY RUN] would remove managed block '${block_id}' from ${file}"
         return 0
     fi
 
-    local tmp
-    tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-cfgw.XXXXXX")"
-    awk -v begin="$begin" -v end="$end" '
+    local real tmp
+    if ! { real="$(_tuidev_real_path "$file")" && tmp="$(_tuidev_mktemp_beside "$real")"; }; then
+        print_warning "could not create a temp file next to $file, so it was left as it is" >&2
+        return 1
+    fi
+    if ! awk -v begin="$begin" -v end="$end" '
         $0 == begin { in_block=1; next }
         $0 == end   { in_block=0; next }
         !in_block   { print }
-    ' "$file" > "$tmp"
-    mv "$tmp" "$file"
+    ' "$file" > "$tmp"; then
+        rm -f "$tmp"
+        print_warning "could not write $file, so it was left as it is" >&2
+        return 1
+    fi
+    _tuidev_commit "$tmp" "$file" "$real" || return 1
     print_success "removed managed block '${block_id}' from ${file}"
-    # Nothing but our block was in it: drop the now-empty file.
-    if ! grep -q '[^[:space:]]' "$file"; then
+    # Nothing but our block was in it: drop the now-empty file. Not a
+    # symlink: the link and its target (a dotfiles repo) are the user's.
+    if [[ ! -L "$file" ]] && ! grep -q '[^[:space:]]' "$file"; then
         rm -f "$file"
         print_info "removed ${file} (only held the tuidev block)"
     fi

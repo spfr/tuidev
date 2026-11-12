@@ -74,7 +74,7 @@ _release_age_write() {
         print_info "$tool: $file already has its own setting here; left as it is"
         return 0
     fi
-    write_managed_block "$file" "$RELEASE_AGE_BLOCK" "$content"
+    write_managed_block "$file" "$RELEASE_AGE_BLOCK" "$content" || true
 }
 
 _release_age_fragment() {
