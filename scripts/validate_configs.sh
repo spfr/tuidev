@@ -58,6 +58,14 @@ print_header "Configuration Validator"
 # ============================================================================
 print_step "Shell scripts (bash -n)"
 
+# macOS ships bash 3.2 as /bin/bash; when the bash on PATH is newer, parse with
+# both, so a script only the new one accepts never passes here.
+old_bash="" old_bash_version=""
+if [[ -x /bin/bash ]]; then
+    old_bash_version="$(/bin/bash --version | sed -n '1s/.*version \([0-9.]*\).*/\1/p')"
+    [[ "${old_bash_version%%.*}" -lt "${BASH_VERSINFO[0]}" ]] && old_bash=/bin/bash
+fi
+
 for script in "$REPO_DIR"/*.sh \
               "$REPO_DIR"/scripts/*.sh \
               "$REPO_DIR"/scripts/lib/*.sh \
@@ -67,10 +75,13 @@ for script in "$REPO_DIR"/*.sh \
               "$REPO_DIR"/lib/agents/*.sh \
               "$REPO_DIR"/configs/swiftbar/*.sh; do
     [[ -f "$script" ]] || continue
-    if bash -n "$script" 2>/dev/null; then
-        pass "$(rel "$script")"
-    else
+    if ! bash -n "$script" 2>/dev/null; then
         fail "$(rel "$script") - syntax error"
+    elif [[ -n "$old_bash" ]] && ! "$old_bash" -n "$script" 2>/dev/null; then
+        # A newer bash on PATH hides what macOS's own bash cannot parse.
+        fail "$(rel "$script") - syntax error under $old_bash $old_bash_version"
+    else
+        pass "$(rel "$script")"
     fi
 done
 echo ""

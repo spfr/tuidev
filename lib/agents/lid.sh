@@ -92,7 +92,9 @@ _agents_lid_root_check() {
 # The osascript that asks for the password: always /usr/bin/osascript, except
 # that the test harness (AGENTS_TESTING) points it at a stub.
 _agents_osascript() {
-    if [[ -n "${AGENTS_TESTING:-}" && -n "${AGENTS_OSASCRIPT:-}" ]]; then echo "$AGENTS_OSASCRIPT"; else echo /usr/bin/osascript; fi
+    # Under test with no stub named, nothing: a test must never raise the real
+    # administrator dialog on the machine it runs on.
+    if [[ -n "${AGENTS_TESTING:-}" ]]; then echo "${AGENTS_OSASCRIPT:-/usr/bin/false}"; else echo /usr/bin/osascript; fi
 }
 
 # _agents_admin_run COMMAND PROMPT — run COMMAND as root after macOS's own

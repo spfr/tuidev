@@ -269,7 +269,8 @@ pos() { printf '%s\n' "$out" | grep -n -m1 -e "$1" | cut -d: -f1; }
 [[ "$out" != *$'\033'* ]] || fail "colors off a terminal"
 # Columns line up by what the eye sees: glyphs are three bytes each.
 cols="$(printf '%s\n' "$out" | grep -E '^ [▲◆●] ' | _agents_awk lib_fmt -f /dev/fd/3 3<<'EOF'
-# Where the age column ends: the age is the token before the gap, or the row's end.
+# Where the age column ends: the age is the token before the gap, or the end of the row.
+# (No apostrophe in here: bash 3.2 misreads one inside a heredoc inside $(...).)
 match($0, /[0-9]+[hm][0-9m]*( |$)/) { t = substr($0, RSTART, RLENGTH); sub(/ $/, "", t); print dw(substr($0, 1, RSTART - 1)) + length(t) }
 EOF
 )"

@@ -579,7 +579,15 @@ fi
 # Keep-awake: a second `on` replaces the first holder; off clears state and lock.
 mkdir -p "$tmp/stubbin" "$tmp/empty"
 printf '#!/bin/bash\nexec sleep 300\n' > "$tmp/stubbin/caffeinate"; chmod +x "$tmp/stubbin/caffeinate"
-awake() { PATH="$tmp/stubbin:$PATH" AGENTS_RUN_DIR="$tmp/run" bash "$REPO_DIR/bin/agents" awake "$@"; }
+# Never this Mac's real power state: with lid mode really on (pmset reports
+# SleepDisabled 1) and no guard in this test's run dir, `awake off` would ask
+# for an administrator password to "restore" lid sleep, and a yes would turn
+# the user's own lid mode off. So pmset is a stub that reports sleep enabled,
+# and osascript one that fails without a dialog.
+printf '#!/bin/bash\necho " SleepDisabled\t\t0"; echo " powermode            0"\n' > "$tmp/stubbin/pmset"
+printf '#!/bin/bash\necho "test: osascript must not run" >&2; exit 1\n' > "$tmp/stubbin/osascript"
+chmod +x "$tmp/stubbin/pmset" "$tmp/stubbin/osascript"
+awake() { PATH="$tmp/stubbin:$PATH" AGENTS_RUN_DIR="$tmp/run" AGENTS_TESTING=1 AGENTS_OSASCRIPT="$tmp/stubbin/osascript" bash "$REPO_DIR/bin/agents" awake "$@"; }
 # The live double-on check needs ps to verify holders (a sandbox blocks it).
 if ps -o lstart= -p $$ >/dev/null 2>&1; then
     awake on >/dev/null || fail "awake on failed"
@@ -616,7 +624,7 @@ printf '1 - on 0\n' > "$state_dir/awake"       # pid 1: kill -0 gives EPERM, not
 [[ -e "$state_dir/awake" ]] || fail "record cleared on EPERM"
 sleep 30 & live=$!
 printf '%s - on 0\n' "$live" > "$state_dir/awake"
-out="$(AGENTS_RUN_DIR="$state_dir" agents_awake_off 2>&1)" && fail "awake off accepted an unverified holder"
+out="$(PATH="$tmp/stubbin:$PATH" AGENTS_TESTING=1 AGENTS_OSASCRIPT="$tmp/stubbin/osascript" AGENTS_RUN_DIR="$state_dir" agents_awake_off 2>&1)" && fail "awake off accepted an unverified holder"
 kill -0 "$live" 2>/dev/null || fail "awake off killed a pid it could not verify"
 [[ "$out" == *"can't verify"* && -e "$state_dir/awake" ]] || fail "unverified off: $out"
 kill "$live" 2>/dev/null; wait "$live" 2>/dev/null || true
