@@ -143,6 +143,24 @@ claude                             # Claude Code, sandboxed by its own settings
 codex                              # Codex, sandboxed by its own settings
 ```
 
+**Or hand it to your agent.** Paste this into Claude Code or Codex. It drives the same installer, shows you the plan and waits for your yes:
+
+```text
+Set up tuidev (https://github.com/spfr/tuidev) on this machine.
+
+1. Clone it to ~/workspace/tuidev (or `git pull --ff-only` if it is already there) and read its README.md and AGENTS.md.
+2. Tell me the OS, and which fits: `--profile desktop --pack ai-clis` on a Mac I sit at,
+   `--profile remote` on a headless box, `--profile minimal` on Linux without Homebrew,
+   `--profile full` for everything on a Mac. Recommend one and ask me once.
+3. Run `./install.sh <my choice> --dry-run < /dev/null` and summarise what it would install
+   and which files in my home it would change. Wait for my yes.
+4. Run the same command without `--dry-run`. Use only install.sh: no `curl | sh`, no edits to my
+   dotfiles by hand. If it needs sudo, a password, or a path your sandbox denies, stop and give
+   me the exact command to run myself.
+5. Run `make check` and `make perf`, and report what failed or warned, with the fix each one
+   prints. Change nothing else. Remind me to run `exec zsh -l`, and that `./uninstall.sh` undoes it.
+```
+
 **The whole lab on a Mac, in one command:** sandboxed agents, tiered subagents, `agents` and the menu bar, fans that keep an Apple Silicon MacBook cool to the touch, Herdr's sidebar across machines, tmux and the extra CLI tools. Add `--dry-run` to see every change first; `cooling` asks for your password once.
 
 ```bash
