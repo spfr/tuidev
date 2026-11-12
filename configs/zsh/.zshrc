@@ -10,6 +10,18 @@
 _tuidev_state="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev"
 [[ -f "$_tuidev_state/env" ]] && . "$_tuidev_state/env"
 
+# Open files: macOS starts every process with a soft limit of 256 and Linux
+# with 1024. Node raises its own; file watchers, test runners and databases
+# started from this shell may not, and fail with EMFILE once several agents
+# run. Raised only when the current limit is a lower number (never lowered,
+# never past the hard limit). Everything started from this shell inherits it.
+() {
+  local soft="$(ulimit -n)" hard="$(ulimit -Hn)" want=65536
+  [[ $hard == <-> ]] && (( hard < want )) && want=$hard
+  [[ $soft == <-> ]] && (( soft < want )) && ulimit -n $want 2>/dev/null
+  return 0
+}
+
 # ============================================================================
 # Environment Variables
 # ============================================================================
@@ -224,10 +236,20 @@ ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=20
 # Aliases - Modern TUI Tools
 # ============================================================================
 
-# Modern replacements. Always `--icons=auto`: a bare `--icons` takes the next
-# word as its value, and agents (Claude Code captures aliases) run `ls DIR`.
-alias cat='bat'
-alias ls='eza --icons=auto'
+# Modern replacements, for a person at a terminal. Claude Code captures aliases
+# and functions into the shell its commands run in, and agents write the real
+# flags: `ls -lt`, `cat -v` and `top -l 1` all fail under eza, bat and btm. So
+# cat, ls and top are functions that hand over to the real command whenever
+# stdout is not a terminal (an agent, a pipe, a script). Always `--icons=auto`:
+# a bare `--icons` takes the next word as its value.
+unalias cat ls top 2>/dev/null
+function cat { if [[ -t 1 ]] && (( $+commands[bat] )); then bat "$@"; else command cat "$@"; fi; }
+function ls { if [[ -t 1 ]] && (( $+commands[eza] )); then eza --icons=auto "$@"; else command ls "$@"; fi; }
+# Complete them as the tools they run, where those tools' completions exist
+# (Debian's bat completes as batcat, and compdef complains about a name it
+# does not know).
+(( $+_comps[bat] )) && compdef cat=bat
+(( $+_comps[eza] )) && compdef ls=eza
 alias ll='eza -l --icons=auto --git'
 alias la='eza -la --icons=auto --git'
 alias lt='eza --tree --level=2 --icons=auto'
@@ -265,7 +287,7 @@ alias ....='cd ../../..'
 
 # System
 if command -v btm &>/dev/null; then
-  alias top='btm'     # bottom system monitor
+  function top { if [[ -t 1 ]]; then btm "$@"; else command top "$@"; fi; }   # bottom, for a person
   alias bottom='btm'  # explicit bottom command
 fi
 

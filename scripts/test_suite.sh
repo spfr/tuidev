@@ -291,13 +291,13 @@ run_core() {
         fi
 
         start_test "Shell aliases" core
-        if grep -q "alias cat=['\"]bat['\"]" "$HOME/.zshrc"; then
-            sub_pass "cat -> bat alias"
+        if grep -q "^function cat .*bat" "$HOME/.zshrc"; then
+            sub_pass "cat -> bat at a terminal"
         else
             sub_fail "cat alias missing"
         fi
-        if grep -q "alias ls=['\"]eza" "$HOME/.zshrc"; then
-            sub_pass "ls -> eza alias"
+        if grep -q "^function ls .*eza" "$HOME/.zshrc"; then
+            sub_pass "ls -> eza at a terminal"
         else
             sub_fail "ls alias missing"
         fi
