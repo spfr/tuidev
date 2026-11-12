@@ -12,26 +12,122 @@ make perf-fix      # the audit, then each fix that needs no root, one question a
 ```
 
 ```text
-✓ Spotlight: package stores and repo folders are out of the index
+✓ Background daemons, share of one core since boot (3 h 23 m): Spotlight 5.8%, syspolicyd 1.9%, fseventsd 1.7%
+    how: ps -Ao time,comm (CPU time since boot) over sysctl -n kern.boottime: warns from 15% of one core, judged after the first hour
 ⚠ Time Machine backs up ~/go/pkg/mod
+    how: tmutil destinationinfo, then tmutil isexcluded for each package store: wants them excluded
     fix (--fix does this): tmutil addexclusion ~/go/pkg/mod
+    undo: tmutil removeexclusion ~/go/pkg/mod
 ⚠ Spotlight indexes 270240 files in ~/Library/pnpm/store/v11, a package store no one searches
     fix: System Settings > Spotlight > Search Privacy > + > ~/Library/pnpm/store/v11   (macOS has no command for this list)
+    undo: System Settings > Spotlight > Search Privacy > select it > -
 ℹ 2 to change, 1 of them by './scripts/perf.sh --fix'. Why: docs/performance.md
 ```
 
-The same report closes every install, `make update-check` and `make update-all`, so the machine is checked again whenever you update: a new package manager's store, a backup disk you added, a limit a reinstall reset.
+Every line says how it was measured (the command, and the threshold it is compared against), so the report has numbers even when everything is right; every fix has its undo. `--fix` prints the whole plan before it asks anything, asks once per fix with No as the default, does nothing without a terminal unless you add `--yes`, and logs each change with its undo in `~/.config/tuidev/disk.log` (`--dry-run` prints the commands and log lines instead).
 
-| It checks | It fixes | Otherwise |
-|-----------|----------|-----------|
-| Package stores and repo folders in the Spotlight index (it asks Spotlight how many files it holds under each) | | Names the folder to add in System Settings |
-| Package stores in Time Machine backups, when a backup disk is set up | `tmutil addexclusion` | |
-| `core.untrackedCache`, and a global `core.fsmonitor` | Sets the first, recorded for uninstall | Prints the command for the second |
-| The open-files limit in your shell | The shipped `.zshrc` raises it | Points at `update.sh --configs` |
-| Low Power Mode on the charger; repos in iCloud-synced folders; a store on another volume | | Says what to change |
-| Linux: inotify limits, swap, `updatedb` | | Prints the drop-in or the line, for you to run with `sudo` |
+The same report closes every install, `make update-check` and `make update-all` (there without the `how:` lines and without what is fine), so the machine is checked again whenever you update: a new package manager's store, a backup disk you added, a limit a reinstall reset.
+
+| It checks | It fixes | Otherwise | How to undo |
+|-----------|----------|-----------|-------------|
+| Package stores and repo folders in the Spotlight index (it asks Spotlight how many files it holds under each) | | Names the folder to add in System Settings | Search Privacy: select it, then − |
+| Package stores in Time Machine backups, when a backup disk is set up | `tmutil addexclusion` | | `tmutil removeexclusion PATH` |
+| `core.untrackedCache`, and a global `core.fsmonitor` | Sets the first, recorded for uninstall | Prints the command for the second | `git config --global --unset core.untrackedCache` |
+| The open-files limit in your shell | The shipped `.zshrc` raises it | Points at `update.sh --configs` | Delete the `ulimit` line |
+| Low Power Mode on the charger; repos in iCloud-synced folders; a store on another volume | | Says what to change | The same setting, back |
+| Linux: inotify limits, swap, `updatedb` | | Prints the drop-in or the line, for you to run with `sudo` | `sudo rm /etc/sysctl.d/60-inotify.conf && sudo sysctl --system` |
+| Measured, macOS: CPU since boot of `mds`, `mds_stores`, `mdworker*`, `fseventsd`, `syspolicyd`, `XprotectService`, `logd` and endpoint agents (`ps -Ao time,comm` over `kern.boottime`); memory pressure and swap (`sysctl`); local Time Machine snapshots | | Warns from 15% of one core averaged since boot (after the first hour), on pressure `warn` or `critical`; notes swap past a quarter of RAM | Nothing to undo: it only reads |
+| Measured, both: free space on your home's volume (`df -Pk`); a corporate endpoint agent (CrowdStrike, Sophos, SentinelOne, Jamf Protect, Defender) | | Warns below 10% free and points at `make disk`; for an endpoint agent, ask IT for exclusions, never turn it off | Nothing to undo |
+| Measured, Linux: load over 5 minutes against cores, swap in use, a `/tmp` in RAM (tmpfs) | | Warns when load exceeds the cores | Nothing to undo |
+
+The 15% threshold: on the test Mac, busy with agents, Spotlight averaged about 4% of one core. Averaged over the whole uptime, 15% means a service spent a seventh of every hour flat out: an index rebuild, a package store churning inside the index, or a scanner chasing every file a build writes. A sandbox that denies `ps` or `sysctl` makes those checks say nothing rather than guess.
 
 It finds your package stores by asking pnpm, Go, uv and npm, and looks for repos in the usual folders (`~/workspace`, `~/code`, `~/src`, `~/dev`, `~/Developer`, `~/projects`, `~/repos`, `~/work`). Name others in `TUIDEV_PERF_DIRS`, colon-separated. It never runs `sudo`, and it never edits Spotlight's own files: [why](#1-spotlight).
+
+## Disk
+
+```bash
+make disk          # what dev tools and agents left on disk, with the command for each; deletes nothing
+make disk-fix      # the same, then the plan, then one question per tool cleanup command
+./scripts/disk.sh --json          # one JSON object, for an agent you ask to plan a cleanup
+./scripts/disk.sh --explain ID    # one item in full (the IDs are in --json)
+./scripts/disk.sh --quick         # leave out the repos in your code folders
+./scripts/disk.sh --min 1G        # hide what is smaller (default 100 MB)
+./scripts/disk.sh --verbose       # also say which places are not there
+```
+
+It is not a Mac cleaner. It looks only at what dev tools and agents leave behind, in places it names as it goes (on stderr, so `--json` stays clean): the Go build and module caches, the npm, pnpm, bun, uv and pip caches, Homebrew's downloads, the Cargo registry, Gradle's caches, Playwright's and Cypress's browsers, CocoaPods, Xcode's DerivedData, iOS DeviceSupport and simulators, Podman, Docker and Apple `container` storage, Node versions fnm installed and Pythons uv installed that a newer patch has superseded, Claude Code transcripts and Codex sessions, tuidev's own backups, and in each git repo in your code folders (to a depth of 4, `TUIDEV_DISK_DEPTH`) the untracked `node_modules`, `target`, `.next`, `.turbo`, `dist` and `.venv` at its root and its linked worktrees. Each is sized with one `du -sk`, eight at a time. On the test Mac a full run took 15 to 40 seconds depending on what else was running, and `--quick` about 8. It never walks the home folder, and never looks at app data, browser or system caches, Downloads or Trash. A code folder reached twice (a symlink, or `~/projects` and `~/Projects` on a case-insensitive disk) is scanned once.
+
+Every item says what it is, why it got its verdict (who owns it, when it was last written, whether anything uses it now), what reclaiming it costs you, and the exact command:
+
+```text
+regenerable: caches a tool rebuilds; safe to clear   35 GB in all
+     6.7 GB  pnpm store   ~/Library/pnpm/store
+             what: Every package your projects' node_modules link to; prune removes only what no project uses, so it frees less than this.
+             why:  a cache pnpm owns and rebuilds; written to in the last day
+             cost: little: only packages no project links to go; an install fetches them again if needed
+             run (--fix offers this): pnpm store prune
+
+stale: superseded or unused; safe after a look   4.5 GB in all
+     433 MB  Node v24.22.1 (fnm)   ~/.local/share/fnm/node-versions/v24.22.1
+             what: Node.js v24.22.1, installed by fnm, with global npm packages: @openai/codex.
+             why:  superseded by v24.22.3, the same major, and not fnm's default (v26.13.1); --fix skips it now: global npm packages installed with it would go too: @openai/codex
+             cost: the version and every global npm package installed with it (@openai/codex); a project pinned to exactly v24.22.1 needs 'fnm install 24.22.1' again
+             run (--fix skips it now): fnm uninstall v24.22.1
+```
+
+| Verdict | Means | `--fix` |
+|---------|-------|---------|
+| `regenerable` | A cache a tool rebuilds. Safe to clear. | Offers the tool's own command for the caches in [What `--fix` runs](#what---fix-runs). The Go module cache and Homebrew's downloads are report-only: the first also holds downloaded Go toolchains and private modules that may need credentials to fetch again; `brew cleanup` also removes old versions from Homebrew's prefix, outside your home. |
+| `stale` | Superseded or unused: a Node or Python patch with a newer one beside it, a merged or idle worktree, build output of a repo untouched for 30 days (`TUIDEV_DISK_STALE_DAYS`), a cache whose tool is gone, more than 1,000 fnm links of shells that have ended. Safe after a look. | Offers `fnm uninstall` and `uv python uninstall` when the checks below pass; everything else, worktrees included, is report-only |
+| `managed` | Another tool owns the cleanup: Podman, Docker, Apple `container`, simulators. | Never; it prints that tool's command |
+| `yours` | Transcripts, tuidev's backups, a worktree that holds work, a folder with its own `.git`. Listed from 1 GB, as information. | Never |
+
+Build output in a repo changed within the stale window is only counted ("In use: 26 GB ... in 16 repos"), never listed. `du` counts a hardlinked or cloned file in full, so deleting a `node_modules` that pnpm or bun linked from their store frees less than its size.
+
+**Worktrees are report-only.** A merged or idle worktree is `stale` only when removing it loses nothing: no changes, no untracked file (whatever `status.showUntrackedFiles` says), nothing ignored except build folders, and, when detached, a commit some branch, tag or remote contains. Anything else makes it `yours`. Ignored entries come from `git status -z --ignored=matching`, which shows an ignored folder as one entry; one counts as build output only when its own last path component is `node_modules`, `target`, `.venv`, `dist`, `.next`, `.turbo`, `__pycache__`, `.pytest_cache` or `coverage` (compared literally: `old dist/` is not, nor is a folder named `*`), or when it lies inside such a folder. Everything inside those build folders goes with the worktree, unlooked at. The command it prints for you, `git -c status.showUntrackedFiles=all -C REPO worktree remove PATH`, makes git itself refuse a worktree with untracked files; `--fix` never runs it.
+
+**What a read touches.** Nothing under your home is written while it looks. It runs no tool that writes when asked: not `go` (`go env` updates its telemetry counters; the caches come from `GOCACHE`, `GOMODCACHE`, `GOPATH`, go's env file and its defaults), not `pnpm` (`pnpm store path` writes under its home; the store comes from `npm_config_store_dir`, `store-dir` in pnpm's rc file, read as text for that one key, then `PNPM_HOME`, `XDG_DATA_HOME` and pnpm's default; `~/.npmrc` holds registry tokens and is never read, so when it exists and `npm_config_store_dir` is unset, `pnpm store prune` is shown but not offered), and not `fnm` (`fnm ls` creates its aliases folder when it is missing; the versions are the `node-versions` folder's entries and the default is the `aliases/default` link). `npm` runs with its debug log off (`npm_config_logs_max=0`), `uv` lists Pythons with `--no-cache`, and `git` runs with `--no-optional-locks` and `core.fsmonitor=false`, so `git status` neither rewrites an index nor starts a daemon. Tested against a throwaway home: every path and modification time is the same after a scan. What it does still run: `uv cache dir`, `uv python dir`, `uv tool dir`, `pip3 cache dir`, `brew --cache`, `podman system df`, `docker system df`, `readlink` on fnm's links of running shells, and `git log`, `ls-files`, `worktree list`, `status`, `for-each-ref` and `merge-base` in your repos; it reads the process table once (`ps`).
+
+**For an agent.** `--json` prints `{generated_at, free_bytes, total_bytes, items: [{id, label, path, bytes, verdict, what, why, cost, evidence, reclaim, safe, fix_offered, fix_reason}], reclaimable_bytes, in_use: {bytes, repos}}`. `evidence` repeats `why`. `safe` is true for `regenerable` only. `fix_offered` is the same decision `--fix` makes at that moment (false when the process table could not be read), and `fix_reason` says why not. Ask the agent to read it and propose; the commands are for you to run, or for `--fix`.
+
+### What `--fix` runs
+
+Only these, each a tool's own command, each asked for on its own:
+
+| Item | Command |
+|------|---------|
+| Go build cache | `go clean -cache` |
+| npm cache | `npm cache clean --force` |
+| pnpm store | `pnpm store prune`, only when the store it found exists and no file that could name another store is unreadable |
+| bun cache | `bun pm cache rm` |
+| uv cache | `uv cache prune` |
+| pip cache | `pip3 cache purge` |
+| CocoaPods cache | `pod cache clean --all` |
+| A superseded Node version with no global npm packages | `fnm uninstall VERSION` |
+| A superseded Python no venv uses | `uv python uninstall KEY` |
+
+**How `--fix` works.** It reads the process table again, then prints the plan: every command it would run, the size of each and the total, and every item it will not offer now, with the reason. Then it asks once per command; only `y` or `yes` and Enter is yes, and anything typed while it scanned is thrown away first. Without a terminal it stops after the plan unless you add `--yes`. After each yes it looks again, with a fresh process table, and works out a runtime's block again from the disk (a global package installed, a venv made since the plan); anything that changed skips that item. Each command runs on its own: a failure stops that item, shows the command's output and is logged, and nothing bigger is tried instead. Each item is measured again afterwards, and the run ends with what ran, what was skipped and why, and the bytes actually freed. Every command run is a tab-separated line in `~/.config/tuidev/disk.log`: time, source, item, command, exit code, bytes before, bytes after, undo. `--dry-run` prints the plan, the commands and the log lines and runs nothing.
+
+**When `--fix` holds back.**
+
+| Item | Not offered while |
+|------|-------------------|
+| A tool's cache | That tool runs (`go`, `gopls`, `npm`, `pnpm`, `bun`, `uv`, `pip`, `pod`), or anything in it was written in the last two minutes |
+| A Node version | It has global npm packages besides npm and corepack (they are named; `fnm uninstall` deletes them), a running process was started from it, or a running shell's fnm link points at it (fnm makes one link per shell, named after its PID; only the links of running shells are read) |
+| A Python | A venv points at it (`pyvenv.cfg` in the code folders to depth 7, uv tools, pipx, `~/.virtualenvs`, poetry, hatch), a running process was started from it, or `--quick` skipped the venv search. A venv elsewhere is not seen, and the cost line says so |
+| Anything | `ps` cannot be read; the path is gone, a symlink, outside your home, your home, `/`, or a repo root |
+
+**What it will never do.**
+
+- Run `rm`. Only a tool's own command from the table above; everything else is report-only, and the `rm` it prints is for you to run after a look. A folder under `.claude/worktrees` that has a `.git` of its own is never given an `rm` line.
+- Remove a worktree, or run `brew`.
+- Touch anything `yours` or `managed`.
+- Change anything outside your home.
+- Run anything without asking, or without a terminal unless you passed `--yes`.
+- Remove fnm's default Node, the newest patch of any Node major or Python minor, or a Node version with global packages.
+
+**How to undo.** A cache comes back the next time its tool needs it (a build, an install). A Node version: `fnm install VERSION`. A Python: `uv python install KEY`. For what you remove by hand from the report: a worktree on a branch comes back with `git worktree add PATH BRANCH`, since the branch stays in the repo; a detached worktree is `stale` only when a branch, tag or remote contains its commit, so `git worktree add --detach PATH COMMIT` brings it back.
 
 ## First, look
 
@@ -253,5 +349,6 @@ Ubuntu 24.04 and later restrict unprivileged user namespaces through AppArmor. A
 | An open-files limit of 65,536 for the shell and what it starts | the shipped `.zshrc` |
 | `core.untrackedCache`, while you have not set it | the git defaults |
 | Time Machine exclusions for package stores, when you say yes | `make perf-fix` |
+| Tools' own cache cleanups and superseded runtimes, each when you say yes | `make disk-fix` |
 
 It does not touch Spotlight's list, Gatekeeper, power settings or sysctls. Those belong to you, most need root, and one trades away a malware scan. `make perf` tells you where they stand.

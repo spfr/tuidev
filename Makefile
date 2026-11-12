@@ -8,7 +8,7 @@
         install install-minimal install-desktop install-remote install-dry \
         uninstall \
         update update-check update-packages update-configs update-migrations update-all \
-        update-security perf perf-fix \
+        update-security perf perf-fix disk disk-fix \
         test test-core test-ui test-all test-lib \
         check check-minimal check-desktop check-remote \
         lint validate-configs validate check-links check-paths \
@@ -92,6 +92,12 @@ perf: ## Performance audit: Spotlight, Time Machine, limits, git (changes nothin
 
 perf-fix: ## Performance audit, then offer each fix that needs no root
 	@./scripts/perf.sh --fix
+
+disk: ## Disk audit: caches, stale runtimes, build trees, worktrees, with a reclaim command each (deletes nothing)
+	@./scripts/disk.sh
+
+disk-fix: ## Disk audit, then offer each regenerable cache and stale runtime, one question each
+	@./scripts/disk.sh --fix
 
 brew-upgrade: ## Raw `brew update && brew upgrade` (bypasses profile)
 	@brew update && brew upgrade
