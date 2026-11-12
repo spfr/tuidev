@@ -39,6 +39,7 @@ The full conventions are in [docs/engineering.md](docs/engineering.md). The rule
   - `ui.sh`: output, `run_cmd`, platform probes, `TUIDEV_STATE_DIR`
   - `pkg.sh`: `pkg_install` over brew → apt → dnf → pacman
   - `gitconfig.sh`: `tuidev_git_defaults` (unset keys only; install and `update --configs`)
+  - `perf.sh`: the performance audit (`perf_collect`, `perf_report`, `perf_apply`)
   - `packs.sh`: pack discovery and arrays
   - `config_write.sh`: `install_config`, managed blocks, backups
   - `profile.sh`: the profile file and `TUIDEV_VALID_PACKS`

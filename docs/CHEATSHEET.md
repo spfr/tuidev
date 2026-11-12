@@ -185,6 +185,7 @@ make test                          # tests for the installed profile (test-core 
 make update-check / make update    # preview / apply updates (update-all is non-interactive)
 make update-migrations             # pending one-shot migrations only
 make update-security               # Tailscale, SSH permissions, Seatbelt drift
+make perf | perf-fix               # performance audit; then the fixes that need no root
 make lint                          # shellcheck every shell script
 make validate-configs              # JSON / TOML / Lua / shell syntax
 make test-lib                      # unit harnesses

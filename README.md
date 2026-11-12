@@ -87,21 +87,28 @@ Agents keep a MacBook's chip at 75–85 °C for hours, and macOS keeps its fans 
 
 ## A modern shell in one command
 
-`./install.sh` sets up Ghostty, zsh with autosuggestions, syntax highlighting and completions, a Starship prompt, and the tools below, with aliases wired in: `cat` runs `bat`, `ls` and `ll` run `eza`, `cd` runs `zoxide`, `lg` runs `lazygit` and `top` runs `btm` once those are installed. Ctrl-T finds a file with fzf and a preview, and with the extras, Ctrl-R searches your history with atuin. One `palette.toml` colors Ghostty, tmux and Starship, and `make theme NAME=catppuccin-mocha` switches all three. [Profiles](docs/profiles.md) · [Cheatsheet](docs/CHEATSHEET.md) · [Theming](docs/theming.md)
+`./install.sh` sets up Ghostty, zsh with autosuggestions, syntax highlighting and completions, a Starship prompt, and the tools below, wired in for you at the terminal: `cat` runs `bat`, `ls` and `ll` run `eza`, `cd` runs `zoxide`, `lg` runs `lazygit` and `top` runs `btm` once those are installed. An agent's `cat`, `ls` and `top` stay the real commands, so the flags it already knows keep working. Ctrl-T finds a file with fzf and a preview, and with the extras, Ctrl-R searches your history with atuin. One `palette.toml` colors Ghostty, tmux and Starship, and `make theme NAME=catppuccin-mocha` switches all three. [Toolbox](docs/toolbox.md) · [Profiles](docs/profiles.md) · [Cheatsheet](docs/CHEATSHEET.md) · [Theming](docs/theming.md)
 
 <img src="docs/assets/cli.gif" width="800" alt="The shipped zsh in a demo repo under the Starship prompt. z ap jumps to ~/api; lt draws the repo as a tree with file icons; cat src/routes.py shows the file through bat with syntax highlighting and git change marks; Ctrl-T opens fzf, and typing cach narrows the files to src/cache.py with a highlighted preview; Ctrl-R opens atuin's history search filtered to test commands; tokei counts the repo's lines by language.">
 
-| Category | Tools |
-|----------|-------|
-| Terminal and shell | Ghostty, zsh plugins, Starship, zoxide; atuin (extras) |
-| Search and files | ripgrep, fd, fzf, bat, eza; broot, dust, duf, procs, sd (extras) |
-| Git and review | git, git-delta, gh; lazygit (extras); `hunk`, a review-first diff viewer (`--pack hunk`) |
-| Data and HTTP | jq, yq; xh (extras) |
-| Quality and speed | shellcheck; hyperfine, tokei, tealdeer, glow (extras) |
-| Python | uv (extras) |
-| Monitoring | bottom, lazydocker (`--pack monitoring`) |
+| Instead of | You get | Why |
+|------------|---------|-----|
+| `grep -r`, `find` | `rg`, `fd` | Recursive, and they skip what `.gitignore` lists, hidden files and binaries |
+| `cat`, `ls`, `tree` | `bat`, `eza` | Syntax highlighting and git change marks; a git status column, icons and a tree |
+| `cd` with long paths, scrolling | `zoxide`, `fzf` | `z api` jumps to the directory you use most; Ctrl-T picks a file with a preview |
+| git's pager and defaults | `delta`, better git defaults | Diffs with the changed words marked; histogram diffs, `zdiff3` conflicts, `rerere` |
+| the GitHub website | `gh` | PRs, reviews and CI logs from the terminal |
+| `grep` over JSON and YAML | `jq`, `yq` | A query reads the structure |
+| bugs found at run time | `shellcheck` | Shell script mistakes caught before they run |
+| `git add -p`, `curl`, `time` | `lazygit`, `xh`, `hyperfine` (extras) | Hunk staging in one screen; formatted JSON; a benchmark with a spread |
+| `sed`, `ps`, `du`, `df`, `man`, `cloc` | `sd`, `procs`, `dust`, `duf`, `tealdeer`, `tokei` (extras) | Simpler syntax, readable output |
+| pyenv, virtualenv, pip, pipx | `uv` (extras) | One binary for Python versions, venvs, lockfiles and tools |
+| nvm | `fnm` (`--pack fnm`) | Node per `.nvmrc` on `cd`, without the shell start-up cost |
+| reverse-search | `atuin` (extras) | History you search by directory and exit code, on Ctrl-R |
+| `top`, `docker ps` | `btm`, `lazydocker` (`--pack monitoring`) | A system monitor and a container view you can read |
+| a long `git diff` | `hunk` (`--pack hunk`) | A review-first viewer for what an agent wrote |
 
-Unlabeled tools are in core. The extras (`--extras`) are optional, and whatever your package manager lacks is skipped.
+Tools with no label are in core. The extras (`--extras`) are optional, and whatever your package manager lacks is skipped. What each one replaces, why, and how an agent comes to use it is in [the toolbox](docs/toolbox.md); `make perf` checks what the OS does behind your agents (package stores in the Spotlight index or in backups, file limits, Low Power Mode, inotify on Linux), fixes what is safe and names the rest: [performance](docs/performance.md).
 
 ## Subagents on the cheapest tier that works
 
@@ -196,6 +203,7 @@ herdr                                    # every agent on this machine and saved
 sbx -- CMD                               # any command under the strict Seatbelt profile (macOS)
 t [NAME]                                 # attach-or-create a tmux session (--pack tmux)
 make check                               # health check for the installed profile
+make perf                                # what the OS does behind your agents, and what to change
 make update                              # profile-aware, drift-detecting update
 make theme NAME=catppuccin-mocha         # re-theme tmux, Ghostty and Starship
 make help                                # every target
@@ -219,6 +227,8 @@ Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.
 | [Cheatsheet](docs/CHEATSHEET.md) | Session commands, tmux keys, aliases, Makefile |
 | [FAQ](docs/FAQ.md) | Troubleshooting |
 | [Profiles and packs](docs/profiles.md) | What each profile and pack installs |
+| [Toolbox](docs/toolbox.md) | Every tool: what it replaces, why, who uses it, and how agents come to use the right one |
+| [Performance](docs/performance.md) | What macOS and Linux do in the background that competes with agents, measured, and what to change |
 | [Sandboxing](docs/sandboxing.md) | Native CLI sandboxes, `sbx`, Seatbelt profiles, credential deny list |
 | [Agent workflows](docs/agent-workflows.md) | AI CLIs, editor integration, agent teams, worktrees, Herdr, `agents` and the menu bar, notifications |
 | [Orchestration](docs/orchestration.md) | The `orchestration` pack: subagent tiers, skills, git gates, CI runners |

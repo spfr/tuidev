@@ -1,6 +1,6 @@
 # Quick Start
 
-From a fresh clone to a sandboxed agent running next to your editor, in about ten minutes. tuidev is a terminal dev environment for Claude Code and Codex: modern CLI tools, agents sandboxed by default with `--pack ai-clis`, easy to watch, and installed in layers you can undo. For reference material, see [CHEATSHEET.md](CHEATSHEET.md).
+From a fresh clone to a sandboxed agent running next to your editor, in about ten minutes. tuidev is a terminal dev environment for Claude Code and Codex: modern CLI tools, agents sandboxed by default with `--pack ai-clis`, easy to watch, and installed in layers you can undo. For what each installed tool replaces and why, see [toolbox.md](toolbox.md); for keys and commands, [CHEATSHEET.md](CHEATSHEET.md).
 
 ## 1. Install
 

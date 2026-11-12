@@ -41,6 +41,8 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 
 ## Built-in packs
 
+What each tool replaces, and why it was picked, is in [toolbox.md](toolbox.md).
+
 **`--core`** (`scripts/install/core.sh`)
 : `bat`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `jq`, `ripgrep`, `shellcheck`, `starship`, `yq`, `zoxide`, and the zsh plugins `zsh-autosuggestions`, `zsh-completions` and `zsh-syntax-highlighting`. On macOS it also installs the Ghostty app. The installer then writes the managed blocks for `~/.zshrc` and `~/.config/starship.toml`, and sets [git defaults](#git-defaults).
 
@@ -79,7 +81,7 @@ The canonical list of pack names is `TUIDEV_VALID_PACKS` in `scripts/lib/profile
 
 When `git` is installed, the installer sets these global keys, but only the ones you haven't already set — including values from `[include]`d files. It records each one so that `uninstall.sh` can unset exactly what it set:
 
-`init.defaultBranch main`, `column.ui auto`, `branch.sort -committerdate`, `tag.sort version:refname`, `help.autocorrect prompt`, `commit.verbose`, `diff.algorithm histogram`, `diff.colorMoved default`, `diff.renames`, `merge.conflictStyle zdiff3` (git 2.35 or later), `rerere.enabled`, `rebase.autoSquash`, `rebase.autoStash`, `rebase.updateRefs`, `push.autoSetupRemote`, `push.followTags`, `fetch.prune`, and, when delta is installed, delta as the pager (`core.pager`, `interactive.diffFilter`) with navigation and line numbers. Delta is **not** set to side-by-side: agent panes are often around 80 columns wide. Toggle it per run with `git -c delta.side-by-side=true diff` or `delta -s`. For a large repo, run `git maintenance start` yourself: the installer only prints it as a tip.
+`init.defaultBranch main`, `column.ui auto`, `branch.sort -committerdate`, `tag.sort version:refname`, `help.autocorrect prompt`, `commit.verbose`, `diff.algorithm histogram`, `diff.colorMoved default`, `diff.renames`, `merge.conflictStyle zdiff3` (git 2.35 or later), `rerere.enabled`, `rebase.autoSquash`, `rebase.autoStash`, `rebase.updateRefs`, `push.autoSetupRemote`, `push.followTags`, `fetch.prune`, `core.untrackedCache` (faster `status` on a large tree; never `core.fsmonitor`, which starts a daemon per worktree), and, when delta is installed, delta as the pager (`core.pager`, `interactive.diffFilter`) with navigation and line numbers. Delta is **not** set to side-by-side: agent panes are often around 80 columns wide. Toggle it per run with `git -c delta.side-by-side=true diff` or `delta -s`. For a large repo, run `git maintenance start` yourself: the installer only prints it as a tip.
 
 ## Picking a profile
 

@@ -172,12 +172,16 @@ you to review.
 ## Everything else `update.sh` does
 
 ```bash
-make update-check          # preview: packages, migrations, drift, repo
+make update-check          # preview: packages, migrations, drift, repo, performance
 make update-packages       # upgrade the packages of your active packs only
 make update-configs        # migrations, then re-apply managed blocks + pack configs
 make update-all            # non-interactive packages + configs + repo
 make update-security       # audit Tailscale, SSH permissions, Seatbelt profile drift
+make perf                  # performance audit: Spotlight, Time Machine, limits, git
+make perf-fix              # the same, then offer each fix that needs no root
 ```
+
+`make update-check` and `make update-all` end with the performance report, so a package store that crept back into the Spotlight index or a new backup disk shows up the next time you update. It only reports there; `make perf-fix` (or `update.sh --perf`) applies. What it checks and why is in [performance.md](performance.md#let-tuidev-check).
 
 A bare `./scripts/update.sh` gives an interactive menu with the same actions.
 Every mode honors `--dry-run`. `update.sh` runs under macOS's stock bash 3.2.

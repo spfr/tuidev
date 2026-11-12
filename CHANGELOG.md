@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.0] - 2026-11-12
+
+`make perf` checks what the OS does behind your agents and fixes what is safe. An agent's `ls -lt` works again. Two new docs: every tool and why it is here, and the performance guide the audit follows.
+
+### Added
+
+- **`make perf`: a performance audit.** It asks Spotlight how many files it holds in your package stores and repo folders, checks Time Machine, Low Power Mode, iCloud-synced repos, the open-files limit and git, and on Linux inotify, swap and `updatedb`. `make perf-fix` (or `update.sh --perf`) offers each fix that needs no root: Time Machine exclusions and `core.untrackedCache`. Everything else is printed as the setting or the command, for you. The report also closes every install, `update.sh --check` and `--all`. It never runs `sudo` and never edits Spotlight's files: macOS has no supported command for the Search Privacy list.
+- **An open-files limit of 65,536 in the shipped `.zshrc`.** macOS starts every process at 256; watchers and test runners started from the shell inherit the raised limit. Only ever upward.
+- **`core.untrackedCache` joins the git defaults** (unset keys only): faster `status` on a large tree. Not `core.fsmonitor`, which starts a daemon per worktree.
+- **[docs/toolbox.md](docs/toolbox.md):** each tool, what it replaces, why, whether it is for you, for agents or both, and the five ways an agent comes to use the right one.
+- **[docs/performance.md](docs/performance.md):** what macOS and Linux do in the background that competes with agents (Spotlight, XProtect, Time Machine, inotify, oomd and more), in order of effect, each with its command, cost and undo, and each claim marked measured or sourced. On the test Mac, 77% of the home Spotlight index was pnpm's and Go's package caches.
+
+### Fixed
+
+- **`ls`, `cat` and `top` broke for agents.** Claude Code captures your aliases into the shell its commands run in, so an agent's `ls -lt`, `cat -v` and `top -l 1` ran under eza, bat and btm and failed on the flags; six weeks of local transcripts showed 46 sessions that lost a turn to `ls -t` alone. The shipped `.zshrc` now makes the three functions that use the modern tool only when stdout is a terminal and the real command otherwise. At your prompt nothing changes. `ls` no longer fails where eza is not installed.
+
 ## [3.19.2] - 2026-11-04
 
 Herdr joins the triage: blocked agents first, a shape for each state, and a sidebar in your palette.
