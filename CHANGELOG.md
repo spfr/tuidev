@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.21.3] - 2026-11-12
+
+### Added
+
+- **`make disk` finds more of what is left behind.** The npx cache (where npx-started MCP servers run from), pnpm's metadata cache, Yarn's caches, node-gyp's headers, Maven's repository, Gradle's distributions and JDKs, Cargo's git checkouts, Deno's cache and CocoaPods' spec repos, each with its command and what clearing it costs: 11 GB more on the machine it was built on. Versions installed by RVM, rbenv, pyenv, nvm, rustup, SDKMAN, asdf and mise are listed with that manager's uninstall command, and never offered.
+
+### Fixed
+
+- **`--fix` offered a Node version that projects pin.** A superseded Node version is now held back when a `.nvmrc` or `.node-version` in your code folders names exactly that version, and the reason names the files. A file that names a major (`24`) follows the newest and pins nothing. `--quick`, which reads no version files, holds every superseded Node back. Found by `make disk-agent`.
+- **The summary's columns.** A held-back reason is cut at its first clause instead of mid-word, and an item listed for its count (fnm's dead shell links) shows a dash, not "0 B".
+
 ## [3.21.2] - 2026-11-12
 
 ### Added

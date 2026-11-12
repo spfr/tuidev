@@ -267,6 +267,11 @@ _disk_scan_caches() {
     _disk_cache npm "npm cache" npm npm "npm config get cache (its debug log off)" "${p:-$HOME/.npm}/_cacache" \
         "Package tarballs npm downloaded, kept for the next install." \
         "the next npm install downloads packages again" "npm cache clean --force" "npm cache clean --force"
+    # npm cache clean leaves _npx alone; MCP servers started with npx run from it.
+    _disk_cache npx "npx packages" npm npm "" "${p:-$HOME/.npm}/_npx" \
+        "Packages npx downloaded to run a command once, kept for the next run. MCP servers started with npx run from here." \
+        "the next npx run downloads its package again; restart MCP servers started with npx afterwards" \
+        "rm -rf $(_disk_q "${p:-$HOME/.npm}/_npx")"
     _disk_cache pnpm "pnpm store" pnpm pnpm "npm_config_store_dir, store-dir in pnpm's rc, or pnpm's default (pnpm is not run: it writes when asked; ~/.npmrc is not read: it holds tokens)" "$(perf_pnpm_store)" \
         "Every package your projects' node_modules link to; prune removes only what no project uses, so it frees less than this." \
         "little: only packages no project links to go; an install fetches them again if needed. A store-dir in a project's own .npmrc is not seen" \
@@ -316,6 +321,39 @@ _disk_scan_caches() {
     _disk_cache gradle "Gradle caches" "" Gradle "" "$p" \
         "Dependencies and build caches Gradle downloaded or built; Gradle has no command that clears them." \
         "the next build downloads and rebuilds: minutes (stop its daemons first)" "rm -rf $(_disk_q "$p")"
+    _disk_cache pnpm-cache "pnpm metadata cache" pnpm pnpm "" "$c/pnpm" \
+        "Registry metadata and the packages 'pnpm dlx' ran, which pnpm keeps beside its store." \
+        "pnpm fetches the metadata again on the next install: seconds" "rm -rf $(_disk_q "$c/pnpm")"
+    p="${YARN_CACHE_FOLDER:-$HOME/.yarn/berry/cache}"
+    _disk_cache yarn-berry "Yarn cache" "" Yarn "" "$p" \
+        "Package archives Yarn (2 and later) keeps for every project on this machine." \
+        "the next yarn install downloads packages again" "yarn cache clean --mirror"
+    _disk_cache yarn-classic "Yarn 1 cache" "" "Yarn 1" "" "$c/Yarn" \
+        "Package archives Yarn 1 downloaded." \
+        "the next yarn install downloads packages again" "yarn cache clean"
+    _disk_cache node-gyp "node-gyp headers" "" node-gyp "" "$c/node-gyp" \
+        "Node headers node-gyp downloaded to build native addons, one set per Node version." \
+        "the next native build downloads the headers of its Node again: seconds" "rm -rf $(_disk_q "$c/node-gyp")"
+    p="$HOME/.m2/repository"
+    _disk_cache maven "Maven repository" "" Maven "" "$p" \
+        "Every artifact Maven downloaded or installed locally; Maven has no command that clears it." \
+        "the next build downloads its dependencies again; an artifact you installed with 'mvn install' and published nowhere is gone" \
+        "rm -rf $(_disk_q "$p")"
+    p="$HOME/.gradle/wrapper/dists"
+    _disk_cache gradle-dists "Gradle distributions" "" "the Gradle wrapper" "" "$p" \
+        "Gradle itself, one copy per version a project's wrapper asked for." \
+        "the next ./gradlew downloads its version again (stop Gradle's daemons first)" "rm -rf $(_disk_q "$p")"
+    p="$HOME/.gradle/jdks"
+    _disk_cache gradle-jdks "Gradle JDKs" "" Gradle "" "$p" \
+        "JDKs Gradle's toolchain support downloaded for builds that asked for a Java version." \
+        "the next such build downloads its JDK again: minutes (stop Gradle's daemons first)" "rm -rf $(_disk_q "$p")"
+    p="${CARGO_HOME:-$HOME/.cargo}/git"
+    _disk_cache cargo-git "Cargo git checkouts" "" cargo "" "$p" \
+        "Git dependencies cargo cloned and checked out." \
+        "the next build clones them again" "rm -rf $(_disk_q "$p")"
+    _disk_cache deno "Deno cache" deno Deno "" "${DENO_DIR:-$c/deno}" \
+        "Modules and compiled code Deno downloaded." \
+        "the next run downloads and compiles its modules again" "deno clean"
     _disk_cache playwright "Playwright browsers" "" Playwright "" "${PLAYWRIGHT_BROWSERS_PATH:-$c/ms-playwright}" \
         "Browser builds Playwright downloaded for tests." \
         "tests need 'npx playwright install' again: a download per browser" "npx playwright uninstall --all"
@@ -326,6 +364,11 @@ _disk_scan_caches() {
     _disk_cache cocoapods "CocoaPods cache" pod CocoaPods "" "$c/CocoaPods" \
         "Pods CocoaPods downloaded, kept for the next pod install." \
         "the next pod install downloads them again" "pod cache clean --all" "pod cache clean --all"
+    p="$HOME/.cocoapods/repos"
+    _disk_cache cocoapods-repos "CocoaPods spec repos" "" CocoaPods "" "$p" \
+        "Spec repos CocoaPods cloned. The old master repo is several GB; trunk now comes from a CDN." \
+        "pod install fetches specs again: seconds from the CDN, a long clone if a Podfile still names the master repo" \
+        "rm -rf $(_disk_q "$p")"
     p="$HOME/Library/Developer/Xcode/DerivedData"
     _disk_cache xcode-derived "Xcode DerivedData" "" Xcode "" "$p" \
         "Xcode's build products and indexes, per project; Xcode has no command that clears them." \
@@ -575,16 +618,67 @@ _disk_find_venvs() {
     DISK_VENVS_SCANNED=true
 }
 
+# _disk_find_pins — DISK_PINS: the version files in the code folders, as
+# `FILE<TAB>VERSION` lines: .nvmrc and .node-version for Node, .ruby-version
+# for Ruby. Read once per scan.
+DISK_PINS=""
+DISK_PINS_SCANNED=false
+_disk_find_pins() {
+    local d f depth=$(( ${TUIDEV_DISK_DEPTH:-4} + 2 ))
+    [[ "$DISK_PINS_SCANNED" != true ]] || return 0
+    _disk_say "version files: .nvmrc, .node-version and .ruby-version in the code folders to depth $depth"
+    DISK_PINS="$(
+        while IFS= read -r d; do
+            find "$d/" -maxdepth "$depth" \( -name node_modules -o -name .git \) -prune -o \
+                \( -name .nvmrc -o -name .node-version -o -name .ruby-version \) -type f -print 2>/dev/null
+        done < <(perf_code_dirs) | sed 's#//*#/#g' | sort -u | while IFS= read -r f; do
+            printf '%s\t%s\n' "$f" "$(sed -n '1{s/[[:space:]]//g;p;}' "$f" 2>/dev/null || true)"
+        done
+    )" || true
+    DISK_PINS_SCANNED=true
+}
+
+# _disk_pinned node|ruby VERSION — the version files that name exactly
+# VERSION (given without a leading v or ruby-), one per line. A file that
+# names a major or an alias (24, lts/*) follows the newest and pins nothing.
+_disk_pinned() {
+    K="$1" V="$2" awk -F'\t' 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"] }
+        NF >= 2 {
+            n = split($1, part, "/"); node = (part[n] == ".nvmrc" || part[n] == ".node-version")
+            if ((k == "node") != node) next
+            p = $2; sub(/^v/, "", p); sub(/^ruby-/, "", p)
+            if (p == v) print $1
+        }' <<< "$DISK_PINS"
+}
+
+# _disk_pin_reason node|ruby VERSION — "N project(s) pin exactly this version:
+# FILE, FILE, ..." (the first three), or nothing.
+_disk_pin_reason() {
+    local pins n first
+    pins="$(_disk_pinned "$1" "$2")" || true
+    [[ -n "$pins" ]] || return 0
+    n="$(printf '%s\n' "$pins" | wc -l | tr -d ' ')"
+    first="$(printf '%s\n' "$pins" | sed -n '1,3p' | while IFS= read -r f; do _perf_tilde "$f"; done | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
+    if (( n > 3 )); then first="$first, ..."; fi
+    echo "$n version file(s) name exactly this version: $first"
+}
+
 # _disk_runtime_block I — why runtime item I must not be removed, from what
-# is on disk now, or nothing: global npm packages in a Node version, a venv
-# on a Python (or venvs not searched). Asked at the scan, and again right
+# is on disk now, or nothing: global npm packages in a Node version, a
+# project's version file that names it (or version files not searched), a
+# venv on a Python (or venvs not searched). Asked at the scan, and again right
 # before the command.
 _disk_runtime_block() {
     local id="${DISK_ID[$1]}" path="${DISK_PATH[$1]}" g venv
     case "$id" in
         node:*)
             g="$(_disk_node_globals "$path")"
-            [[ -z "$g" ]] || echo "global npm packages installed with it would go too: $g" ;;
+            if [[ -n "$g" ]]; then echo "global npm packages installed with it would go too: $g"; return 0; fi
+            if [[ "$DISK_PINS_SCANNED" != true ]]; then
+                echo "version files were not searched (--quick), so a project may pin it"
+                return 0
+            fi
+            _disk_pin_reason node "${id#node:v}" ;;
         python:*)
             if [[ "$DISK_VENVS_SCANNED" != true ]]; then
                 echo "venvs were not searched (--quick), so one may use it"
@@ -605,6 +699,7 @@ _disk_scan_runtimes() {
     if [[ -n "$dir" ]]; then
         def="$(_disk_fnm_alias_version "$dir/aliases/default")"
         versions="$(_disk_fnm_versions "$dir")"
+        [[ "$DISK_QUICK" == true ]] || _disk_find_pins
         _disk_say "Node: the versions in $(_perf_tilde "$dir/node-versions") and the links in aliases/ (fnm is not run; default: ${def:-none})"
         while IFS=' ' read -r v newer; do
             [[ -n "$v" && "$v" != "$def" ]] || continue
@@ -643,6 +738,56 @@ _disk_scan_runtimes() {
             _disk_block "$(_disk_runtime_block $((${#DISK_ID[@]} - 1)))"
         done <<< "$cands"
     fi
+    return 0
+}
+
+# _disk_versions ID LABEL DIR TOOL COMMAND — every folder in DIR is a version
+# TOOL installed: one managed item each, with TOOL's own uninstall command
+# (COMMAND, then the version; no space after a COMMAND that ends in @).
+# Nothing here knows whether a project needs a version, so none is ever
+# offered; a Ruby that .ruby-version files name says so.
+_disk_versions() {
+    local id="$1" label="$2" dir="$3" tool="$4" cmd="$5" v name pins sep=" "
+    [[ -d "$dir" ]] || return 0
+    [[ "$cmd" != *@ ]] || sep=""
+    for v in "$dir"/*; do
+        [[ -d "$v" && ! -L "$v" ]] || continue
+        name="${v##*/}"; pins=""
+        if [[ "$label" == Ruby* && "$DISK_PINS_SCANNED" == true ]]; then pins="$(_disk_pin_reason ruby "${name#ruby-}")"; fi
+        _disk_add "$id:$name" "$label $name" "$v" managed \
+            "A version $tool installed, with what was installed into it (gems, packages, components)." \
+            "$tool owns it, and nothing here tells whether a project still needs it${pins:+; $pins}" \
+            "that version and everything installed into it; a project that names it needs it installed again" \
+            "$cmd$sep$name"
+    done
+    return 0
+}
+
+# Versions other managers installed (fnm's Node and uv's Python are judged in
+# _disk_scan_runtimes): listed with their sizes and their manager's command.
+_disk_scan_managers() {
+    local root t data="${XDG_DATA_HOME:-$HOME/.local/share}"
+    _disk_say "other version managers: RVM, rbenv, pyenv, nvm, rustup, SDKMAN, asdf, mise (their folders; none is run)"
+    _disk_versions rvm "Ruby (RVM)" "${rvm_path:-$HOME/.rvm}/rubies" RVM "rvm remove"
+    _disk_versions rbenv "Ruby (rbenv)" "${RBENV_ROOT:-$HOME/.rbenv}/versions" rbenv "rbenv uninstall"
+    _disk_versions pyenv "Python (pyenv)" "${PYENV_ROOT:-$HOME/.pyenv}/versions" pyenv "pyenv uninstall"
+    _disk_versions nvm "Node (nvm)" "${NVM_DIR:-$HOME/.nvm}/versions/node" nvm "nvm uninstall"
+    _disk_versions rustup "Rust toolchain" "${RUSTUP_HOME:-$HOME/.rustup}/toolchains" rustup "rustup toolchain uninstall"
+    root="${SDKMAN_DIR:-$HOME/.sdkman}/candidates"
+    for t in "$root"/*; do
+        [[ -d "$t" ]] || continue
+        _disk_versions "sdkman:${t##*/}" "${t##*/} (SDKMAN)" "$t" SDKMAN "sdk uninstall ${t##*/}"
+    done
+    root="${ASDF_DATA_DIR:-$HOME/.asdf}/installs"
+    for t in "$root"/*; do
+        [[ -d "$t" ]] || continue
+        _disk_versions "asdf:${t##*/}" "${t##*/} (asdf)" "$t" asdf "asdf uninstall ${t##*/}"
+    done
+    root="${MISE_DATA_DIR:-$data/mise}/installs"
+    for t in "$root"/*; do
+        [[ -d "$t" ]] || continue
+        _disk_versions "mise:${t##*/}" "${t##*/} (mise)" "$t" mise "mise uninstall ${t##*/}@"
+    done
     return 0
 }
 
@@ -1044,6 +1189,7 @@ disk_collect() {
     local line
     DISK_ID=(); DISK_LABEL=(); DISK_PATH=(); DISK_KB=(); DISK_VERDICT=(); DISK_WHAT=(); DISK_WHY=()
     DISK_COST=(); DISK_RECLAIM=(); DISK_FIX=(); DISK_REPO=(); DISK_BLOCK=(); DISK_ACTIVE_REPOS=0
+    DISK_PINS=""; DISK_PINS_SCANNED=false
     DISK_VENVS=""; DISK_VENVS_SCANNED=false; _DISK_SEEN=$'\n'
     DISK_QUICK=false; [[ "${1:-}" == --quick ]] && DISK_QUICK=true
     _DISK_HOME_REAL="$(cd "$HOME" 2>/dev/null && pwd -P)" || _DISK_HOME_REAL=""
@@ -1068,8 +1214,9 @@ disk_collect() {
         _disk_step "3/5 repos and worktrees in your code folders (the slow part)"
         _disk_scan_trees
     fi
-    _disk_step "4/5 Node and Python versions, agent transcripts"
+    _disk_step "4/5 Node, Python and other installed versions, agent transcripts"
     _disk_scan_runtimes
+    _disk_scan_managers
     _disk_scan_agents
     _disk_step "5/5 measuring ${#DISK_ID[@]} place(s) with du -sk"
     _disk_measure
@@ -1284,9 +1431,18 @@ _disk_group_title() {
     esac
 }
 
-# _disk_short TEXT — TEXT cut to 64 characters for a one-line row.
+# _disk_short TEXT — TEXT for a one-line row: as it is up to 64 characters,
+# else its first clause (up to the first ": "), else cut.
 _disk_short() {
-    if (( ${#1} > 64 )); then printf '%s...\n' "${1:0:61}"; else printf '%s\n' "$1"; fi
+    local t="$1"
+    if (( ${#t} > 64 )) && [[ "$t" == *": "* ]]; then t="${t%%: *}"; fi
+    if (( ${#t} > 64 )); then printf '%s...\n' "${t:0:61}"; else printf '%s\n' "$t"; fi
+}
+
+# _disk_size KB — the size column; an item listed for its count, not its
+# bytes (fnm's links), shows a dash.
+_disk_size() {
+    if (( $1 == 0 )); then echo "-"; else _perf_human $(( $1 * 1024 )); fi
 }
 
 # disk_summary — the report a person starts from: one line per item, grouped
@@ -1333,7 +1489,7 @@ disk_summary() {
                 yours)   right="$(_perf_tilde "${DISK_PATH[$i]}")" ;;
                 *)       right="$(_disk_short "${DISK_RECLAIM[$i]}")" ;;
             esac
-            printf '  %9s  %-26s %-22s %s\n' "$(_perf_human $((kb * 1024)))" "${DISK_LABEL[$i]}" "${DISK_ID[$i]}" "$right"
+            printf '  %9s  %-26s %-22s %s\n' "$(_disk_size "$kb")" "${DISK_LABEL[$i]}" "${DISK_ID[$i]}" "$right"
             printed=$((printed + 1))
         done <<< "$(printf '%s' "$rows" | grep "^$g	" | sort -t '	' -k2,2nr || true)"
         if [[ "$g" == hand ]]; then

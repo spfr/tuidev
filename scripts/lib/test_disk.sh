@@ -234,5 +234,39 @@ if ! command -v claude >/dev/null 2>&1 && ! command -v codex >/dev/null 2>&1; th
 fi
 pass "summary: grouped by what to do, dozens folded into one line, next step named; --agent sends the audit and the rules, read-only"
 
+# 12. More of what is left behind: the npx cache; versions other managers
+#     installed, with that manager's command and never offered; a Node
+#     version a project's version file names exactly is held back (a major
+#     alone pins nothing), and --quick, which reads no version files, holds
+#     every superseded Node back.
+: > "$tmp/state/calls"
+kb "$HOME/.npm/_npx" 1572864
+kb "$HOME/.rvm/rubies/ruby-2.7.2" 153600; ln -s "$HOME/.rvm/rubies/ruby-2.7.2" "$HOME/.rvm/rubies/default"
+kb "$HOME/.rustup/toolchains/stable-aarch64-apple-darwin" 1048576
+kb "$HOME/.local/share/mise/installs/node/20.1.0" 204800
+DISK_FD="" disk_collect; json="$(DISK_MIN_KB=0 disk_json)"; out="$(disk_summary)"
+[[ "$out" == *"npx packages"*"rm -rf ~/.npm/_npx"* ]] || fail "the npx cache is not listed: $out"
+[[ "$out" == *"Another tool's storage"*"Rust toolchain stable-aarch64-apple-darwin"*"rustup toolchain uninstall stable-aarch64-apple-darwin"* ]] \
+    || fail "a rustup toolchain is not listed with rustup's command: $out"
+[[ "$json" == *'"id":"rvm:ruby-2.7.2"'*'"verdict":"managed"'*'"reclaim":"rvm remove ruby-2.7.2"'* && "$json" != *'"id":"rvm:default"'* ]] \
+    || fail "RVM's Ruby is not managed with rvm's command, or its default link is listed: $json"
+[[ "$json" == *'"reclaim":"mise uninstall node@20.1.0"'* ]] || fail "mise's command: $json"
+if [[ -n "$real_jq" ]]; then
+    [[ "$(item rvm:ruby-2.7.2 fix_offered) $(item rustup:stable-aarch64-apple-darwin fix_offered)" == "false false" ]] || fail "another manager's version is offered"
+    [[ "$(item node:v22.0.0 fix_offered)" == true ]] || fail "an unpinned superseded Node is not offered: $(item node:v22.0.0 fix_reason)"
+fi
+echo "22" > "$oldrepo/.nvmrc"                           # a major: follows the newest
+echo "v22.0.0" > "$repo/.nvmrc"; echo "22.0.0" > "$repo/.node-version"
+echo "ruby-2.7.2" > "$repo/.ruby-version"
+DISK_FD="" disk_collect; out="$(disk_report)"
+[[ "$out" == *"Node v22.0.0 (fnm)"*"--fix skips it now: 2 version file(s) name exactly this version: "*"fresh/.n"* ]] || fail "a pinned Node is not held back: $out"
+[[ "$out" == *"Ruby (RVM) ruby-2.7.2"*"1 version file(s) name exactly this version"* ]] || fail "a pinned Ruby does not say so: $out"
+disk_apply yes_fn > "$tmp/fix.txt"
+! grep -q "fnm uninstall v22.0.0\|rvm\|rustup\|mise" "$tmp/state/calls" || fail "a pinned Node or another manager's version was removed: $(cat "$tmp/state/calls")"
+DISK_FD="" disk_collect --quick; out="$(disk_report)"
+[[ "$out" == *"Node v22.0.0 (fnm)"*"--fix skips it now: version files were not searched (--quick)"* ]] || fail "--quick offered a Node without reading version files: $out"
+rm "$oldrepo/.nvmrc" "$repo/.nvmrc" "$repo/.node-version" "$repo/.ruby-version"
+pass "npx cache listed; other managers' versions shown with their command, never offered; a pinned Node is held back, and every Node under --quick"
+
 echo ""
 echo "All disk lib tests passed."
