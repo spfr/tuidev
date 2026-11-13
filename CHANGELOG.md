@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A starship warning in any repo with a stash.** The stash symbol was a bare `$`, which starship reads as the start of a variable, so entering a repo with stashes printed `Error parsing format string git_status.stashed` and dropped the symbol. It is escaped now. `./scripts/update.sh --configs` brings the fix to an installed prompt.
+
 ## [3.21.3] - 2026-11-12
 
 ### Added
