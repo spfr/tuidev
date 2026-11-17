@@ -212,7 +212,7 @@ _agents_herdr_refresh() {
     local lock="$AGENTS_RUN_DIR/herdr.lock" now out rc=1
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
     _agents_lock "$lock" || return 1
-    now="$(date +%s)"
+    _agents_strftime now %s
     if out="$(_agents_timeout "${1:-2}" _agents_herdr_query)"; then
         _agents_replace "$AGENTS_RUN_DIR/herdr.tsv" "$now${out:+$'\n'$out}" && rc=0
     fi
