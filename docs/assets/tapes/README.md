@@ -108,3 +108,21 @@ To capture the real menu by hand instead, `swiftbar-demo.sh` writes a demo plugi
 4. Set SwiftBar's plugin folder back, and delete the demo folder.
 
 Every action in the demo menu fails safe. SwiftBar runs a menu action in its own environment, without the plugin's `DEMO_HOME`, so an action that calls the demo `agents` directly stops at its `DEMO_HOME` check before doing anything. One that goes back through the demo plugin reaches the demo `agents`, which never signals and refuses keep-awake and new windows. Check the capture for anything from your own menu bar (other items, the clock) and crop it out.
+
+## The remote screencast's fleet
+
+`remote-demo.sh` is the same fleet with tuidev on every machine, for recording "remote feels local" ([remote.md](../../remote.md#remote-feels-local-ports-links-and-files)) without a real hostname or session on screen:
+
+```bash
+bash docs/assets/tapes/remote-demo.sh up /tmp/hd/aurora
+eval "$(bash docs/assets/tapes/remote-demo.sh env /tmp/hd/aurora)" && herdr   # Ctrl+b q detaches
+bash docs/assets/tapes/remote-demo.sh down /tmp/hd/aurora
+```
+
+- The machines are **atlas** and **kepler** (two containers, as above). Each has this checkout's `agents` and the `tuidev.link` plugin with its keys; this Mac's demo home has them too, and runs the link watcher.
+- The cast: on atlas, a `storefront` session that starts a real web server on `localhost:5173` and writes `review.md`, and a `search` session blocked on a question; on kepler, an `orders-api` session that started a server on `:8080` and ended, leaving it behind, and a `platform-infra` session; here, `payments` and `docs-site`. They are the same stand-ins, run under their agent's name so `agents` lists them as sessions.
+- The environment sets `AGENTS_MAP_ROOT` to the demo home, so `agents map` lists only what runs under it and never the sessions of whoever records.
+- The storefront stand-in also leaves what Claude Code keeps about a session (a record in `~/.claude/sessions` and a transcript with one Write call), so the map lists `review.md` among the files sessions wrote.
+- `remote.tape` renders `docs/assets/remote.mp4`: start the fleet with `TUIDEV_DEMO_NO_BROWSER=1` (the demo's `open` then only records what it was given, so no tab opens while VHS draws), then `DEMO_HOME=/tmp/hd/aurora vhs docs/assets/tapes/remote.tape`. `remote-browser.png` is the forwarded page as headless Chrome renders it, cut in with ffmpeg for `remote-cut.mp4` and `remote.gif`. The tape's prompt shows no path, so nothing of the machine that renders it is on screen.
+- What is real: the ssh tunnels, the Herdr plugin's click, the browser tab (this Mac's own browser, on a `127.0.0.1` port), `agents map` and its stop. It is not a VHS tape: a click that opens a browser needs a screen recording.
+

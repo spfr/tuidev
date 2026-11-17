@@ -36,6 +36,16 @@ tuidev is shell scripts and configs for coding with AI agents from the terminal 
 
 <sub>Herdr with this Mac and two Linux containers saved as SSH machines, `devbox` and `workbox`. The agents are scripted stand-ins that report their state through Herdr's hook API, not live Claude Code or Codex sessions. Rendered with `make screenshots`.</sub>
 
+## Remote feels local
+
+The dev server an agent started on another machine prints `http://localhost:5173`, and that is the other machine's localhost. With tuidev on both, you stop thinking about it. **Ctrl-click the URL** in its Herdr pane and it opens in your own browser, through an ssh tunnel made on the spot. Press **prefix+m** for the map: one list of what runs where, on every machine, grouped by what you would do with it: previews and dev servers first, with where each opens; the reports and pages sessions just wrote, which Enter fetches and opens here; what was left behind; then the sessions and the machines with their CPU and memory. Enter goes there and **ctrl-k stops what is under the cursor on the machine that runs it**, asked first, so nothing needs `pkill` or remembering where a server was started. **Drag a file onto a session on another machine** and it gets there: the session asks your Mac for it, your Mac asks you once, and nothing leaves without that click.
+
+It is plain ssh underneath. Your machine keeps one connection to each machine saved in Herdr, nothing listens anywhere, and what another machine may ask for is decided on yours: only its own loopback URLs, on a port your machine picks, and only files a viewer shows. [Remote feels local](docs/remote.md#remote-feels-local-ports-links-and-files)
+
+<img src="docs/assets/remote.gif" width="800" alt="Herdr in a terminal with three machines in its sidebar: Local, atlas and kepler. The storefront session on atlas shows a preview server at http://localhost:5173 and a review it wrote. Back on Local, prefix+m opens the map: under Previews and dev servers, atlas port 5173 by the storefront session and kepler port 8080, left behind; under Files sessions just wrote, review.md on atlas; then sessions and machines. Enter on the atlas row forwards the port, and the checkout page served from atlas appears in a browser. Ctrl-x on the kepler row asks to send SIGTERM to one process; after y the row is gone and Left behind says nothing. Enter on review.md fetches it, and the review is read in the terminal on this Mac.">
+
+<sub>This Mac and two Linux containers saved as SSH machines, `atlas` and `kepler`. The sessions are scripted stand-ins; the tunnel, the browser page, the stop and the fetched file are real. Recorded with `docs/assets/tapes/remote.tape` on the fleet `remote-demo.sh` starts ([how](docs/assets/tapes/README.md#the-remote-screencasts-fleet)).</sub>
+
 ## Cleanup with evidence
 
 Every `claude` session starts its own MCP servers, and its subagents start test runs, dev servers and polling loops. When a session crashes, or a subagent hands back its report, some of that keeps running. `agents` (`--pack monitoring`) lists each session with what it runs, flags what was left behind, and gives every flagged process a verdict with its evidence, so you stop the right thing and leave the rest.

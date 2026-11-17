@@ -4,8 +4,11 @@
 FROM debian:trixie-slim
 
 ARG HERDR_VERSION
+# python3, iproute2 (ss), lsof and fzf are for remote-demo.sh: a dev server to
+# forward, and tuidev's `agents` (its port list and its map) on the machine.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssh-server bash ca-certificates curl jq git procps less \
+        python3 iproute2 lsof fzf \
  && rm -rf /var/lib/apt/lists/*
 
 # Herdr's release binary, checked against the digest the release lists.

@@ -43,3 +43,6 @@ test_results/
 
 # Personal tools (not part of repo)
 dhcp/
+
+# Screencast renders (docs/assets/tapes/remote.tape); the GIF cut from them is tracked
+docs/assets/*.mp4
