@@ -23,6 +23,11 @@
 # session:window.pane" lines, where.sh), "job" records (awk/lib_jobs.awk) and,
 # last, "hot PID START SINCE TS CPUTIME CONFIRMED" streaks when AGENTS_HOG_CLOCK and
 # AGENTS_HOG_HOT (the previous run's) are set: only agents_collect keeps them.
+# With AGENTS_LISTEN_PLAN set, one more line at the very end, the listener
+# plan agents_collect keeps and removes: "lplan RELISTEN SKIP", RELISTEN the
+# pids of AGENTS_LISTEN_SKIP (those LISTENERS left out) whose ports may show
+# now (comma-separated), SKIP every pid whose ports no record can show
+# (space-separated); "-" for none.
 agents_classify() {
     local mcp pats
     _agents_mcp_needles mcp     # which configured MCP server each process is

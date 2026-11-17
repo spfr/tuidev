@@ -174,6 +174,7 @@ MANAGED_BLOCKS=(
     "$HOME/.config/starship.toml|$REPO_DIR/configs/starship/starship.toml|tuidev-starship"
     "$HOME/.config/tmux/tmux.conf|$REPO_DIR/configs/tmux/tmux.conf|tuidev-tmux"
     "$HOME/.config/herdr/config.toml|$REPO_DIR/configs/herdr/keys.toml|tuidev-keys"
+    "$HOME/.config/herdr/config.toml|$REPO_DIR/configs/herdr/sidebar.toml|tuidev-sidebar"
 )
 
 # tmux.conf belongs to --pack tmux: check (and re-apply) its block only where
@@ -181,12 +182,13 @@ MANAGED_BLOCKS=(
 # creates a tmux.conf on a machine without the pack.
 # The Herdr keys block names the tuidev.link plugin's actions, so only
 # --pack herdr, which links that plugin first, ever creates it: an update
-# refreshes it where it already is.
+# refreshes it where it already is. So does the sidebar block, which the pack
+# adds only while your config has no [ui.sidebar.spaces] of its own.
 managed_block_applies() {
     local dest="$1" id="$2"
     case "$id" in
         tuidev-tmux) tuidev_active_packs | grep -qx tmux && return 0 ;;
-        tuidev-keys) ;;
+        tuidev-keys|tuidev-sidebar) ;;
         *)           return 0 ;;
     esac
     [[ -f "$dest" ]] && grep -qxF "$(tuidev_block_begin "$id")" "$dest" 2>/dev/null

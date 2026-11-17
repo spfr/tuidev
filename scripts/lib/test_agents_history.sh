@@ -334,6 +334,50 @@ agents_sample || fail "a locked-out sample failed"
 rmdir "$AGENTS_DATA_DIR/sample.lock"
 pass "sample: one at a time (lock dir)"
 
+# A sample when nothing happened (no agent, no command, no changed
+# transcript) writes the stamp and the baseline and skips the rest; anything
+# that did happen runs it in full.
+(
+    AGENTS_DATA_DIR="$tmp/quiet"; HOME="$tmp/quiet-home"; mkdir -p "$HOME"
+    : > "$tmp/scans"; scans() { wc -l < "$tmp/scans" | tr -d " "; }
+    # shellcheck disable=SC2317,SC2329  # called by the functions under test
+    agents_snapshot() { cat "$tmp/snap.quiet"; }
+    _agents_tokens_scan() { echo x >> "$tmp/scans"; touch "$AGENTS_DATA_DIR/tokens.stamp"; echo 1 > "$AGENTS_DATA_DIR/tokens.full"; }
+    {
+        psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd
+        psl 300 1 5.0 600000 1:00.00 01:00:00 08:00:00 claude
+    } > "$tmp/snap.quiet"
+    FAKE_NOW=1760400000
+    agents_sample || fail "quiet: first sample"      # an agent: in full
+    sc="$(scans)"
+    printf '%s\n' "$(psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd)" > "$tmp/snap.quiet"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "quiet: the agent is gone"   # nothing left to count: quiet
+    [[ "$(scans)" == "$sc" ]] || fail "the sample after the agent left ran in full"
+    [[ "$(cat "$AGENTS_DATA_DIR/sample.state")" == "$FAKE_NOW" ]] || fail "the agent's processes stayed in sample.state"
+    rows="$(wc -l < "$AGENTS_DATA_DIR/history.tsv")"; sc="$(scans)"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "quiet: a quiet sample"
+    [[ "$(scans)" == "$sc" ]] || fail "a quiet sample ran the token scan"
+    [[ "$(cat "$AGENTS_DATA_DIR/sample.stamp")" == "$FAKE_NOW" && "$(cat "$AGENTS_DATA_DIR/sample.state")" == "$FAKE_NOW" ]] \
+        || fail "a quiet sample did not write the stamp and the baseline"
+    [[ "$(wc -l < "$AGENTS_DATA_DIR/history.tsv")" == "$rows" ]] || fail "a quiet sample appended rows"
+    _agents_sample_due $((FAKE_NOW + 30)) && fail "a quiet sample must count as a sample (not due again)"
+    # A transcript changed since the last scan: in full.
+    mkdir -p "$HOME/.claude/projects/p/x"; echo '{}' > "$HOME/.claude/projects/p/x.jsonl"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "quiet: a changed transcript"
+    [[ "$(scans)" == $((sc + 1)) ]] || fail "a changed transcript did not run the scan"
+    # An agent running: in full; a hook wait to credit: in full.
+    sc="$(scans)"; psl 700 1 5.0 90000 1:00.00 01:00 08:58:00 claude >> "$tmp/snap.quiet"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "quiet: an agent"
+    [[ "$(scans)" == $((sc + 1)) ]] || fail "a running agent did not run the scan"
+    printf '%s\n' "$(psl 1 0 0.0 20000 10:00.00 13-16:00:00 08:00:00 /sbin/launchd)" > "$tmp/snap.quiet"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "quiet: the agent ended"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample; sc="$(scans)"
+    mkdir -p "$AGENTS_DATA_DIR/waiting"; echo x > "$AGENTS_DATA_DIR/waiting/abc"
+    FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "quiet: an open hook wait"
+    [[ "$(scans)" == $((sc + 1)) ]] || fail "an open hook wait did not run the scan"
+)
+pass "sample: with no agent, command, run or changed transcript, only the stamp and baseline are written; any of them runs it in full"
+
 # Provenance for auto-reap: a process seen under an agent keeps that mark
 # once its session ends and it is orphaned; one never seen there has none.
 (

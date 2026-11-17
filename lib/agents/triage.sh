@@ -88,7 +88,7 @@ _agents_waitsum_line() {
     [[ "$AGENTS_HISTORY" == 1 && -r "$AGENTS_DATA_DIR/waits.today" ]] || return 0
     local d="" b="" f="" p="" today
     IFS=$'\t' read -r d b f p < "$AGENTS_DATA_DIR/waits.today"
-    today="$(date +%Y-%m-%d)"
+    _agents_strftime today %Y-%m-%d
     [[ "$d" == "$today" && "$b" =~ ^[0-9]+$ && "$f" =~ ^[0-9]+$ && "$p" =~ ^[0-9]+$ ]] || return 0
     printf 'waitsum\t%s\t%s\t%s\n' "$b" "$f" "$p"
 }

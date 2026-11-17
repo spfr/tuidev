@@ -208,6 +208,29 @@ _agents_tokens_scan() {
     return 0
 }
 
+# _agents_tokens_idle NOW — true when a scan would read nothing: a previous
+# scan's stamp and a complete listing exist (tokens.full is not 0: no catch-up
+# pending), no Claude Code or Codex transcript and no Grok usage.json changed
+# since the stamp, and no transcript is still hot within the quiet time
+# (_AGENTS_TOKENS_QUIET, plus a minute): a hot line's last row may wait for
+# it before it counts. One find per CLI, no stat. A scan skipped for this
+# leaves the stamp where it was, so the next change is still "since" it.
+_agents_tokens_idle() {
+    local dir="$AGENTS_DATA_DIR" now="$1" c="${CODEX_HOME:-$HOME/.codex}/sessions" g="${GROK_HOME:-$HOME/.grok}/sessions" full=""
+    [[ -f "$dir/tokens.stamp" && -r "$dir/tokens.full" ]] || return 1
+    read -r full < "$dir/tokens.full"
+    [[ "$full" =~ ^[0-9]+$ && $full -gt 0 ]] || return 1
+    [[ -z "$(_agents_tx_find "$AGENTS_HISTORY_DAYS" -newer "$dir/tokens.stamp" -print -quit)" ]] || return 1
+    if [[ -d "$c" ]]; then
+        [[ -z "$(find "$c" -mindepth 4 -maxdepth 4 -type f -name 'rollout-*.jsonl' -newer "$dir/tokens.stamp" -print -quit 2>/dev/null)" ]] || return 1
+    fi
+    if [[ -d "$g" && -f "$dir/grok.stamp" ]]; then
+        [[ -z "$(find "$g" -mindepth 3 -maxdepth 3 -type f -name usage.json -newer "$dir/grok.stamp" -print -quit 2>/dev/null)" ]] || return 1
+    fi
+    [[ ! -r "$dir/tokens.hot" ]] \
+        || ! LC_ALL=C awk -F '\t' -v t="$((now - _AGENTS_TOKENS_QUIET - 60))" '($5 + 0) > t { f = 1; exit } END { exit !f }' "$dir/tokens.hot"
+}
+
 # _agents_tokens_stamp FILE EPOCH — FILE, empty, with EPOCH as its mtime
 # (touch -t: BSD date -r, GNU and BusyBox date -d @); nothing when it
 # cannot be made, and the next scan then lists every transcript.

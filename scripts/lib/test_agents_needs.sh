@@ -389,11 +389,12 @@ else
     echo "SKIP: jq not installed: json fields not checked"
 fi
 
-# agents tsv: verdict rows first, after the palette and the marks (the menu
-# needs them before the items), the auto-reap setting among the conf rows.
+# agents tsv: verdict rows first (the menu needs them before the items), the
+# auto-reap setting among the conf rows.
 tsv_out="$( agents_collect() { printf '%s\n' "$enr"; }; AGENTS_AUTO_REAP=1 agents_tsv 2>/dev/null )"
-first="$(printf '%s\n' "$tsv_out" | awk -F '\t' '$1 != "palette" && $1 != "glyph" { print; exit }')"
-[[ "${first%%$'\t'*}" == need ]] || fail "tsv does not start with verdict rows: $first"
+# (After the palette and the glyph table, which are about how rows look.)
+tsv_first="$(printf '%s\n' "$tsv_out" | grep -v -e "^palette$(printf '\t')" -e "^glyph$(printf '\t')" | head -1)"
+[[ "$(printf '%s\n' "$tsv_first" | cut -f1)" == need ]] || fail "tsv does not start with verdict rows: $tsv_first"
 [[ "$(printf '%s\n' "$tsv_out" | awk -F '\t' '$1 == "need" { n = NR } $1 == "agent" && !a { a = NR } END { print (n < a) }')" == 1 ]] || fail "tsv: verdicts after the records"
 [[ "$tsv_out" == *$'\n'"conf"$'\t'"AGENTS_AUTO_REAP"$'\t'"1"* ]] || fail "tsv lacks conf AGENTS_AUTO_REAP"
 pass "agents tsv: verdict rows first, then the records; conf carries AGENTS_AUTO_REAP"

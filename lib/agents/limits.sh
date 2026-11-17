@@ -79,16 +79,18 @@ _agents_limits_lines() {
 # cli and window; FAMILY, when not empty, also drops every other line of
 # that family (a source that reports all its windows at once, so one that
 # went away goes too). Malformed rows are left out. Under limits.lock
-# (a second at most), one rename; a no-op with AGENTS_HISTORY=0. False when
-# it could not be written.
+# (a second at most, or TRIES attempts 0.05 s apart: the status line passes
+# 1, so a held lock or an unwritable directory never stalls a render; the
+# next render writes the reading), one rename; a no-op with AGENTS_HISTORY=0.
+# False when it could not be written.
 _agents_limits_put() {
     [[ "$AGENTS_HISTORY" == 1 && -n "$2" ]] || return 0
-    local fam="$1" rows="$2"
+    local fam="$1" rows="$2" tries="${3:-20}"
     (
         umask 077
         _agents_data_dir || exit 1
         f="$AGENTS_DATA_DIR/limits.tsv" lock="$AGENTS_DATA_DIR/limits.lock"
-        _agents_lock "$lock" 20 0.05 || exit 1
+        _agents_lock "$lock" "$tries" 0.05 || exit 1
         # The rows on stdin (an awk -v value can't hold a newline everywhere).
         out="$(printf '%s\n' "$rows" | LC_ALL=C awk -F '\t' -v fam="$fam" -v f="$f" '
             function ok(n, a) {

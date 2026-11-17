@@ -161,6 +161,26 @@ Practices:
 8. **Start the server from a login shell.** Integrations read the *server's* `PATH`. A server started by `brew services`, or by a non-interactive `ssh host herdr server`, gets a stripped `PATH` and reports the CLIs as `not found`. On Linux, use a systemd user unit with `ExecStart=/bin/bash -lc 'exec "$HOME/.local/bin/herdr" server'`; on a Mac, a LaunchAgent whose `ProgramArguments` are `/bin/zsh`, `-lc`, `exec "$HOME/.local/bin/herdr" server`. The full path keeps it on the release binary whatever the login `PATH` puts first.
 9. **Trim the logs when the server is down anyway.** Herdr writes `~/.config/herdr/herdr-server.log` and `herdr-client.log`, and 0.9.5 leaves no rotated copies; the server keeps its log open. `make check` warns above 50 MB (`HERDR_LOG_WARN_MB` changes the bar). That is no reason to restart: the next time the server is stopped anyway, before it starts again, run `cd ~/.config/herdr && for f in herdr*.log; do tail -n 2000 "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done`.
 
+### Tabs named after what runs in them
+
+With `--pack monitoring` beside `--pack herdr`, Herdr's labels say what runs where, so a tab bar of `1 2 3 4` reads `✳ Fleet IA`, `✳ Remote runners and …`, `❯ mactui_setup`:
+
+- **A tab** is named with its kind's mark (`AGENTS_GLYPHS`: `✳` Claude Code, `⬡` Codex, `❯` a shell…), then the session's own task title (Herdr's `terminal_title`, without its status characters), else the pane's directory, cut at 20 characters with `…`. In a tab with several panes, an agent wins over shells, and of several agents the first one (in pane order, so moving focus never renames the tab) names it, with `+N` for the others. A title that is only the CLI's name (`Claude Code`), a command line or a shell prompt doesn't count as a task.
+- **A workspace row** in the sidebar ends with what runs in it, one mark and count per kind: `✳2 ❯1`. That is the `$agents` token in `[ui.sidebar.spaces] rows`, which the pack adds as a `tuidev-sidebar` block in `~/.config/herdr/config.toml`, unless your config sets those rows itself; then add `"$agents"` to yours.
+- **An agent row**, and its pane border with `show_agent_labels_on_pane_borders`, shows `✳ claude` instead of `claude` (Herdr's display name for the pane, which applies only while that agent runs there).
+
+**Your names stay yours.** A sync renames only a tab whose label is still Herdr's number, or the one a sync gave it. Rename a tab and it is never touched again; `~/.config/tuidev/run/herdr-labels.tsv` remembers which tabs a sync named and the number each had. A label is set only when it differs from what Herdr shows, so a sync with nothing new writes nothing.
+
+**What keeps it current.** No daemon of its own: the `tuidev.link` plugin's event hooks run `agents herdr sync` when a tab, pane or agent comes or goes or moves, when an agent changes state, when you switch tabs, and when the server starts. Herdr has no hook for a title or directory change alone, so the next of those catches it, as does the menu bar's refresh on macOS (`--throttle`: at most every 30 seconds). Syncs never overlap: one that finds another running leaves a mark, and the running one goes again a second later, so a burst of events costs two passes. Each machine's server runs its own plugin, so each machine names its own tabs; the panes of a saved machine are named there.
+
+```bash
+agents herdr              # each tab: its label, whose it is, what a sync would make it; each workspace's roll-up
+agents herdr sync -n      # what a sync would change, without changing it
+agents herdr reset        # every tab a sync named gets its number back; the roll-ups and marks are cleared
+```
+
+`AGENTS_HERDR_NAMES=0` in `agents.conf` turns it off; `agents herdr reset` then puts back what it set (with it on, the next sync names them again). `AGENTS_GLYPHS=off` keeps the names without the marks (`claude:2 shell:1` in the sidebar).
+
 ### Sessions and devices
 
 A **session** is one Herdr server with its own workspaces, panes and socket. Plain `herdr` attaches to the `default` session; `herdr --session NAME` (or `herdr session attach NAME`) starts or attaches a named one, each with its own server.
@@ -323,7 +343,7 @@ agents limits             # each CLI's usage limits: a gauge per window with the
 A test that leaks, or loops while building an array, can take a Mac's memory in under a minute: one node process an agent started grew to 16 GB in 55 seconds, macOS killed dozens of its own daemons, and the "Your system has run out of application memory" dialog blamed Chrome, because it lists only apps. Two layers stop that now:
 
 1. **The Node heap cap** in the shipped Claude Code and Codex settings (`NODE_OPTIONS=--max-old-space-size=4096`, [above](#ai-clis)) makes the common case fail fast inside the agent's own command.
-2. **The memory guard**, `agents mem guard`, which the pack runs as a LaunchAgent (`~/Library/LaunchAgents/dev.tuidev.memguard.plist`, loaded at login, restarted if it fails), covers every language. Every `AGENTS_MEM_POLL` seconds (5) it reads one `ps` snapshot, and for the few processes past half the warning (or the largest few while memory pressure is up) samples their footprint, which keeps counting what the compressor squeezed and swap took, while RSS falls as a runaway grows (`ps` showed 10 GB for that node; Activity Monitor showed 29). Then:
+2. **The memory guard**, `agents mem guard`, which the pack runs as a LaunchAgent (`~/Library/LaunchAgents/dev.tuidev.memguard.plist`, loaded at login, restarted if it fails), covers every language. Every `AGENTS_MEM_POLL` seconds (5) while anything needs watching (a process past half the warning, memory pressure warn or critical, or free memory falling at half `AGENTS_MEM_RATE` or faster), and every `AGENTS_MEM_IDLE` seconds (20) otherwise (a minute with no agent session running, since nothing is then stoppable), it reads one `ps` snapshot, and for the few processes past half the warning (or the largest few while memory pressure is up) samples their footprint, which keeps counting what the compressor squeezed and swap took, while RSS falls as a runaway grows (`ps` showed 10 GB for that node; Activity Monitor showed 29). Then:
    - past `AGENTS_MEM_WARN` (8 GB), and again at each doubling, a notification names the process, the script it runs, its project and session (`node (clientFuelToday.test.js) in cairn holds 16.6G; stopped at 24.0G`), and a click jumps to that session; growing faster than `AGENTS_MEM_RATE` (200 MB/s) gets one warning too;
    - a process in an agent tree, below the agent and yours, past `AGENTS_MEM_KILL` (half the RAM), or the largest such past the warning while macOS reports critical memory pressure, is stopped, tree and all, through the same engine as `agents kill` (its refusals, a start-time check, SIGTERM, then SIGKILL after `AGENTS_GRACE`), and the notification says so. An agent session itself, your apps and other users' processes are only ever warned about;
    - every warning and stop goes to `memory.tsv` in the data directory (`epoch event pid name label project session footprint rss free% swap`, names only, pruned with the history), stops to `events.tsv` as `guard`/`memory` too, and a turn to critical pressure is recorded with the biggest process at the time, so the next morning `agents mem` says what happened.
@@ -853,7 +873,8 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_MEM_WARN` | `8` | GB of memory that gets a process a warning (and again at each doubling), and makes it a memory hog |
 | `AGENTS_MEM_KILL` | `0` | GB at which the guard stops a process in an agent tree; `0` is half the RAM |
 | `AGENTS_MEM_RATE` | `200` | MB/s of growth that gets a process one warning |
-| `AGENTS_MEM_POLL` | `5` | Seconds between the guard's looks |
+| `AGENTS_MEM_POLL` | `5` | Seconds between the guard's looks while something needs watching |
+| `AGENTS_MEM_IDLE` | `20` | Seconds between its looks when nothing does (a minute with no agent session); clamped so a runaway growing at 4x `AGENTS_MEM_RATE` cannot get from half the warning to the stop size between two looks |
 | `AGENTS_TOOL_LONG` | `20` | Minutes before a session's command (a tool shell) is flagged `long` |
 | `AGENTS_LS_TOOLS` | `5` | Commands listed under each session in `agents ls`; `agents ps` lists all |
 | `AGENTS_PARKED_MIN` | `60` | Minutes a finished session stays to review before it counts as [parked](#local-processes-agents---pack-monitoring), in `agents`, the menu and the waits report |
@@ -874,6 +895,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup and its hourly health check |
 | `AGENTS_LINK` | `1` | `0` turns off the link watcher (`agents link watch`), which opens here what you Ctrl-click in a Herdr pane of another machine; `agents link restart` applies a change ([remote.md](remote.md#remote-feels-local-ports-links-and-files)) |
 | `AGENTS_GLYPHS` | (empty) | The mark in front of each kind of session wherever one is listed (Herdr's tabs and sidebar, `agents map`, the menu bar): `claude=✳ codex=⬡ grok=✕ agy=▲ cursor-agent=◈ shell=❯ agent=◆` (`agent` is any other agent CLI, `shell` a pane without one). `KIND=GLYPH` words replace single ones; `off` shows none. |
+| `AGENTS_HERDR_NAMES` | `1` | Herdr's labels say what runs where (`agents herdr`): each tab named after what runs in it, each workspace row's `$agents` roll-up, the mark on agent rows. A tab you renamed is never touched. `0` leaves Herdr's labels alone; `agents herdr reset` puts back what a sync set ([Herdr's labels](#tabs-named-after-what-runs-in-them)) |
 | `AGENTS_REMOTE_HOSTS` | empty | ssh hosts that count as your machines for `agents ports`, `forward`, `push`, `open` and the watcher, besides the ones saved in Herdr; space-separated |
 | `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
 | `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |

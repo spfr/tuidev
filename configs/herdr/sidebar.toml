@@ -1,0 +1,10 @@
+# tuidev's sidebar rows for Herdr: each workspace row ends with what runs in
+# it, one mark and count per kind ("✳2 ❯1": two Claude Code sessions and a
+# shell), the $agents token `agents herdr sync` reports (--pack monitoring).
+# Herdr's default rows otherwise. For rows of your own, delete this whole
+# block, markers too, and write yours: a second [ui.sidebar.spaces] table
+# would be a TOML error, so the installer skips this block while your config
+# has one. Add your own settings above this block: TOML has no way to close
+# a table, so whatever follows it would land in [ui.sidebar.spaces].
+[ui.sidebar.spaces]
+rows = [["state_icon", "workspace", "$agents"], ["branch", "git_status"]]

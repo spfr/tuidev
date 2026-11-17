@@ -5,11 +5,15 @@
 # link an agent printed) is passed to that other machine, which opens it: the
 # URL through an ssh tunnel, the file fetched (`agents link`, docs/remote.md).
 # With nobody attached, the click opens here, as it would without the plugin.
+#
+# Its event hooks keep Herdr's labels saying what runs where (`agents herdr
+# sync`: tab names, the sidebar's $agents roll-up, agent rows' marks). Herdr
+# runs each hook on its own server, so every machine names its own tabs.
 id = "tuidev.link"
 name = "tuidev link"
-version = "0.2.0"
+version = "0.3.0"
 min_herdr_version = "0.9.0"
-description = "What runs where and one key to stop it; open localhost and file links from another machine's panes on the machine you sit at."
+description = "What runs where and one key to stop it; tabs named after what runs in them; open localhost and file links from another machine's panes on the machine you sit at."
 platforms = ["linux", "macos"]
 
 [[actions]]
@@ -54,3 +58,51 @@ id = "file"
 title = "Open file on my machine"
 pattern = "^file://"
 action = "open"
+
+# What changes a tab's name or a workspace's roll-up: a tab, pane or agent
+# coming or going or moving, and an agent changing state (its task title is
+# set by then). Herdr offers no hook on a title or directory change alone
+# (pane.updated is not a hook event); the next of these, or the menu bar's
+# refresh, catches it. A burst of them costs one sync and one more pass.
+[[startup]]
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "tab.created"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "tab.closed"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "tab.moved"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "tab.focused"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "pane.created"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "pane.closed"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "pane.moved"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "pane.exited"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "pane.agent_detected"
+command = ["sh", "run.sh", "sync"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["sh", "run.sh", "sync"]

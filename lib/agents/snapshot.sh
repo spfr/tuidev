@@ -3,8 +3,9 @@
 #
 # Owns: the ps snapshot, a process's start time, listening ports, working
 #   directories, the pids never flagged stale (launchd jobs, systemd
-#   services, our own keep-awake holder), Herdr's view (cached), the Herdr
-#   pane each session runs in (HERDR_PANE_ID in its environment), Herdr's
+#   services, our own keep-awake holder), the listener plan (which processes
+#   lsof can leave out), Herdr's view (cached), the Herdr pane each session
+#   runs in (HERDR_PANE_ID in its environment, kept per PID@START), Herdr's
 #   health (an hourly check: a stale server, outdated integrations), and
 #   agents_collect, the full record set every view starts from.
 # Uses: config.sh, util.sh, classify.sh (agents_classify, agents_enrich),
@@ -43,14 +44,21 @@ _agents_zombie() {
     [[ "$st" == Z* ]]
 }
 
-# "pid port" for every TCP listener we can see (our own processes, unprivileged).
-# Fails when they could not be listed (no lsof or ss, or it failed): "no
-# ports found" then is not "no ports" (agents_collect's probe row). lsof exits
-# 1 with no output when nothing listens; an error also says so on stderr.
+# _agents_listeners [--skip "PID…" | --only PID,…] — "pid port" for every
+# TCP listener we can see (our own processes, unprivileged). Fails when they
+# could not be listed (no lsof or ss, or it failed): "no ports found" then is
+# not "no ports" (agents_collect's probe row). lsof exits 1 with no output
+# when nothing listens; an error also says so on stderr. --skip leaves those
+# processes out, --only asks about those alone (agents_collect's listener
+# plan); ss, which lists every socket at once, ignores both.
 _agents_listeners() {
-    local out rc=0
+    local out rc=0 sel=()
+    case "${1:-}" in
+        --skip) [[ -z "${2:-}" ]] || sel=(-p "^${2// /,^}") ;;
+        --only) sel=(-a -p "${2:-}") ;;
+    esac
     if command -v lsof >/dev/null 2>&1; then
-        out="$(lsof -b -w -nP -iTCP -sTCP:LISTEN -Fpn 2>&1)" || rc=$?
+        out="$(lsof -b -w -nP "${sel[@]}" -iTCP -sTCP:LISTEN -Fpn 2>&1)" || rc=$?
         printf '%s\n' "$out" | awk '
             /^p/ { p = substr($0, 2) }
             /^n/ { port = $0; sub(/.*:/, "", port); if (!seen[p " " port]++) print p " " port }'
@@ -204,7 +212,7 @@ _agents_herdr_refresh() {
     local lock="$AGENTS_RUN_DIR/herdr.lock" now out rc=1
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
     _agents_lock "$lock" || return 1
-    now="$(date +%s)"
+    _agents_strftime now %s
     if out="$(_agents_timeout "${1:-2}" _agents_herdr_query)"; then
         _agents_replace "$AGENTS_RUN_DIR/herdr.tsv" "$now${out:+$'\n'$out}" && rc=0
     fi
@@ -286,12 +294,17 @@ _agents_herdr_health_check() {
 # asked only when HERDR (_agents_herdr's answer) lists agents. agents_collect
 # and agents_sample both use it, so a sample's waits see the exact pane too.
 _agents_herdr_panes() {
-    local t p k hosted=()
+    local t p k st lp="" lst="" hosted=() toks=""
     [[ -n "$1" ]] || return 0
-    while IFS=$'\t' read -r t p k _; do
-        [[ "$t" == where && "$k" == herdr ]] && hosted+=("$p")
+    # An agent row (its start is column 9) comes just before its where row.
+    while IFS=$'\t' read -r t p k _ _ _ _ _ st _; do
+        if [[ "$t" == agent ]]; then lp="$p"; lst="$st"
+        elif [[ "$t" == where && "$k" == herdr ]]; then
+            hosted+=("$p")
+            [[ "$p" != "$lp" || -z "$lst" ]] || toks+=" $p@$lst"
+        fi
     done <<<"$2"
-    [[ ${#hosted[@]} -eq 0 ]] || _agents_pane_env "${hosted[@]}"
+    [[ ${#hosted[@]} -eq 0 ]] || _AGENTS_PANE_TOKENS="$toks" _agents_pane_env "${hosted[@]}"
     return 0
 }
 
@@ -302,9 +315,19 @@ _agents_herdr_panes() {
 # shows a process's environment after its command line; only your own),
 # given 2s. Never under the test harness (AGENTS_TESTING), whose fixture
 # pids would meet this machine's processes: a test redefines it.
+#
+# On macOS that ps is half the cost of a refresh's Herdr part (its
+# environment dumps, and the timeout's processes), and every refresh asks
+# about the same sessions. But a process's environment is the one it was
+# exec'd with, and a session does not exec again while it runs: so its
+# answer (a pane, or none) holds for as long as it lives, and is kept in the
+# run dir (pane.env), keyed by PID@START. _AGENTS_PANE_TOKENS
+# (_agents_herdr_panes) names the PID@START of the pids asked about; a pid
+# without one, or whose token is not in the cache (new, or a reused pid), is
+# asked about. Only an answer ps gave in full is kept.
 _agents_pane_env() {
     [[ $# -gt 0 && -z "${AGENTS_TESTING:-}" ]] || return 0
-    local p kv out=""
+    local p kv out="" toks=" ${_AGENTS_PANE_TOKENS:-} " cache="$AGENTS_RUN_DIR/pane.env" have=$'\n' keep="" tok pane ask=() raw rc=0 line
     if [[ -r /proc/self/environ ]]; then
         for p in "$@"; do
             [[ "$p" =~ ^[0-9]+$ ]] || continue
@@ -315,19 +338,50 @@ _agents_pane_env() {
         [[ -z "$out" ]] || printf '%s' "$out" | _agents_pane_env_parse
         return 0
     fi
-    _agents_timeout 2 env LC_ALL=C ps -E -ww -o pid=,command= -p "$(_agents_commas "$@")" 2>/dev/null | _agents_pane_env_parse
+    if [[ -n "${toks// /}" && -r "$cache" ]]; then
+        while IFS= read -r line; do have+="$line"$'\n'; done < "$cache"
+    fi
+    for p in "$@"; do
+        tok=""
+        if [[ "$toks" == *" $p@"* ]]; then tok="${toks#*" $p@"}"; tok="$p@${tok%% *}"; fi
+        if [[ -n "$tok" && "$have" == *$'\n'"$tok"$'\t'* ]]; then
+            pane="${have#*$'\n'"$tok"$'\t'}"; pane="${pane%%$'\n'*}"
+            keep+="$tok"$'\t'"$pane"$'\n'
+            [[ "$pane" == - ]] || out+="$p"$'\t'"$pane"$'\n'
+        else
+            ask+=("$p")
+        fi
+    done
+    if [[ ${#ask[@]} -gt 0 ]]; then
+        raw="$(_agents_timeout 2 env LC_ALL=C ps -E -ww -o pid=,command= -p "$(_agents_commas "${ask[@]}")" 2>/dev/null)" || rc=$?
+        # Every pid ps printed, "-" for one with no pane; the cut-off keeps nothing.
+        while IFS=$'\t' read -r p pane; do
+            [[ -n "$p" ]] || continue
+            [[ "$pane" == - ]] || out+="$p"$'\t'"$pane"$'\n'
+            [[ $rc -eq 124 || "$toks" != *" $p@"* ]] && continue
+            tok="${toks#*" $p@"}"; keep+="$p@${tok%% *}"$'\t'"$pane"$'\n'
+        done <<<"$(printf '%s\n' "$raw" | _agents_pane_env_parse all)"
+    fi
+    printf '%s' "$out"
+    # Rewritten (whole, never half) only when this run's answers differ.
+    if [[ -n "$keep" && $'\n'"$keep" != "$have" && -d "$AGENTS_RUN_DIR" ]]; then
+        _agents_replace "$cache" "${keep%$'\n'}" || true
+    fi
     return 0
 }
 
-# _agents_pane_env_parse < LINES — "pid<TAB>pane" from "PID COMMAND… ENV…"
-# lines: the last HERDR_PANE_ID= word (the environment comes after the
-# arguments), and only a pane id made of [A-Za-z0-9:_-].
+# _agents_pane_env_parse [all] < LINES — "pid<TAB>pane" from "PID COMMAND…
+# ENV…" lines: the last HERDR_PANE_ID= word (the environment comes after the
+# arguments), and only a pane id made of [A-Za-z0-9:_-]. With all, also
+# "pid<TAB>-" for each process without one.
 # shellcheck disable=SC2016  # awk source
 _agents_pane_env_parse() {
-    awk '{
+    awk -v all="${1:-}" '{
         p = $1; s = $0; id = ""; sub(/^[ \t]*[0-9]+/, "", s)
         while (match(s, /[ \t]HERDR_PANE_ID=[^ \t]*/)) { id = substr(s, RSTART + 15, RLENGTH - 15); s = substr(s, RSTART + RLENGTH) }
-        if (p ~ /^[0-9]+$/ && id ~ /^[A-Za-z0-9:_-]+$/) print p "\t" id
+        if (p !~ /^[0-9]+$/) next
+        if (id ~ /^[A-Za-z0-9:_-]+$/) print p "\t" id
+        else if (all != "") print p "\t-"
     }'
 }
 
@@ -355,6 +409,67 @@ _agents_keep_pids() {
     return 0
 }
 
+# The listener plan. lsof spends its time in the file tables it walks, and a
+# few processes hold most of the descriptors (a virtual machine's tens of
+# thousands, browsers, system agents) while their ports reach no record. So
+# each classify pass names the processes whose ports no record can show
+# (classify.awk's lsink), and the next run's lsof leaves those out
+# (listen.skip in the run dir). Nothing is taken on trust: the pass checks
+# every pid that was left out against this run's snapshot and, before the
+# records are final, asks lsof about any whose ports may show now (a reused
+# pid, a process that exec'd another command). A damaged or half-written
+# list only costs that second ask: it is a plain write.
+
+# _agents_listen_skip VAR — set VAR to the last run's plan, the pids to
+# leave out: "" for none, or when the list is damaged or too long for one
+# argument.
+_agents_listen_skip() {
+    local _s=""
+    { read -r _s < "$AGENTS_RUN_DIR/listen.skip"; } 2>/dev/null || true
+    [[ ${#_s} -le 65536 && "$_s" =~ ^[0-9]+( [0-9]+)*$ ]] || _s=""
+    printf -v "$1" '%s' "$_s"
+}
+
+# _agents_collect_classify — agents_collect's classify pass, on its ps,
+# listen, keep, panes, hot, clock, feed and lskip (dynamic scope): sets
+# recs. When a pid lsof left out may matter now, lsof is asked about it
+# (lprobe=fail when that fails) and the pass runs again with its ports. The
+# next run's plan is kept; a plan line never reaches recs.
+_agents_collect_classify() {
+    local full relisten="-" skip="-" more
+    full="$(printf '%s\n' "$ps" | AGENTS_LISTEN_PLAN=1 AGENTS_LISTEN_SKIP="$lskip" AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+    _agents_take_plan
+    if [[ "$relisten" != - ]]; then
+        more="$(_agents_listeners --only "$relisten")" || lprobe=fail
+        [[ -z "$more" ]] || listen+="${listen:+$'\n'}$more"
+        full="$(printf '%s\n' "$ps" | AGENTS_LISTEN_PLAN=1 AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+        _agents_take_plan
+    fi
+    [[ "$skip" != - ]] || skip=""
+    if [[ "$skip" != "$lskip" && -d "$AGENTS_RUN_DIR" ]]; then
+        { printf '%s\n' "$skip" > "$AGENTS_RUN_DIR/listen.skip"; } 2>/dev/null
+    fi
+    return 0
+}
+
+# _agents_take_plan — split the caller's full (the classify output) into
+# recs and its last line, the plan: relisten and skip ("-" for none). A
+# suffix removal and byte offsets, under LC_ALL=C: in a UTF-8 locale bash
+# widens the whole output first, ten times the cost.
+_agents_take_plan() {
+    local p LC_ALL=C
+    recs="${full%$'\n'lplan$'\t'*}"
+    if [[ ${#recs} -lt ${#full} ]]; then
+        p="${full:${#recs}+7}"
+    elif [[ "$full" == lplan$'\t'* ]]; then
+        p="${full#lplan$'\t'}"; recs=""
+    else
+        return 0
+    fi
+    relisten="${p%%$'\t'*}"; skip="${p#*$'\t'}"
+    [[ "$relisten" =~ ^[0-9]+(,[0-9]+)*$ ]] || relisten=-
+}
+
 # agents_collect — the full record set for this moment, ending in
 # "probe listen ok|fail": whether the listening ports could be listed (when
 # not, a stale tree's "no ports" proves nothing, and auto-reap leaves it).
@@ -364,14 +479,16 @@ _agents_keep_pids() {
 # hands what it saw to the run ledger (_agents_runs_feed): the same snapshot
 # and lsof, plus the tool shells' stdout from that lsof.
 agents_collect() {
-    local ps listen keep kbg="" panes="" tbg="" recs pids lprobe=ok enr feed="" hint=""
+    local ps listen keep kbg="" panes="" tbg="" recs pids lprobe=ok enr feed="" hint="" lskip=""
     [[ "${_AGENTS_FEED:-}" == 1 && "$AGENTS_HISTORY" == 1 ]] && feed=1
     # Listing the listeners scans every process (lsof): the slowest probe, so
-    # it runs while ps reads the process table; so do launchctl on macOS,
-    # whose jobs (pids never stale) need no snapshot, tmux's pane list, and
-    # the cwd lookup for the pids the last run asked about
-    # (_agents_cwd_prefetch).
-    _agents_bg 5 _agents_listeners
+    # it runs while ps reads the process table, leaving out the processes
+    # whose ports no record could show last run (_agents_listen_skip); so do
+    # launchctl on macOS, whose jobs (pids never stale) need no snapshot,
+    # tmux's pane list, and the cwd lookup for the pids the last run asked
+    # about (_agents_cwd_prefetch).
+    _agents_listen_skip lskip
+    _agents_bg 5 _agents_listeners ${lskip:+--skip "$lskip"}
     if command -v launchctl >/dev/null 2>&1; then _agents_bg 7 _agents_keep_pids ""; kbg=1; fi
     if _agents_tmux_up; then _agents_bg 9 _agents_panes; tbg=1; fi
     _agents_cwd_prefetch 8 ${feed:+--stdout} || true
@@ -389,7 +506,7 @@ agents_collect() {
     # Hogs by CPU are judged over time: the streaks go from run to run.
     local hotf="$AGENTS_RUN_DIR/hog.state" hot="" newhot=""
     [[ -r "$hotf" ]] && hot="$(<"$hotf")"
-    recs="$(printf '%s\n' "$ps" | AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+    _agents_collect_classify
     local type pid kind rest watch="" where="" runs="" herdr
     set --
     while IFS=$'\t' read -r type pid kind rest; do
@@ -405,7 +522,7 @@ agents_collect() {
     [[ "$newhot" == "$hot" ]] || { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$hotf" "$newhot"; } 2>/dev/null
     _agents_cwds_hinted pids 8 "$hint" ${feed:+--stdout} "$@"
     herdr="$(_agents_herdr "${AGENTS_HERDR_MODE:-sync}")"
-    enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$herdr" "$(_agents_watched "$watch")" "$(_agents_herdr_panes "$herdr" "$where")")"
+    enr="$(printf '%s\n' "$recs" | agents_enrich "$pids" "$herdr" "$(_agents_watched "$watch")" "$(_agents_herdr_panes "$herdr" "$recs")")"
     [[ -z "$enr" ]] || printf '%s\n' "$enr"
     # Runs are tool commands and stale trees: with neither, nothing to feed.
     [[ -z "$feed" || -z "$runs" ]] || _agents_runs_feed "$enr" "$recs" "$pids"

@@ -23,8 +23,8 @@ _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
-_AGENTS_CONF_KEYS+=" AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL"
-_AGENTS_CONF_KEYS+=" AGENTS_LINK AGENTS_REMOTE_HOSTS AGENTS_GLYPHS"
+_AGENTS_CONF_KEYS+=" AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL AGENTS_MEM_IDLE"
+_AGENTS_CONF_KEYS+=" AGENTS_LINK AGENTS_REMOTE_HOSTS AGENTS_GLYPHS AGENTS_HERDR_NAMES"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
 _AGENTS_CONF_KEYS+=" AGENTS_PARKED_MIN AGENTS_THEME AGENTS_COLOR_NEED AGENTS_COLOR_DONE AGENTS_COLOR_RUN"
 _AGENTS_CONF_KEYS+=" AGENTS_COLOR_WARN AGENTS_COLOR_DIM AGENTS_COLOR_ACCENT"
@@ -60,11 +60,11 @@ _agents_conf_valid() {
         AGENTS_NAMES)       [[ "$2" =~ ^[A-Za-z0-9._\ -]+$ ]] ;;
         AGENTS_NO_HERDR)    [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
-        AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP|AGENTS_LINK) [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP|AGENTS_LINK|AGENTS_HERDR_NAMES) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_REMOTE_HOSTS) [[ -z "$2" || "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._@:/-]*(\ +[A-Za-z0-9][A-Za-z0-9._@:/-]*)*$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
         AGENTS_MEM_GUARD)   [[ "$2" =~ ^(kill|warn|off)$ ]] ;;
-        AGENTS_MEM_WARN|AGENTS_MEM_RATE|AGENTS_MEM_POLL) [[ "$2" =~ ^[1-9][0-9]{0,4}$ ]] ;;
+        AGENTS_MEM_WARN|AGENTS_MEM_RATE|AGENTS_MEM_POLL|AGENTS_MEM_IDLE) [[ "$2" =~ ^[1-9][0-9]{0,4}$ ]] ;;
         AGENTS_MEM_KILL)    [[ "$2" =~ ^[0-9]{1,5}$ ]] ;;
         AGENTS_PRICES)      [[ -z "$2" || "$2" == off || "$2" =~ ^(/|~/)[^[:cntrl:]]+$ ]] ;;
         AGENTS_HOOK_REAP|AGENTS_HOOK_LOG) [[ "$2" =~ ^[01]?$ ]] ;;
@@ -181,17 +181,20 @@ _agents_env_check AGENTS_AUTO_REAP 0
 # doubling), one growing faster than AGENTS_MEM_RATE MB/s too; one in an agent
 # tree holding AGENTS_MEM_KILL GB (0: half the RAM), or the largest such past
 # the warning while memory pressure is critical, is stopped. Checked every
-# AGENTS_MEM_POLL seconds.
+# AGENTS_MEM_POLL seconds while something needs watching, every
+# AGENTS_MEM_IDLE seconds otherwise.
 AGENTS_MEM_GUARD="${AGENTS_MEM_GUARD:-kill}"
 AGENTS_MEM_WARN="${AGENTS_MEM_WARN:-8}"
 AGENTS_MEM_KILL="${AGENTS_MEM_KILL:-0}"
 AGENTS_MEM_RATE="${AGENTS_MEM_RATE:-200}"
 AGENTS_MEM_POLL="${AGENTS_MEM_POLL:-5}"
+AGENTS_MEM_IDLE="${AGENTS_MEM_IDLE:-20}"
 _agents_env_check AGENTS_MEM_GUARD kill
 _agents_env_check AGENTS_MEM_WARN 8
 _agents_env_check AGENTS_MEM_KILL 0
 _agents_env_check AGENTS_MEM_RATE 200
 _agents_env_check AGENTS_MEM_POLL 5
+_agents_env_check AGENTS_MEM_IDLE 20
 # Your other machines (remote.sh, forward.sh, link.sh). AGENTS_LINK: 1 (the
 # default) lets `agents link watch` follow them, so a click on a localhost
 # link in one of their Herdr panes opens here through a tunnel; 0 turns the
@@ -246,6 +249,12 @@ AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs review running parked limits to
 # The mark in front of each kind of session, wherever one is listed (glyph.sh
 # has the defaults): KIND=GLYPH words replace single ones, "off" shows none.
 AGENTS_GLYPHS="${AGENTS_GLYPHS:-}"
+# Herdr's labels (herdrlabel.sh): 1 (the default) names each tab after what
+# runs in it, rolls up each workspace's sessions in the sidebar ($agents) and
+# marks agent rows; 0 leaves Herdr's labels alone (`agents herdr reset` puts
+# back what it set).
+AGENTS_HERDR_NAMES="${AGENTS_HERDR_NAMES:-1}"
+_agents_env_check AGENTS_HERDR_NAMES 1
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"

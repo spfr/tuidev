@@ -41,6 +41,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib/pkg.sh"
 # shellcheck source=lib/herdr.sh disable=SC1091
 . "$SCRIPT_DIR/lib/herdr.sh"
+# shellcheck source=lib/config_write.sh disable=SC1091
+. "$SCRIPT_DIR/lib/config_write.sh"
 
 # Cache uname once. Probes run dozens of times across the suite.
 TUIDEV_OS="$(uname -s)"
@@ -295,6 +297,37 @@ check_extras() {
 }
 
 # ---------------------------------------------------------------------------
+# Category: shell: compinit more than once
+# ---------------------------------------------------------------------------
+
+# Each compinit call costs 20 to 100 ms on every new shell, and installers
+# (oh-my-zsh, version managers, cloud SDKs) like to append their own after
+# tuidev's. Counts the calls (a command word, not a comment or `autoload`) in
+# ~/.zshrc and ~/.zshrc.local; the tuidev block counts once however many
+# branches it has (it runs one). Warns only, with what to do; it never edits
+# the file. ZDOTDIR, when set, is where zsh reads them.
+check_zshrc_compinit() {
+    local dir="${ZDOTDIR:-$HOME}" f n total=0 begin end where="" tilde='~'
+    begin="$(tuidev_block_begin tuidev-zshrc)"; end="$(tuidev_block_end tuidev-zshrc)"
+    for f in "$dir/.zshrc" "$dir/.zshrc.local"; do
+        [[ -f "$f" ]] || continue
+        n="$(LC_ALL=C awk -v b="$begin" -v e="$end" '
+            $0 == b { inb = 1; if (!blk++) c++; next }
+            $0 == e { inb = 0; next }
+            inb { next }
+            { s = $0; sub(/^[ \t]+/, "", s); if (s ~ /^#/) next; sub(/[ \t]#.*/, "", s) }
+            s ~ /(^|[;&|({]|[ \t](then|else|do))[ \t]*compinit([ \t;)}]|$)/ { c++ }
+            END { print c + 0 }' "$f")"
+        [[ "$n" =~ ^[0-9]+$ && $n -gt 0 ]] || continue
+        total=$((total + n)); where="${where:+$where, }${f/#"$HOME"/$tilde}: $n"
+    done
+    (( total > 1 )) || return 0
+    print_header "Shell"
+    print_warning "compinit runs $total times per new shell ($where): remove the ones an installer added after tuidev's, which already runs it once (each costs 20 to 100 ms; this check never edits the file)"
+    OPT_WARN=$((OPT_WARN + 1))
+}
+
+# ---------------------------------------------------------------------------
 # Category: power (macOS): sleep disabled and nothing will restore it
 # ---------------------------------------------------------------------------
 
@@ -516,6 +549,7 @@ run_checks() {
     # Extras + packs are never required.
     check_extras
     check_packs
+    check_zshrc_compinit
     check_power
 }
 

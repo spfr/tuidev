@@ -40,6 +40,39 @@ _herdr_install_config() {
     fi
     print_step "installing herdr config (adopt-existing)"
     install_config "$dest" "$src" --adopt-existing
+    _herdr_install_sidebar "$dest"
+}
+
+# The sidebar's workspace rows with the $agents roll-up (configs/herdr/
+# sidebar.toml), a managed block, unless the config already has its own
+# [ui.sidebar.spaces] outside that block: a second one would be a TOML error
+# that stops Herdr reading the file.
+_herdr_install_sidebar() {
+    local dest="$1" src="$REPO_ROOT/configs/herdr/sidebar.toml"
+    [[ -f "$src" ]] || return 0
+    if _herdr_has_own_spaces "$dest"; then
+        print_info "herdr: your config sets [ui.sidebar.spaces] itself, so tuidev's rows were not added;"
+        print_info "  add \"\$agents\" to its rows for each workspace's sessions (agents herdr sync)."
+        return 0
+    fi
+    install_config "$dest" "$src" --managed-block tuidev-sidebar || true
+}
+
+# _herdr_has_own_spaces FILE — does FILE set the sidebar's space rows outside
+# tuidev's block (a [ui.sidebar.spaces] table, or the key under [ui.sidebar])?
+_herdr_has_own_spaces() {
+    [[ -f "$1" ]] || return 1
+    awk -v begin="$(tuidev_block_begin tuidev-sidebar)" -v end="$(tuidev_block_end tuidev-sidebar)" '
+        $0 == begin { inside = 1; next }
+        $0 == end   { inside = 0; next }
+        inside      { next }
+        { sub(/#.*/, "") }
+        /^[[:space:]]*\[[[:space:]]*ui[[:space:]]*\.[[:space:]]*sidebar[[:space:]]*\.[[:space:]]*spaces[[:space:]]*\]/ { found = 1 }
+        /^[[:space:]]*\[[[:space:]]*ui[[:space:]]*\.[[:space:]]*sidebar[[:space:]]*\.[[:space:]]*spaces[[:space:]]*\./ { found = 1 }
+        /^[[:space:]]*\[/ { table = $0; gsub(/[[:space:]]/, "", table) }
+        table == "[ui.sidebar]" && /^[[:space:]]*spaces[[:space:]]*[.=]/ { found = 1 }
+        table == "[ui]" && /^[[:space:]]*sidebar[[:space:]]*\.[[:space:]]*spaces/ { found = 1 }
+        END { exit !found }' "$1"
 }
 
 # tuidev's Herdr plugin (configs/herdr/plugins/tuidev-link): a Ctrl-click on a

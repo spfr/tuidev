@@ -115,6 +115,21 @@ OTHER MACHINES (over ssh: Herdr's saved machines, and AGENTS_REMOTE_HOSTS)
                                dialog, before anything is sent
   agents link restart          restart the LaunchAgent (after editing the settings)
 
+HERDR'S LABELS (this machine's Herdr; AGENTS_HERDR_NAMES=0 leaves them alone)
+  agents herdr [status]        each tab's label, what a sync would make it and whose
+                               it is; each workspace's roll-up
+  agents herdr sync [--throttle] [-n] [-q]
+                               name each tab after what runs in it (the kind's mark,
+                               then the session's task title or the pane's
+                               directory, "+N" for more agents), roll up each
+                               workspace's sessions for the sidebar (\$agents) and
+                               mark agent rows. Only a tab still showing Herdr's
+                               number, or the name a sync gave it: one you renamed
+                               stays yours. Herdr's events run it (the tuidev.link
+                               plugin); --throttle: not within 30s of the last
+  agents herdr reset [-n]      put back every tab number a sync replaced and clear
+                               what it reported
+
 HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
   agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]
                                where the CPU went: CPU-hours by job (test, build,
