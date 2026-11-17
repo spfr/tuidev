@@ -1395,21 +1395,21 @@ pass "AGENTS_BAR_SECTIONS: old names keep working, the old default reads as the 
 # kind takes the "agent" mark, no glyph rows leave the rows as they were, and a
 # glyph is cleaned (no "|") and capped at 8 characters.
 g_sess() { printf 'agent\t%s\t%s\t600\t0.0\t0.0\t800000\t0\ts%s\t-\tme\t-\t/p/x\ta\t%s\ntriage\t%s\t%s\t60\t%s\n' "$1" "$2" "$1" "$4" "$1" "$3" "$5"; }
-g_recs="$(g_sess 11 claude run "Fleet IA" working)"$'\n'"$(g_sess 12 codex unknown - "no signal")"$'\n'"$(g_sess 13 claude need web blocked)"$'\n'"$(g_sess 14 claude review web "done")"$'\n'"$(g_sess 15 grok parked api idle)"$'\n'"$(g_sess 16 mystery-cli run odd working)"
+g_recs="$(g_sess 11 claude run "API docs" working)"$'\n'"$(g_sess 12 codex unknown - "no signal")"$'\n'"$(g_sess 13 claude need web blocked)"$'\n'"$(g_sess 14 claude review web "done")"$'\n'"$(g_sess 15 grok parked api idle)"$'\n'"$(g_sess 16 mystery-cli run odd working)"
 g_rows=$'glyph\tclaude\t✳\nglyph\tcodex\t⬡\nglyph\tgrok\t✕\nglyph\tagent\t◆'
 menu="$(plugin "$g_recs" "$g_rows")"
-for want in "✳ Fleet IA · working · " "⬡ codex · no signal · " "✳ web · blocked" "✳ web · done" "--✕ api · idle" "◆ odd · working · "; do
+for want in "✳ API docs · working · " "⬡ codex · no signal · " "✳ web · blocked" "✳ web · done" "--✕ api · idle" "◆ odd · working · "; do
     [[ "$menu" == *"$want"* ]] || fail "session row without its mark ($want): $menu"
 done
 section_of() { printf '%s\n' "$menu" | awk -v s="$1" '/^[A-Z]/ { on = (index($0, s) == 1) } on'; }
 [[ "$(section_of "Needs you")" == *"✳ web · blocked"* && "$(section_of "To review")" == *"✳ web · done"* \
-    && "$(section_of "Running")" == *"✳ Fleet IA"* && "$(section_of "No signal")" == *"⬡ codex"* && "$(section_of "Parked")" == *"✕ api"* ]] \
+    && "$(section_of "Running")" == *"✳ API docs"* && "$(section_of "No signal")" == *"⬡ codex"* && "$(section_of "Parked")" == *"✕ api"* ]] \
     || fail "a mark in the wrong section: $menu"
 menu="$(plugin "$g_recs" "")"
-[[ "$menu" == *$'\nFleet IA · working · '* && "$menu" == *$'\n--codex · no signal · '* && "$menu" != *"✳"* && "$menu" != *"◆"* ]] \
+[[ "$menu" == *$'\nAPI docs · working · '* && "$menu" == *$'\n--codex · no signal · '* && "$menu" != *"✳"* && "$menu" != *"◆"* ]] \
     || fail "no glyph rows (an older agents, or off) must leave the rows as they were: $menu"
 menu="$(plugin "$g_recs" $'glyph\tclaude\ta|b bash=x\nglyph\tcodex\t0123456789ABC')"
-[[ "$menu" == *$'\na¦b bash Fleet IA · working · '* && "$menu" != *"a|b"* && "$menu" == *$'\n--01234567 codex · no signal'* ]] \
+[[ "$menu" == *$'\na¦b bash API docs · working · '* && "$menu" != *"a|b"* && "$menu" == *$'\n--01234567 codex · no signal'* ]] \
     || fail "a hostile or long glyph: $menu"
 [[ "$(printf '%s\n' "$menu" | grep -c 'param[0-9]*=x')" == 0 ]] || fail "a glyph reached a param"
 pass "SwiftBar session rows lead with their kind's mark; unknown kinds take the agent mark; glyphs are cleaned and capped; none sent, none drawn"

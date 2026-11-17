@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # lib/agents/herdrlabel.sh — Herdr's labels say what runs where: a tab is
-# named after what runs in it (`✳ Fleet IA`, `❯ mactui_setup`) instead of
+# named after what runs in it (`✳ API docs`, `❯ mactui_setup`) instead of
 # "1 2 3", a workspace row in the sidebar carries a roll-up of its sessions
 # by kind (`✳2 ❯1`, the `$tuidev_agents` token) and how many are blocked on you
 # (`2 blocked`, `$tuidev_need`), an agent row says since when a state that waits on

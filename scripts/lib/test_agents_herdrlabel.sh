@@ -85,9 +85,9 @@ pane() {   # ID TAB WS AGENT CWD TITLE
 }
 fixture() {
     {
-        pane w1:p1 w1:t1 w1 claude /work/agentic "◐ Fleet IA"
+        pane w1:p1 w1:t1 w1 claude /work/agentic "◐ API docs"
         pane w1:p2 w1:t2 w1 ""     /work/mactui_setup "user@box: ~/work/mactui_setup"
-        pane w1:p3 w1:t3 w1 claude /work/agentic "✳ Remote runners and port proxying"
+        pane w1:p3 w1:t3 w1 claude /work/agentic "✳ Fix login redirect and port proxying"
         pane w1:p4 w1:t3 w1 ""     /work/agentic ""
         pane w1:p5 w1:t3 w1 claude /work/agentic "✳ Claude Code"
         pane w1:p6 w1:t4 w1 ""     /work/notes ""
@@ -124,18 +124,18 @@ user_rename() { "$tmp/herdr" tab rename "$1" "$2"; }
 # --- 1. Naming --------------------------------------------------------------------------------
 fixture; fresh
 out="$(agents_herdr_sync)"
-[[ "$(label w1:t1)" == "✳ Fleet IA" ]] || fail "a session's task title: $(label w1:t1)"
+[[ "$(label w1:t1)" == "✳ API docs" ]] || fail "a session's task title: $(label w1:t1)"
 [[ "$(label w1:t2)" == "❯ mactui_setup" ]] || fail "a shell is named by its directory, not its prompt: $(label w1:t2)"
-[[ "$(label w1:t3)" == "✳ Remote runners and … +1" ]] || fail "the first agent wins, cut at 20, +N: $(label w1:t3)"
+[[ "$(label w1:t3)" == "✳ Fix login redirect … +1" ]] || fail "the first agent wins, cut at 20, +N: $(label w1:t3)"
 [[ "$(label w1:t4)" == "notes" ]] || fail "a name you typed was changed: $(label w1:t4)"
 [[ "$(label w2:t1)" == "⬡ api" ]] || fail "a command line is no task title: $(label w2:t1)"
 [[ "$(token w1)" == "✳3 ❯3" && "$(token w2)" == "⬡1" ]] || fail "roll-ups: $(token w1) | $(token w2)"
 [[ "$(shown w1:p1)" == "✳ claude" && "$(shown w2:p1)" == "⬡ codex" && -z "$(shown w1:p2)" ]] || fail "display names: $(shown w1:p1) $(shown w2:p1) $(shown w1:p2)"
-[[ "$out" == *"tab w1:t1: ✳ Fleet IA"* ]] || fail "sync said: $out"
+[[ "$out" == *"tab w1:t1: ✳ API docs"* ]] || fail "sync said: $out"
 grep -qx -- '--agent' "$FAKE/calls" || fail "a display name without its agent guard"
 grep -qxF "tab${T:-	}w1:t4" "$AGENTS_RUN_DIR/herdr-labels.tsv" && fail "your tab was recorded as ours"
 [[ "$(grep -c "^tab	" "$AGENTS_RUN_DIR/herdr-labels.tsv")" -eq 4 ]] || fail "state: $(cat "$AGENTS_RUN_DIR/herdr-labels.tsv")"
-grep -qx "tab	w1:t1	ours	1	✳ Fleet IA" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "state keeps the number: $(cat "$AGENTS_RUN_DIR/herdr-labels.tsv")"
+grep -qx "tab	w1:t1	ours	1	✳ API docs" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "state keeps the number: $(cat "$AGENTS_RUN_DIR/herdr-labels.tsv")"
 pass "naming: mark and task title, else the directory; the first agent wins with +N; cut at 20; roll-ups; display names"
 
 # --- 2. Nothing changed, nothing written --------------------------------------------------------
@@ -188,13 +188,13 @@ pass "a label that already reads what a sync would set is adopted, and reset giv
 # --- 6. Glyphs off, and turned off -----------------------------------------------------------------
 fixture; rm -f "$AGENTS_RUN_DIR/herdr-labels.tsv"
 AGENTS_GLYPHS=off agents_herdr_sync >/dev/null
-[[ "$(label w1:t1)" == "Fleet IA" && "$(label w1:t2)" == mactui_setup ]] || fail "glyphs off: $(label w1:t1) | $(label w1:t2)"
+[[ "$(label w1:t1)" == "API docs" && "$(label w1:t2)" == mactui_setup ]] || fail "glyphs off: $(label w1:t1) | $(label w1:t2)"
 [[ "$(token w1)" == "claude:3 shell:3" ]] || fail "glyphs off roll-up: $(token w1)"
 [[ -z "$(shown w1:p1)" ]] || fail "glyphs off set a display name"
 agents_herdr_sync >/dev/null
-[[ "$(label w1:t1)" == "✳ Fleet IA" && "$(shown w1:p1)" == "✳ claude" ]] || fail "glyphs back on: $(label w1:t1)"
+[[ "$(label w1:t1)" == "✳ API docs" && "$(shown w1:p1)" == "✳ claude" ]] || fail "glyphs back on: $(label w1:t1)"
 AGENTS_GLYPHS=off agents_herdr_sync >/dev/null
-[[ -z "$(shown w1:p1)" && "$(label w1:t1)" == "Fleet IA" ]] || fail "glyphs off again: $(shown w1:p1) $(label w1:t1)"
+[[ -z "$(shown w1:p1)" && "$(label w1:t1)" == "API docs" ]] || fail "glyphs off again: $(shown w1:p1) $(label w1:t1)"
 fresh; out="$(AGENTS_HERDR_NAMES=0 agents_herdr_sync)"
 [[ "$(calls)" == 0 && "$out" == *"left alone"* ]] || fail "AGENTS_HERDR_NAMES=0 still called herdr: $(cat "$FAKE/calls" 2>/dev/null)"
 fresh; AGENTS_NO_HERDR=1 agents_herdr_sync >/dev/null
@@ -226,7 +226,7 @@ _agents_unlock "$AGENTS_RUN_DIR/herdr-labels.lock"
 : > "$FAKE/poke"; fresh
 agents_herdr_sync -q
 [[ "$(grep -cx snapshot "$FAKE/calls")" == 2 && ! -e "$AGENTS_RUN_DIR/herdr-labels.dirty" ]] || fail "an event during a sync did not get one more pass: $(grep -cx snapshot "$FAKE/calls")"
-[[ "$(label w1:t1)" == "✳ Fleet IA" ]] || fail "the coalesced sync did not name"
+[[ "$(label w1:t1)" == "✳ API docs" ]] || fail "the coalesced sync did not name"
 fresh; agents_herdr_sync --throttle
 [[ "$(calls)" == 0 ]] || fail "--throttle ran within 30 s"
 AGENTS_NOW=$((AGENTS_NOW + 31)) agents_herdr_sync --throttle -q
@@ -238,7 +238,7 @@ agents_herdr_sync -q 2>/dev/null || fail "a sync failed when Herdr did not answe
 rm -f "$FAKE/down"
 title w1:p1 "Dry run"; fresh
 out="$(agents_herdr sync -n)"
-[[ "$(writes)" == 0 && "$out" == *"would rename tab w1:t1: ✳ Dry run"* && "$(label w1:t1)" == "✳ Fleet IA" ]] || fail "dry run: $out"
+[[ "$(writes)" == 0 && "$out" == *"would rename tab w1:t1: ✳ Dry run"* && "$(label w1:t1)" == "✳ API docs" ]] || fail "dry run: $out"
 pass "one sync at a time (a mark, then one more pass); --throttle; Herdr down changes nothing; -n writes nothing"
 
 # --- 9. Another source's display name wins -------------------------------------------------------
@@ -251,7 +251,7 @@ pass "a display name another tool set is left as it is"
 
 # --- 10. status ----------------------------------------------------------------------------------
 out="$(agents_herdr status)"
-[[ "$out" == *"w1:t4"*"yours"*"notes"* && "$out" == *"w1:t1"*"agents"*"✳ Fleet IA"* ]] || fail "status: $out"
+[[ "$out" == *"w1:t4"*"yours"*"notes"* && "$out" == *"w1:t1"*"agents"*"✳ API docs"* ]] || fail "status: $out"
 [[ "$out" == *"proj"*"w1"*"✳3 ❯3"* ]] || fail "status roll-up: $out"
 agents_herdr bogus >/dev/null 2>&1 && fail "an unknown subcommand succeeded"
 pass "status: each tab's label and whose it is; each workspace's roll-up"
@@ -267,8 +267,8 @@ snap_others() { jq -c '.result.snapshot | [(.tabs[] | select(.tab_id != "w1:t1")
 before="$(snap_others)"
 # A tab you renamed: named again as a sync would, and ours (its number as ORIG).
 fresh; out="$(agents_herdr_reset w1:t1)"
-[[ "$(label w1:t1)" == "✳ Fleet IA" && "$out" == "tab w1:t1: ✳ Fleet IA" ]] || fail "reset w1:t1: $(label w1:t1), said: $out"
-grep -qx "tab	w1:t1	ours	1	✳ Fleet IA" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "reset w1:t1 state: $(st)"
+[[ "$(label w1:t1)" == "✳ API docs" && "$out" == "tab w1:t1: ✳ API docs" ]] || fail "reset w1:t1: $(label w1:t1), said: $out"
+grep -qx "tab	w1:t1	ours	1	✳ API docs" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "reset w1:t1 state: $(st)"
 [[ "$(writes)" == 1 && "$(snap_others)" == "$before" ]] || fail "reset w1:t1 touched more: $(writes) writes"
 [[ "$(grep -v "^tab	w1:t1	" "$AGENTS_RUN_DIR/herdr-labels.tsv")" == "$others" ]] || fail "reset w1:t1 changed other state lines: $(st)"
 # ... and the next sync keeps it named, as ours.
@@ -346,7 +346,7 @@ status w1:p3 working 3; agents_herdr_sync -q
 [[ -z "$(wtok w1 tuidev_need)" && -z "$(ptok w1:p3 tuidev_since)" ]] || fail "nobody blocked: need $(wtok w1 tuidev_need)"
 # Another session in a tab with a task title of its own: $tuidev_session, with its mark; gone with the title.
 title w1:p5 "Port proxying"; agents_herdr_sync -q
-[[ "$(ptok w1:p5 tuidev_session)" == "✳ Port proxying" && "$(label w1:t3)" == "✳ Remote runners and … +1" ]] || fail "a second session: $(ptok w1:p5 tuidev_session)"
+[[ "$(ptok w1:p5 tuidev_session)" == "✳ Port proxying" && "$(label w1:t3)" == "✳ Fix login redirect … +1" ]] || fail "a second session: $(ptok w1:p5 tuidev_session)"
 title w1:p5 "✳ Claude Code"; agents_herdr_sync -q
 [[ -z "$(ptok w1:p5 tuidev_session)" ]] || fail "\$session kept without a title: $(ptok w1:p5 tuidev_session)"
 # An agent that exits: its tokens go with it.
