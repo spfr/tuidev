@@ -558,4 +558,13 @@ fi
 
 # Load local customizations (if any). An `if`, not `&&`: a missing file must
 # not leave $? = 1 for the first prompt.
+# Tokens belong in the secret store (`secret`, docs/secrets.md); tuidev never
+# sources ~/.config/zsh/secrets.zsh, the plaintext stopgap. If you still do,
+# keep it yours alone.
+if [[ -f ~/.config/zsh/secrets.zsh ]] && zmodload -F zsh/stat b:zstat 2>/dev/null \
+   && zstat -A _tuidev_mode +mode ~/.config/zsh/secrets.zsh 2>/dev/null && (( _tuidev_mode[1] & 8#077 )); then
+  print -u2 "tuidev: ~/.config/zsh/secrets.zsh is readable by others: chmod 600 it, or move its tokens: secret import --remove ~/.config/zsh/secrets.zsh"
+fi
+unset _tuidev_mode
+
 if [[ -f ~/.zshrc.local ]]; then source ~/.zshrc.local; fi
