@@ -301,6 +301,45 @@ out="$(MEASURED=0 tick 9200)"
 psfix="$psfix_small"
 pass "off macOS no footprint is sampled and RSS decides, every look"
 
+# 4c. When the guard looks next (_AGENTS_MEM_NEXT): POLL while anything needs
+#     watching, IDLE otherwise, a minute with no agent session; clamped.
+next() { ( AGENTS_NOW="$1" agents_mem_tick >/dev/null; echo "$_AGENTS_MEM_NEXT" ); }
+MACH=$'50331648\t40\tnormal\t1048576\t2097152'
+quiet="$(printf '%s\n' "$psfix_small" | awk '$1 == 620 || $1 == 700 { $6 = 1000 } { print }')"
+reset; psfix="$psfix_small"; FPS=""
+[[ "$(next 7000)" == 5 ]] || fail "a candidate past half the warning keeps the poll at 5 s"
+reset; psfix="$quiet"
+[[ "$(next 7100)" == 20 ]] || fail "nothing large, an agent running: the idle interval, 20 s"
+[[ "$(AGENTS_MEM_IDLE=10 next 7100)" == 10 ]] || fail "AGENTS_MEM_IDLE is honoured"
+[[ "$(AGENTS_MEM_IDLE=2 next 7100)" == 5 ]] || fail "idle is never below the poll"
+reset; psfix="$(printf '%s\n' "$quiet" | awk '$1 != 600 && $1 != 620 { print }')"
+[[ "$(next 7200)" == 60 ]] || fail "no agent session at all: 60 s"
+# Pressure, or free memory falling at half the rate, keep the poll.
+reset; psfix="$quiet"; MACH=$'50331648\t40\twarn\t1048576\t2097152'
+[[ "$(next 7300)" == 5 ]] || fail "memory pressure warn keeps the poll"
+MACH=$'50331648\t40\tnormal\t1048576\t2097152'
+reset; psfix="$quiet"
+tick 7400 >/dev/null                                      # saves free 40% at 7400
+MACH=$'50331648\t39\tnormal\t1048576\t2097152'            # 1% of 48 GB in 4 s: ~125 MB/s, past half of 200
+[[ "$(next 7404)" == 5 ]] || fail "free memory falling at half the rate keeps the poll"
+MACH=$'50331648\t40\tnormal\t1048576\t2097152'
+# The clamp: a 16 GB machine stops at 8 GB and half the warning is 4 GB; a
+# runaway at 4 x 200 MB/s covers 4 GB in 5 s, so the interval cannot exceed 5.
+reset; psfix="$quiet"; MACH=$'16777216\t40\tnormal\t1048576\t2097152'
+[[ "$(AGENTS_MEM_IDLE=60 next 7500)" == 5 ]] || fail "idle clamped to the runaway's time to the stop size"
+MACH=$'50331648\t40\tnormal\t1048576\t2097152'
+[[ "$(AGENTS_MEM_IDLE=60 next 7600)" == 25 ]] || fail "48 GB: (24 - 4) GB at 800 MB/s is 25 s"
+# A runaway still stops within one interval: an idle look, then it jumps past
+# the stop size, and the very next look stops it.
+reset; psfix="$quiet"
+[[ "$(next 7700)" == 20 ]] || fail "idle before the runaway"
+psfix="$(printf '%s\n' "$psfix_small" | awk -v g="$G" '$1 == 620 { $6 = g * 30 } { print }')"
+FPS=""
+tick 7720 >/dev/null
+[[ "$(cat "$tmp/killed" 2>/dev/null)" == "620@Wed_Oct_14_09:00:05_2026" ]] || fail "the look after an idle interval stops a runaway past the stop size"
+psfix="$psfix_small"; reset
+pass "adaptive poll: poll while watching, idle otherwise, a minute without an agent; clamped; a runaway still stops at the next look"
+
 # 5. The menu's memg row: the guard's state and the last incident.
 reset
 mkdir -p "$AGENTS_DATA_DIR" "$AGENTS_RUN_DIR"
@@ -319,6 +358,8 @@ _agents_conf_valid AGENTS_MEM_GUARD kill  || fail "kill is valid"
 _agents_conf_valid AGENTS_MEM_KILL 0      || fail "AGENTS_MEM_KILL=0 is valid (half the RAM)"
 ! _agents_conf_valid AGENTS_MEM_WARN 0    || fail "AGENTS_MEM_WARN=0 is not"
 ! _agents_conf_valid AGENTS_MEM_POLL 2s   || fail "AGENTS_MEM_POLL takes seconds as a number"
+_agents_conf_valid AGENTS_MEM_IDLE 20     || fail "AGENTS_MEM_IDLE takes seconds"
+! _agents_conf_valid AGENTS_MEM_IDLE 0    || fail "AGENTS_MEM_IDLE=0 is not valid"
 pass "AGENTS_MEM_* values are validated"
 
 # 7. Memory hogs lead the hogs, in any tree, by RSS.

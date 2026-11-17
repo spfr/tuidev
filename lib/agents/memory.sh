@@ -281,6 +281,7 @@ agents_mem_tick() {
     local total free level su stot warn stopkib screen floor snap cands fps="" now
     local pid start rss uid name label root rkind fp f v tok step last ts grew srss rate news="" prev="" first=""
     local what proj session msg stopped="" dry="${AGENTS_DRY_RUN:-false}" meas=0 busy=0 want=" " pf pts seen
+    local fall=0 hot=0
     [[ "$AGENTS_MEM_GUARD" != off ]] || { echo "the memory guard is off (AGENTS_MEM_GUARD=off)"; return 0; }
     _agents_now now
     IFS=$'\t' read -r total free level su stot <<<"$(agents_mem_machine)"
@@ -293,13 +294,16 @@ agents_mem_tick() {
         _agents_awk "lib_proc memory" -v self="$AGENTS_SELF" -v screen="$screen" -v floor="$floor" -v max=8)"
     [[ -n "${_AGENTS_MEM_STATE+set}" ]] || _agents_mem_state_load
     prev="${_AGENTS_MEM_LEVEL:--}"
+    # How fast free memory fell since the last look, in KiB/s.
+    read -r pf pts _ <<<"${_AGENTS_MEM_FREE:-}"
+    if [[ "$free" =~ ^[0-9]+$ && "$pf" =~ ^[0-9]+$ && "$pts" =~ ^[0-9]+$ && $now -gt $pts && $pf -gt $free ]]; then
+        fall=$(((pf - free) * total / 100 / (now - pts)))
+    fi
     # Which candidates get a footprint sample this look (want: " PID PID ").
     if [[ -n "$cands" ]] && _agents_mem_measured; then
         meas=1
         [[ "$level" == warn || "$level" == critical ]] && busy=1
-        read -r pf pts _ <<<"${_AGENTS_MEM_FREE:-}"
-        if [[ "$free" =~ ^[0-9]+$ && "$pf" =~ ^[0-9]+$ && "$pts" =~ ^[0-9]+$ && $now -gt $pts && $pf -gt $free ]] \
-            && [[ $(((pf - free) * total / 100 / (now - pts))) -ge $((AGENTS_MEM_RATE * 1024)) ]]; then busy=1; fi
+        [[ $fall -ge $((AGENTS_MEM_RATE * 1024)) ]] && busy=1
         while IFS=$'\t' read -r pid start rss uid _ _ root _; do
             [[ "$pid" =~ ^[0-9]+$ ]] || continue
             _agents_mem_state_get "$pid@$start"
@@ -323,6 +327,7 @@ agents_mem_tick() {
             [[ "$last" -gt "$fp" ]] && fp="$last"
             seen="$last $ts"
         fi
+        [[ $fp -lt $screen ]] || hot=1
         # The biggest one, for a pressure incident.
         [[ -n "$first" ]] || first="$pid"$'\t'"$name"$'\t'"$label"$'\t'"$session"$'\t'"$fp"$'\t'"$rss"
         if [[ "$AGENTS_MEM_GUARD" == kill ]] && _agents_mem_hot "$pid" "$uid" "$root" \
@@ -377,9 +382,44 @@ agents_mem_tick() {
         _agents_mem_record pressure "$pid" "$name" "$label" "$proj" "$session" "$fp" "$rss" "$free" "$su"
         _agents_mem_say "Memory pressure is critical: $(_agents_mem_what "$name" "$label") in $proj holds the most, $(_agents_mem_gb "$fp")" "$pid" "$snap"
     fi
+    _agents_mem_next "$level" "$fall" "$hot" "$stopkib" "$screen" "$cands" "$snap"
     [[ "$dry" == true ]] && return 0
     _AGENTS_MEM_STATE="$news" _AGENTS_MEM_LEVEL="$level" _AGENTS_MEM_FREE="$free $now"
     _agents_mem_state_save
+}
+
+# _agents_mem_next LEVEL FALL_KIBS HOT STOP_KIB SCREEN_KIB CANDS SNAP — when
+# the guard looks next, in _AGENTS_MEM_NEXT (seconds): we want it running when
+# it is needed, not all the time. AGENTS_MEM_POLL while anything needs
+# watching (a candidate at or past the screening size, memory pressure warn
+# or critical, free memory falling at half AGENTS_MEM_RATE or faster);
+# otherwise AGENTS_MEM_IDLE; and a minute (never less than the idle one) when
+# no agent session runs at all, since nothing is then stoppable.
+#
+# Safety bound: the idle interval is clamped to the time a runaway growing at
+# four times AGENTS_MEM_RATE needs to get from the screening size to the stop
+# size, the distance the guard must still see it cross. A runaway that starts
+# just after a look is then seen at the screening size on the next one, and
+# from then on the guard looks every AGENTS_MEM_POLL, before the stop size,
+# whatever AGENTS_MEM_IDLE says. The bound is never below AGENTS_MEM_POLL:
+# that is the guard's best.
+_agents_mem_next() {
+    local level="$1" fall="$2" hot="$3" stopkib="$4" screen="$5" cands="$6" snap="$7" idle bound
+    _AGENTS_MEM_NEXT="$AGENTS_MEM_POLL"
+    [[ "$level" != warn && "$level" != critical && $hot == 0 && -z "$cands" ]] || return 0
+    [[ $fall -lt $((AGENTS_MEM_RATE * 512)) ]] || return 0
+    idle="$AGENTS_MEM_IDLE"
+    [[ $idle -ge $AGENTS_MEM_POLL ]] || idle="$AGENTS_MEM_POLL"
+    if [[ $stopkib -gt $screen ]]; then
+        bound=$(((stopkib - screen) / (AGENTS_MEM_RATE * 4096)))
+        [[ $bound -ge $AGENTS_MEM_POLL ]] || bound="$AGENTS_MEM_POLL"
+        [[ $idle -le $bound ]] || idle="$bound"
+    fi
+    _AGENTS_MEM_NEXT="$idle"
+    if ! printf '%s\n' "$snap" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc memory" -v probe=1 | grep -q 1; then
+        [[ $idle -ge 60 ]] || _AGENTS_MEM_NEXT=60
+    fi
+    return 0
 }
 
 # The guard's state, kept across its looks and restarts in the run dir:
@@ -415,7 +455,8 @@ _agents_mem_guard_state() {
 }
 
 # _agents_mem_guard_loop — `agents mem guard`: a look every AGENTS_MEM_POLL
-# seconds, for good (the LaunchAgent runs it, KeepAlive on failure). One
+# seconds while something needs watching, every AGENTS_MEM_IDLE (a minute with
+# no agent session) otherwise (_agents_mem_next), for good (the LaunchAgent runs it, KeepAlive on failure). One
 # guard at a time (memguard.lock): a second one waits a minute and fails, so
 # launchd tries again later; with the guard off it exits 0 and stays down.
 _agents_mem_guard_loop() {
@@ -430,7 +471,7 @@ _agents_mem_guard_loop() {
     trap '[[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null; _agents_unlock "$lock"; exit 0' TERM INT HUP
     while :; do
         agents_mem_tick >/dev/null 2>&1 || true
-        sleep "$AGENTS_MEM_POLL" &
+        sleep "${_AGENTS_MEM_NEXT:-$AGENTS_MEM_POLL}" &
         sleeper=$!
         wait "$sleeper"
         sleeper=""

@@ -8,7 +8,8 @@
 # the topmost agent above it and ROOT_KIND that agent's kind ("-" for both
 # outside any agent tree). With -v pids=" PID PID ", exactly those qualify
 # (`agents mem`, which has top's list). Never this process or its ancestors
-# (-v self=PID). Needs lib_proc.
+# (-v self=PID). With -v probe=1 it prints 1 when any agent session runs, and
+# nothing else (the guard's idle interval). Needs lib_proc.
 
 # label(a): the first argument after the program that names a file (has a /
 # or a dot, no leading dash), as its basename: what tells one node from
@@ -33,6 +34,10 @@ NF >= 14 {
     av[p] = s
 }
 END {
+    if (probe) {
+        for (k = 1; k <= n; k++) if (agent_kind(av[ord[k]]) != "") { print 1; exit }
+        exit
+    }
     ancestors(self)
     screen += 0; floor += 0; max += 0
     lim = (floor > 0 && floor < screen) ? floor : screen
