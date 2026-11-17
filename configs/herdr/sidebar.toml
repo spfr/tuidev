@@ -12,4 +12,4 @@
 rows = [["state_icon", "workspace"], ["branch", "git_status", "$agents"]]
 
 [ui.sidebar.agents]
-rows = [["state_icon", "tab", { token = "machine", rules = [{ equals = "Local", hide = true }] }], ["agent", "workspace"]]
+rows = [["state_icon", { token = "tab", bold = true, dim = false }, { token = "machine", rules = [{ equals = "Local", hide = true }] }], ["agent", { token = "workspace", bold = false, dim = true }]]
