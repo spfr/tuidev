@@ -93,6 +93,24 @@ out="$(sl_json 23.5 1792180000 41.2 1792500000 | agents_statusline)"
     || fail "a changed window: $(cat "$L")"
 ( AGENTS_NOW=$((NOW + 420)); sl_json 30 1792180000 41.2 1792500000 | agents_statusline >/dev/null )
 [[ "$(cut -f1 "$L" | sort -u)" == "$((NOW + 420))" ]] || fail "a 5-minute-old reading was not refreshed: $(cat "$L")"
+# A render never stalls: a held lock or an unwritable data directory is one
+# try and a silent give-up (it used to retry 20 times, about 2 s a render).
+if command -v perl >/dev/null 2>&1; then
+    ms() { perl -MTime::HiRes=time -e 'printf "%d", time * 1000'; }
+    mkdir "$D/limits.lock"; echo "$$ $(_agents_start $$)" > "$D/limits.lock/holder"
+    t0="$(ms)"; out="$( AGENTS_NOW=$((NOW + 2000)); sl_json 60 1792180000 41.2 1792500000 | agents_statusline )"; t1="$(ms)"
+    [[ $((t1 - t0)) -lt 500 ]] || fail "a held limits.lock stalled the status line $((t1 - t0)) ms"
+    [[ "$out" == *"5h 60%"* ]] || fail "the status line was not printed under a held lock: $out"
+    rm -rf "$D/limits.lock"
+    if [[ "$(id -u)" != 0 ]]; then
+        chmod 500 "$D"
+        t0="$(ms)"; out="$( AGENTS_NOW=$((NOW + 2100)); sl_json 61 1792180000 41.2 1792500000 | agents_statusline )"; t1="$(ms)"
+        chmod 700 "$D"
+        [[ $((t1 - t0)) -lt 500 ]] || fail "an unwritable data directory stalled the status line $((t1 - t0)) ms"
+        [[ "$out" == *"5h 61%"* ]] || fail "the status line was not printed from an unwritable directory: $out"
+    fi
+    pass "statusline: a held lock or an unwritable data directory costs one try, never a stall (under 0.5 s)"
+fi
 # One window absent: the other is kept as it was; rate_limits absent: nothing written.
 before="$(cat "$L")"
 ( AGENTS_NOW=$((NOW + 900)); sl_json "" "" 50 1792500000 | agents_statusline >/dev/null )

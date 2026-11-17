@@ -47,7 +47,8 @@ agents_statusline() {
         parsed="$(_agents_statusline_awk "$now")" || parsed=""
     fi
     rows="${parsed#*$'\n'}"; [[ "$parsed" == *$'\n'* ]] || rows=""
-    [[ -z "$rows" ]] || _agents_limits_put "" "$rows" 2>/dev/null || true
+    # One try: a render never waits for a lock (the next one writes it).
+    [[ -z "$rows" ]] || _agents_limits_put "" "$rows" 1 2>/dev/null || true
     if [[ -n "$own" ]]; then
         printf '%s\n' "$in" | _AGENTS_STATUSLINE_INNER=1 /bin/sh -c "$AGENTS_STATUSLINE_CMD"
         return
