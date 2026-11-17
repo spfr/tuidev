@@ -735,7 +735,7 @@ menu="$(mbar env)"
 : > "$tmp/mbin/calls"
 [[ "$(mbar env SWIFTBAR_PLUGIN_REFRESH_REASON=MenuOpen)" == "$menu" ]] || fail "menu: opening did not print the last output"
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [[ "$(wc -l < "$tmp/mbin/calls" | tr -d ' ')" -ge 2 ]] && break; sleep 0.1; done
-[[ "$(cat "$tmp/mbin/calls")" == "map --cache"$'\n'"-g swiftbar://refreshplugin?name=agents" ]] || fail "menu: opening did not load the board and refresh: $(cat "$tmp/mbin/calls")"
+[[ "$(cat "$tmp/mbin/calls")" == "map --cache"$'\n'"bar poke" ]] || fail "menu: opening did not load the board and refresh: $(cat "$tmp/mbin/calls")"
 # A machine's long summary is cut, a label that reads as an option is no row, and a
 # run that ends in a refusal is shown but never kept for the next open.
 long="$(printf 'x%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70)"
@@ -745,8 +745,10 @@ menu2="$(mbar env)"
 [[ ! -e "$tmp/sbcache/last.nomap" ]] || fail "menu: the section is on, yet the next open is told not to load"
 printf 'conf\tAGENTS_BAR_SECTIONS\tneeds system\n' >> "$tmp/menu.tsv"; mbar env >/dev/null; : > "$tmp/mbin/calls"
 [[ -e "$tmp/sbcache/last.nomap" ]] || fail "menu: no marker with the machines section turned off"
-mbar env SWIFTBAR_PLUGIN_REFRESH_REASON=MenuOpen >/dev/null; sleep 0.5
-[[ ! -s "$tmp/mbin/calls" ]] || fail "menu: opening asked the machines with their section off: $(cat "$tmp/mbin/calls")"
+mbar env SWIFTBAR_PLUGIN_REFRESH_REASON=MenuOpen >/dev/null
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [[ ! -s "$tmp/mbin/calls" ]] || break; sleep 0.1; done
+sleep 0.2
+[[ "$(cat "$tmp/mbin/calls")" == "bar poke" ]] || fail "menu: opening with the machines section off asked them, or did not refresh: $(cat "$tmp/mbin/calls")"
 grep -v 'AGENTS_BAR_SECTIONS' "$tmp/menu.tsv" > "$tmp/menu.tsv.n" && mv "$tmp/menu.tsv.n" "$tmp/menu.tsv"; mbar env >/dev/null
 kept="$(cat "$tmp/sbcache/last")"
 # shellcheck disable=SC2016  # the stub's own variables
@@ -762,6 +764,6 @@ out="$(PATH="$tmp/mbin:$PATH" AGENTS_BIN="$tmp/mbin/agents-slow" SWIFTBAR_PLUGIN
 # Without a board (nothing loaded yet) there is no section, and no last output means a full run.
 grep -v '^map' "$tmp/menu.tsv" > "$tmp/menu.tsv.n" && mv "$tmp/menu.tsv.n" "$tmp/menu.tsv"; rm -f "$tmp/sbcache/last"
 [[ "$(mbar env SWIFTBAR_PLUGIN_REFRESH_REASON=MenuOpen)" != *"Machines"* ]] || fail "menu: a machines section with nothing loaded"
-pass "the menu bar: its timer reads this machine only; opening shows the last output at once and loads the machines behind it"
+pass "the menu bar: its timer reads this machine only; opening shows the last output at once and loads the machines behind it, then a poke refreshes it"
 
 echo "All agents remote tests passed."

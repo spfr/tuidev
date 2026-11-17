@@ -22,10 +22,10 @@
 # sessions, then limits and today, then what to keep an eye on (stale, hogs,
 # machines), then the machine itself (awake, system), then the footer.
 #
-# SwiftBar plugin. Installed by `./install.sh --pack monitoring` (macOS); the
-# refresh interval is the `10s` in the file name (AGENTS_BAR_REFRESH in
-# ~/.config/agents.conf, applied by the pack). Everything shown comes from one
-# `agents tsv` call, every action runs `agents` (see `agents --help`), and the
+# SwiftBar plugin. Installed by `./install.sh --pack monitoring` (macOS) as
+# agents.1m.sh: SwiftBar's timer is the interval in the installed file's name
+# (AGENTS_BAR_REFRESH in ~/.config/agents.conf, applied by the pack; this
+# source keeps its old name). Everything shown comes from one `agents tsv` call, every action runs `agents` (see `agents --help`), and the
 # title and sections follow the AGENTS_BAR_* settings in that file. Windows
 # open in your terminal via `agents open-term` (AGENTS_TERMINAL), never
 # through SwiftBar's terminal=true, which always picks Terminal.app.
@@ -35,19 +35,32 @@
 # `agents` doesn't send (triage, pace, palette, glyph, swap, waitsum, map) has a
 # fallback.
 #
-# Closed and open are two jobs. On its timer (the menu closed) the plugin reads
-# what this machine alone can tell, and asks no other machine for anything. When
-# you open the menu (refreshOnOpen: SwiftBar runs the plugin first, and waits
-# for it) it prints its last output at once, then loads the rest behind the
-# open menu: `agents map --cache` asks your other machines what runs there, and
-# a refresh puts that, and a fresh reading of this machine, into the menu a
-# moment later. Nothing remote is ever polled.
+# It runs when it is needed, not all the time. Three states:
+#   - Event: something changed, and something says so: Claude Code's hooks,
+#     Herdr's agent events, Codex's notify (`agents bar poke`: at most one
+#     refresh every 2 s, the last of a burst kept). While a command runs, or a
+#     session works that nothing reports on (Codex, agy, grok outside Herdr),
+#     a run asks for the next one in 10 s itself (bar_next_in); a keep-awake
+#     countdown, at its end.
+#   - Idle: on the timer, a backstop (1m). When the last full run found
+#     nothing going on (no session, command, stale process, hog or warning) and
+#     nothing has poked since, a timed run up to 5 minutes later prints that
+#     output again without asking `agents` anything (the idle fast path).
+#   - Open: the timer reads what this machine alone can tell, and asks no other
+#     machine for anything. When you open the menu (refreshOnOpen: SwiftBar
+#     runs the plugin first, and waits for it) it prints its last output at
+#     once, then loads the rest behind the open menu: `agents map --cache` asks
+#     your other machines what runs there, and a poke puts that, and a fresh
+#     reading of this machine, into the menu a moment later. Nothing remote is
+#     ever polled.
+# Each run under SwiftBar leaves bar.alive in the run directory (SwiftBar's
+# pid), so a poke never launches a SwiftBar that is not running.
 
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
-# A refresh runs every few seconds, so the plugin forks as little as it can:
-# one `agents tsv`, one awk for the jobs, a clock read for keep-awake, and one
-# `mv` that keeps the output for the next open. Everything else is bash
-# builtins (helpers set REPLY instead of printing).
+# A refresh can come every few seconds, so the plugin forks as little as it
+# can: one `agents tsv`, one awk for the jobs, a clock read, and one `mv` that
+# keeps the output for the next open. Everything else is bash builtins
+# (helpers set REPLY instead of printing).
 if [[ -n "${SWIFTBAR_PLUGIN_PATH:-}" ]]; then SELF="$SWIFTBAR_PLUGIN_PATH"
 else
     case "$0" in */*) SELF="${0%/*}" ;; *) SELF=. ;; esac
@@ -71,22 +84,68 @@ esac
 
 # The last full output, kept for the next time the menu opens. Opening must
 # not wait: print it (a read loop, no process), start the loader, and leave.
-# The loader is not started when the last run found the machines section
-# turned off ($LAST.nomap): nothing then asks another machine anything.
+# The loader asks no other machine anything when the last run found the
+# machines section turned off ($LAST.nomap).
 LAST=""
 [[ -z "${SWIFTBAR_PLUGIN_CACHE_PATH:-}" ]] || LAST="$SWIFTBAR_PLUGIN_CACHE_PATH/last"
+REASON="${SWIFTBAR_PLUGIN_REFRESH_REASON:-}"
 OPENED=""
-[[ "${SWIFTBAR_PLUGIN_REFRESH_REASON:-}" != MenuOpen || $# -ne 0 ]] || OPENED=1
+[[ "$REASON" != MenuOpen || $# -ne 0 ]] || OPENED=1
+# agents' run directory, as `agents` and the shipped hooks spell it: the
+# poke's files (lib/agents/bar.sh) and the Herdr sync's stamp.
+BAR_RUN="${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}"
+BAR_IDLE_MAX=300   # the idle fast path keeps an output this many seconds at most
 # load_on_open — start the loader (`open-load`, below) apart from this run.
 load_on_open() {
-    [[ -n "$LAST" && -e "$LAST.nomap" ]] && return 0
     "$SELF" open-load </dev/null >/dev/null 2>&1 &
     disown 2>/dev/null || true
 }
+# print_last — the kept output, as it is.
+print_last() { local l; while IFS= read -r l || [[ -n "$l" ]]; do printf '%s\n' "$l"; done < "$LAST"; }
+# bar_alive EPOCH — tell `agents bar poke` that SwiftBar runs this plugin
+# (bar.alive: EPOCH SWIFTBAR_PID NAME LAUNCH), only when SwiftBar runs it.
+# SwiftBar's pid is this run's parent, or its parent's (SwiftBar wraps a
+# plugin in a shell's -c): looked up by ps once per SwiftBar launch, then
+# reused while it lives.
+bar_alive() {
+    local t="" pid="" name="" launch="" pp="" c=""
+    [[ "${SWIFTBAR:-}" == 1 ]] || return 0
+    [[ -d "$BAR_RUN" ]] || mkdir -p "$BAR_RUN" 2>/dev/null || return 0
+    [[ ! -r "$BAR_RUN/bar.alive" ]] || read -r t pid name launch < "$BAR_RUN/bar.alive"
+    if [[ ! "$pid" =~ ^[0-9]+$ || "$launch" != "${SWIFTBAR_LAUNCH_TIME:--}" ]] || ! kill -0 "$pid" 2>/dev/null; then
+        pid=""
+        read -r pp c <<<"$(ps -o ppid=,comm= -p "$PPID" 2>/dev/null)"
+        if [[ "$c" == SwiftBar || "$c" == */SwiftBar ]]; then pid="$PPID"
+        elif [[ "$pp" =~ ^[0-9]+$ ]]; then
+            c="$(ps -o comm= -p "$pp" 2>/dev/null)"
+            [[ "$c" != SwiftBar && "$c" != */SwiftBar ]] || pid="$pp"
+        fi
+        [[ -n "$pid" ]] || return 0
+    fi
+    name="${SELF##*/}"; name="${name%%.*}"
+    printf '%s %s %s %s\n' "$1" "$pid" "$name" "${SWIFTBAR_LAUNCH_TIME:--}" > "$BAR_RUN/bar.alive" 2>/dev/null
+}
 if [[ -n "$OPENED" && -n "$LAST" && -s "$LAST" ]]; then
-    while IFS= read -r _l || [[ -n "$_l" ]]; do printf '%s\n' "$_l"; done < "$LAST"
+    print_last
+    bar_alive "$(date +%s)"
     load_on_open
     exit 0
+fi
+# The idle fast path: a timed run, the last full run found nothing going on
+# ($LAST.idle: its epoch) under BAR_IDLE_MAX ago, and no poke since (bar.dirty
+# or a bar.poked as new as the mark): the kept output again, and no `agents`.
+# A poke, the menu opening, a manual refresh or the mark's age all take the
+# full path.
+if [[ "$REASON" == Schedule && $# -eq 0 && -n "$LAST" && -s "$LAST" && -f "$LAST.idle" && ! -e "$BAR_RUN/bar.dirty" ]] \
+    && { [[ ! -e "$BAR_RUN/bar.poked" ]] || [[ "$LAST.idle" -nt "$BAR_RUN/bar.poked" ]]; }; then
+    _t=""; read -r _t < "$LAST.idle" 2>/dev/null || true
+    NOW_S="$(date +%s)"
+    if [[ "$_t" =~ ^[0-9]+$ && $NOW_S -ge $_t && $((NOW_S - _t)) -lt $BAR_IDLE_MAX ]]; then
+        print_last
+        bar_alive "$NOW_S"
+        exit 0
+    fi
+    unset _t
 fi
 
 # AGENTS_BIN picks a specific agents (a checkout, while developing).
@@ -109,12 +168,12 @@ if [[ -z "$AGENTS" ]]; then
 fi
 
 # open-load — what an open menu waits for: the machines board (throttled and
-# locked by `agents map --cache`), then one refresh of this plugin, by the name
-# SwiftBar knows it under (the file name up to its first dot).
+# locked by `agents map --cache`; not while that section is off), then one
+# refresh of this plugin (`agents bar poke`, which has the name SwiftBar
+# knows it under from bar.alive).
 if [[ "${1:-}" == open-load ]]; then
-    "$AGENTS" map --cache >/dev/null 2>&1 || true
-    _n="${SELF##*/}"
-    open -g "swiftbar://refreshplugin?name=${_n%%.*}" 2>/dev/null || true
+    [[ -n "$LAST" && -e "$LAST.nomap" ]] || "$AGENTS" map --cache >/dev/null 2>&1 || true
+    "$AGENTS" bar poke >/dev/null 2>&1 || true
     exit 0
 fi
 
@@ -129,19 +188,24 @@ if ! data="$("$AGENTS" tsv 2>/dev/null)"; then
 fi
 # Opened with no last output to show (the first open, or a SwiftBar without a
 # cache directory): this run is the menu, and the loader starts all the same.
-[[ -z "$OPENED" ]] || load_on_open
+if [[ -n "$OPENED" ]]; then bar_alive "$(date +%s)"; load_on_open; fi
 
 # From here on the output goes to a file first, which is printed when the run
 # ends and kept for the next open only when the run reached its last line
 # (OUT_DONE): a refusal's page or a run cut short is shown, never kept. The
 # saved stdout is descriptor 3, which the background jobs below close.
-OUT_DONE=""
+OUT_DONE="" BAR_IDLE=""
 keep_out() {
     local l
     exec 1>&3 3>&-
     [[ -f "$LAST.$$" ]] || return 0
     while IFS= read -r l || [[ -n "$l" ]]; do printf '%s\n' "$l"; done < "$LAST.$$"
-    if [[ -n "$OUT_DONE" ]] && mv -f "$LAST.$$" "$LAST" 2>/dev/null; then return 0; fi
+    if [[ -n "$OUT_DONE" ]] && mv -f "$LAST.$$" "$LAST" 2>/dev/null; then
+        # The idle mark (its epoch) goes with the output it describes.
+        if [[ -n "$BAR_IDLE" ]]; then printf '%s\n' "$BAR_IDLE" > "$LAST.idle" 2>/dev/null
+        elif [[ -e "$LAST.idle" ]]; then rm -f "$LAST.idle"; fi
+        return 0
+    fi
     rm -f "$LAST.$$" 2>/dev/null
 }
 if [[ -n "$LAST" ]] && { [[ -d "${LAST%/*}" ]] || mkdir -p "${LAST%/*}" 2>/dev/null; } && exec 3>&1 && : 2>/dev/null > "$LAST.$$"; then
@@ -637,7 +701,10 @@ warn_rows() {
     done <<<"$REPLY"
 }
 
-n_auto=0 BAR_AUTO=0 BAR_SERVICE=""
+n_auto=0 BAR_AUTO=0 BAR_SERVICE="" BAR_REFRESH=1m
+# Live commands (act tool rows) and working sessions nothing reports on: what
+# brings the next refresh forward (bar_next_in).
+n_tools=0 n_unhooked=0
 agent_rows=()
 while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user herdr cwd args project aflags adup; do
     case "$type" in
@@ -667,6 +734,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             printf -v "U_start_$pid" '%s' "$start"      # an MCP server's token (Where the CPU goes)
             case "$kind" in
                 tool)
+                    n_tools=$((n_tools + 1))
                     [[ "$pid" =~ ^[0-9]+$ && "$start" =~ ^[A-Za-z0-9_:]+$ ]] || continue
                     t="$pid@$start" fl=""
                     [[ ",$aflags," == *,dup,* ]] && fl+=" · ${adup}× dup"
@@ -783,6 +851,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                 AGENTS_CONF)         CONF="$kind" ;;
                 AGENTS_AUTO_REAP)    BAR_AUTO="${kind:-0}" ;;
                 AGENTS_SERVICE_PATH) BAR_SERVICE="$kind" ;;
+                AGENTS_BAR_REFRESH)  BAR_REFRESH="${kind:-1m}" ;;
             esac
             ;;
     esac
@@ -910,6 +979,10 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
             unknown_menu+="$mark$who · $label · $REPLY · $m | sfimage=questionmark.circle $TINT_IDLE $click symbolize=false"$'\n'"$sub" ;;
         *)
             n_running=$((n_running + 1))
+            # Claude Code's hooks poke when it stops, and Herdr's events for a
+            # session in one of its panes; nothing tells of any other's end.
+            v="W_how_$pid"
+            [[ "$kind" == claude || "$herdr" != - || "${!v-}" == herdr ]] || n_unhooked=$((n_unhooked + 1))
             if [[ $WN -gt 0 ]]; then
                 # The flag is what you'd want to read; the session is one level down.
                 v="${WT[1]} | sfimage=${WS[1]} ${WD[1]} $ROW symbolize=false"$'\n'"${WB[1]}"$'-----\n'"$sub"
@@ -1810,6 +1883,108 @@ sections_now() {
     done
     REPLY="$out"
 }
+
+# --- Refreshes ---------------------------------------------------------------------
+# What the next refresh needs, decided once the reading is in (the top of this
+# file says how the plugin runs: event, idle, open).
+
+BAR_FAST=10   # seconds between refreshes while something nothing reports on goes on
+# bar_secs INTERVAL — REPLY: AGENTS_BAR_REFRESH's shape (10s, 1m, 2h, 1d) in
+# seconds; 60 for anything else (lib/agents/bar.sh's _agents_bar_secs).
+bar_secs() {
+    local n="${1%[smhd]}"
+    REPLY=60
+    [[ "$1" =~ ^[1-9][0-9]{0,6}[smhd]$ ]] || return 0
+    case "$1" in
+        *s) REPLY="$n" ;;
+        *m) REPLY=$((n * 60)) ;;
+        *h) REPLY=$((n * 3600)) ;;
+        *d) REPLY=$((n * 86400)) ;;
+    esac
+}
+# bar_next_in TOOLS UNHOOKED ENDS_IN BACKSTOP — REPLY: in how many seconds this
+# menu must refresh again, ahead of its timer; 0 when the timer does.
+#   TOOLS     live commands (act tool rows): BAR_FAST, for their flags (long,
+#             dup, stuck) and for the run ledger, which records a command
+#             shorter than the minute between samples from these readings
+#   UNHOOKED  working sessions nothing reports on (no hooks, not in a Herdr
+#             pane: Codex, agy, grok): BAR_FAST, to see them finish
+#   ENDS_IN   seconds until a keep-awake or lid countdown ends, -1 for none:
+#             then (the title's cup goes with it)
+#   BACKSTOP  the timer's interval in seconds: nothing sooner than it is asked
+#             for. A hog's streak needs no more: it is read every 30 s at best.
+bar_next_in() {
+    local n=0 e
+    [[ $1 -eq 0 && $2 -eq 0 ]] || n=$BAR_FAST
+    if [[ $3 -ge 0 ]]; then
+        e=$(($3 + 1)); [[ $e -ge 2 ]] || e=2
+        [[ $n -gt 0 && $n -le $e ]] || n=$e
+    fi
+    [[ $n -lt $4 ]] || n=0
+    REPLY=$n
+}
+# bar_schedule SECS — the next refresh in SECS: a detached sleep, then `agents
+# bar poke`. One pending at a time (bar.next: DUE TOKEN): one due as soon
+# stands; a later one is replaced, and its sleeper, finding another token,
+# does nothing. Every descriptor is redirected, 3 too: SwiftBar's pipe must
+# close when this run ends.
+bar_schedule() {
+    local due=$((NOW_S + $1)) cur="" tok="$((NOW_S + $1)).$$"
+    [[ -d "$BAR_RUN" ]] || return 0
+    [[ ! -r "$BAR_RUN/bar.next" ]] || read -r cur _ < "$BAR_RUN/bar.next"
+    if [[ "$cur" =~ ^[0-9]+$ && $cur -ge $((NOW_S - 1)) && $cur -le $((due + 1)) ]]; then return 0; fi
+    printf '%s %s\n' "$due" "$tok" > "$BAR_RUN/bar.next" 2>/dev/null || return 0
+    ( trap '' HUP
+      sleep "$1"
+      t=""; read -r _ t < "$BAR_RUN/bar.next" 2>/dev/null
+      [[ "$t" == "$tok" ]] || exit 0
+      rm -f "$BAR_RUN/bar.next"
+      exec "$AGENTS" bar poke ) </dev/null >/dev/null 2>&1 3>&- &
+}
+
+now_s
+ends=-1
+for v in awake lid; do
+    case "$v" in
+        awake) [[ "$awake_mode" == timed || "$awake_mode" == lid ]] || continue; t="$awake_until" ;;
+        lid)   [[ "$lid_state" == on ]] || continue; t="$lid_until" ;;
+    esac
+    num "$t" && [[ $t -gt $NOW_S ]] || continue
+    [[ $ends -ge 0 && $ends -le $((t - NOW_S)) ]] || ends=$((t - NOW_S))
+done
+bar_secs "$BAR_REFRESH"
+bar_next_in "$n_tools" "$n_unhooked" "$ends" "$REPLY"; next="$REPLY"
+# Only under SwiftBar (by hand or in a test, nothing is started or touched).
+if [[ "${SWIFTBAR:-}" == 1 ]]; then
+    bar_alive "$NOW_S"
+    [[ $next -eq 0 ]] || bar_schedule "$next"
+    # A window whose keeper is gone (a bar.busy 10 s old) would make every
+    # hook decline: let it go.
+    if [[ -e "$BAR_RUN/bar.busy" ]]; then
+        t=""; read -r t < "$BAR_RUN/bar.busy" 2>/dev/null
+        if ! num "$t" || [[ $((NOW_S - t)) -ge 10 ]]; then rm -f "$BAR_RUN/bar.busy" "$BAR_RUN/bar.dirty"; fi
+    fi
+fi
+# Idle: nothing that changes on its own, so the next timed runs may print this
+# output again (the idle fast path). Not with a session (a daemon is none), a
+# live command, a run the ledger has open or a reading of one waiting for the
+# sample, a stale process, a hog or a hot streak toward one, a warning in the
+# title, or an earlier refresh asked for.
+f="${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/runs.state"
+if [[ $n_agents -eq 0 && $n_tools -eq 0 && $n_stale -eq 0 && $n_hogs -eq 0 && -z "$attention" && $next -eq 0 \
+      && ! -s "$f" && ! -s "$BAR_RUN/hog.state" ]]; then
+    BAR_IDLE="$NOW_S"
+    for f in "$BAR_RUN"/runs.feed/*; do [[ ! -e "$f" ]] || BAR_IDLE=""; break; done
+fi
+# Herdr's labels: Herdr's events keep them current, but a pane's title changes
+# with no event; while an agent runs in Herdr, a sync at most every 30 s
+# (`--throttle`; its stamp is read here first, so no process starts to decline).
+if [[ "${SWIFTBAR:-}" == 1 && $n_in_herdr -gt 0 ]]; then
+    t=""; [[ ! -r "$BAR_RUN/herdr-labels.stamp" ]] || read -r t < "$BAR_RUN/herdr-labels.stamp"
+    if ! num "$t" || [[ $((NOW_S - t)) -ge 30 ]]; then
+        ( trap '' HUP; exec "$AGENTS" herdr sync --throttle -q ) </dev/null >/dev/null 2>&1 3>&- &
+    fi
+fi
 
 bar_title
 sections_now

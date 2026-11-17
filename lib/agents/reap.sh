@@ -32,7 +32,8 @@ agents_auto_tokens() {
     awk -F '\t' '$1 == "need" && $8 == 1 { print $2 "@" $3 "\t" $4 "\t" ($9 == "-" ? "-" : $12 ":" $9) }'
 }
 
-# _agents_auto_due — true at most once a minute (the menu runs auto-reap on
+# _agents_auto_due — true once a minute at most (_AGENTS_MINUTE_DUE: 55 s, so
+# a menu on a 60 s timer gets one each refresh; the menu runs auto-reap on
 # every refresh that shows something it may stop). The stamp is read and
 # written under a lock (mkdir is atomic), so two overlapping menu runs never
 # both start a reap; a lock whose holder is gone is taken over (_agents_lock).
@@ -42,7 +43,7 @@ _agents_auto_due() {
     _agents_lock "$lock" || return 1
     now="$(date +%s)"
     _agents_stamp_age age "$f" "$now"
-    if [[ $age -ge 60 ]] && _agents_replace "$f" "$now"; then rc=0; fi
+    if [[ $age -ge $_AGENTS_MINUTE_DUE ]] && _agents_replace "$f" "$now"; then rc=0; fi
     _agents_unlock "$lock"
     return $rc
 }

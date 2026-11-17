@@ -106,9 +106,27 @@ plugin_name() {   # CONF_LINE
       . "$REPO_DIR/scripts/install/packs/monitoring.sh"; _monitoring_plugin_name )
 }
 [[ "$(plugin_name AGENTS_BAR_REFRESH=30s)" == agents.30s.sh ]] || fail "plugin name for 30s: $(plugin_name AGENTS_BAR_REFRESH=30s)"
-[[ "$(plugin_name AGENTS_BAR_REFRESH=30)" == agents.10s.sh ]]  || fail "bad refresh not ignored"
-[[ "$(plugin_name '# nothing')" == agents.10s.sh ]]            || fail "default plugin name"
-pass "the pack names the plugin after AGENTS_BAR_REFRESH (agents.30s.sh)"
+[[ "$(plugin_name AGENTS_BAR_REFRESH=30)" == agents.1m.sh ]]   || fail "bad refresh not ignored"
+[[ "$(plugin_name '# nothing')" == agents.1m.sh ]]             || fail "default plugin name: $(plugin_name '# nothing')"
+pass "the pack names the plugin after AGENTS_BAR_REFRESH (agents.30s.sh; agents.1m.sh by default)"
+
+# An install from before the 1m default has agents.10s.sh, recorded in the
+# manifest: the next install or update --configs places agents.1m.sh and
+# removes it (SwiftBar would run both), and nothing it did not place.
+(
+    dir="$tmp/swiftbar"; mkdir -p "$dir"
+    export TUIDEV_STATE_DIR="$tmp/prune-state" DRY_RUN=false
+    export TUIDEV_MANIFEST_FILE="$TUIDEV_STATE_DIR/manifest"
+    mkdir -p "$TUIDEV_STATE_DIR"
+    for f in agents.10s.sh agents.1m.sh agents.5s.sh other.10s.sh; do : > "$dir/$f"; done
+    printf 'file %s\n' "$dir/agents.10s.sh" "$dir/agents.1m.sh" "$dir/other.10s.sh" > "$TUIDEV_MANIFEST_FILE"
+    # shellcheck source=../install/packs/monitoring.sh disable=SC1091
+    . "$REPO_DIR/scripts/install/packs/monitoring.sh"
+    _monitoring_prune_plugins "$dir" "$(unset AGENTS_BAR_REFRESH; XDG_CONFIG_HOME="$tmp/none" _monitoring_plugin_name)" >/dev/null
+    [[ ! -e "$dir/agents.10s.sh" && -e "$dir/agents.1m.sh" ]] || fail "the 10s plugin was not replaced by the 1m one: $(ls "$dir")"
+    [[ -e "$dir/agents.5s.sh" && -e "$dir/other.10s.sh" ]] || fail "prune removed a plugin it did not place, or another plugin: $(ls "$dir")"
+) || exit 1
+pass "the pack replaces an older install's agents.10s.sh with agents.1m.sh, and removes nothing it did not place"
 
 # 3. Classification. Fixture: uid 501 is "me"; the test's own process is 7000
 #    (a child of 6999, a shell under the third claude session).

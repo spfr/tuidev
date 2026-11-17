@@ -76,16 +76,20 @@ _monitoring_agents() {
 }
 
 # The plugin's file name carries SwiftBar's refresh interval
-# (AGENTS_BAR_REFRESH in agents.conf, read by agents' own parser).
+# (AGENTS_BAR_REFRESH in agents.conf, read by agents' own parser; 1m, a
+# backstop: the plugin refreshes on events). The source keeps its name,
+# agents.10s.sh, which tests, docs and the menu goldens use; only the
+# installed copy carries the interval.
 _monitoring_plugin_name() {
     local refresh
     refresh="$(AGENTS_CONF="$MONITORING_CONF" bash "$MONITORING_REPO/bin/agents" config 2>/dev/null \
         | sed -n 's/^AGENTS_BAR_REFRESH=//p')"
-    printf 'agents.%s.sh\n' "${refresh:-10s}"
+    printf 'agents.%s.sh\n' "${refresh:-1m}"
 }
 
 # Drop a plugin this pack placed under another interval's name, so SwiftBar
-# doesn't run two copies after AGENTS_BAR_REFRESH changes.
+# doesn't run two copies after AGENTS_BAR_REFRESH changes (or its default
+# does: the 10s one an older tuidev installed, on the next update --configs).
 _monitoring_prune_plugins() {
     local dir="$1" keep="$2" old
     while IFS= read -r old; do
