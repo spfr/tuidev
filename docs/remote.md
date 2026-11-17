@@ -74,7 +74,7 @@ Your machines are the ones saved in Herdr (`herdr machine list`) plus any ssh ho
 - **Previews and dev servers** come first: every port something was started to be looked at on, with its machine, command, project, CPU, memory and age, whether a session still owns it or it was left behind, and where it opens. A remote one that is already forwarded shows its local URL.
 - **Files sessions just wrote**: the reports, pages and images an agent session wrote in the last day (from its Write and Edit calls), on any machine. Enter opens one on the machine you sit at, fetched first when it lives elsewhere, so reading what a remote agent produced takes no copying and no path typing.
 - **Left behind**: stale processes and hogs nobody is using.
-- **Sessions**: one line per agent session, with its status and a count of what it runs (`ctrl-e` lists those).
+- **Sessions**: one line per agent session, with the mark of its kind (✳ claude, ⬡ codex, and the rest of [`AGENTS_GLYPHS`](agent-workflows.md)), its status and a count of what it runs (`ctrl-e` lists those). A server a session started says `by ✳ claude app`.
 - **Machines**: each machine's CPU, free memory and counts.
 
 The other machines answer over one shared ssh connection each, so the list comes up in a second or two.
@@ -87,6 +87,8 @@ The other machines answer over one shared ssh connection each, so the list comes
 | `ctrl-p` | | | peek at its pane | |
 
 A stop is `agents kill` on the machine that runs the thing, with its refusals and its y/N question. A dev server here is a listener started in a project directory: not an agent's own port, not an app or system service, not a daemon in your home directory (`agents ports` lists every listener).
+
+What another machine sends is untrusted text. One set of checks (`lib/agents/awk/lib_maprows.awk`) decides, for the list and for the menu bar's board alike, whether a row is one: an id only in the shape of a process id (up to 10 digits, `@` and a start of up to 48 plain characters), a port a number, a file an absolute path of plain characters (up to 400), a forward only from this machine and with every field of its shape. No control character reaches your terminal: C0 and DEL, C1 (as UTF-8 writes it), and the bidi and line-separator characters (U+202A to U+202E, U+2066 to U+2069, U+2028, U+2029) become spaces. A long path is shortened so its recognisable part stays: a temp-directory binary shows its name first, and a file's path is cut in the middle.
 
 So nothing needs `pkill`, and nothing needs you to remember which machine a dev server was started on. `agents map workbox` or `agents map local` narrows it to one machine; piped, it prints the list.
 

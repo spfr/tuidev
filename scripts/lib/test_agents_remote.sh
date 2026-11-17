@@ -446,6 +446,8 @@ fi
 pass "a dropped file: asked for by the session's hook, refused when hidden, sent only on your yes, and the session is told where it is"
 
 # --- 8. The map ------------------------------------------------------------------------------
+# The marks of kinds of sessions are tested below; the rows here are read without them.
+export AGENTS_GLYPHS=off
 _agents_map_rows() {
     printf 'sys\tcpu 12%% · memory 60%% free · 1 session · 1 left behind\n'
     printf 'proc\t500@Mon_1\tclaude         500    3.0   1.0G   1h00m  app                    working · claude\n'
@@ -531,6 +533,124 @@ reset; agents_map --act go devbox port 8000:91 >/dev/null; agents_map --act go l
 [[ "$(opened)" == "http://localhost:8000"$'\n'"http://localhost:8000" ]] || fail "map: enter on a server and a forward: $(opened)"
 [[ "$(agents_map --act stop local fwd 8000)" == "closed localhost:8000 (devbox:8000)" ]] || fail "map: ctrl-k on a forward"
 [[ -z "$(agents_map --preview - head -)" && "$(agents_map --preview devbox head -)" == *"sweep"* && "$(agents_map --preview devbox port 8000:91)" == *"forward it here"* ]] || fail "map: preview text"
+# One copy of the checks: the list and the menu bar's board take a row, or
+# refuse it, the same way (awk/lib_maprows.awk). Every row here is from devbox.
+(
+    big=""; i=0; while [[ $i -lt 49 ]]; do big+="a"; i=$((i + 1)); done
+    ok48="${big%a}"
+    # id<TAB>what: the stale rows' ids; each valid one is a row of LEFT BEHIND and counts in the bar's "left".
+    {
+        printf 'sys\tcpu 1%% \342\200\256evil\342\200\250 \342\201\247x\342\201\251 \302\233[31m ok\n'
+        for id in 11@a 22@Mon_1:2 33 "44@$ok48"; do printf 'proc\t%s\tstale          1    0.0     1M     1m  x                      ok\n' "$id"; done
+        for id in 12345678901 "55@$big" 66@ '66@a b' '77;x' '@88' 'ab' '99@a/b' "5$(printf '\033')"; do printf 'proc\t%s\tstale          1    0.0     1M     1m  x                      bad\n' "$id"; done
+        # A row whose text starts with a control character is no stale row of its own in either.
+        printf 'proc\t111@z\t\001  stale        1    0.0     1M     1m  x                      child\n'
+        for p in 3000 4000; do printf 'port\t%s\t12\tnode\t/srv/p%s\n' "$p" "$p"; done
+        for p in 123456 99x; do printf 'port\t%s\t12\tnode\t/srv/bad\n' "$p"; done
+        printf 'port\t5000\t12345678901\tnode\t/srv/p5000\n'
+        # A forward from this machine (local) needs every field; devbox's own are no rows.
+        printf 'fwd\t31337\tdevbox\t8000\tactive\t1\n'
+    } | awk '{ print "devbox\t" $0 }' > "$tmp/hostile.rows"
+    {
+        printf 'local\tfwd\t41000\tdevbox\t8000\tactive\t5\n'
+        printf 'local\tfwd\t41001\tdevbox\t8001\tdead\n'
+        printf 'local\tfwd\t41002\tdevbox\t8002\tactive\tx\n'
+        printf 'local\tfwd\t41003\tdev box\t8003\tactive\t5\n'
+        printf 'local\tfwd\t41004\tdevbox\t8004\tsideways\t5\n'
+        printf 'local\tfwd\t410050\tdevbox\t8005\tactive\t5\n'
+        printf 'local\tfwd\t41006\tdevbox\t8006\tactive\t1234567890\n'
+    } >> "$tmp/hostile.rows"
+    _agents_map_all() { cat "$tmp/hostile.rows"; }
+    h_list="$(NO_COLOR=1 _agents_map_list | LC_ALL=C tr -d '\r')"
+    h_bar="$(_agents_map_bar)"
+    # procs: the same ids in both (the bar counts what the list shows under LEFT BEHIND)
+    got="$(printf '%s\n' "$h_list" | awk -F '\t' '$2 == "proc" { print $3 }' | tr '\n' ' ')"
+    [[ "$got" == "11@a 22@Mon_1:2 33 44@$ok48 " ]] || fail "map: ids the list took: $got"
+    [[ "$h_bar" == *"left${T}devbox${T}4"$'\n'* || "$h_bar" == *"left${T}devbox${T}4" ]] || fail "map bar: not the same four stale rows: $h_bar"
+    # ports: 3000 and 4000 (and 5000 with no process id); neither takes 123456 or 99x
+    lp="$(printf '%s\n' "$h_list" | awk -F '\t' '$2 == "port" { sub(/:.*/, "", $3); print $3 }' | tr '\n' ' ')"
+    bp="$(printf '%s\n' "$h_bar" | awk -F '\t' '$1 == "port" { print $3 }' | tr '\n' ' ')"
+    [[ "$lp" == "3000 4000 5000 " && "$bp" == "$lp" ]] || fail "map: ports differ: list '$lp', bar '$bp'"
+    [[ "$h_list" == *"5000:-"* ]] || fail "map: a process id of the wrong shape was kept: $h_list"
+    # forwards: only local's own, with every field of its shape: 41000 alone
+    lf="$(printf '%s\n' "$h_list" | awk -F '\t' '$2 == "fwd" { print $3 }' | tr '\n' ' ')"
+    bf="$(printf '%s\n' "$h_bar" | awk -F '\t' '$1 == "fwd" { print $2 }' | tr '\n' ' ')"
+    [[ "$lf" == "41000 " && "$bf" == "$lf" ]] || fail "map: forwards differ: list '$lf', bar '$bf'"
+    [[ "$h_list" != *31337* && "$h_bar" != *31337* ]] || fail "map: a forward devbox sent was taken"
+    # text: no control character, no C1, no bidi or line separator, in either
+    for out in "$h_list" "$h_bar"; do
+        [[ "$(printf '%s' "$out" | LC_ALL=C grep -c $'\342\200[\250-\256]\\|\342\201[\246-\251]\\|\302[\200-\237]\\|[\001-\010\013-\037\177]')" -eq 0 ]] \
+            || fail "map: a control or bidi character got through: $(printf '%s' "$out" | cat -v)"
+    done
+    [[ "$(printf '%s\n' "$h_list" | tr -s ' ')" == *"cpu 1% evil x [31m ok"* ]] || fail "map: the machine's line: $h_list"
+    [[ "$(printf '%s\n' "$h_bar" | tr -s ' ')" == *"mach${T}devbox${T}cpu 1% evil x [31m ok"* ]] || fail "map bar: the machine's line: $h_bar"
+)
+unset AGENTS_GLYPHS
+# Marks: the table's own, one display column each, in front of the session's kind and of "by KIND" on a
+# server it owns; the columns stay where they are (a mark is several bytes: padded by display width).
+dwidth() { printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' '; }
+g_rows() { printf '%s\n' "$1" | cut -f4; }
+glist="$(unset AGENTS_GLYPHS; NO_COLOR=1 agents_map --list)"
+[[ "$(g_rows "$glist" | tr -s ' ')" == *"local ✳ claude app"* ]] || fail "map: no mark on the claude session: $(g_rows "$glist")"
+[[ "$(g_rows "$glist" | tr -s ' ')" == *"devbox ⬡ codex api"* ]] || fail "map: marks: $(g_rows "$glist")"
+# Aligned: the project column starts at the same display column in the header and in every session row,
+# with a mark, with an empty one, and with the marks off.
+for g in "" "agent=" "claude=C codex=" "off"; do
+    gl2="$(AGENTS_GLYPHS="$g" NO_COLOR=1 agents_map --list | cut -f4)"
+    want=""
+    while IFS= read -r line; do
+        case "$line" in
+            *MACHINE*AGENT*PROJECT*) pre="${line%%PROJECT*}" ;;
+            *claude*" app "*working*) pre="${line%% app *} " ;;
+            *codex*" api "*) pre="${line%% api *} " ;;
+            *) continue ;;
+        esac
+        w="$(dwidth "$pre")"
+        [[ -n "$want" ]] || want="$w"
+        [[ "$w" == "$want" ]] || fail "map: the project column moved ($w, not $want) with AGENTS_GLYPHS='$g': $line"
+    done <<<"$gl2"
+    [[ -n "$want" ]] || fail "map: no session rows with AGENTS_GLYPHS='$g'"
+done
+# A mark of your own; the kind of the row is only a key into the table.
+[[ "$(AGENTS_GLYPHS="claude=C" NO_COLOR=1 agents_map --list | cut -f4 | tr -s ' ')" == *"local C claude app"* ]] || fail "map: AGENTS_GLYPHS=claude=C"
+off="$(AGENTS_GLYPHS=off NO_COLOR=1 agents_map --list | cut -f4)"
+[[ "$off" != *✳* && "$off" != *⬡* && "$(printf '%s\n' "$off" | tr -s ' ')" == *"local claude app"* ]] || fail "map: marks off is not today's list: $off"
+(
+    # A server a session started says whose it is, with that session's mark.
+    _agents_map_all() {
+        printf 'local\tproc\t500@a\tclaude         500    3.0   1.0G   1h00m  app                    working · claude\n'
+        printf 'local\tproc\t502@a\t  tool         502    1.0    20M      2m  main                   npm run dev\n'
+        printf 'local\tport\t5173\t502\tnode\t/srv/proj\n'
+    }
+    [[ "$(NO_COLOR=1 _agents_map_list | cut -f4 | tr -s ' ')" == *"· by ✳ claude app"* ]] || fail "map: the mark on a server's owner"
+    [[ "$(AGENTS_GLYPHS=off NO_COLOR=1 _agents_map_list | cut -f4 | tr -s ' ')" == *"· by claude app"* ]] || fail "map: a server's owner without marks"
+)
+(
+    # A kind the table does not name takes the "agent" mark; one that tries to be more than a key stays a word.
+    _agents_map_all() {
+        printf 'devbox\tproc\t7@a\tmystery         7    0.0     1M     1m  proj                   working · x\n'
+        printf 'devbox\tproc\t8@a\t$(id)           8    0.0     1M     1m  proj2                  working · x\n'
+    }
+    [[ "$(NO_COLOR=1 _agents_map_list | cut -f4 | tr -s ' ')" == *"devbox ◆ mystery proj"* ]] || fail "map: the mark of a kind the table lacks"
+    [[ "$(AGENTS_GLYPHS=off NO_COLOR=1 _agents_map_list | cut -f4 | tr -s ' ')" == *"devbox mystery proj"* ]] || fail "map: no mark, a kind the table lacks"
+    [[ "$(AGENTS_GLYPHS='mystery=$(id)' NO_COLOR=1 _agents_map_list | cut -f4)" != *"uid="* ]] || fail "map: the table's text was run"
+)
+# A long path, a recognisable end first: a binary in a temp directory shows its name, then where it is; a file its
+# name, its session, and a path cut in the middle.
+(
+    _agents_map_all() {
+        printf 'local\tproc\t9@a\tstale           9    0.0     1M     1m  x                      /var/folders/vr/abcdef123/T/go-build3158750540/b001/web.test ··\n'
+        printf 'local\tproc\t10@a\tstale          10    0.0     1M     1m  x                      /usr/bin/short -v\n'
+        printf 'local\tfile\t/srv/some/deeply/nested/project/directory/with/many/levels/reports/final-report.html\tapi\n'
+    }
+    t="$(NO_COLOR=1 _agents_map_list | cut -f4)"
+    [[ "$t" == *"  web.test  /var/folders/"*"/b001/ ··"* && "$t" != *"/var/folders/vr/abcdef123/T/go-build3158750540/b001/web.test"* ]] || fail "map: the temp binary: $t"
+    [[ "$t" == *"/usr/bin/short -v"* ]] || fail "map: a short path was changed: $t"
+    line="$(printf '%s\n' "$t" | grep 'final-report.html .*api ')" || fail "map: the file row: $t"
+    last="${line##* }"
+    [[ "$last" == /srv/*…*/reports/final-report.html && "$(dwidth "$last")" -eq 50 ]] || fail "map: the file path is not cut in the middle: $line"
+)
+unset AGENTS_GLYPHS
 # This machine's own rows: a session, and of the listeners only the dev server
 # (not the session's own port, not an app's).
 # shellcheck source=../../lib/agents/map.sh disable=SC1091

@@ -19,7 +19,8 @@
 #
 # Owns: `agents map`, its rows, list, actions and preview, and the menu
 #   bar's copy of the board (map.tsv).
-# Uses: config.sh, util.sh, snapshot.sh (agents_collect), pick.sh
+# Uses: config.sh, util.sh, glyph.sh (_agents_glyph_map), awk/lib_maprows.awk
+#   (the checks for a row from another machine), snapshot.sh (agents_collect), pick.sh
 #   (_agents_pick_list, _agents_fzf), remote.sh (machines, ssh, ports),
 #   forward.sh, link.sh (agents_link_click), system.sh (agents_system),
 #   kill.sh/reap.sh/where.sh through agents_main.
@@ -177,12 +178,38 @@ _agents_map_list() {
     local all=0 b="" d="" n=""
     if [[ "${1:-}" == --all ]]; then all=1; shift; fi
     if [[ -z "${NO_COLOR:-}" ]]; then b=$'\033[1m' d=$'\033[2m' n=$'\033[0m'; fi
-    _agents_map_all "${1:-}" | LC_ALL=C awk -F '\t' -v home="$HOME" -v all="$all" -v B="$b" -v D="$d" -v N="$n" '
-        # No control character: C0, DEL, and C1 as UTF-8 writes it (U+009B is
-        # another spelling of ESC [).
-        function clean(s) { gsub(/[[:cntrl:]]/, " ", s); gsub(/\302[\200-\237]/, " ", s); return s }
+    # What a row may be, and clean() and tilde(), come from awk/lib_maprows.awk
+    # (the menu bar's board asks the same); cells are padded by lib_fmt's lc(),
+    # because a mark is several bytes and one column.
+    # shellcheck disable=SC2016  # awk, not the shell, reads the program
+    _agents_map_all "${1:-}" | _agents_awk_eval "lib_fmt lib_maprows" '
         function trim(s) { sub(/^ +/, "", s); sub(/ +$/, "", s); return s }
-        function tilde(p) { return (home != "" && index(p, home) == 1) ? "~" substr(p, length(home) + 1) : p }
+        # S shortened in the middle to N columns: its start and its end stay.
+        function mid(s, n,   h) {
+            if (length(s) <= n) return s
+            h = int((n - 1) / 3)
+            return substr(s, 1, h) gl("more") substr(s, length(s) - (n - h - 1) + 1)
+        }
+        # The mark of a kind of session: its own, the "agent" one for a kind
+        # the table does not name, the shell one for none. Looked up in a table
+        # that is ours; the kind (a remote row said it) is only ever a key.
+        function mark(kind) {
+            if (!gon) return ""
+            if (kind == "" || kind == "-") kind = "shell"
+            if (kind in gmap) return gmap[kind]
+            return ("agent" in gmap) ? gmap["agent"] : ""
+        }
+        # What a stale process or hog runs: a long path as its name first, then
+        # where it is, shortened; its arguments after.
+        function what_of(w,   first, rest, base, dir, k) {
+            first = w; rest = ""
+            if ((k = index(w, " ")) > 0) { first = substr(w, 1, k - 1); rest = substr(w, k) }
+            if (first !~ /^\// || length(first) <= 48) return w
+            base = first; sub(/.*\//, "", base)
+            dir = substr(first, 1, length(first) - length(base))
+            if (base == "") return w
+            return base "  " mid(tilde(dir), 40) rest
+        }
         function group(title, hint) { printf "-\thead\t-\t%s%s%s  %s%s%s\n", B, title, N, D, hint, N }
         # A pick row: TYPE PID CPU% MEM AGE, two spaces, NAME (22 wide), WHAT.
         function parse(line,    t, rest) {
@@ -192,47 +219,51 @@ _agents_map_list() {
             rest = line; sub(/^ *[^ ]+ +[^ ]+ +[^ ]+ +[^ ]+ +[^ ]+  /, "", rest)
             P_name = trim(substr(rest, 1, 22)); P_what = trim(substr(rest, 24))
         }
-        $2 == "sys"  { if (!($1 in mseen)) { mseen[$1] = 1; mo[++nm] = $1 } msys[$1] = clean($3); next }
+        BEGIN {
+            n = split(glyphs, gw, " ")
+            for (i = 1; i <= n; i++) if ((k = index(gw[i], "=")) > 1) { gmap[substr(gw[i], 1, k - 1)] = substr(gw[i], k + 1); gon = 1 }
+            gwid = 1
+            for (k in gmap) if (dw(gmap[k]) > gwid) gwid = dw(gmap[k])
+        }
+        $2 == "sys"  { mr_sys(); if (!($1 in mseen)) { mseen[$1] = 1; mo[++nm] = $1 } msys[$1] = R_text; next }
         $2 == "proc" {
-            if ($3 !~ /^[0-9]+(@[A-Za-z0-9_:+.-]+)?$/ || length($3) > 60) next
-            line = clean($4); parse(line)
-            pid = $3; sub(/@.*/, "", pid)
-            cpu[$1, pid] = P_cpu; mem[$1, pid] = P_mem; age[$1, pid] = P_age
+            if (!mr_proc()) next
+            line = R_line; parse(line)
+            pid = R_pid
+            pcpu[$1, pid] = P_cpu; pmem[$1, pid] = P_mem; page[$1, pid] = P_age
             if (P_child) {
-                if (cur != "") { kids[cur]++; ktype[cur, P_type]++; kid[cur, kids[cur]] = $1 "\tproc\t" $3 "\t" sprintf("     %-12s %-8s %-16s %-9s %6s %6s %7s  %s", "", P_type, substr(P_name, 1, 16), "", P_cpu, P_mem, P_age, P_what) }
+                if (cur != "") { kids[cur]++; ktype[cur, P_type]++; kid[cur, kids[cur]] = $1 "\tproc\t" R_id "\t" sprintf("     %-12s %s%-8s %-16s %-9s %6s %6s %7s  %s", "", (gon ? lc("", gwid + 1) : ""), P_type, substr(P_name, 1, 16), "", P_cpu, P_mem, P_age, P_what) }
                 owner[$1, pid] = curname
                 next
             }
             if (P_type == "stale" || P_type == "hog") {
                 cur = ""; curname = ""
-                lb[++nl] = $1 "\tproc\t" $3 "\t" sprintf("   %-12s %-8s %-16s %6s %6s %7s  %s", $1, (P_type == "hog" ? "heavy" : "stale"), substr(P_name, 1, 16), P_cpu, P_mem, P_age, P_what)
+                lb[++nl] = $1 "\tproc\t" R_id "\t" sprintf("   %-12s %-8s %-16s %6s %6s %7s  %s", $1, (P_type == "hog" ? "heavy" : "stale"), substr(P_name, 1, 16), P_cpu, P_mem, P_age, what_of(P_what))
                 isstale[$1, pid] = (P_type == "stale")
                 next
             }
             status = "-"; what = P_what
             if (what ~ / · /) { status = what; sub(/ · .*/, "", status) }
-            cur = $1 SUBSEP $3; curname = P_type " " P_name
-            se[++ns] = cur; sm[ns] = $1; sid[ns] = $3
-            stext[ns] = sprintf("%-12s %-8s %-16s %-9s %6s %6s %7s", $1, P_type, substr(P_name, 1, 16), substr(status, 1, 9), P_cpu, P_mem, P_age)
+            gm = mark(P_type)
+            cur = $1 SUBSEP R_id; curname = (gm == "" ? "" : gm " ") P_type " " P_name
+            se[++ns] = cur; sm[ns] = $1; sid[ns] = R_id
+            stext[ns] = sprintf("%-12s %s%-8s %-16s %-9s %6s %6s %7s", $1, (gon ? lc(gm, gwid) " " : ""), P_type, substr(P_name, 1, 16), substr(status, 1, 9), P_cpu, P_mem, P_age)
             next
         }
         $2 == "port" {
-            if ($3 !~ /^[0-9]+$/ || length($3) > 5) next
-            np++; pm[np] = $1; pp[np] = $3
-            ppid[np] = ($4 ~ /^[0-9]+$/ && length($4) <= 10) ? $4 : "-"
-            pc[np] = clean($5); pw[np] = tilde(clean($6))
+            if (!mr_port()) next
+            np++; pm[np] = $1; pp[np] = R_port; ppid[np] = R_ppid
+            pc[np] = R_cmd; pw[np] = tilde(R_cwd)
             next
         }
         $2 == "file" {
-            if ($3 !~ /^\/[A-Za-z0-9._ @+,=\/~-]+$/ || length($3) > 400) next
-            nfi++; fim[nfi] = $1; fip[nfi] = $3; fis[nfi] = clean($4)
+            if (!mr_file()) next
+            nfi++; fim[nfi] = $1; fip[nfi] = R_path; fis[nfi] = R_session
             next
         }
-        # A forward is a row of this machine only: one another machine sends
-        # is no row, and each field has its shape.
         $2 == "fwd" {
-            if ($1 != "local" || $3 !~ /^[0-9]+$/ || length($3) > 5 || $4 !~ /^[A-Za-z0-9._-]+$/ || $5 !~ /^[0-9]+$/ || length($5) > 5 || $6 !~ /^(active|dead)$/ || $7 !~ /^[0-9]+$/) next
-            nf++; fl[nf] = $3; fm[nf] = $4; fr[nf] = $5; fs[nf] = $6; fa[nf] = $7; fwd[$4, $5] = nf
+            if (!mr_fwd()) next
+            nf++; fl[nf] = R_flocal; fm[nf] = R_flabel; fr[nf] = R_fremote; fs[nf] = R_fstate; fa[nf] = R_fage; fwd[R_flabel, R_fremote] = nf
         }
         END {
             group("PREVIEWS AND DEV SERVERS", "enter opens it in your browser · ctrl-k stops it")
@@ -245,14 +276,14 @@ _agents_map_list() {
                 else if ((m, pp[i]) in fwd) { f = fwd[m, pp[i]]; used[f] = 1; opens = "http://localhost:" fl[f] (fs[f] == "active" ? "  (forwarded)" : "  (forward is dead)") }
                 else opens = "enter: forward it here"
                 note = (k in isstale && isstale[k]) ? "  · left behind" : ((k in owner && owner[k] != "") ? "  · by " owner[k] : "")
-                printf "%s\tport\t%s:%s\t   %-12s %-7s %-10s %-16s %6s %6s %7s  %s%s\n", m, pp[i], ppid[i], m, ":" pp[i], substr(pc[i], 1, 10), substr(proj, 1, 16), cpu[k], mem[k], age[k], opens, note
+                printf "%s\tport\t%s:%s\t   %-12s %-7s %-10s %-16s %6s %6s %7s  %s%s\n", m, pp[i], ppid[i], m, ":" pp[i], substr(pc[i], 1, 10), substr(proj, 1, 16), pcpu[k], pmem[k], page[k], opens, note
             }
             if (nfi) {
                 print "-\thead\t-\t"
                 group("FILES SESSIONS JUST WROTE", "enter opens it on this machine (fetched first when it is elsewhere)")
                 for (i = 1; i <= nfi; i++) {
                     base = fip[i]; sub(/.*\//, "", base)
-                    printf "%s\tfile\t%s\t   %-12s %-28s %-16s %s\n", fim[i], fip[i], fim[i], substr(base, 1, 28), substr(fis[i], 1, 16), tilde(fip[i])
+                    printf "%s\tfile\t%s\t   %-12s %-28s %-16s %s\n", fim[i], fip[i], fim[i], substr(base, 1, 28), substr(fis[i], 1, 16), mid(tilde(fip[i]), 50)
                 }
             }
             print "-\thead\t-\t"
@@ -262,7 +293,7 @@ _agents_map_list() {
             print "-\thead\t-\t"
             group("SESSIONS", "enter goes to it · ctrl-p peeks · ctrl-e lists what each runs")
             if (!ns) printf "-\thead\t-\t   %snone%s\n", D, N
-            else printf "-\thead\t-\t   %s%-12s %-8s %-16s %-9s %6s %6s %7s  %s%s\n", D, "MACHINE", "AGENT", "PROJECT", "STATUS", "CPU%", "MEM", "AGE", "RUNS", N
+            else printf "-\thead\t-\t   %s%-12s %s %-16s %-9s %6s %6s %7s  %s%s\n", D, "MACHINE", lc("AGENT", 8 + (gon ? gwid + 1 : 0)), "PROJECT", "STATUS", "CPU%", "MEM", "AGE", "RUNS", N
             for (i = 1; i <= ns; i++) {
                 c = se[i]; runs = ""
                 if (ktype[c, "mcp"]) runs = runs ktype[c, "mcp"] " mcp"
@@ -282,7 +313,7 @@ _agents_map_list() {
             print "-\thead\t-\t"
             group("MACHINES", "ctrl-s sweeps what sessions left behind on one")
             for (i = 1; i <= nm; i++) printf "%s\thead\t-\t   %-12s %s\n", mo[i], mo[i], msys[mo[i]]
-        }'
+        }' -F '\t' -v home="$HOME" -v all="$all" -v B="$b" -v D="$d" -v N="$n" -v glyphs="$(_agents_glyph_map)"
 }
 
 # _agents_map_target MACHINE — set _AGENTS_M_TARGET for a list row's machine;
@@ -405,28 +436,28 @@ _agents_map_preview() {
 #   port<TAB>LABEL<TAB>PORT<TAB>COMMAND<TAB>PROJECT<TAB>LOCALPORT|-<TAB>stale|-
 #   left<TAB>LABEL<TAB>COUNT          (stale processes there)
 #   fwd<TAB>LOCALPORT<TAB>LABEL<TAB>PORT<TAB>active|dead
-# The same shapes _agents_map_list asks of a row, no control character, and
+# The same checks _agents_map_list makes of a row (awk/lib_maprows.awk), and
 # no text longer than a menu line.
 _agents_map_bar() {
-    _agents_map_all | LC_ALL=C awk -F '\t' '
-        function clean(s) { gsub(/[[:cntrl:]]/, " ", s); gsub(/\302[\200-\237]/, " ", s); return s }
-        $2 == "sys"  { if (!($1 in seen)) { seen[$1] = 1; mo[++nm] = $1 } msys[$1] = substr(clean($3), 1, 120); next }
+    # shellcheck disable=SC2016
+    _agents_map_all | _agents_awk_eval "lib_maprows" '
+        $2 == "sys"  { mr_sys(); if (!($1 in seen)) { seen[$1] = 1; mo[++nm] = $1 } msys[$1] = R_text; next }
         $2 == "proc" {
-            if ($3 !~ /^[0-9]+(@[A-Za-z0-9_:+.-]+)?$/ || length($3) > 60 || $4 ~ /^  /) next
-            line = $4; sub(/^ +/, "", line)
-            if (line ~ /^stale /) { pid = $3; sub(/@.*/, "", pid); stale[$1, pid] = 1; left[$1]++ }
+            if (!mr_proc() || R_line ~ /^  /) next
+            line = R_line; sub(/^ +/, "", line)
+            if (line ~ /^stale /) { stale[$1, R_pid] = 1; left[$1]++ }
             next
         }
         $2 == "port" {
-            if ($3 !~ /^[0-9]+$/ || length($3) > 5) next
-            np++; pm[np] = $1; pp[np] = $3; ppid[np] = ($4 ~ /^[0-9]+$/ && length($4) <= 10) ? $4 : "-"; pc[np] = clean($5)
-            proj = clean($6); sub(/\/+$/, "", proj); sub(/.*\//, "", proj); pw[np] = proj
+            if (!mr_port()) next
+            np++; pm[np] = $1; pp[np] = R_port; ppid[np] = R_ppid; pc[np] = R_cmd
+            proj = R_cwd; sub(/\/+$/, "", proj); sub(/.*\//, "", proj); pw[np] = proj
             next
         }
         $2 == "fwd" {
-            if ($1 != "local" || $3 !~ /^[0-9]+$/ || length($3) > 5 || $4 !~ /^[A-Za-z0-9._-]+$/ || $5 !~ /^[0-9]+$/ || length($5) > 5 || $6 !~ /^(active|dead)$/) next
-            nf++; fl[nf] = $3; fm[nf] = $4; fr[nf] = $5; fs[nf] = $6
-            if ($6 == "active") fwd[$4, $5] = $3
+            if (!mr_fwd()) next
+            nf++; fl[nf] = R_flocal; fm[nf] = R_flabel; fr[nf] = R_fremote; fs[nf] = R_fstate
+            if (R_fstate == "active") fwd[R_flabel, R_fremote] = R_flocal
         }
         END {
             for (i = 1; i <= nm; i++) printf "mach\t%s\t%s\n", mo[i], msys[mo[i]]
@@ -435,7 +466,7 @@ _agents_map_bar() {
                     (((pm[i], pp[i]) in fwd) ? fwd[pm[i], pp[i]] : "-"), (((pm[i], ppid[i]) in stale) ? "stale" : "-")
             for (i = 1; i <= nm; i++) if (left[mo[i]]) printf "left\t%s\t%d\n", mo[i], left[mo[i]]
             for (i = 1; i <= nf; i++) printf "fwd\t%s\t%s\t%s\t%s\n", fl[i], fm[i], fr[i], fs[i]
-        }'
+        }' -F '\t'
 }
 
 # _agents_map_cache [MAXAGE] — write that board to map.tsv in the run
