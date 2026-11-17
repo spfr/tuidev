@@ -18,7 +18,7 @@ An `export NPM_TOKEN=...` line in `~/.zshrc`:
 | `secret set NAME` | Stores a value read from a hidden prompt, or from stdin when piped (`pbpaste \| secret set NAME`). Never from the command line, which shows in `ps` and history. Setting it again replaces it. |
 | `secret get NAME` | Prints the value, for `$(...)`. |
 | `secret ls`, `secret rm NAME` | Lists names (never values), deletes one. |
-| `secret run -n NAME [-n NAME]... -- CMD` | Runs CMD with those secrets in its environment, and nothing in your shell. `--all` passes every secret; `--optional` starts CMD even when one can't be read. |
+| `secret run -n NAME [-n NAME]... -- CMD` | Runs CMD with those secrets in its environment, and nothing in your shell. `--all` passes every secret (an empty store passes none and still runs CMD; a store that can't be listed stops it, exit 1); `--optional` starts CMD even when one can't be read or the store can't be listed. |
 | `secret export NAME...` | Prints `export NAME='value'` lines for `eval`. |
 | `secret scan [FILE...]` | Lists token-looking literal exports as `FILE:LINE: NAME`, never the value. Exit 1 on a hit. Default files: `~/.zshrc`, `~/.zshrc.local`, `~/.zprofile`, `~/.zshenv`, `~/.bashrc`, `~/.bash_profile`, `~/.profile`, `~/.config/zsh/*.zsh`. |
 | `secret import [--dry-run] [--remove] FILE [NAME...]` | Stores FILE's literal `NAME=value` lines (the ones `scan` flags, or the NAMEs given). It lists names and line numbers first. `--remove` then replaces each line with a comment, after writing `FILE.secret-backup-<time>` (mode 600) with the values taken out. `--dry-run` only lists. |

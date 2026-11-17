@@ -20,7 +20,7 @@ SH="$BASH"   # the bash under test (CI also runs these under /bin/bash, 3.2)
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-secret.XXXXXX")"
 tmp="$(cd "$tmp" && pwd)"
-trap '/bin/rm -rf "$tmp"' EXIT
+trap '/bin/chmod -R u+rwx "$tmp" 2>/dev/null; /bin/rm -rf "$tmp"' EXIT
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
@@ -265,6 +265,32 @@ for backend in keychain secret-tool pass; do
 
     for (( j = 2; j <= ${#values[@]}; j++ )); do run_secret rm "HOSTILE_$j" 2>/dev/null; done
 done
+
+# run --all with nothing to add: an empty store runs CMD (nothing to add is no
+# error); a listing that fails is a store error (exit 1, not usage), and
+# --optional runs CMD anyway.
+export TUIDEV_SECRET_BACKEND=pass
+PD="$PASSWORD_STORE_DIR/tuidev"; mkdir -p "$PD"
+s ls; [[ $rc -eq 0 && -z "$(out)" ]] || fail "pass: the store is not empty for the --all tests: $(out)"
+for opt in "" --optional; do
+    rm -f "$tmp/ran"
+    s run ${opt:+"$opt"} --all -- "$SH" -c ': > "$1"' _ "$tmp/ran"
+    [[ $rc -eq 0 && -e "$tmp/ran" ]] || fail "run $opt --all, empty store: rc=$rc, ran: $([[ -e "$tmp/ran" ]] && echo yes || echo no): $(err)"
+done
+chmod 000 "$PD"
+if [[ -r "$PD" ]]; then
+    echo "SKIP: a mode 000 directory is readable here (root): the failed listing is not testable"
+else
+    rm -f "$tmp/ran"
+    s run --all -- "$SH" -c ': > "$1"' _ "$tmp/ran"
+    [[ $rc -eq 1 && ! -e "$tmp/ran" ]] || fail "run --all, the listing failed: rc=$rc, or CMD ran"
+    grep -q 'could not be listed' "$tmp/err" && ! grep -q 'name a secret' "$tmp/err" || fail "run --all, the listing failed: $(err)"
+    s run --optional --all -- "$SH" -c ': > "$1"' _ "$tmp/ran"
+    [[ $rc -eq 0 && -e "$tmp/ran" ]] || fail "run --optional --all, the listing failed: rc=$rc: $(err)"
+    s ls; [[ $rc -eq 1 ]] || fail "ls, the listing failed: rc=$rc"
+fi
+chmod 700 "$PD"
+pass "run --all: an empty store runs CMD; a failed listing stops it (exit 1, a store error), --optional runs it anyway"
 unset TUIDEV_SECRET_BACKEND
 
 # ----------------------------------------------------------------------------
