@@ -206,6 +206,21 @@ check_core() {
     else
         check_required "zsh on PATH" "have_cmd zsh"
     fi
+
+    # API tokens belong in the secret store, not in shell startup files
+    # (docs/secrets.md). `secret scan` prints FILE:LINE: NAME, never a value.
+    check_optional "secret on PATH" "have_cmd secret"
+    if have_cmd secret; then
+        local hits hit
+        hits="$(secret scan 2>/dev/null)" || true
+        if [[ -z "$hits" ]]; then
+            print_success "no token-looking exports in shell startup files"
+        else
+            print_warning "token-looking exports in shell startup files (move them: secret import --dry-run --remove FILE)"
+            while IFS= read -r hit; do print_info "    $hit"; done <<< "$hits"
+            OPT_WARN=$((OPT_WARN + 1))
+        fi
+    fi
 }
 
 # ---------------------------------------------------------------------------
