@@ -150,6 +150,7 @@ agents open workbox /PATH/report.html   # fetch one file and open it here
 agents link                             # the watcher behind Ctrl-click on a remote localhost link
 agents herdr                            # tab names and sidebar roll-ups: each tab's label and whose it is
 agents herdr reset                      # every tab a sync named gets its number back (AGENTS_HERDR_NAMES=0 keeps it so)
+agents herdr reset TAB_ID               # one tab back to auto-naming, one you renamed too (ids: agents herdr)
 ```
 
 Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. Plain `herdr` is the `default` session; keep one per machine and split projects into workspaces. Upgrade with `herdr update --handoff` from outside Herdr: the server keeps its panes. A server a systemd unit runs upgrades with `make update-packages` (the unit's reload hands over), never `--handoff`. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).

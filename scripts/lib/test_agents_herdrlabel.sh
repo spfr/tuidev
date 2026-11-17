@@ -241,6 +241,57 @@ out="$(agents_herdr status)"
 agents_herdr bogus >/dev/null 2>&1 && fail "an unknown subcommand succeeded"
 pass "status: each tab's label and whose it is; each workspace's roll-up"
 
+# --- 10b. One tab handed back: reset TAB_ID... ------------------------------------------------------
+st() { cat "$AGENTS_RUN_DIR/herdr-labels.tsv" 2>/dev/null; }
+fixture; rm -f "$AGENTS_RUN_DIR/herdr-labels.tsv"
+agents_herdr_sync -q
+user_rename w1:t1 "release"; agents_herdr_sync -q
+grep -qx "tab	w1:t1	user		" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "setup: w1:t1 is not yours: $(st)"
+others="$(grep -v "^tab	w1:t1	" "$AGENTS_RUN_DIR/herdr-labels.tsv")"
+snap_others() { jq -c '.result.snapshot | [(.tabs[] | select(.tab_id != "w1:t1")), .workspaces, (.panes | map(.display_agent))]' "$FAKE/snap.json"; }
+before="$(snap_others)"
+# A tab you renamed: named again as a sync would, and ours (its number as ORIG).
+fresh; out="$(agents_herdr_reset w1:t1)"
+[[ "$(label w1:t1)" == "✳ Fleet IA" && "$out" == "tab w1:t1: ✳ Fleet IA" ]] || fail "reset w1:t1: $(label w1:t1), said: $out"
+grep -qx "tab	w1:t1	ours	1	✳ Fleet IA" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "reset w1:t1 state: $(st)"
+[[ "$(writes)" == 1 && "$(snap_others)" == "$before" ]] || fail "reset w1:t1 touched more: $(writes) writes"
+[[ "$(grep -v "^tab	w1:t1	" "$AGENTS_RUN_DIR/herdr-labels.tsv")" == "$others" ]] || fail "reset w1:t1 changed other state lines: $(st)"
+# ... and the next sync keeps it named, as ours.
+title w1:p1 "Ship it"; agents_herdr_sync -q
+[[ "$(label w1:t1)" == "✳ Ship it" ]] || fail "a tab handed back is not named by the next sync: $(label w1:t1)"
+# A tab that is ours already: a fresh name (a sync has not run since its title changed), ORIG kept.
+title w1:p3 "New work"; fresh
+out="$(agents_herdr_reset w1:t3)"
+[[ "$(label w1:t3)" == "✳ New work +1" && "$out" == "tab w1:t3: ✳ New work +1" ]] || fail "reset of an ours tab: $(label w1:t3), said: $out"
+grep -qx "tab	w1:t3	ours	3	✳ New work +1" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "reset of an ours tab, state: $(st)"
+# One that reads its name already: no write, said all the same.
+fresh; out="$(agents_herdr_reset w1:t2)"
+[[ "$(writes)" == 0 && "$out" == "tab w1:t2: ❯ mactui_setup" ]] || fail "reset of a tab that reads its name: $(writes) writes, said: $out"
+grep -qx "tab	w1:t2	ours	2	❯ mactui_setup" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "reset of a tab that reads its name, state: $(st)"
+# A tab a sync has no name for (no agent, no directory): its number, and Herdr's again.
+jq '(.result.snapshot.panes[] | select(.pane_id == "w1:p6") | .cwd) = ""' "$FAKE/snap.json" > "$FAKE/s" && mv "$FAKE/s" "$FAKE/snap.json"
+user_rename w1:t4 "notes"; printf 'tab\tw1:t4\tuser\t\t\n' >> "$AGENTS_RUN_DIR/herdr-labels.tsv"
+fresh; out="$(agents_herdr_reset w1:t4)"
+[[ "$(label w1:t4)" == 4 && "$out" == "tab w1:t4: 4" ]] || fail "reset of a tab with no name to give: $(label w1:t4), said: $out"
+! grep -q "^tab	w1:t4	" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "reset of a tab with no name to give kept its state line: $(st)"
+# Names off: its number, no state line, and it says so.
+fresh; out="$(AGENTS_HERDR_NAMES=0 agents_herdr_reset w1:t1)"
+[[ "$(label w1:t1)" == 1 && "$out" == *"tab w1:t1: 1"*"names are off"* ]] || fail "reset with names off: $(label w1:t1), said: $out"
+! grep -q "^tab	w1:t1	" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "reset with names off kept the state line: $(st)"
+# -n: what it would do, nothing written.
+user_rename w1:t1 "mine"; fresh
+out="$(agents_herdr_reset -n w1:t1)"
+[[ "$(writes)" == 0 && "$(label w1:t1)" == mine && "$out" == "would rename tab w1:t1: ✳ Ship it" ]] || fail "reset -n: $(writes) writes, said: $out"
+# A malformed or unknown id: one line on stderr each, the valid ones done, exit 1.
+fresh; rc=0; out="$(agents_herdr_reset 'w1:t1;rm' w9:t9 w1:t1 2>"$tmp/err")" || rc=$?
+[[ $rc -eq 1 && "$(label w1:t1)" == "✳ Ship it" && "$out" == "tab w1:t1: ✳ Ship it" ]] || fail "bad ids: rc $rc, $(label w1:t1), said: $out"
+{ [[ "$(wc -l < "$tmp/err" | tr -d ' ')" == 2 ]] && grep -q 'not a tab id' "$tmp/err" && grep -q 'no tab w9:t9' "$tmp/err"; } \
+    || fail "bad ids, stderr: $(cat "$tmp/err")"
+rc=0; agents_herdr_reset '-x' >/dev/null 2>&1 || rc=$?; [[ $rc -eq 2 ]] || fail "reset -x: rc $rc"
+fresh; rc=0; agents_herdr_reset 'bad id' >/dev/null 2>&1 || rc=$?
+[[ $rc -eq 1 && "$(calls)" == 0 ]] || fail "only a malformed id: rc $rc, $(calls) herdr calls"
+pass "reset TAB_ID: a tab you renamed is named again and ours; ours gets a fresh name; no name gives its number and no state; names off; -n; bad ids said and skipped; nothing else touched"
+
 # --- 11. The plugin's hooks ------------------------------------------------------------------------
 plugin="$REPO_DIR/configs/herdr/plugins/tuidev-link"
 # The events Herdr 0.9.5 runs plugin hooks for (PLUGIN_HOOK_EVENT_KINDS): an

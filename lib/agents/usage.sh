@@ -139,6 +139,10 @@ HERDR'S LABELS (this machine's Herdr; AGENTS_HERDR_NAMES=0 leaves them alone)
                                agents again and refresh the menu bar first
   agents herdr reset [-n]      put back every tab number a sync replaced and clear
                                what it reported
+  agents herdr reset [-n] TAB_ID...
+                               hand those tabs back to auto-naming, one you renamed
+                               too (agents herdr lists their ids): named now as a
+                               sync would, else their number; nothing else changes
 
 HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
   agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]

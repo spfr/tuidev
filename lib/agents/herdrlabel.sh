@@ -8,8 +8,10 @@
 # One read per sync (`herdr api snapshot`: workspaces, tabs and panes with
 # their labels, tokens and display names), one jq that decides, and a
 # `herdr` write only for what differs. A tab is renamed only while its label
-# is Herdr's own (a number) or the one a sync set; once you rename it, it is
-# yours for good (the run dir's herdr-labels.tsv remembers, keyed by tab id).
+# is Herdr's own (a number) or the one a sync set; once you (or another tool,
+# through Herdr's tab.rename) rename it, it is yours for good (the run dir's
+# herdr-labels.tsv remembers, keyed by tab id), until `agents herdr reset
+# TAB_ID` hands it back.
 # Nothing runs on a timer of its own: the tuidev.link plugin's [[events]]
 # hooks start `agents herdr sync` when a tab, pane or agent comes or goes or
 # an agent changes state, and the menu bar's refresh runs `--throttle` as a
@@ -48,12 +50,17 @@ _agents_hl_ready() {
 }
 _agents_hl_socket() { [[ -S "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}" ]]; }
 
-# The decisions, in jq. Input: `herdr api snapshot`. Arguments: mode (sync or
-# reset), glyphs (_agents_glyph_map, "" when off), state (herdr-labels.tsv).
+# The decisions, in jq. Input: `herdr api snapshot`. Arguments: mode (sync,
+# reset, or tabs: hand the tabs in ids back), glyphs (_agents_glyph_map, ""
+# when off), state (herdr-labels.tsv), ids (tabs: the tab ids, space-separated),
+# names (tabs: AGENTS_HERDR_NAMES).
 # Output, one record a line, fields split by US (\x1f; no value holds a
 # control character):
 #   R TAB LABEL STATE_OK STATE_KEPT   rename TAB; the state line on success,
 #                                      and the one to keep when it fails
+#   K TAB LABEL STATE                 tabs: TAB reads LABEL already; STATE
+#                                      (may be "") is its state line
+#   U TAB                             tabs: no such tab in this Herdr
 #   W WORKSPACE VALUE                  set the $agents token ("" clears it)
 #   D PANE AGENT VALUE STATE_OK STATE_KEPT
 #                                      set (or with "" clear) the display name
@@ -80,6 +87,7 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
 | ($st | map(select(.[0] == "pane") | {key: .[1], value: (.[2] // "")}) | from_entries) as $panes
 | (["claude", "codex", "grok", "agy", "cursor-agent"]) as $order
 | .result.snapshot as $s
+| ($ids | split(" ") | map(select(. != ""))) as $pick
 | ($s.panes // []) as $all
 | ($s.workspaces // [] | map({key: .workspace_id, value: (.label // "" | clean)}) | from_entries) as $wsname
 # What a pane is called: its task title, unless that is only the CLI name, a
@@ -115,9 +123,21 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
   (($s.tabs // [])[] as $t | ($t.tab_id // "" | id) as $id
     | ([$s.tabs[] | select(.workspace_id == $t.workspace_id)] | map(.tab_id // "" | id) | index($id) + 1 | tostring) as $pos
     | ($t.label // "" | clean) as $cur | $tabs[$id] as $old
-    | (if $mode == "reset" then "" else want($id) end) as $w
+    | (if $mode == "sync" then want($id) else "" end) as $w
     | ($wsname[$t.workspace_id] // "") as $wn
-    | if $mode == "reset" then
+    | if $mode == "tabs" then
+        # Handed back: named as a sync would now, and ours (its number kept as
+        # ORIG); with no name to give (or names off), its number, and Herdr
+        # owns it again. Every other tab keeps its state line as it is.
+        (if ($pick | index($id)) then
+           (if $old then "tab\t\($id)\t\($old.mode)\t\($old.orig)\t\($old.set)" else "" end) as $was
+           | (if $names == "0" then "" else want($id) end) as $nw
+           | (if $nw != "" then $nw else $pos end) as $to
+           | (if $nw != "" then "tab\t\($id)\tours\t\(if ($old.orig // "") != "" then $old.orig else $pos end)\t\($nw)" else "" end) as $line
+           | if $to == $cur then ["K", $id, $cur, $line] | us else ["R", $id, $to, $line, $was] | us end
+         elif $old then ["S", "tab\t\($id)\t\($old.mode)\t\($old.orig)\t\($old.set)"] | us
+         else empty end)
+      elif $mode == "reset" then
         (if $old.mode == "ours" and $cur == $old.set and $old.orig != "" then ["R", $id, $old.orig, "", ""] | us else empty end),
         (["I", "tab", $id, $wn, $cur, $old.orig // "", "reset"] | us)
       elif $old.mode == "user" then (["S", "tab\t\($id)\tuser\t\t"] | us), (["I", "tab", $id, $wn, $cur, "", "yours"] | us)
@@ -132,28 +152,35 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
       elif $on and $w != "" and $cur == $w then
         (["S", "tab\t\($id)\tours\t\($pos)\t\($w)"] | us), (["I", "tab", $id, $wn, $cur, $w, "ours"] | us)
       else (["I", "tab", $id, $wn, $cur, "", "yours"] | us) end),
-# Workspaces: the $agents token.
-  (($s.workspaces // [])[] | (.workspace_id // "" | id) as $id | (.tokens[$tok] // "" | clean) as $cur
+# Workspaces: the $agents token (tabs: left alone).
+  (if $mode == "tabs" then empty else
+   ($s.workspaces // [])[] | (.workspace_id // "" | id) as $id | (.tokens[$tok] // "" | clean) as $cur
     | (if $mode == "reset" then "" else rollup($id) end) as $w
     | (if $w != $cur then ["W", $id, $w] | us else empty end),
-      (["I", "ws", $id, (.label // "" | clean), $cur, $w, ""] | us)),
-# Agent panes: the display name, and only ours: one another source set wins.
+      (["I", "ws", $id, (.label // "" | clean), $cur, $w, ""] | us) end),
+# Agent panes: the display name, and only ours: one another source set wins
+# (tabs: left alone, their state lines kept).
   ($all[] | (.pane_id // "" | id) as $id | (.agent // "" | id) as $ag | (.display_agent // "" | clean) as $cur | ($panes[$id] // "") as $old
-    | (if $mode == "reset" or (.agent | not) then "" else (.agent | kind | mark(.)) as $m | if $m != "" then $m + " " + $ag else "" end end) as $w
+    | if $mode == "tabs" then (if $old != "" then ["S", "pane\t\($id)\t\($old)"] | us else empty end) else
+      (if $mode == "reset" or (.agent | not) then "" else (.agent | kind | mark(.)) as $m | if $m != "" then $m + " " + $ag else "" end end) as $w
     | if $w == $cur then (if $w != "" then ["S", "pane\t\($id)\t\($w)"] | us else empty end)
       elif $w == "" then (if $cur != "" and ($cur == $old or ($mode == "reset" and $old != "")) then ["D", $id, $ag, "", "", "pane\t\($id)\t\($old)"] | us else empty end)
       elif $cur == "" or $cur == $old then ["D", $id, $ag, $w, "pane\t\($id)\t\($w)", (if $old != "" then "pane\t\($id)\t\($old)" else "" end)] | us
-      else (if $old != "" then ["S", "pane\t\($id)\t\($old)"] | us else empty end) end)
+      else (if $old != "" then ["S", "pane\t\($id)\t\($old)"] | us else empty end) end end),
+# Tabs asked for that this Herdr does not have.
+  ($pick - [($s.tabs // [])[] | .tab_id // "" | id] | .[] | ["U", .] | us)
 '
 
-# _agents_hl_plan MODE — the records for MODE (sync or reset), from one
-# snapshot; false when Herdr did not answer in 3 s.
+# _agents_hl_plan MODE [IDS] — the records for MODE (sync, reset, or tabs:
+# the tab ids IDS, space-separated), from one snapshot; false when Herdr did
+# not answer in 3 s.
 _agents_hl_plan() {
     local snap state=""
     snap="$(_agents_timeout 3 _agents_hl_herdr api snapshot 2>/dev/null)" || return 1
     [[ -r "$AGENTS_RUN_DIR/herdr-labels.tsv" ]] && state="$(cat "$AGENTS_RUN_DIR/herdr-labels.tsv" 2>/dev/null)"
     printf '%s\n' "$snap" | jq -r --arg mode "$1" --arg glyphs "$(_agents_glyph_map)" --arg state "$state" \
-        --arg home "$HOME" --arg tok "$_AGENTS_HL_TOKEN" "$_AGENTS_HL_JQ" 2>/dev/null
+        --arg home "$HOME" --arg tok "$_AGENTS_HL_TOKEN" --arg ids "${2:-}" --arg names "${AGENTS_HERDR_NAMES:-1}" \
+        "$_AGENTS_HL_JQ" 2>/dev/null
 }
 
 # _agents_hl_text VALUE — is VALUE fit for a label: printable, 1 to 160 bytes,
@@ -161,17 +188,21 @@ _agents_hl_plan() {
 # anything reaches a herdr argument.)
 _agents_hl_text() { [[ -n "$1" && ${#1} -le 160 && "$1" != *[[:cntrl:]]* && "$1" != -* ]]; }
 
-# _agents_hl_apply MODE — run MODE's plan: each write, then the state file.
-# AGENTS_DRY_RUN=true prints the writes instead. Prints what it changed.
+# _agents_hl_apply MODE [IDS] — run MODE's plan: each write, then the state
+# file. AGENTS_DRY_RUN=true prints the writes instead. Prints what it changed;
+# 3 when a tab in IDS is not there (said on stderr), after the others.
 _agents_hl_apply() {
-    local plan line kind a b c d e state="" n=0 ok
-    plan="$(_agents_hl_plan "$1")" || { echo "agents: Herdr did not answer" >&2; return 1; }
+    local plan line kind a b c d e state="" n=0 ok rc=0
+    plan="$(_agents_hl_plan "$1" "${2:-}")" || { echo "agents: Herdr did not answer" >&2; return 1; }
     while IFS= read -r line; do
         [[ -n "$line" ]] || continue
         IFS=$'\x1f' read -r kind a b c d e <<<"$line"
         ok=false
         case "$kind" in
             S) state+="$a"$'\n'; continue ;;
+            K) [[ -z "$c" ]] || state+="$c"$'\n'
+               if [[ "${AGENTS_DRY_RUN:-false}" == true ]]; then echo "would keep tab $a: $b"; else echo "tab $a: $b"; fi ;;
+            U) echo "agents: no tab $a in this Herdr (see: agents herdr status)" >&2; rc=3; continue ;;
             R) { [[ "$a" =~ $_AGENTS_HL_ID_RE ]] && _agents_hl_text "$b"; } || continue
                if [[ "${AGENTS_DRY_RUN:-false}" == true ]]; then echo "would rename tab $a: $b"
                elif _agents_timeout 3 _agents_hl_herdr tab rename "$a" "$b" >/dev/null 2>&1; then ok=true; echo "tab $a: $b"; fi
@@ -199,14 +230,14 @@ _agents_hl_apply() {
         esac
         n=$((n + 1))
     done <<<"$plan"
-    [[ "${AGENTS_DRY_RUN:-false}" != true ]] || return 0
+    [[ "${AGENTS_DRY_RUN:-false}" != true ]] || return "$rc"
     state="${state%$'\n'}"
     if [[ "$1" == reset || -z "$state" ]]; then
         rm -f "$AGENTS_RUN_DIR/herdr-labels.tsv"
     elif [[ "$state" != "$(cat "$AGENTS_RUN_DIR/herdr-labels.tsv" 2>/dev/null)" ]]; then
         _agents_replace "$AGENTS_RUN_DIR/herdr-labels.tsv" "$state" || true
     fi
-    return 0
+    return "$rc"
 }
 
 # agents_herdr_sync [--throttle] [--poke] [-n] [-q] — name the tabs, set the roll-ups and
@@ -266,21 +297,39 @@ agents_herdr_sync() {
     return 0
 }
 
-# agents_herdr_reset [-n] — the way back: every tab a sync named gets its
-# number again (the one it had, where it still shows what a sync set), and
-# the roll-ups and display names a sync reported are cleared. Works with
-# AGENTS_HERDR_NAMES=0 too; with it on, the next sync names them again.
+# agents_herdr_reset [-n] [TAB_ID...] — the way back: every tab a sync named
+# gets its number again (the one it had, where it still shows what a sync
+# set), and the roll-ups and display names a sync reported are cleared. Works
+# with AGENTS_HERDR_NAMES=0 too; with it on, the next sync names them again.
+# With TAB_IDs (`agents herdr status` lists them): those tabs only, handed
+# back to auto-naming, a tab you renamed included: named now as a sync would,
+# or given their number when a sync has no name for them (or names are off).
+# Every other tab, the roll-ups and the display names stay as they are. An
+# unknown or malformed id is said on stderr, and the exit is 1 after the rest.
 agents_herdr_reset() {
-    local a lock="$AGENTS_RUN_DIR/herdr-labels.lock" out
+    local a lock="$AGENTS_RUN_DIR/herdr-labels.lock" out ids="" bad=0 rc=0
     for a in "$@"; do
         case "$a" in
             -n|--dry-run) AGENTS_DRY_RUN=true ;;
-            *) echo "usage: agents herdr reset [-n]" >&2; return 2 ;;
+            -*) echo "usage: agents herdr reset [-n] [TAB_ID...]" >&2; return 2 ;;
+            *) if [[ "$a" =~ $_AGENTS_HL_ID_RE ]]; then [[ " $ids " == *" $a "* ]] || ids+="${ids:+ }$a"
+               else echo "agents: not a tab id: $(printf '%q' "$a") (see: agents herdr status)" >&2; bad=1; fi ;;
         esac
     done
+    [[ -n "$ids" || $bad -eq 0 ]] || return 1
     _agents_hl_ready || { echo "agents: no Herdr to reset here (AGENTS_NO_HERDR, or no herdr, jq or socket)" >&2; return 1; }
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
     _agents_lock "$lock" 30 0.2 || { echo "agents: a sync is running; try again" >&2; return 1; }
+    if [[ -n "$ids" ]]; then
+        out="$(_agents_hl_apply tabs "$ids")" || rc=$?
+        _agents_unlock "$lock"
+        [[ $rc -eq 0 || $rc -eq 3 ]] || return 1
+        [[ -z "$out" ]] || printf '%s\n' "$out"
+        [[ "${AGENTS_HERDR_NAMES:-1}" == 1 ]] \
+            || echo "AGENTS_HERDR_NAMES=0: names are off, so a tab handed back keeps its number."
+        [[ $rc -eq 0 && $bad -eq 0 ]] || return 1
+        return 0
+    fi
     out="$(_agents_hl_apply reset)" || { _agents_unlock "$lock"; return 1; }
     _agents_unlock "$lock"
     if [[ -n "$out" ]]; then printf '%s\n' "$out"; else echo "nothing to reset"; fi
@@ -321,6 +370,6 @@ agents_herdr() {
         status) agents_herdr_status ;;
         sync)   agents_herdr_sync "$@" ;;
         reset)  agents_herdr_reset "$@" ;;
-        *)      echo "usage: agents herdr [status | sync [--throttle] [--poke] [-n] [-q] | reset [-n]]" >&2; return 2 ;;
+        *)      echo "usage: agents herdr [status | sync [--throttle] [--poke] [-n] [-q] | reset [-n] [TAB_ID...]]" >&2; return 2 ;;
     esac
 }
