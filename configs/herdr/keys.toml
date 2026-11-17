@@ -1,0 +1,13 @@
+# tuidev's keys for its Herdr plugin (tuidev.link). Change or remove them
+# outside this block: a binding of your own for the same key wins a reload.
+[[keys.command]]
+key = "prefix+m"
+type = "plugin_action"
+command = "tuidev.link.map"
+description = "map: what runs where, and stop it"
+
+[[keys.command]]
+key = "prefix+shift+o"
+type = "plugin_action"
+command = "tuidev.link.ports"
+description = "ports: what listens where"

@@ -870,6 +870,8 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_LID_MAX` | `8h` | The longest `agents awake lid` may run; longer requests are refused |
 | `AGENTS_LID_MIN_BATTERY` | `20` | Battery % (off AC) below which the lid guard turns lid sleep back on |
 | `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup and its hourly health check |
+| `AGENTS_LINK` | `1` | `0` turns off the link watcher (`agents link watch`), which opens here what you Ctrl-click in a Herdr pane of another machine; `agents link restart` applies a change ([remote.md](remote.md#remote-feels-local-ports-links-and-files)) |
+| `AGENTS_REMOTE_HOSTS` | empty | ssh hosts that count as your machines for `agents ports`, `forward`, `push`, `open` and the watcher, besides the ones saved in Herdr; space-separated |
 | `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
 | `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |
 | `AGENTS_PRICES` | `~/.config/tuidev/agents-prices.tsv` | Your prices for the reports' [API-equivalent cost](#tokens-and-denials), read after the list prices that ship, an absolute or `~/` path; `off` shows no cost at all |

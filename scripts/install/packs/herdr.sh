@@ -42,6 +42,42 @@ _herdr_install_config() {
     install_config "$dest" "$src" --adopt-existing
 }
 
+# tuidev's Herdr plugin (configs/herdr/plugins/tuidev-link): a Ctrl-click on a
+# localhost or file link opens on the machine you sit at, and a Ports popup.
+# Copied to $TUIDEV_LIB_DIR and linked from there, so it runs without the
+# repo; linking again after an update is how Herdr reads a changed manifest.
+_herdr_install_plugin() {
+    local src="$REPO_ROOT/configs/herdr/plugins/tuidev-link" dest="$TUIDEV_LIB_DIR/herdr-plugins/tuidev-link" f
+    [[ -f "$src/herdr-plugin.toml" ]] || return 0
+    print_step "installing the tuidev.link Herdr plugin -> $dest"
+    for f in "$src"/*; do
+        install_config "$dest/${f##*/}" "$f" --overwrite
+    done
+    # The binary this pack just placed: ~/.local/bin may not be on PATH yet.
+    local herdr; herdr="$(herdr_direct_path)"; [[ -x "$herdr" ]] || herdr="herdr"
+    if [[ "$DRY_RUN" == true ]]; then
+        run_cmd "$herdr" plugin link "$dest"
+        return 0
+    fi
+    # Linked again so Herdr reads a changed manifest; a link that was there
+    # and can't be made again is put back as it was (the files are the new
+    # ones either way), and without one the keys are not written.
+    local had=false
+    ! "$herdr" plugin list 2>/dev/null | grep -q 'tuidev\.link' || had=true
+    "$herdr" plugin unlink tuidev.link >/dev/null 2>&1 || true
+    if ! "$herdr" plugin link "$dest" >/dev/null 2>&1; then
+        [[ "$had" == false ]] || "$herdr" plugin link "$dest" >/dev/null 2>&1 || true
+        print_warning "could not link the tuidev.link plugin: herdr plugin link $dest (continuing)"
+        return 0
+    fi
+    # Its keys, as a managed block in your config (the plugin first: a key
+    # for an action Herdr does not know would be an error).
+    install_config "$HOME/.config/herdr/config.toml" "$REPO_ROOT/configs/herdr/keys.toml" --managed-block tuidev-keys
+    "$herdr" server reload-config >/dev/null 2>&1 || true
+    print_info "tuidev.link: prefix+m is the map (what runs where, and stop it); prefix+shift+o the ports."
+    print_info "  Ctrl-click a localhost link in a pane of another machine to open it here (needs --pack monitoring on both; docs/remote.md)."
+}
+
 _herdr_first_run_hints() {
     print_info "Prefix is ctrl+b (tmux is ctrl+a). See docs/agent-workflows.md."
     print_info "Optional: herdr integration install claude (and codex): agent state hooks."
@@ -61,6 +97,7 @@ herdr_install() {
     fi
 
     _herdr_install_config
+    _herdr_install_plugin
     print_info "Run 'herdr' to attach."
     [[ "$HERDR_INSTALLED_NOW" == true ]] && _herdr_first_run_hints
     if [[ -n "$(herdr_systemd_units)" ]]; then

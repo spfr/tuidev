@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.22.0] - 2026-11-17
+
+### Added
+
+- **Remote feels local: a click on another machine's `localhost` opens here.** Ctrl-click `http://localhost:5173` in a Herdr pane of another machine and it opens in the browser of the machine you sit at, through an ssh tunnel made on the spot; Ctrl-click a file link (Markdown, HTML, an image, a PDF) and the file is fetched and opened here. A Herdr plugin (`tuidev.link`, linked by `--pack herdr`) hands the click to `agents link click` on the machine that owns the pane; a watcher on your machine (`agents link watch`, a LaunchAgent on macOS) keeps one ssh to each saved machine and reads requests from it. Nothing listens anywhere, and the watcher decides what a request may do: only loopback `http(s)` URLs, on a local port of its own choosing (47000 up, eight a machine), only files a viewer shows (up to 50 MB, capped on your machine), five a machine in ten seconds. `AGENTS_LINK=0` turns it off. [Remote and mobile](docs/remote.md#remote-feels-local-ports-links-and-files)
+- **`agents map`: what runs where, and one key to stop it.** One list for this machine and your others, grouped by what you would do: previews and dev servers first (port, command, project, whether a session still owns it, where it opens), the files sessions just wrote (a report or a page an agent on another machine produced opens here with enter, fetched for you), then what was left behind, the sessions (one line each, `ctrl-e` for what they run) and the machines with their CPU and memory. Enter opens a server in your browser (forwarding it first when it is remote) or goes to a session, ctrl-k stops what is under the cursor on the machine that runs it (`agents kill`, asked first), ctrl-s sweeps a machine (`agents reap`). In Herdr it is a popup on prefix+m, bound by `--pack herdr` with prefix+shift+o for the ports. No `pkill`, and no remembering where a dev server was started.
+- **`agents ports`: what listens where.** Every TCP port of yours on this machine and on your others (Herdr's saved machines, plus `AGENTS_REMOTE_HOSTS`), with its command, working directory and where it opens. `--pick` is the same in fzf, and the plugin's Ports popup inside Herdr: enter opens the port in your browser, forwarding it first when it is remote.
+- **`agents forward open MACHINE PORT|URL`**, with `ls` and `close`. One `ssh -N -L` per forward, loopback to loopback, on the same port number when it is free here, so the URL a program printed works as it stands. A forward is tracked by its ssh control socket, not a pid, so `agents forward` always says whether it still answers. ssh never prompts (a machine that needs a password is reported) and never forwards your ssh agent.
+- **Drop a file onto a session on another machine.** Drag a file from Finder onto a pane where Claude Code runs elsewhere: the terminal pastes a path that exists only on your Mac, the session's prompt hook asks your machine for it, and your Mac asks you once, naming the machine and the file. On Send it is copied into that machine's drop folder and the session is told where to read it. Nothing is sent without that click; files with a hidden folder or a `Library` on their path, behind symlinks, outside your home, the temp folders and mounted volumes, or over 50 MB are never offered; and a machine you did not answer with Send is not asked about again for five minutes. The hook is a second `UserPromptSubmit` entry in the shipped Claude Code settings; it starts `agents` only while a watcher is attached.
+- **`agents push` and `agents open`.** `push` copies files into a machine's `~/.cache/tuidev/drop` and prints the remote paths (on macOS it also copies them), to paste into a pane there; `open` fetches one file and opens it here.
+
+### Changed
+
+- **`uninstall.sh`** closes the forwards, removes the watcher's LaunchAgent and unlinks the plugin.
+
+### Fixed
+
+- **`docs/remote.md` named a `tunnel` function that never shipped.** It points at `agents forward` now.
+- **The Herdr GIF showed the home directory of the machine that rendered it.** For its first second, before Herdr starts, the prompt printed that path. The tape's prompt has no path now, and the GIF is rendered again.
+- **`make screenshots TAPES=herdr` could not start its fleet.** It looked for `herdr` only where Homebrew puts it, and its "server is up" check failed whatever the server said (`grep -q` ending the pipe under `pipefail`).
+- **A lock whose holder was killed while taking it stayed held for ever.** The half-written holder file kept the lock directory from being removed; it is cleared with a takeover now (`agents`' own locks, every command that uses one).
+
 ## [3.21.4] - 2026-11-13
 
 ### Fixed

@@ -28,7 +28,7 @@ ssh devbox && t myproject
 
 Detach with `Ctrl+a d`. `tls` lists sessions on the box. tmux-continuum saves every 15 minutes and tmux-resurrect restores sessions when tmux starts, so sessions survive a reboot too. There's no prebuilt layout anymore — `t myproject` gives you a plain session, and you run your editor of choice (`nvim`, or split a second SSH session for it) inside it.
 
-**Why Tailscale SSH:** ACLs live in the tailnet rather than in `authorized_keys` files on every host, check mode can force re-authentication, access follows your identity provider, and a revoked device loses access immediately. Plain SSH still works as a fallback. Cloudflare and ngrok tunnels (the `tunnel` function) are a last resort, not the architecture.
+**Why Tailscale SSH:** ACLs live in the tailnet rather than in `authorized_keys` files on every host, check mode can force re-authentication, access follows your identity provider, and a revoked device loses access immediately. Plain SSH still works as a fallback. Cloudflare and ngrok tunnels are a last resort, not the architecture; to reach a dev server on another machine, use [`agents forward`](#remote-feels-local-ports-links-and-files).
 
 ## mosh for flaky networks
 
@@ -51,6 +51,81 @@ herdr --remote workbox                      # one-off thin client
 ```
 
 On a node, `~/.local/bin` must be on `PATH` for *non-interactive* SSH too, which means adding it to `~/.profile`, not only `.zshrc`. Fleet practices are in [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
+
+## Remote feels local: ports, links and files
+
+A dev server on another machine prints `http://localhost:5173`, and that is the other machine's localhost. With `--pack monitoring` on both machines and `--pack herdr` on the one that runs the panes, you don't have to think about it:
+
+```bash
+agents map                         # what runs where, on every machine; in Herdr: prefix+m
+agents ports                       # what listens where: this machine and your others
+agents ports --pick                # the same in fzf; enter opens the port in your browser
+agents forward open workbox 5173   # bring that port here and open it
+agents forward                     # the forwards, and whether each still answers
+agents forward close --all
+agents push -m workbox shot.png    # into workbox's ~/.cache/tuidev/drop; prints (and copies) the path
+agents open workbox /srv/app/report.html   # fetch one file and open it here
+```
+
+Your machines are the ones saved in Herdr (`herdr machine list`) plus any ssh hosts in `AGENTS_REMOTE_HOSTS` (`~/.config/agents.conf`); any ssh host works by name too.
+
+**The map: what runs where, and one key to stop it.** `agents map` (prefix+m in Herdr, a popup over whatever you are doing) is one list for this machine and your others, grouped by what you would do with a thing rather than by where it is:
+
+- **Previews and dev servers** come first: every port something was started to be looked at on, with its machine, command, project, CPU, memory and age, whether a session still owns it or it was left behind, and where it opens. A remote one that is already forwarded shows its local URL.
+- **Files sessions just wrote**: the reports, pages and images an agent session wrote in the last day (from its Write and Edit calls), on any machine. Enter opens one on the machine you sit at, fetched first when it lives elsewhere, so reading what a remote agent produced takes no copying and no path typing.
+- **Left behind**: stale processes and hogs nobody is using.
+- **Sessions**: one line per agent session, with its status and a count of what it runs (`ctrl-e` lists those).
+- **Machines**: each machine's CPU, free memory and counts.
+
+The other machines answer over one shared ssh connection each, so the list comes up in a second or two.
+
+| Key | On a preview or dev server | On something left behind | On a session | On a machine |
+|---|---|---|---|---|
+| `enter` | open it in your browser, forwarding first when it is remote | | go to its pane (here) or peek at it (elsewhere) | |
+| `ctrl-k` | stop the process that holds it | stop its tree | stop its tree | |
+| `ctrl-s` | sweep its machine | sweep its machine | | sweep it: `agents reap` stops what sessions left behind, asked first |
+| `ctrl-p` | | | peek at its pane | |
+
+A stop is `agents kill` on the machine that runs the thing, with its refusals and its y/N question. A dev server here is a listener started in a project directory: not an agent's own port, not an app or system service, not a daemon in your home directory (`agents ports` lists every listener).
+
+So nothing needs `pkill`, and nothing needs you to remember which machine a dev server was started on. `agents map workbox` or `agents map local` narrows it to one machine; piped, it prints the list.
+
+**A click just works.** Ctrl-click a `localhost` URL in a Herdr pane of another machine and it opens in the browser of the machine you sit at, through a tunnel made on the spot. Ctrl-click a file link an agent printed (a `.md`, `.html`, image or PDF) and the file is fetched and opened here. Pieces:
+
+- **The plugin** (`tuidev.link`, linked by `--pack herdr`). Herdr runs a plugin on the machine that owns the pane, so the click is handled over there, where there is no browser. The plugin hands it to `agents link click`.
+- **The watcher** (`agents link watch`; a LaunchAgent on macOS, a tmux pane or systemd user service on Linux). The machine you sit at keeps one ssh to each of your machines and reads requests from it. Nothing listens anywhere, and the other machine never connects to yours.
+- With no watcher connected, a click opens on the machine itself: a `localhost` URL in its browser, a file link when it is a format a viewer shows. "Connected" is the watcher, not you: sitting at a Mac that another of your Macs follows, a click there goes to the other one. Turn the watcher off on a machine you don't work from (`AGENTS_LINK=0`).
+
+**Drop a file onto a session on another machine.** Drag a screenshot or a document from Finder onto a pane where Claude Code runs on another machine, and send your prompt as usual. The terminal only pastes the file's path, which exists on your Mac alone; the session's prompt hook notices a path that is not there and asks your machine for it. Your Mac shows one dialog (which machine, which file, from which folder, how big), and on **Send** copies the file into that machine's `~/.cache/tuidev/drop` and tells the session where to read it. Cancel, or no answer in 30 seconds, sends nothing, and the session is told you did not send it. A path your Mac has no file for (one the prompt only mentions, such as where to write a report) is not a dropped file: nobody is asked and the session hears nothing.
+
+- A request is another machine asking for one of your files, so nothing is ever sent without that click, and some files are never even offered: anything with a hidden folder (`~/.ssh`, `~/.aws`, `~/.config`…) or a `Library` folder on its path, however either is spelled; anything reached through a symlink; anything outside your own home directory, the temp folders and mounted volumes; and anything over 50 MB. What is sent is the file the dialog showed, by its real path, and only if it is still that file when you click.
+- A machine can't wear you down: after a request you did not approve, it is not asked about again for five minutes, and it gets three dialogs in five minutes at most.
+- The prompt hook waits 50 seconds in all, so with several dropped files in one prompt, answer quickly or drop them one prompt at a time; a file approved after the hook gave up is still copied, and the session is not told.
+- macOS may ask once to let the watcher read `Desktop`, `Documents` or `Downloads`; until you allow it, a file there is reported as unreadable in `~/Library/Logs/tuidev-link.log`.
+- The dialog needs the Mac you sit at; from a Linux desktop use `agents push FILE`, which does the same copy by hand.
+- The hook ships in Claude Code's settings (`UserPromptSubmit`) and starts `agents` only while a watcher is attached. Codex has no prompt hook to carry it: there, `agents push`.
+
+`agents link` shows the watcher and each machine it follows. `--pack herdr` binds two keys for the plugin, as a managed block in `~/.config/herdr/config.toml`: prefix+m for the map and prefix+shift+o for the ports popup (`agents ports --pick`). A binding of your own outside the block is yours to keep.
+
+**What a forward is.** One `ssh -N -L` of its own, from this machine's `127.0.0.1` to the other machine's `localhost`: nothing is bound to a public address at either end. One you open yourself takes the same port number when that is free here, so the URL a program printed works as it stands; otherwise the next free one. ssh runs with `BatchMode`, so a machine that needs a password is reported, never prompted for: load the key (`ssh-add`) or reconnect it (`herdr machine reconnect workbox`) first. These connections carry nothing your ssh config would add for the host: no agent or X11 forwarding, and none of its `LocalForward` lines.
+
+**What another machine may ask for.** The watcher treats each line as a request and decides itself:
+
+- a URL must be `http(s)` on `localhost`, `127.0.0.1`, `0.0.0.0` or `[::1]`; it becomes a tunnel to that machine's `localhost` and a tab on your `127.0.0.1`. Nothing else is opened;
+- the local port is the watcher's choice, from 47000 up, never the port asked for: no request can put another machine behind a port your own tools use (`localhost:5432` while your database is down). At most eight forwards a machine;
+- a file must be an absolute path with a viewer's extension (Markdown, text, JSON, CSV, HTML, PDF, images), at most 50 MB, a cap applied on your machine; it lands in `~/.local/state/tuidev/agents/remote/MACHINE/`, where a requested file is kept a day and the folder at most 500 MB. Scripts and apps are never opened;
+- at most five requests a machine in ten seconds.
+
+Any process on the other machine can send a request, not only your click, so treat the watcher as "that machine may open a tab or a document here". The page it opens is that machine's content in your browser: the tab is on `127.0.0.1` so it shares no cookies with what you run on `localhost`, but like any forwarded dev server it can make requests to other loopback ports. Don't follow a machine you would not open a dev server from (`AGENTS_LINK=0`, or disable it in Herdr).
+
+Limits worth knowing:
+
+- The click needs Herdr's mouse capture on (`ui.mouse_capture`, the default) and is Ctrl-click on every platform. In saved-machine panes Herdr does not open OSC 8 links yet ([herdr#4447](https://github.com/herdrdev/herdr/issues/4447)), so there a link has to be on screen as its URL; `agents ports --pick` and `agents forward open` need no click.
+- A forwarded server sees `Host: localhost:PORT`. One that checks the host name, or serves TLS for the machine's own name, may refuse.
+- Herdr itself already bridges a pasted clipboard image; a dropped file is the section above.
+- After your laptop sleeps, the other machine can take a while to notice the watcher is gone; a click in that window is lost. The watcher reconnects on its own.
+- The LaunchAgent uses the ssh agent macOS gives every login session. A key that only an agent named in your shell's rc files holds (`SSH_AUTH_SOCK` set there) is not available to it: `agents link` then shows the machine as unreachable.
+- `AGENTS_LINK=0` turns the watcher off; `agents link restart` applies a changed setting.
 
 ## Personal hosts stay local
 

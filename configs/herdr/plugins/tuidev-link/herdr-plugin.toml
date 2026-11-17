@@ -1,0 +1,56 @@
+# tuidev's Herdr plugin, linked by ./install.sh --pack herdr.
+#
+# A plugin runs on the machine that owns the pane. On a machine you are
+# attached to from another one, a Ctrl-click on a localhost URL (or on a file
+# link an agent printed) is passed to that other machine, which opens it: the
+# URL through an ssh tunnel, the file fetched (`agents link`, docs/remote.md).
+# With nobody attached, the click opens here, as it would without the plugin.
+id = "tuidev.link"
+name = "tuidev link"
+version = "0.2.0"
+min_herdr_version = "0.9.0"
+description = "What runs where and one key to stop it; open localhost and file links from another machine's panes on the machine you sit at."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "open"
+title = "Open link on my machine"
+command = ["sh", "run.sh", "click"]
+
+[[actions]]
+id = "map"
+title = "Map: what runs where, and stop it"
+command = ["sh", "run.sh", "map"]
+
+[[actions]]
+id = "ports"
+title = "Ports: what listens where"
+command = ["sh", "run.sh", "ports"]
+
+[[panes]]
+id = "map"
+title = "Map"
+placement = "popup"
+width = "92%"
+height = "90%"
+command = ["sh", "run.sh", "map-pane"]
+
+[[panes]]
+id = "ports"
+title = "Ports"
+placement = "popup"
+width = "80%"
+height = "70%"
+command = ["sh", "run.sh", "ports-pane"]
+
+[[link_handlers]]
+id = "localhost"
+title = "Open on my machine"
+pattern = "^https?://(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::1\\])(:[0-9]+)?(/.*)?$"
+action = "open"
+
+[[link_handlers]]
+id = "file"
+title = "Open file on my machine"
+pattern = "^file://"
+action = "open"

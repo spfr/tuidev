@@ -173,15 +173,22 @@ MANAGED_BLOCKS=(
     "$HOME/.zshrc|$REPO_DIR/configs/zsh/.zshrc|tuidev-zshrc"
     "$HOME/.config/starship.toml|$REPO_DIR/configs/starship/starship.toml|tuidev-starship"
     "$HOME/.config/tmux/tmux.conf|$REPO_DIR/configs/tmux/tmux.conf|tuidev-tmux"
+    "$HOME/.config/herdr/config.toml|$REPO_DIR/configs/herdr/keys.toml|tuidev-keys"
 )
 
 # tmux.conf belongs to --pack tmux: check (and re-apply) its block only where
 # that pack is active or the block is already in the file, so an update never
 # creates a tmux.conf on a machine without the pack.
+# The Herdr keys block names the tuidev.link plugin's actions, so only
+# --pack herdr, which links that plugin first, ever creates it: an update
+# refreshes it where it already is.
 managed_block_applies() {
     local dest="$1" id="$2"
-    [[ "$id" == tuidev-tmux ]] || return 0
-    tuidev_active_packs | grep -qx tmux && return 0
+    case "$id" in
+        tuidev-tmux) tuidev_active_packs | grep -qx tmux && return 0 ;;
+        tuidev-keys) ;;
+        *)           return 0 ;;
+    esac
     [[ -f "$dest" ]] && grep -qxF "$(tuidev_block_begin "$id")" "$dest" 2>/dev/null
 }
 

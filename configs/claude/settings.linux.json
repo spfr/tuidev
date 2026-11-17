@@ -188,6 +188,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}/link\"; for f in \"$d\"/l.*; do [ -p \"$f\" ] || exit 0; [ -x \"$HOME/.local/bin/agents\" ] && exec \"$HOME/.local/bin/agents\" link drop; exit 0; done; exit 0",
+            "timeout": 60
+          }
+        ]
       }
     ],
     "PostToolUse": [

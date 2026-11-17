@@ -203,6 +203,10 @@ _agents_lock_takeover() {
         esac
     else
         [[ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || return 1
+        # A run killed between writing its holder file and renaming it left
+        # only the half-written one: without this the lock could never be
+        # removed, and never taken again.
+        rm -f "$lock"/holder.* 2>/dev/null
     fi
     if [[ -n "$h" ]]; then
         moved="$lock/holder.$$.$RANDOM"

@@ -10,7 +10,9 @@
 # On macOS it adds SwiftBar and a menu-bar plugin built on `agents`, and
 # terminal-notifier, so a click on an agent's notification jumps to its session,
 # and a LaunchAgent that runs the memory guard (`agents mem guard`), which
-# stops a runaway process in an agent tree before macOS runs out of memory.
+# stops a runaway process in an agent tree before macOS runs out of memory,
+# and one that runs the link watcher (`agents link watch`), which opens here
+# what you click in a Herdr pane of another machine.
 #
 # Entrypoint: monitoring_install
 # Invoked via: ./install.sh --pack monitoring
@@ -122,22 +124,22 @@ _monitoring_swiftbar() {
     print_info "The first click asks to let terminal-notifier control your terminal app: allow it, so a click lands on the session's tab (declined, it only brings the app forward)."
 }
 
-# The memory guard's LaunchAgent: the plist (configs/agents) with this
-# install's paths filled in, then (re)loaded so a new agents takes over.
-MONITORING_MEMGUARD_LABEL="dev.tuidev.memguard"
-_monitoring_memguard() {
-    local plist="$HOME/Library/LaunchAgents/$MONITORING_MEMGUARD_LABEL.plist" tmp
-    local log="$HOME/Library/Logs/tuidev-memguard.log"
+# _monitoring_launchagent LABEL LOGNAME WHAT RESTART — one of agents' own
+# LaunchAgents: the plist (configs/agents/LABEL.plist) with this install's
+# paths filled in, then (re)loaded so a new agents takes over.
+_monitoring_launchagent() {
+    local label="$1" plist="$HOME/Library/LaunchAgents/$1.plist" tmp
+    local log="$HOME/Library/Logs/$2.log"
     local path="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    print_step "installing the memory guard (LaunchAgent) -> $plist"
-    tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-memguard.XXXXXX")"
+    print_step "installing $3 (LaunchAgent) -> $plist"
+    tmp="$(mktemp "${TMPDIR:-/tmp}/tuidev-launchagent.XXXXXX")"
     sed -e "s|@AGENTS@|$HOME/.local/bin/agents|" -e "s|@PATH@|$path|" -e "s|@LOG@|$log|" \
-        "$MONITORING_REPO/configs/agents/$MONITORING_MEMGUARD_LABEL.plist" > "$tmp"
+        "$MONITORING_REPO/configs/agents/$label.plist" > "$tmp"
     install_config "$plist" "$tmp" --overwrite
     rm -f "$tmp"
     [[ "$DRY_RUN" == true ]] && return 0
     local job
-    job="gui/$(id -u)/$MONITORING_MEMGUARD_LABEL"
+    job="gui/$(id -u)/$label"
     if launchctl print "$job" >/dev/null 2>&1; then
         launchctl bootout "$job" 2>/dev/null || true
         # bootout returns before the job is gone, and bootstrap fails (5:
@@ -148,8 +150,21 @@ _monitoring_memguard() {
         done
     fi
     run_cmd launchctl bootstrap "gui/$(id -u)" "$plist" \
-        || print_warning "the memory guard did not start: agents mem restart (continuing)"
+        || print_warning "$3 did not start: $4 (continuing)"
+}
+
+MONITORING_MEMGUARD_LABEL="dev.tuidev.memguard"
+_monitoring_memguard() {
+    _monitoring_launchagent "$MONITORING_MEMGUARD_LABEL" tuidev-memguard "the memory guard" "agents mem restart"
     print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM; 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
+}
+
+# The link watcher: one ssh to each of your other machines, so a click in one
+# of their Herdr panes opens here (lib/agents/link.sh).
+MONITORING_LINK_LABEL="dev.tuidev.link"
+_monitoring_link() {
+    _monitoring_launchagent "$MONITORING_LINK_LABEL" tuidev-link "the link watcher" "agents link restart"
+    print_info "link watcher: a Ctrl-click on a localhost link in a Herdr pane of another machine opens here ('agents link' shows it; AGENTS_LINK=0 in $MONITORING_CONF turns it off)."
 }
 
 monitoring_install() {
@@ -160,12 +175,15 @@ monitoring_install() {
     if is_macos; then
         _monitoring_swiftbar
         _monitoring_memguard
+        _monitoring_link
     else
         print_info "memory guard: run 'agents mem guard' in a tmux pane (or a systemd user service) to stop runaway agent processes."
+        print_info "link watcher: on the machine you sit at, run 'agents link watch' in a tmux pane (or a systemd user service)."
     fi
 
     print_info "bottom installs as 'btm' on your PATH."
     print_info "agents: run 'agents' (or 'agents watch'); 'agents --help' lists kill, reap and awake."
+    print_info "agents ports lists what listens here and on your other machines; 'agents forward open MACHINE PORT' brings one here."
     print_info "agents mcp lists your MCP servers; 'agents mcp lazy NAME' starts one on its first tool call instead of with every session."
 
     print_success "monitoring pack complete"

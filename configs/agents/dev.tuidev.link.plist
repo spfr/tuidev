@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The link watcher (`agents link watch`), installed by ./install.sh --pack
+  monitoring into ~/Library/LaunchAgents: one ssh to each of your machines
+  (Herdr's saved machines, AGENTS_REMOTE_HOSTS), so a click on a localhost or
+  file link in one of their Herdr panes opens on this Mac. Settings:
+  AGENTS_LINK and AGENTS_REMOTE_HOSTS in ~/.config/agents.conf, then
+  `agents link restart`. The pack fills in the @...@ values.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.tuidev.link</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@AGENTS@</string>
+        <string>link</string>
+        <string>watch</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>@PATH@</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <!-- Restarted when it fails; AGENTS_LINK=0 exits 0 and stays down. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>@LOG@</string>
+</dict>
+</plist>

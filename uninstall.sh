@@ -149,6 +149,7 @@ _remove_block "$HOME/.config/tmux/theme.conf" tuidev-theme
 _remove_block "$HOME/.config/ghostty/config" tuidev-theme
 _remove_block "$HOME/.config/starship.toml"  tuidev-theme
 _remove_block "$HOME/.config/herdr/config.toml" tuidev-theme
+_remove_block "$HOME/.config/herdr/config.toml" tuidev-keys
 
 # Records are `<key> <value>`. A key the user has since changed is theirs now.
 # Install checked with --includes (is the key set anywhere the user's global
@@ -170,11 +171,17 @@ each_line "$M_GIT" _unset_git_record
 
 print_header "removing tuidev helpers"
 
-# Release a keep-awake hold `agents` started before the helper goes away, and
-# put the MCP servers it made lazy back in front: their configs name
-# mcp-lazy, which goes too.
+# Release a keep-awake hold `agents` started before the helper goes away,
+# stop the link watcher and then close the tunnels (each is an ssh of its own
+# that would stay; the watcher first, or it could open one more), and put the
+# MCP servers it made lazy back in front: their configs name mcp-lazy, which
+# goes too.
 if [[ -x "$HOME/.local/bin/agents" ]]; then
     run_cmd "$HOME/.local/bin/agents" awake off || true
+    if [[ -f "$HOME/Library/LaunchAgents/dev.tuidev.link.plist" ]]; then
+        run_cmd launchctl bootout "gui/$(id -u)/dev.tuidev.link" 2>/dev/null || true
+    fi
+    run_cmd "$HOME/.local/bin/agents" forward close --all || true
     if [[ -x "$HOME/.local/bin/mcp-lazy" ]]; then
         run_cmd "$HOME/.local/bin/agents" mcp eager --all \
             || print_warning "some MCP servers still name $HOME/.local/bin/mcp-lazy: agents mcp eager NAME, or edit their configs"
@@ -192,6 +199,14 @@ if [[ -f /Library/LaunchDaemons/dev.tuidev.fan.plist && -x /Library/PrivilegedHe
     fi
 fi
 
+# Herdr keeps a linked plugin by its path: unlinked before its files go.
+if [[ -d "$TUIDEV_LIB_DIR/herdr-plugins/tuidev-link" ]]; then
+    herdr_bin="$(herdr_direct_path)"; [[ -x "$herdr_bin" ]] || herdr_bin="herdr"
+    if command_exists "$herdr_bin"; then
+        run_cmd "$herdr_bin" plugin unlink tuidev.link || true
+    fi
+fi
+
 _remove_helper() {
     case "$1" in "$HOME/.local/bin/"*|"$TUIDEV_LIB_DIR/"*) ;; *) return 0 ;; esac
     [[ -e "$1" || -L "$1" ]] || return 0
@@ -204,7 +219,8 @@ _remove_lib_dirs() {
     local d
     [[ "$DRY_RUN" != true ]] || return 0
     for d in "$TUIDEV_LIB_DIR/agents/awk" "$TUIDEV_LIB_DIR"/agents/themes/* "$TUIDEV_LIB_DIR/agents/themes" \
-             "$TUIDEV_LIB_DIR/agents" "$TUIDEV_LIB_DIR/fan" "$TUIDEV_LIB_DIR"; do
+             "$TUIDEV_LIB_DIR/agents" "$TUIDEV_LIB_DIR/fan" "$TUIDEV_LIB_DIR/herdr-plugins/tuidev-link" \
+             "$TUIDEV_LIB_DIR/herdr-plugins" "$TUIDEV_LIB_DIR"; do
         [[ -d "$d" ]] && rmdir "$d" 2>/dev/null && done_msg "removed $d"
     done
     return 0
@@ -233,6 +249,9 @@ else
     for src in "$SCRIPT_DIR"/configs/themes/*/palette.toml; do
         _remove_if_ours "$TUIDEV_LIB_DIR/agents/themes/${src#"$SCRIPT_DIR/configs/themes/"}" "$src"
     done
+    for src in "$SCRIPT_DIR"/configs/herdr/plugins/tuidev-link/*; do
+        _remove_if_ours "$TUIDEV_LIB_DIR/herdr-plugins/tuidev-link/${src##*/}" "$src"
+    done
 fi
 _remove_lib_dirs
 
@@ -252,14 +271,16 @@ else
         [[ -f "$f" ]] && cmp -s "$f" "$SCRIPT_DIR/configs/swiftbar/agents.10s.sh" && _remove_swiftbar_plugin "$f"
     done
 fi
-# The memory guard's LaunchAgent only runs `agents` too: unloaded and removed
-# with it, or launchd would retry a missing command at every login.
-memguard_plist="$HOME/Library/LaunchAgents/dev.tuidev.memguard.plist"
-if [[ -f "$memguard_plist" ]] && grep -q 'agents' "$memguard_plist" 2>/dev/null; then
-    run_cmd launchctl bootout "gui/$(id -u)/dev.tuidev.memguard" 2>/dev/null || true
-    run_cmd rm -f "$memguard_plist"
-    done_msg "removed $memguard_plist"
-fi
+# The memory guard's and the link watcher's LaunchAgents only run `agents`
+# too: unloaded and removed with it, or launchd would retry a missing command
+# at every login.
+for agent_label in dev.tuidev.memguard dev.tuidev.link; do
+    agent_plist="$HOME/Library/LaunchAgents/$agent_label.plist"
+    if [[ ! -f "$agent_plist" ]] || ! grep -q 'agents' "$agent_plist" 2>/dev/null; then continue; fi
+    run_cmd launchctl bootout "gui/$(id -u)/$agent_label" 2>/dev/null || true
+    run_cmd rm -f "$agent_plist"
+    done_msg "removed $agent_plist"
+done
 # Unset SwiftBar's plugin folder only if it is still ours and now empty.
 if is_macos && [[ "$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null)" == "$swiftbar_dir" ]] \
    && [[ -z "$(ls -A "$swiftbar_dir" 2>/dev/null)" ]]; then

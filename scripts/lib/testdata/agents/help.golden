@@ -71,6 +71,42 @@ LOOK
                                and a verdict: safe to stop, check first, leave
                                it, informational; --copy puts it on the clipboard
 
+OTHER MACHINES (over ssh: Herdr's saved machines, and AGENTS_REMOTE_HOSTS)
+  agents map [MACHINE|local]   what runs where, in fzf, on every machine: previews
+                               and dev servers first (port, project, where each
+                               opens), then what was left behind, the sessions (one
+                               line each; ctrl-e lists what they run) and the
+                               machines. enter opens or goes there, ctrl-k stops
+                               what is under the cursor (asked first, on its
+                               machine), ctrl-s sweeps a machine (agents reap). In
+                               Herdr: prefix+m
+  agents ports [--pick] [MACHINE|local]
+                               what listens where: each TCP port of yours here and
+                               on your machines, its command, cwd and where it opens;
+                               --pick: in fzf, enter opens it in your browser
+  agents forward open [--no-open] MACHINE PORT|URL
+                               bring a port of MACHINE here (loopback to loopback,
+                               one ssh -L) and open it in your browser: the same
+                               port number when it is free here
+  agents forward [ls]          the forwards and whether each still answers
+  agents forward close --all | --dead | LOCALPORT | MACHINE PORT
+  agents push [-m MACHINE] FILE...
+                               copy files into MACHINE's ~/.cache/tuidev/drop and
+                               print the paths (macOS: copied too), to paste there
+  agents open [--no-open] MACHINE /PATH
+                               fetch one file (up to 50 MB) and open it here
+  agents link [status]         the watcher: with it, a Ctrl-click on a localhost
+                               link or a file link in a Herdr pane of another machine
+                               opens here (a tunnel on a port from 47000, then your
+                               browser; the file, fetched). The monitoring pack runs it as a LaunchAgent
+                               (macOS); elsewhere run 'agents link watch'.
+                               AGENTS_LINK=0 turns it off
+                               The other way: a file dropped onto a Claude Code
+                               session elsewhere pastes a path that is only here;
+                               its prompt hook asks for it, and you are asked, in a
+                               dialog, before anything is sent
+  agents link restart          restart the LaunchAgent (after editing the settings)
+
 HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
   agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]
                                where the CPU went: CPU-hours by job (test, build,

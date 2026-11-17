@@ -85,6 +85,12 @@ agents_main() {
                   agents_awake ${aw[@]+"${aw[@]}"} ;;
         cool)     agents_cool "$@" ;;
         mem)      agents_mem "$@" ;;
+        map)      agents_map "$@" ;;
+        ports)    agents_ports "$@" ;;
+        forward)  agents_forward "$@" ;;
+        link)     agents_link "$@" ;;
+        push)     agents_push "$@" ;;
+        open)     agents_remote_open "$@" ;;
         thermal)  local lvl; lvl="$(agents_thermal_level)"
                   echo "thermal pressure: $(agents_thermal_name "${lvl:--}")${lvl:+ ($lvl)}"
                   echo "energy mode: $(agents_powermode)" ;;

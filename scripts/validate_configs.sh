@@ -139,6 +139,8 @@ toml_files=(
     "$REPO_DIR/configs/codex/config.toml"
     "$REPO_DIR"/configs/orchestration/codex/agents/*.toml
     "$REPO_DIR/configs/herdr/config.toml"
+    "$REPO_DIR/configs/herdr/keys.toml"
+    "$REPO_DIR"/configs/herdr/plugins/*/herdr-plugin.toml
     "$REPO_DIR"/configs/themes/*/palette.toml
 )
 if command_exists python3 && python3 -c 'import tomllib' 2>/dev/null; then

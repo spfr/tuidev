@@ -70,6 +70,10 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `awake.sh` | the keep-awake holder and `agents awake` |
 | `lid.sh` | `awake lid`: the root guard, the admin dialog, the lid state |
 | `cool.sh` | `agents cool`: the fan daemon's status file and mode file (`--pack cooling`), the tsv's cool row |
+| `remote.sh` | your other machines: the machine list (Herdr's saved machines, `AGENTS_REMOTE_HOSTS`), the one ssh command line (`BatchMode`, never a prompt), `agents ports`, `agents push`, `agents open` |
+| `forward.sh` | `agents forward`: one `ssh -N -L` per forward, loopback to loopback, with a control socket and a record per local port (`run/forward/f.PORT`), so no pid is stored |
+| `map.sh` | `agents map`: every machine's sessions, leftovers and dev servers in one fzf list (`--rows` is what a machine answers over ssh), with go, stop, sweep and peek on the row's own machine |
+| `link.sh` | `agents link`: the fifo a watcher's ssh reads on the far machine (`serve`), what the Herdr plugin runs for a click (`click`), and the watcher that validates and acts on each request (`watch`) |
 | `memory.sh` | `agents mem`: each process's footprint (`footprint` for the few candidates, `top` only for other users' processes), the machine's memory and swap, the memory guard's look (`agents_mem_tick`), its loop and state (`memguard.state`, `memguard.lock`), `memory.tsv`, the tsv's memg and swap rows |
 | `kill.sh` | refusals, PID@START plans, SIGTERM then SIGKILL (`kill`, `term`, and every other stop) |
 | `reap.sh` | what `agents reap` stops, by hand or with `--auto` |

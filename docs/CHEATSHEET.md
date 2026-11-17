@@ -122,6 +122,18 @@ herdr status                            # versions; server_binary_stale: the new
 herdr integration status                # after every upgrade: reinstall anything outdated
 ```
 
+Other machines, over ssh (`--pack monitoring`; [remote.md](remote.md#remote-feels-local-ports-links-and-files)):
+
+```bash
+agents map                              # what runs where on every machine; enter go, ctrl-k stop, ctrl-s sweep (Herdr: prefix+m)
+agents ports [--pick]                   # what listens where, here and on your machines (Herdr: prefix+shift+o)
+agents forward open workbox 5173        # that port, here, in your browser
+agents forward                          # the forwards; close --all | --dead | PORT
+agents push -m workbox FILE             # into its drop folder; the path is copied
+agents open workbox /PATH/report.html   # fetch one file and open it here
+agents link                             # the watcher behind Ctrl-click on a remote localhost link
+```
+
 Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. Plain `herdr` is the `default` session; keep one per machine and split projects into workspaces. Upgrade with `herdr update --handoff` from outside Herdr: the server keeps its panes. A server a systemd unit runs upgrades with `make update-packages` (the unit's reload hands over), never `--handoff`. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
 
 ## macOS hotkeys (desktop profile)
