@@ -264,7 +264,8 @@ AGENTS_UID=501 AGENTS_SELF=9999
     agents_sample || fail "agents sample failed"
     [[ -s "$tmp/sample/tokens.tsv" && -f "$tmp/sample/runs.state" && -f "$tmp/sample/tokens.today" ]] || fail "agents sample did not scan: $(ls "$tmp/sample")"
     _agents_tokens_scan() { exit 7; }
-    rm -f "$tmp/sample/prune.stamp"
+    # No sample.state: a first sample is never the quiet kind, which skips the scan.
+    rm -f "$tmp/sample/prune.stamp" "$tmp/sample/sample.state"
     err="$(agents_sample 2>&1)" || fail "a failing scan failed the sample: $err"
     [[ "$err" == *"token scan failed"* ]] || fail "a failing scan was silent: $err"
     [[ -f "$tmp/sample/prune.stamp" ]] || fail "the sample stopped at the failing scan"

@@ -362,6 +362,8 @@ pass "sample: one at a time (lock dir)"
     [[ "$(wc -l < "$AGENTS_DATA_DIR/history.tsv")" == "$rows" ]] || fail "a quiet sample appended rows"
     _agents_sample_due $((FAKE_NOW + 30)) && fail "a quiet sample must count as a sample (not due again)"
     # A transcript changed since the last scan: in full.
+    # The stamp a minute back: BusyBox find compares -newer in whole seconds.
+    touch -t "$(date -r $(($(date +%s) - 60)) +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$(($(date +%s) - 60))" +%Y%m%d%H%M.%S)" "$AGENTS_DATA_DIR/tokens.stamp"
     mkdir -p "$HOME/.claude/projects/p/x"; echo '{}' > "$HOME/.claude/projects/p/x.jsonl"
     FAKE_NOW=$((FAKE_NOW + 60)); agents_sample || fail "quiet: a changed transcript"
     [[ "$(scans)" == $((sc + 1)) ]] || fail "a changed transcript did not run the scan"

@@ -1422,7 +1422,7 @@ menu="$(plugin "$(st_row 900 /work/agentic-vms "/var/folders/vr/x1/T/go-build315
 [[ "$menu" == *$'\n--web.test -test.count=1 · agentic-vms · '* ]] || fail "stale label: base name and project: $menu"
 [[ "$menu" == *$'\n--api.test · '* && "$menu" != *"api.test · go-build9"* ]] || fail "stale label: a temp cwd is no project: $menu"
 [[ "$menu" == *$'\n--node example-agent-mcp.cjs · '* ]] || fail "stale label: a home path cut to its base name: $menu"
-[[ "$(printf '%s\n' "$menu" | grep -cE '^(--)?[^-].*/var/folders')" == 0 ]] || fail "a temp path on a stale row: $menu"
+[[ "$(printf '%s\n' "$menu" | sed 's/ | .*//' | grep -cE '^(--)?[^-].*/var/folders')" == 0 ]] || fail "a temp path on a stale row: $menu"
 # The Stale row says what they are, in a word each.
 [[ "$menu" == *$'\n'"Stale (3) · web.test, api.test, example-agent-mcp | sfimage=xmark.bin refresh=true symbolize=false"$'\n'* ]] \
     || fail "the Stale row's names: $(printf '%s\n' "$menu" | grep '^Stale')"

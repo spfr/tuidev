@@ -149,7 +149,8 @@ case "$sub" in
     rm) rm -f "$f" ;;
 esac
 EOF
-chmod +x "$tmp/sys"/* "$tmp/plat"/* "$tmp/fakes"/*
+# Not the bash symlink: on Linux chmod follows it to the system's bash.
+for f in "$tmp/sys"/* "$tmp/plat"/* "$tmp/fakes"/*; do [[ -L "$f" ]] || chmod +x "$f"; done
 
 FAKES_PATH="$tmp/fakes:$tmp/plat:$tmp/sys"
 run_secret() { PATH="${SPATH:-$FAKES_PATH}" "$SH" "$SECRET" "$@"; }
