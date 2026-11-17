@@ -1,14 +1,16 @@
 # tuidev's sidebar rows for Herdr, laid out for a 26-column sidebar: Herdr
 # shortens every token on a line that runs over, so each line keeps to what
 # fits. A workspace row: its name, then in red how many agents there are
-# blocked on you ($need); below, the branch and what runs there ($agents:
-# "✳2 ❯1", two Claude Code sessions and a shell). An agent row, like a mail
-# list: the tab's name (what the session is doing), the session's own task
-# title when the tab's name does not say it ($session), the agent only when
-# no mark names it already, the machine unless it is Local, and when its
-# state began ($since); below, the state in words (blocked in red, done in
-# blue, the rest dim) and the workspace. The $ tokens come from `agents herdr
-# sync` (--pack monitoring); without it they are not shown.
+# blocked on you ($tuidev_need); below, the branch and what runs there
+# ($tuidev_agents: "✳2 ❯1", two Claude Code sessions and a shell). An agent
+# row, like a mail list: the tab's name (what the session is doing), the
+# session's own task title when the tab's name does not say it
+# ($tuidev_session), the agent only when no mark names it already, the machine
+# unless it is Local, and when its state began ($tuidev_since); below, the
+# state in words (blocked in red, done in blue, the rest dim) and the
+# workspace. The $tuidev_ tokens come from `agents herdr sync` (--pack
+# monitoring); without it they are not shown. In rows of your own, write them
+# as "$tuidev_agents" (3.22.0 called it "$agents").
 # For rows of your own, delete this whole block, markers too, and write yours:
 # a second [ui.sidebar.spaces] or [ui.sidebar.agents] table would be a TOML
 # error, so the installer skips this block while your config has either. Keep
@@ -16,8 +18,8 @@
 # whatever follows lands in the last one.
 [ui.sidebar.spaces]
 rows = [
-  ["state_icon", "workspace", { token = "$need", fg = "#e5484d", bold = true }],
-  ["branch", "git_status", "$agents"],
+  ["state_icon", "workspace", { token = "$tuidev_need", fg = "#e5484d", bold = true }],
+  ["branch", "git_status", "$tuidev_agents"],
 ]
 
 [ui.sidebar.agents]
@@ -25,10 +27,10 @@ rows = [
   [
     "state_icon",
     { token = "tab", bold = true, dim = false },
-    "$session",
+    "$tuidev_session",
     { token = "agent", rules = [{ contains = " ", hide = true }] },
     { token = "machine", rules = [{ equals = "Local", hide = true }] },
-    { token = "$since", dim = true },
+    { token = "$tuidev_since", dim = true },
   ],
   [
     { token = "state_text", dim = true, rules = [

@@ -250,7 +250,7 @@ AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs review running parked limits to
 # has the defaults): KIND=GLYPH words replace single ones, "off" shows none.
 AGENTS_GLYPHS="${AGENTS_GLYPHS:-}"
 # Herdr's labels (herdrlabel.sh): 1 (the default) names each tab after what
-# runs in it, rolls up each workspace's sessions in the sidebar ($agents) and
+# runs in it, rolls up each workspace's sessions in the sidebar ($tuidev_agents) and
 # marks agent rows; 0 leaves Herdr's labels alone (`agents herdr reset` puts
 # back what it set).
 AGENTS_HERDR_NAMES="${AGENTS_HERDR_NAMES:-1}"

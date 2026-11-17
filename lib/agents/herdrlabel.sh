@@ -2,10 +2,10 @@
 # lib/agents/herdrlabel.sh — Herdr's labels say what runs where: a tab is
 # named after what runs in it (`✳ Fleet IA`, `❯ mactui_setup`) instead of
 # "1 2 3", a workspace row in the sidebar carries a roll-up of its sessions
-# by kind (`✳2 ❯1`, the `$agents` token) and how many are blocked on you
-# (`2 blocked`, `$need`), an agent row says since when a state that waits on
-# you began (`16:32`, `$since`) and the session's own task title when its
-# tab's name does not (`$session`), and an agent row and pane border show the
+# by kind (`✳2 ❯1`, the `$tuidev_agents` token) and how many are blocked on you
+# (`2 blocked`, `$tuidev_need`), an agent row says since when a state that waits on
+# you began (`16:32`, `$tuidev_since`) and the session's own task title when its
+# tab's name does not (`$tuidev_session`), and an agent row and pane border show the
 # kind's mark (`✳ claude`, Herdr's display_agent). Every value changes only
 # when what it says changes, so a sync with nothing new writes nothing.
 #
@@ -30,10 +30,16 @@
 # Public: agents_herdr, agents_herdr_sync, agents_herdr_reset.
 
 _AGENTS_HL_SOURCE="tuidev"   # our metadata's source: what a reset clears
-_AGENTS_HL_TOKEN="agents"    # the workspace token: "$agents" in [ui.sidebar.spaces] rows
+_AGENTS_HL_TOKEN="tuidev_agents"    # the workspace token: "$tuidev_agents" in [ui.sidebar.spaces] rows
 # Every token a sync reports, and only these: what a reset clears. Workspace:
-# $agents, $need; agent pane: $since, $session.
-_AGENTS_HL_TOKENS="agents need since session"
+# $tuidev_agents, $tuidev_need; agent pane: $tuidev_since, $tuidev_session.
+# The prefix keeps another tool's tokens out of our way: Herdr does not say
+# which source set a token.
+_AGENTS_HL_TOKENS="tuidev_agents tuidev_need tuidev_since tuidev_session"
+# The names 3.22.0 and its successors used before the prefix; a sync clears
+# them once where it finds them (a name another tool set is cleared too, once
+# per appearance: the collision the prefix ends).
+_AGENTS_HL_LEGACY="agents need since session"
 _AGENTS_HL_THROTTLE=30       # --throttle: seconds between syncs
 _AGENTS_HL_PAUSE=1           # seconds a sync waits before going again for events that came in
 _AGENTS_HL_ID_RE='^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$'
@@ -68,9 +74,9 @@ _agents_hl_socket() { [[ -S "${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock
 #   K TAB LABEL STATE                 tabs: TAB reads LABEL already; STATE
 #                                      (may be "") is its state line
 #   U TAB                             tabs: no such tab in this Herdr
-#   W WORKSPACE NAME=VALUE...          set the workspace's tokens ($agents,
-#                                      $need; "NAME=" clears one)
-#   P PANE NAME=VALUE...               set the pane's tokens ($since, $session)
+#   W WORKSPACE NAME=VALUE...          set the workspace's tokens ($tuidev_agents,
+#                                      $tuidev_need; "NAME=" clears one)
+#   P PANE NAME=VALUE...               set the pane's tokens ($tuidev_since, $tuidev_session)
 #   D PANE AGENT VALUE STATE_OK STATE_KEPT
 #                                      set (or with "" clear) the display name
 #   S STATE                            a state line to keep as it is
@@ -132,7 +138,7 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
     | [$seq[] | . as $k | {t: tag($k), n: ($ks | map(select(. == $k)) | length)}]
     | reduce .[] as $e ([]; if (map(.t) | index($e.t)) then map(if .t == $e.t then .n += $e.n else . end) else . + [$e] end)
     | map(.t + (.n | tostring)) | join(" ");
-# $need: how many agents in a workspace wait for you (blocked); "" for none.
+# $tuidev_need: how many agents in a workspace wait for you (blocked); "" for none.
   def need($wid): ($all | map(select((.workspace_id // "" | id) == $wid and .agent and .agent_status == "blocked")) | length)
     | if . == 0 then "" elif . == 1 then "blocked" else "\(.) blocked" end;
 # What a tab will read after this sync: the same rules as the tabs below.
@@ -141,7 +147,7 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
       elif $old.mode == "ours" then (if $cur == $old.set and $w != "" then $w else $cur end)
       elif ($cur | test("^[0-9]{1,4}$")) and $w != "" then $w
       else $cur end;
-# $since: when a state that waits on you began (blocked, done, idle; not
+# $tuidev_since: when a state that waits on you began (blocked, done, idle; not
 # working), as a clock time today (16:32), the weekday this week (Mon), the
 # date before that (Nov 3). It changes only with the state, or once when the
 # day turns.
@@ -150,8 +156,10 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
       elif ($now | tonumber) - $e < 518400 then $e | strflocaltime("%a")
       else $e | strflocaltime("%b %e") | gsub(" +"; " ") end;
 # The token patches for one pane or workspace: "NAME=VALUE" ("NAME=" clears)
-# for each of ours whose value differs from what Herdr holds.
-  def patch($tk): map(select(.[1] != ($tk[.[0]] // "" | clean)) | .[0] + "=" + .[1]);
+# for each of ours whose value differs from what Herdr holds, and a clear for
+# each legacy name in $old that Herdr still holds (once: then it is gone).
+  def patch($tk; $old): map(select(.[1] != ($tk[.[0]] // "" | clean)) | .[0] + "=" + .[1])
+    + ($old | map(select($tk[.] != null) | . + "="));
 # Tabs.
   (($s.tabs // [])[] as $t | ($t.tab_id // "" | id) as $id
     | ([$s.tabs[] | select(.workspace_id == $t.workspace_id)] | map(.tab_id // "" | id) | index($id) + 1 | tostring) as $pos
@@ -185,17 +193,17 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
       elif $on and $w != "" and $cur == $w then
         (["S", "tab\t\($id)\tours\t\($pos)\t\($w)"] | us), (["I", "tab", $id, $wn, $cur, $w, "ours"] | us)
       else (["I", "tab", $id, $wn, $cur, "", "yours"] | us) end),
-# Workspaces: the $agents and $need tokens (tabs: left alone).
+# Workspaces: the $tuidev_agents and $tuidev_need tokens (tabs: left alone).
   (if $mode == "tabs" then empty else
    ($s.workspaces // [])[] | (.workspace_id // "" | id) as $id | (.tokens // {}) as $tk | ($tk[$tok] // "" | clean) as $cur
     | (if $mode == "reset" then "" else rollup($id) end) as $w
-    | ([[$tok, $w], ["need", (if $mode == "reset" then "" else need($id) end)]] | patch($tk)) as $ops
+    | ([[$tok, $w], ["tuidev_need", (if $mode == "reset" then "" else need($id) end)]] | patch($tk; ["agents", "need"])) as $ops
     | (if ($ops | length) > 0 then ["W", $id] + $ops | us else empty end),
       (["I", "ws", $id, (.label // "" | clean), $cur, $w, ""] | us) end),
-# Agent panes: the $since and $session tokens, and a "seen" state line for
+# Agent panes: the $tuidev_since and $tuidev_session tokens, and a "seen" state line for
 # each (tabs: the lines kept as they are). When a state began is known only
 # when a sync saw it change (the kind, the state or Herdr state_change_seq):
-# "-" until then, and no $since. $session is the task title of the pane itself
+# "-" until then, and no $tuidev_since. $tuidev_session is the task title of the pane itself
 # (a directory says nothing the row does not), only when the name of its tab
 # does not say it: a tab you named, or one another session leads.
   (if $mode == "tabs" then ($all[] | (.pane_id // "" | id) as $id | $seen[$id] // empty
@@ -211,8 +219,8 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
        | ($after[.tab_id // "" | id] // "") as $lab
        | (if $own == "" or $lab == $own or ($lab | startswith($own + " +")) then "" else $own end) as $sess
        | (["S", "seen\t\($id)\t\($ag)\t\($stt)\t\($sq)\t\($at)"] | us),
-         ([["since", $since], ["session", $sess]] | patch($tk) | if length > 0 then ["P", $id] + . | us else empty end)
-     else [["since", ""], ["session", ""]] | patch($tk) | if length > 0 then ["P", $id] + . | us else empty end end
+         ([["tuidev_since", $since], ["tuidev_session", $sess]] | patch($tk; ["since", "session"]) | if length > 0 then ["P", $id] + . | us else empty end)
+     else [["tuidev_since", ""], ["tuidev_session", ""]] | patch($tk; ["since", "session"]) | if length > 0 then ["P", $id] + . | us else empty end end
    end),
 # Agent panes: the display name, and only ours: one another source set wins
 # (tabs: left alone, their state lines kept).
@@ -250,7 +258,9 @@ _agents_hl_tokens() {
     shift 2
     for f in "$@"; do
         n="${f%%=*}" v="${f#*=}"
-        [[ "$f" == *=* && " $_AGENTS_HL_TOKENS " == *" $n "* ]] || continue
+        [[ "$f" == *=* ]] || continue
+        # Ours; or a legacy name, only to clear it.
+        [[ " $_AGENTS_HL_TOKENS " == *" $n "* || ( -z "${f#*=}" && " $_AGENTS_HL_LEGACY " == *" $n "* ) ]] || continue
         if [[ -n "$v" ]]; then _agents_hl_text "$v" || continue; args+=(--token "$n=$v")
         else args+=(--clear-token "$n"); fi
         msg+="${msg:+, }\$$n ${v:-(cleared)}"

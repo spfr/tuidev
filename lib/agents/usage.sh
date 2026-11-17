@@ -131,10 +131,11 @@ HERDR'S LABELS (this machine's Herdr; AGENTS_HERDR_NAMES=0 leaves them alone)
                                then the session's task title or the pane's
                                directory, "+N" for more agents), roll up each
                                workspace's sessions and how many are blocked for
-                               the sidebar (\$agents, \$need), give agent rows the
-                               time a waiting state began (\$since) and their own
-                               task title where the tab's name does not say it
-                               (\$session), and mark them. Only a tab still
+                               the sidebar (\$tuidev_agents, \$tuidev_need), give
+                               agent rows the time a waiting state began
+                               (\$tuidev_since) and their own task title where
+                               the tab's name does not say it (\$tuidev_session),
+                               and mark them. Only a tab still
                                showing Herdr's number, or the name a sync gave it:
                                one you renamed stays yours. Herdr's events run it
                                (the tuidev.link plugin); --throttle: not within 30s

@@ -7,7 +7,7 @@
 # With nobody attached, the click opens here, as it would without the plugin.
 #
 # Its event hooks keep Herdr's labels saying what runs where (`agents herdr
-# sync`: tab names, the sidebar's $agents roll-up, agent rows' marks). Herdr
+# sync`: tab names, the sidebar's $tuidev_agents roll-up, agent rows' marks). Herdr
 # runs each hook on its own server, so every machine names its own tabs.
 id = "tuidev.link"
 name = "tuidev link"

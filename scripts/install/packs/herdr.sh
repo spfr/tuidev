@@ -53,7 +53,7 @@ _herdr_install_sidebar() {
     [[ -f "$src" ]] || return 0
     if herdr_has_own_sidebar "$dest"; then
         print_info "herdr: your config sets [ui.sidebar.spaces] or [ui.sidebar.agents] itself, so tuidev's rows were not added;"
-        print_info "  add \"\$agents\" to your spaces rows for each workspace's sessions (agents herdr sync)."
+        print_info "  add \"\$tuidev_agents\" to your spaces rows for each workspace's sessions (agents herdr sync)."
         return 0
     fi
     install_config "$dest" "$src" --managed-block tuidev-sidebar || true

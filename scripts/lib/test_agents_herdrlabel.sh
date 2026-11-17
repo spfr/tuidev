@@ -102,7 +102,7 @@ fixture() {
         panes: .}}}' > "$FAKE/snap.json"
 }
 label() { jq -r --arg id "$1" '.result.snapshot.tabs[] | select(.tab_id == $id) | .label' "$FAKE/snap.json"; }
-token() { jq -r --arg id "$1" '.result.snapshot.workspaces[] | select(.workspace_id == $id) | .tokens.agents // ""' "$FAKE/snap.json"; }
+token() { jq -r --arg id "$1" '.result.snapshot.workspaces[] | select(.workspace_id == $id) | .tokens.tuidev_agents // ""' "$FAKE/snap.json"; }
 shown() { jq -r --arg id "$1" '.result.snapshot.panes[] | select(.pane_id == $id) | .display_agent // ""' "$FAKE/snap.json"; }
 wtok() { jq -r --arg id "$1" --arg k "$2" '.result.snapshot.workspaces[] | select(.workspace_id == $id) | .tokens[$k] // ""' "$FAKE/snap.json"; }
 ptok() { jq -r --arg id "$1" --arg k "$2" '.result.snapshot.panes[] | select(.pane_id == $id) | .tokens[$k] // ""' "$FAKE/snap.json"; }
@@ -154,7 +154,7 @@ user_rename w1:t1 "release"; fresh
 agents_herdr_sync >/dev/null
 [[ "$(label w1:t1)" == "release" ]] || fail "your rename was undone: $(label w1:t1)"
 # The one write: the session's own name, which your tab's name no longer says.
-[[ "$(writes)" == 1 && "$(ptok w1:p1 session)" == "✳ Ship the release" ]] || fail "your rename: $(writes) writes, \$session $(ptok w1:p1 session)"
+[[ "$(writes)" == 1 && "$(ptok w1:p1 tuidev_session)" == "✳ Ship the release" ]] || fail "your rename: $(writes) writes, \$session $(ptok w1:p1 tuidev_session)"
 ! grep -qx rename "$FAKE/calls" || fail "a tab rename after your rename"
 grep -qx "tab	w1:t1	user		" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "your rename was not remembered: $(cat "$AGENTS_RUN_DIR/herdr-labels.tsv")"
 user_rename w1:t1 "5"; title w1:p1 "Another task"
@@ -307,77 +307,77 @@ fresh; rc=0; agents_herdr_reset 'bad id' >/dev/null 2>&1 || rc=$?
 [[ $rc -eq 1 && "$(calls)" == 0 ]] || fail "only a malformed id: rc $rc, $(calls) herdr calls"
 pass "reset TAB_ID: a tab you renamed is named again and ours; ours gets a fresh name; no name gives its number and no state; names off; -n; bad ids said and skipped; nothing else touched"
 
-# --- 10c. The sidebar's tokens: $need, $since, $session ----------------------------------------------
+# --- 10c. The sidebar's tokens: $tuidev_need, $tuidev_since, $tuidev_session ----------------------------------------------
 fixture; rm -f "$AGENTS_RUN_DIR/herdr-labels.tsv"
 status w1:p1 working 1; status w1:p3 idle 1; status w1:p5 idle 1; status w2:p1 working 1
 fresh; agents_herdr_sync -q
-# First sight: when a state began is not known, so no $since; nobody is blocked.
-[[ -z "$(ptok w1:p1 since)" && -z "$(ptok w1:p3 since)" && -z "$(wtok w1 need)" ]] || fail "first sight: since $(ptok w1:p1 since), need $(wtok w1 need)"
+# First sight: when a state began is not known, so no $tuidev_since; nobody is blocked.
+[[ -z "$(ptok w1:p1 tuidev_since)" && -z "$(ptok w1:p3 tuidev_since)" && -z "$(wtok w1 tuidev_need)" ]] || fail "first sight: since $(ptok w1:p1 tuidev_since), need $(wtok w1 tuidev_need)"
 grep -qx "seen	w1:p1	claude	working	1	-" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "no seen line: $(st)"
-# A tab named after its own session needs no $session; a title that is only the CLI's name gives none.
-[[ -z "$(ptok w1:p1 session)" && -z "$(ptok w1:p3 session)" && -z "$(ptok w1:p5 session)" ]] || fail "session on first sight: $(ptok w1:p5 session)"
+# A tab named after its own session needs no $tuidev_session; a title that is only the CLI's name gives none.
+[[ -z "$(ptok w1:p1 tuidev_session)" && -z "$(ptok w1:p3 tuidev_session)" && -z "$(ptok w1:p5 tuidev_session)" ]] || fail "session on first sight: $(ptok w1:p5 tuidev_session)"
 # Blocked: the workspace says so, the pane says since when.
 status w1:p1 blocked 2; fresh; agents_herdr_sync -q
-[[ "$(wtok w1 need)" == blocked && "$(ptok w1:p1 since)" == "17:00" ]] || fail "blocked: need $(wtok w1 need), since $(ptok w1:p1 since)"
-[[ -z "$(wtok w2 need)" && "$(writes)" == 2 ]] || fail "blocked: need on w2 $(wtok w2 need), $(writes) writes"
+[[ "$(wtok w1 tuidev_need)" == blocked && "$(ptok w1:p1 tuidev_since)" == "17:00" ]] || fail "blocked: need $(wtok w1 tuidev_need), since $(ptok w1:p1 tuidev_since)"
+[[ -z "$(wtok w2 tuidev_need)" && "$(writes)" == 2 ]] || fail "blocked: need on w2 $(wtok w2 tuidev_need), $(writes) writes"
 # Nothing changed, the clock moved on: no write, and the state file stays.
 before="$(st)"; fresh
 AGENTS_NOW=$((AGENTS_NOW + 120)) agents_herdr_sync -q
 [[ "$(writes)" == 0 && "$(calls)" == 1 && "$(st)" == "$before" ]] || fail "an unchanged sync two minutes on wrote: $(writes)"
-# Two blocked; then working again: $since cleared (working waits on nobody), $need down to one.
+# Two blocked; then working again: $tuidev_since cleared (working waits on nobody), $tuidev_need down to one.
 status w1:p3 blocked 2; AGENTS_NOW=$((AGENTS_NOW + 120)) agents_herdr_sync -q
-[[ "$(wtok w1 need)" == "2 blocked" && "$(ptok w1:p3 since)" == "17:02" ]] || fail "two blocked: $(wtok w1 need), $(ptok w1:p3 since)"
+[[ "$(wtok w1 tuidev_need)" == "2 blocked" && "$(ptok w1:p3 tuidev_since)" == "17:02" ]] || fail "two blocked: $(wtok w1 tuidev_need), $(ptok w1:p3 tuidev_since)"
 status w1:p1 working 3; fresh; AGENTS_NOW=$((AGENTS_NOW + 180)) agents_herdr_sync -q
-[[ "$(wtok w1 need)" == blocked && -z "$(ptok w1:p1 since)" && "$(writes)" == 2 ]] || fail "working again: $(wtok w1 need), since $(ptok w1:p1 since), $(writes) writes"
+[[ "$(wtok w1 tuidev_need)" == blocked && -z "$(ptok w1:p1 tuidev_since)" && "$(writes)" == 2 ]] || fail "working again: $(wtok w1 tuidev_need), since $(ptok w1:p1 tuidev_since), $(writes) writes"
 # Idle at a new time; the same state with a new state_change_seq began again.
 status w1:p1 idle 4; AGENTS_NOW=$((AGENTS_NOW + 240)) agents_herdr_sync -q
-[[ "$(ptok w1:p1 since)" == "17:04" ]] || fail "idle: $(ptok w1:p1 since)"
+[[ "$(ptok w1:p1 tuidev_since)" == "17:04" ]] || fail "idle: $(ptok w1:p1 tuidev_since)"
 status w1:p1 idle 6; AGENTS_NOW=$((AGENTS_NOW + 300)) agents_herdr_sync -q
-[[ "$(ptok w1:p1 since)" == "17:05" ]] || fail "a new seq: $(ptok w1:p1 since)"
+[[ "$(ptok w1:p1 tuidev_since)" == "17:05" ]] || fail "a new seq: $(ptok w1:p1 tuidev_since)"
 # The day turns: the weekday, once; a week on: the date.
 fresh; AGENTS_NOW=$((AGENTS_NOW + 86400)) agents_herdr_sync -q
-[[ "$(ptok w1:p1 since)" == Fri && "$(ptok w1:p3 since)" == Fri ]] || fail "the next day: $(ptok w1:p1 since)"
+[[ "$(ptok w1:p1 tuidev_since)" == Fri && "$(ptok w1:p3 tuidev_since)" == Fri ]] || fail "the next day: $(ptok w1:p1 tuidev_since)"
 fresh; AGENTS_NOW=$((AGENTS_NOW + 86400 + 60)) agents_herdr_sync -q
 [[ "$(writes)" == 0 ]] || fail "the next day, again: $(writes) writes"
 AGENTS_NOW=$((AGENTS_NOW + 8 * 86400)) agents_herdr_sync -q
-[[ "$(ptok w1:p1 since)" == "Oct 16" ]] || fail "a week on: $(ptok w1:p1 since)"
-# Nobody blocked: $need cleared, not left at zero.
+[[ "$(ptok w1:p1 tuidev_since)" == "Oct 16" ]] || fail "a week on: $(ptok w1:p1 tuidev_since)"
+# Nobody blocked: $tuidev_need cleared, not left at zero.
 status w1:p3 working 3; agents_herdr_sync -q
-[[ -z "$(wtok w1 need)" && -z "$(ptok w1:p3 since)" ]] || fail "nobody blocked: need $(wtok w1 need)"
-# Another session in a tab with a task title of its own: $session, with its mark; gone with the title.
+[[ -z "$(wtok w1 tuidev_need)" && -z "$(ptok w1:p3 tuidev_since)" ]] || fail "nobody blocked: need $(wtok w1 tuidev_need)"
+# Another session in a tab with a task title of its own: $tuidev_session, with its mark; gone with the title.
 title w1:p5 "Port proxying"; agents_herdr_sync -q
-[[ "$(ptok w1:p5 session)" == "✳ Port proxying" && "$(label w1:t3)" == "✳ Remote runners and … +1" ]] || fail "a second session: $(ptok w1:p5 session)"
+[[ "$(ptok w1:p5 tuidev_session)" == "✳ Port proxying" && "$(label w1:t3)" == "✳ Remote runners and … +1" ]] || fail "a second session: $(ptok w1:p5 tuidev_session)"
 title w1:p5 "✳ Claude Code"; agents_herdr_sync -q
-[[ -z "$(ptok w1:p5 session)" ]] || fail "\$session kept without a title: $(ptok w1:p5 session)"
+[[ -z "$(ptok w1:p5 tuidev_session)" ]] || fail "\$session kept without a title: $(ptok w1:p5 tuidev_session)"
 # An agent that exits: its tokens go with it.
 title w1:p5 "Port proxying"; agents_herdr_sync -q
 jq '(.result.snapshot.panes[] | select(.pane_id == "w1:p5")) |= del(.agent, .agent_status)' "$FAKE/snap.json" > "$FAKE/s" && mv "$FAKE/s" "$FAKE/snap.json"
 fresh; agents_herdr_sync -q
-[[ -z "$(ptok w1:p5 session)" && -z "$(ptok w1:p5 since)" ]] || fail "an exited agent kept its tokens"
+[[ -z "$(ptok w1:p5 tuidev_session)" && -z "$(ptok w1:p5 tuidev_since)" ]] || fail "an exited agent kept its tokens"
 ! grep -q "^seen	w1:p5	" "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "an exited agent kept its seen line"
-pass "tokens: \$need counts the blocked; \$since when a waiting state began (not while working), stable across syncs, by day and date later; \$session only for a task title the tab does not show"
+pass "tokens: \$tuidev_need counts the blocked; \$tuidev_since when a waiting state began (not while working), stable across syncs, by day and date later; \$tuidev_session only for a task title the tab does not show"
 
-# Glyphs off: $session without a mark. Dry run: said, not written.
+# Glyphs off: $tuidev_session without a mark. Dry run: said, not written.
 title w1:p5 "Port proxying"
 jq '(.result.snapshot.panes[] | select(.pane_id == "w1:p5")) |= (.agent = "claude" | .agent_status = "idle")' "$FAKE/snap.json" > "$FAKE/s" && mv "$FAKE/s" "$FAKE/snap.json"
 fresh; out="$(agents_herdr sync -n)"
-[[ "$(writes)" == 0 && "$out" == *'would set pane w1:p5: $session ✳ Port proxying'* ]] || fail "dry run: $out"
+[[ "$(writes)" == 0 && "$out" == *'would set pane w1:p5: $tuidev_session ✳ Port proxying'* ]] || fail "dry run: $out"
 AGENTS_GLYPHS=off agents_herdr_sync -q
-[[ "$(ptok w1:p5 session)" == "Port proxying" ]] || fail "glyphs off: $(ptok w1:p5 session)"
+[[ "$(ptok w1:p5 tuidev_session)" == "Port proxying" ]] || fail "glyphs off: $(ptok w1:p5 tuidev_session)"
 agents_herdr_sync -q
 # Hostile: a forged seen line, a hostile title, names and values the shell refuses.
 printf 'seen\tw1:p2\tclaude\tblocked\t9\t$(touch %s/pwned)\nseen\tw9:p9;rm\tx\ty\tz\t1\n' "$tmp" >> "$AGENTS_RUN_DIR/herdr-labels.tsv"
 title w1:p5 $'\e]0;x\a-rf \xe2\x80\xae`id`\x1fP\x1fw1:p1\x1fsince=pwned'
 fresh; agents_herdr_sync -q
 [[ ! -e "$tmp/pwned" ]] || fail "a seen line ran a command"
-s="$(ptok w1:p5 session)"
-[[ "$s" != *[[:cntrl:]]* && "$s" != *$'\xe2\x80\xae'* && "$s" == "✳ "[[:alnum:]]* && ${#s} -le 26 ]] || fail "a hostile title's \$session: $(printf '%q' "$s")"
-[[ "$(ptok w1:p1 since)" != pwned ]] || fail "a title forged a token"
+s="$(ptok w1:p5 tuidev_session)"
+[[ "$s" != *[[:cntrl:]]* && "$s" != *$'\xe2\x80\xae'* && "$s" == "✳ "[[:alnum:]]* && ${#s} -le 26 ]] || fail "a hostile title's \$tuidev_session: $(printf '%q' "$s")"
+[[ "$(ptok w1:p1 tuidev_since)" != pwned ]] || fail "a title forged a token"
 ! grep -q 'w9:p9' "$AGENTS_RUN_DIR/herdr-labels.tsv" || fail "a forged seen line was kept"
 fresh
-_agents_hl_tokens pane w1:p1 "evil=1" "since=-x" "need" >/dev/null && fail "unknown names and unfit values were sent"
+_agents_hl_tokens pane w1:p1 "evil=1" "tuidev_since=-x" "tuidev_need" >/dev/null && fail "unknown names and unfit values were sent"
 [[ "$(calls)" == 0 ]] || fail "_agents_hl_tokens called herdr with nothing to send"
-_agents_hl_tokens pane w1:p1 "since=" "evil=1" >/dev/null
+_agents_hl_tokens pane w1:p1 "tuidev_since=" "evil=1" >/dev/null
 { grep -qx -- '--clear-token' "$FAKE/calls" && ! grep -qx 'evil=1' "$FAKE/calls"; } || fail "one call with only our names: $(cat "$FAKE/calls")"
 pass "tokens: glyphs off, dry run, forged state lines and hostile titles, and only our names with fit values reach herdr"
 
@@ -385,16 +385,34 @@ pass "tokens: glyphs off, dry run, forged state lines and hostile titles, and on
 status w1:p1 blocked 9; agents_herdr_sync -q
 jq '(.result.snapshot.panes[] | select(.pane_id == "w1:p1") | .tokens.ctx) = "42" | (.result.snapshot.workspaces[] | select(.workspace_id == "w1") | .tokens.jj) = "clean"' \
     "$FAKE/snap.json" > "$FAKE/s" && mv "$FAKE/s" "$FAKE/snap.json"
-[[ -n "$(ptok w1:p1 since)" && -n "$(wtok w1 need)" && -n "$(ptok w1:p5 session)" ]] || fail "setup: tokens to reset"
+[[ -n "$(ptok w1:p1 tuidev_since)" && -n "$(wtok w1 tuidev_need)" && -n "$(ptok w1:p5 tuidev_session)" ]] || fail "setup: tokens to reset"
 fresh; AGENTS_HERDR_NAMES=0 agents_herdr_sync -q
 [[ "$(calls)" == 0 ]] || fail "names off called herdr"
 agents_herdr_reset >/dev/null
-for p in w1:p1 w1:p3 w1:p5 w2:p1; do [[ -z "$(ptok "$p" since)" && -z "$(ptok "$p" session)" ]] || fail "reset left a pane token on $p"; done
-[[ -z "$(wtok w1 need)" && -z "$(wtok w1 agents)" ]] || fail "reset left a workspace token"
+for p in w1:p1 w1:p3 w1:p5 w2:p1; do [[ -z "$(ptok "$p" tuidev_since)" && -z "$(ptok "$p" tuidev_session)" ]] || fail "reset left a pane token on $p"; done
+[[ -z "$(wtok w1 tuidev_need)" && -z "$(wtok w1 tuidev_agents)" ]] || fail "reset left a workspace token"
 [[ "$(ptok w1:p1 ctx)" == 42 && "$(wtok w1 jj)" == clean ]] || fail "reset cleared another source's tokens"
 fresh; out="$(agents_herdr_reset)"
 [[ "$(writes)" == 0 && "$out" == "nothing to reset"* ]] || fail "a second reset wrote: $out"
-pass "tokens: reset clears \$need, \$since and \$session and nothing of another source's; AGENTS_HERDR_NAMES=0 writes nothing"
+pass "tokens: reset clears \$tuidev_need, \$tuidev_since and \$tuidev_session and nothing of another source's; AGENTS_HERDR_NAMES=0 writes nothing"
+
+# Legacy names (3.22.0: agents; its successors: need, since, session) are cleared once, in the same
+# write as the new values; a second sync finds nothing; other names are never touched. Reset clears both.
+agents_herdr_reset >/dev/null
+jq '(.result.snapshot.workspaces[] | select(.workspace_id == "w1") | .tokens) += {agents: "✳1", need: "blocked"}
+    | (.result.snapshot.panes[] | select(.pane_id == "w1:p1") | .tokens) += {since: "17:00", session: "old", ctx: "42"}' \
+    "$FAKE/snap.json" > "$FAKE/s" && mv "$FAKE/s" "$FAKE/snap.json"
+fresh; agents_herdr_sync -q
+[[ -z "$(wtok w1 agents)" && -z "$(wtok w1 need)" && -z "$(ptok w1:p1 since)" && -z "$(ptok w1:p1 session)" ]] || fail "legacy tokens kept"
+[[ -n "$(wtok w1 tuidev_agents)" && "$(wtok w1 tuidev_need)" == blocked && "$(ptok w1:p1 ctx)" == 42 ]] || fail "legacy: new tokens not set with them, or another name touched"
+[[ "$(grep -c -- '--clear-token' "$FAKE/calls")" -ge 4 ]] || fail "legacy: four clears expected: $(cat "$FAKE/calls")"
+fresh; agents_herdr_sync -q
+[[ "$(writes)" == 0 ]] || fail "legacy: a second sync wrote $(writes)"
+jq '(.result.snapshot.workspaces[] | select(.workspace_id == "w1") | .tokens) += {agents: "x", need: "y"}
+    | (.result.snapshot.panes[] | select(.pane_id == "w1:p1") | .tokens) += {since: "z", session: "t"}' "$FAKE/snap.json" > "$FAKE/s" && mv "$FAKE/s" "$FAKE/snap.json"
+agents_herdr_reset >/dev/null
+[[ -z "$(wtok w1 agents)$(wtok w1 need)$(wtok w1 tuidev_agents)$(ptok w1:p1 since)$(ptok w1:p1 session)$(ptok w1:p1 tuidev_since)" ]] || fail "reset left a legacy or new token"
+pass "tokens: the pre-prefix names are cleared once with the new values set, never again, and by reset"
 
 # --- 11. The plugin's hooks ------------------------------------------------------------------------
 plugin="$REPO_DIR/configs/herdr/plugins/tuidev-link"
@@ -467,7 +485,7 @@ pass "herdr sync --poke: Herdr's agents read again and the menu bar poked, only 
         herdr_has_own_sidebar "$c" || fail "sidebar.$t under [ui] was missed"
     done
     src="$REPO_DIR/configs/herdr/sidebar.toml"
-    grep -q '"\$agents"' "$src" || fail "sidebar.toml has no \$agents"
+    grep -q '"\$tuidev_agents"' "$src" || fail "sidebar.toml has no \$tuidev_agents"
     [[ "$(grep -c '^\[' "$src")" -eq 2 ]] || fail "sidebar.toml must hold the spaces and the agents table"
     grep -qx '\[ui.sidebar.spaces\]' "$src" || fail "sidebar.toml has no spaces table"
     grep -qx '\[ui.sidebar.agents\]' "$src" || fail "sidebar.toml has no agents table"
@@ -486,7 +504,7 @@ pass "herdr sync --poke: Herdr's agents read again and the menu bar poked, only 
     up="$tmp/herdr-up.toml"
     printf '[ui]\nstatus_indicators = "symbols"\n\n' > "$up"
     old='[ui.sidebar.spaces]
-rows = [["state_icon", "workspace", "$agents"], ["branch", "git_status"]]'
+rows = [["state_icon", "workspace", "$tuidev_agents"], ["branch", "git_status"]]'
     write_managed_block "$up" tuidev-sidebar "$old" >/dev/null 2>&1
     _herdr_install_sidebar "$up" >/dev/null 2>&1
     [[ "$(read_managed_block "$up" tuidev-sidebar)" == "$(cat "$src")" ]] || fail "the old block was not replaced"
