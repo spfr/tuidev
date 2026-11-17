@@ -150,6 +150,7 @@ _remove_block "$HOME/.config/ghostty/config" tuidev-theme
 _remove_block "$HOME/.config/starship.toml"  tuidev-theme
 _remove_block "$HOME/.config/herdr/config.toml" tuidev-theme
 _remove_block "$HOME/.config/herdr/config.toml" tuidev-keys
+_remove_block "$HOME/.config/herdr/config.toml" tuidev-sidebar
 
 # Records are `<key> <value>`. A key the user has since changed is theirs now.
 # Install checked with --includes (is the key set anywhere the user's global
