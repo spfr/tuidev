@@ -13,11 +13,13 @@
 # Nothing runs on a timer of its own: the tuidev.link plugin's [[events]]
 # hooks start `agents herdr sync` when a tab, pane or agent comes or goes or
 # an agent changes state, and the menu bar's refresh runs `--throttle` as a
-# safety net. Each machine syncs its own server; a saved machine's panes are
+# safety net. An agent's event adds --poke: the menu bar shows it too. Each machine syncs its own server; a saved machine's panes are
 # that machine's to name.
 #
 # Owns: `agents herdr` (status, sync, reset), herdr-labels.tsv and its lock.
 # Uses: config.sh (AGENTS_HERDR_NAMES, AGENTS_NO_HERDR, AGENTS_RUN_DIR),
+#   snapshot.sh (_agents_herdr_refresh), bar.sh (_agents_bar_target,
+#   agents_bar_poke),
 #   glyph.sh (_agents_glyph_map), util.sh (locks, timeouts, atomic replace).
 # Public: agents_herdr, agents_herdr_sync, agents_herdr_reset.
 
@@ -207,24 +209,35 @@ _agents_hl_apply() {
     return 0
 }
 
-# agents_herdr_sync [--throttle] [-n] [-q] — name the tabs, set the roll-ups and
+# agents_herdr_sync [--throttle] [--poke] [-n] [-q] — name the tabs, set the roll-ups and
 # display names, writing only what differs. One sync at a time: a sync that
 # finds another running leaves a mark (herdr-labels.dirty) and exits, and the
 # running one goes again (a second later, so a burst of Herdr events costs one
 # more pass, not one each). --throttle: not when one ran in the last 30 s (the
 # menu bar's refresh). -q: say nothing (the plugin's hooks). Nothing, and no
-# Herdr call, when AGENTS_HERDR_NAMES=0 or there is no Herdr here.
+# Herdr call, when AGENTS_HERDR_NAMES=0 or there is no Herdr here. --poke (an
+# agent's event: the same process, not a second one): first, where the menu
+# bar would refresh, Herdr's agents are read again (the cache the menu reads
+# could be up to 10 s old) and the menu bar is poked.
 agents_herdr_sync() {
     local throttle=false quiet=false a lock="$AGENTS_RUN_DIR/herdr-labels.lock" dirty="$AGENTS_RUN_DIR/herdr-labels.dirty"
-    local stamp="$AGENTS_RUN_DIR/herdr-labels.stamp" now age pass=0 round=0 out
+    local stamp="$AGENTS_RUN_DIR/herdr-labels.stamp" now age pass=0 round=0 out poke=false
     for a in "$@"; do
         case "$a" in
             --throttle)    throttle=true ;;
+            --poke)        poke=true ;;
             -q|--quiet)    quiet=true ;;
             -n|--dry-run)  AGENTS_DRY_RUN=true ;;
-            *) echo "usage: agents herdr sync [--throttle] [-n] [-q]" >&2; return 2 ;;
+            *) echo "usage: agents herdr sync [--throttle] [--poke] [-n] [-q]" >&2; return 2 ;;
         esac
     done
+    if [[ "$poke" == true ]] && _agents_now now && _agents_bar_target "$now"; then
+        if [[ -z "${AGENTS_NO_HERDR:-}" ]] && _agents_hl_socket && command -v jq >/dev/null 2>&1; then
+            # The hook's Herdr, when herdr is not on its PATH.
+            PATH="${HERDR_BIN_PATH:+${HERDR_BIN_PATH%/*}:}$PATH" _agents_herdr_refresh 1 || true
+        fi
+        agents_bar_poke
+    fi
     [[ "${AGENTS_HERDR_NAMES:-1}" == 1 ]] || { [[ "$quiet" == true ]] || echo "agents: AGENTS_HERDR_NAMES=0: Herdr's labels are left alone"; return 0; }
     _agents_hl_ready || return 0
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
@@ -308,6 +321,6 @@ agents_herdr() {
         status) agents_herdr_status ;;
         sync)   agents_herdr_sync "$@" ;;
         reset)  agents_herdr_reset "$@" ;;
-        *)      echo "usage: agents herdr [status | sync [--throttle] [-n] [-q] | reset [-n]]" >&2; return 2 ;;
+        *)      echo "usage: agents herdr [status | sync [--throttle] [--poke] [-n] [-q] | reset [-n]]" >&2; return 2 ;;
     esac
 }

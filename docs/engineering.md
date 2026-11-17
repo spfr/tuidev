@@ -97,7 +97,8 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `activity.sh` | which session a process is (Claude Code's `sessions/PID.json`, Codex's open rollout file) and what it is doing, from the last 256 KiB of its transcript |
 | `show.sh` | `agents show`: one process in detail, and its JSON |
 | `pick.sh` | `agents pick`: the fzf browser, its list and its command line |
-| `hooks.sh` | `agents hook`: what a finished subagent or a cleared session left running |
+| `bar.sh` | `agents bar poke`: the menu bar refreshes when something changed (`open -g swiftbar://refreshplugin`), only while SwiftBar runs the plugin (`bar.alive`, which the plugin writes), at most once every 2 s with the last of a burst kept (`bar.busy`, `bar.dirty` and a keeper for the window); `agents bar status` |
+| `hooks.sh` | `agents hook`: what a finished subagent or a cleared session left running; the menu bar's pokes from the wait and cleanup hooks |
 | `notify.sh` | the y/N prompt, the macOS dialog, notifications (terminal-notifier's, clickable to a session, else `osascript`'s) |
 | `usage.sh` | `agents --help` |
 | `cli.sh` | `agents_main`: options and the subcommand table; `agents cwd` |

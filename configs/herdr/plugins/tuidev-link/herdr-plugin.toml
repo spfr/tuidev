@@ -11,7 +11,7 @@
 # runs each hook on its own server, so every machine names its own tabs.
 id = "tuidev.link"
 name = "tuidev link"
-version = "0.3.0"
+version = "0.4.0"
 min_herdr_version = "0.9.0"
 description = "What runs where and one key to stop it; tabs named after what runs in them; open localhost and file links from another machine's panes on the machine you sit at."
 platforms = ["linux", "macos"]
@@ -64,6 +64,9 @@ action = "open"
 # set by then). Herdr offers no hook on a title or directory change alone
 # (pane.updated is not a hook event); the next of these, or the menu bar's
 # refresh, catches it. A burst of them costs one sync and one more pass.
+# An agent coming, going or changing state also refreshes the menu bar
+# (sync-poke): that is how it hears of codex, grok and agy sessions here,
+# which have no hooks of their own.
 [[startup]]
 command = ["sh", "run.sh", "sync"]
 
@@ -89,7 +92,7 @@ command = ["sh", "run.sh", "sync"]
 
 [[events]]
 on = "pane.closed"
-command = ["sh", "run.sh", "sync"]
+command = ["sh", "run.sh", "sync-poke"]
 
 [[events]]
 on = "pane.moved"
@@ -97,12 +100,12 @@ command = ["sh", "run.sh", "sync"]
 
 [[events]]
 on = "pane.exited"
-command = ["sh", "run.sh", "sync"]
+command = ["sh", "run.sh", "sync-poke"]
 
 [[events]]
 on = "pane.agent_detected"
-command = ["sh", "run.sh", "sync"]
+command = ["sh", "run.sh", "sync-poke"]
 
 [[events]]
 on = "pane.agent_status_changed"
-command = ["sh", "run.sh", "sync"]
+command = ["sh", "run.sh", "sync-poke"]

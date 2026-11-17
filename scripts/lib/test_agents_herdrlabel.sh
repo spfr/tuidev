@@ -250,14 +250,44 @@ evs="$(sed -n 's/^on = "\(.*\)"$/\1/p' "$plugin/herdr-plugin.toml")"
 [[ -n "$evs" ]] || fail "the plugin has no event hooks"
 for e in $evs; do [[ "$known" == *" $e "* ]] || fail "the plugin hooks $e, which Herdr does not run hooks for"; done
 [[ "$evs" != *tab.renamed* ]] || fail "hooking tab.renamed would answer the sync's own renames"
-[[ "$(grep -c '^command = \["sh", "run.sh", "sync"\]$' "$plugin/herdr-plugin.toml")" -eq $(( $(printf '%s\n' "$evs" | wc -l) + 1 )) ]] \
-    || fail "every event hook and the startup hook run run.sh sync"
+[[ "$(grep -cE '^command = \["sh", "run.sh", "sync(-poke)?"\]$' "$plugin/herdr-plugin.toml")" -eq $(( $(printf '%s\n' "$evs" | wc -l) + 1 )) ]] \
+    || fail "every event hook and the startup hook run run.sh sync or sync-poke"
+# An agent's events refresh the menu bar too (sync-poke); the others don't.
+pokes="$(awk '/^on = / { e = $3; gsub(/"/, "", e) } /^command = .*"sync-poke"/ { print e }' "$plugin/herdr-plugin.toml" | sort | tr '\n' ' ')"
+[[ "$pokes" == "pane.agent_detected pane.agent_status_changed pane.closed pane.exited " ]] || fail "sync-poke runs on: $pokes"
 printf '#!/bin/sh\necho "$*" > "%s/stub"\n' "$tmp" > "$tmp/agents-stub"; chmod +x "$tmp/agents-stub"
 AGENTS_BIN="$tmp/agents-stub" sh "$plugin/run.sh" sync || fail "run.sh sync failed"
 [[ "$(cat "$tmp/stub")" == "herdr sync -q" ]] || fail "run.sh sync ran: $(cat "$tmp/stub")"
-out="$(AGENTS_BIN="$tmp/nope" sh "$plugin/run.sh" sync 2>&1)" || fail "run.sh sync without agents failed (a hook error on every event)"
-[[ -z "$out" ]] || fail "run.sh sync without agents said: $out"
-pass "the plugin: hooks only events Herdr runs hooks for (not tab.renamed), each runs agents herdr sync -q; quiet without agents"
+AGENTS_BIN="$tmp/agents-stub" sh "$plugin/run.sh" sync-poke || fail "run.sh sync-poke failed"
+[[ "$(cat "$tmp/stub")" == "herdr sync -q --poke" ]] || fail "run.sh sync-poke ran: $(cat "$tmp/stub")"
+for v in sync sync-poke; do
+    out="$(AGENTS_BIN="$tmp/nope" sh "$plugin/run.sh" "$v" 2>&1)" || fail "run.sh $v without agents failed (a hook error on every event)"
+    [[ -z "$out" ]] || fail "run.sh $v without agents said: $out"
+done
+pass "the plugin: hooks only events Herdr runs hooks for (not tab.renamed), each runs agents herdr sync -q, an agent's with --poke; quiet without agents"
+
+# --poke: where the menu bar would refresh (bar.alive names a live SwiftBar),
+# Herdr's agents are read again, then the bar is poked, in this one process;
+# anywhere else neither. The label sync runs as before either way.
+(
+    export AGENTS_RUN_DIR="$tmp/pokerun"; mkdir -p "$AGENTS_RUN_DIR"
+    : > "$tmp/pokes"
+    _agents_herdr_refresh() { echo refresh >> "$tmp/pokes"; }
+    agents_bar_poke() { echo poke >> "$tmp/pokes"; }
+    _agents_hl_socket() { return 0; }
+    _agents_hl_ready() { return 1; }    # the label sync itself: not here
+    OSTYPE=darwin25
+    agents_herdr_sync -q --poke
+    [[ ! -s "$tmp/pokes" ]] || fail "--poke with no plugin running: $(cat "$tmp/pokes")"
+    printf '%s %s agents -\n' "$AGENTS_NOW" "$$" > "$AGENTS_RUN_DIR/bar.alive"
+    agents_herdr_sync -q --poke
+    [[ "$(tr '\n' ' ' < "$tmp/pokes")" == "refresh poke " ]] || fail "--poke: $(cat "$tmp/pokes")"
+    : > "$tmp/pokes"; agents_herdr_sync -q
+    [[ ! -s "$tmp/pokes" ]] || fail "a sync without --poke poked: $(cat "$tmp/pokes")"
+    : > "$tmp/pokes"; OSTYPE=linux-gnu agents_herdr_sync -q --poke
+    [[ ! -s "$tmp/pokes" ]] || fail "--poke off macOS: $(cat "$tmp/pokes")"
+) || exit 1
+pass "herdr sync --poke: Herdr's agents read again and the menu bar poked, only where SwiftBar runs the plugin"
 
 # --- 12. The herdr pack's sidebar block -----------------------------------------------------------------
 (

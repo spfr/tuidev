@@ -92,6 +92,7 @@ agents_main() {
         push)     agents_push "$@" ;;
         open)     agents_remote_open "$@" ;;
         herdr)    agents_herdr "$@" ;;
+        bar)      agents_bar "$@" ;;
         thermal)  local lvl; lvl="$(agents_thermal_level)"
                   echo "thermal pressure: $(agents_thermal_name "${lvl:--}")${lvl:+ ($lvl)}"
                   echo "energy mode: $(agents_powermode)" ;;

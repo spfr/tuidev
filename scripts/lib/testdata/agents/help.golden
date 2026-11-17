@@ -65,6 +65,13 @@ LOOK
                                Code's and Codex's configs, so a session starts it on
                                its first tool call, not with the session; eager: back
   agents json | tsv            machine-readable snapshot (tsv feeds SwiftBar)
+  agents bar [status]          the menu bar's refreshes: SwiftBar running the plugin,
+                               the last poke, an early refresh pending
+  agents bar poke [--settle]   refresh the menu bar now (macOS, SwiftBar running the
+                               plugin; else nothing): at most one every 2s, the last
+                               of a burst at the window's end; --settle: once more
+                               then. Claude Code's hooks, Herdr's events and the
+                               menu itself run it; AGENTS_BAR_REFRESH is the backstop
   agents why [--copy] PID[@START]
                                why an item is listed, the evidence (owner, age,
                                ports, the file a loop watches and its last line)
@@ -110,7 +117,7 @@ OTHER MACHINES (over ssh: Herdr's saved machines, and AGENTS_REMOTE_HOSTS)
 HERDR'S LABELS (this machine's Herdr; AGENTS_HERDR_NAMES=0 leaves them alone)
   agents herdr [status]        each tab's label, what a sync would make it and whose
                                it is; each workspace's roll-up
-  agents herdr sync [--throttle] [-n] [-q]
+  agents herdr sync [--throttle] [--poke] [-n] [-q]
                                name each tab after what runs in it (the kind's mark,
                                then the session's task title or the pane's
                                directory, "+N" for more agents), roll up each
@@ -118,7 +125,9 @@ HERDR'S LABELS (this machine's Herdr; AGENTS_HERDR_NAMES=0 leaves them alone)
                                mark agent rows. Only a tab still showing Herdr's
                                number, or the name a sync gave it: one you renamed
                                stays yours. Herdr's events run it (the tuidev.link
-                               plugin); --throttle: not within 30s of the last
+                               plugin); --throttle: not within 30s of the last;
+                               --poke: an agent's state changed, so read Herdr's
+                               agents again and refresh the menu bar first
   agents herdr reset [-n]      put back every tab number a sync replaced and clear
                                what it reported
 

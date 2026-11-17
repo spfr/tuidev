@@ -7,11 +7,15 @@
 #   ports       open the Ports popup
 #   ports-pane  the popup itself: agents ports --pick
 #   sync        an event hook: agents herdr sync (nothing, quietly, without agents)
+#   sync-poke   an agent's event hook: the same, and the menu bar refreshes
+#               (macOS with SwiftBar; elsewhere the same as sync)
 agents="${AGENTS_BIN:-$HOME/.local/bin/agents}"
-if [ "${1:-}" = sync ]; then
-    [ -x "$agents" ] || exit 0
-    exec "$agents" herdr sync -q </dev/null
-fi
+case "${1:-}" in
+    sync|sync-poke)
+        [ -x "$agents" ] || exit 0
+        [ "$1" = sync ] || exec "$agents" herdr sync -q --poke </dev/null
+        exec "$agents" herdr sync -q </dev/null ;;
+esac
 if [ ! -x "$agents" ]; then
     echo "tuidev.link: $agents is missing (./install.sh --pack monitoring)" >&2
     exit 1
@@ -29,5 +33,5 @@ case "${1:-}" in
     ports-pane)
         exec "$agents" ports --pick ;;
     *)
-        echo "usage: run.sh click|map|map-pane|ports|ports-pane|sync" >&2; exit 2 ;;
+        echo "usage: run.sh click|map|map-pane|ports|ports-pane|sync|sync-poke" >&2; exit 2 ;;
 esac
