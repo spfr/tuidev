@@ -27,6 +27,11 @@ export HOME="$tmp/home" NO_COLOR=1 AGENTS_CONF="$tmp/none.conf" AGENTS_RUN_DIR="
 mkdir -p "$HOME" "$AGENTS_RUN_DIR" "$AGENTS_DATA_DIR" "$tmp/bin"
 # The stub `open`: what a poke would have asked SwiftBar.
 printf '#!/bin/sh\necho "$*" >> "%s/opened"\n' "$tmp" > "$tmp/bin/open"; chmod +x "$tmp/bin/open"
+# ps: the plugin's parent is SwiftBar (a run under SwiftBar), unless PSCOMM
+# says otherwise; any other pid's command is PSPARENT's (launchd).
+# shellcheck disable=SC2016
+printf '#!/bin/sh\ncase "$*" in *ppid=,comm=*) echo "1 ${PSCOMM:-/Applications/SwiftBar.app/Contents/MacOS/SwiftBar}" ;; *comm=*) echo "${PSPARENT:-launchd}" ;; esac\n' > "$tmp/bin/ps"
+chmod +x "$tmp/bin/ps"
 export PATH="$tmp/bin:$PATH"
 
 # shellcheck source=../../bin/agents disable=SC1091
@@ -61,7 +66,25 @@ alive; AGENTS_BAR_REFRESH=10m; agents_bar_poke; settle
 [[ "$(cat "$tmp/opened")" == "-g swiftbar://refreshplugin?name=agents" ]] || fail "the poke: $(cat "$tmp/opened" 2>/dev/null)"
 [[ -s "$R/bar.poked" ]] || fail "no bar.poked after a poke"
 AGENTS_BAR_REFRESH=1m
-pass "a poke goes out only under SwiftBar here (bar.alive: a live pid, fresh, a plain name, macOS); else nothing, and no file"
+# A stamp past one backstop: the plugin missed a run, and the pid may be
+# another process's now (SwiftBar quit, the pid reused): one ps must say it is
+# SwiftBar, or `open` would launch the SwiftBar the user quit.
+rm -f "$tmp/opened"; alive "$SB" "$(( $(date +%s) - 90 ))"
+PSPARENT=/bin/sleep agents_bar_poke; sleep 0.2
+[[ "$(opened)" == 0 ]] || fail "a poke went out to a reused pid (a stamp past one backstop, ps: not SwiftBar)"
+PSPARENT=/Applications/SwiftBar.app/Contents/MacOS/SwiftBar agents_bar_poke; settle
+[[ "$(opened)" == 1 ]] || fail "a poke to SwiftBar (a stamp past one backstop, ps: SwiftBar) did not go out"
+rm -f "$tmp/opened"; alive; PSPARENT=/bin/sleep agents_bar_poke; settle
+[[ "$(opened)" == 1 ]] || fail "a fresh stamp asked ps (it needs none)"
+# Nowhere to send it: the mark the hook's guard wrote first is dropped (it
+# would keep the plugin's timed runs off the idle fast path for good), unless
+# a window's keeper holds it.
+rm -f "$tmp/opened"; alive 99999999; : > "$R/bar.dirty"; agents_bar_poke
+[[ ! -e "$R/bar.dirty" ]] || fail "a poke that could not go out left the mark"
+: > "$R/bar.dirty"; date +%s > "$R/bar.busy"; agents_bar_poke
+[[ -e "$R/bar.dirty" ]] || fail "a poke that could not go out dropped a live window's mark"
+rm -f "$R/bar.dirty" "$R/bar.busy"; alive
+pass "a poke goes out only under SwiftBar here (bar.alive: a live pid, fresh, a plain name, macOS; past one backstop, ps says SwiftBar); else nothing, and no file or mark left"
 
 # --- 2. Debounce: one per window, the last of a burst kept -------------------------------
 rm -f "$R"/bar.busy "$R"/bar.dirty "$tmp/opened"; alive
@@ -143,12 +166,9 @@ pass "the next-refresh table: 10 s while a command runs or an unreported session
 # --- 4. The plugin: idle fast path, early refresh, bar.alive, Herdr sync ---------------------
 M="$tmp/m"; mkdir -p "$M/cache"; ln -s "$PLUGIN" "$M/agents.1m.sh"   # SwiftBar's name for it
 # shellcheck disable=SC2016  # the stubs' own variables
-printf '#!/bin/bash\necho "$*" >> "%s/calls"\n[[ "$1" != tsv ]] || cat "%s/tsv"\n' "$M" "$M" > "$M/agents"
+# MARK_DURING=FILE: the reading writes FILE (a hook's mark landing mid-run).
+printf '#!/bin/bash\necho "$*" >> "%s/calls"\n[[ "$1" != tsv ]] || cat "%s/tsv"\n[[ "$1" != tsv || -z "${MARK_DURING:-}" ]] || : > "$MARK_DURING"\n' "$M" "$M" > "$M/agents"
 chmod +x "$M/agents"
-# ps: the plugin's parent is SwiftBar (a run under SwiftBar), unless PSCOMM says otherwise.
-# shellcheck disable=SC2016
-printf '#!/bin/sh\ncase "$*" in *ppid=,comm=*) echo "1 ${PSCOMM:-/Applications/SwiftBar.app/Contents/MacOS/SwiftBar}" ;; *comm=*) echo "${PSPARENT:-launchd}" ;; esac\n' > "$tmp/bin/ps"
-chmod +x "$tmp/bin/ps"
 idle_tsv() { printf 'sys\t5\t1.0\t8\t60\tnormal\t-\t-\nhist\tok\t0\t-\t0\nconf\tAGENTS_BAR_REFRESH\t1m\n' > "$M/tsv"; }
 calls() { if [[ -f "$M/calls" ]]; then grep -c '^tsv' "$M/calls"; else echo 0; fi; }
 # mbar [VAR=VALUE...] — one run as SwiftBar makes it (a timed one unless the
@@ -264,6 +284,11 @@ env PATH="$tmp/bin:$PATH" AGENTS_BIN="$M/agents" bash "$PLUGIN" > /dev/null
 printf '%s\n' "$(( $(date +%s) - 30 ))" > "$R/bar.busy"; : > "$R/bar.dirty"
 mbar SWIFTBAR_PLUGIN_REFRESH_REASON=URLScheme
 [[ ! -e "$R/bar.busy" && ! -e "$R/bar.dirty" ]] || fail "a dead keeper's bar.busy outlived a full run"
+# ... and a poke marked while the run reads the machine is kept for the next.
+printf '%s\n' "$(( $(date +%s) - 30 ))" > "$R/bar.busy"; : > "$R/bar.dirty"
+mbar SWIFTBAR_PLUGIN_REFRESH_REASON=URLScheme MARK_DURING="$R/bar.dirty"
+[[ ! -e "$R/bar.busy" && -e "$R/bar.dirty" ]] || fail "a dead keeper's cleanup lost a mark made during the run: $(ls -A "$R")"
+rm -f "$R/bar.dirty"
 pass "bar.alive: SwiftBar's pid (the parent, or above a shell wrapper), only under SwiftBar; a dead keeper's window is let go"
 
 # Herdr's labels from the menu: while an agent runs in a Herdr pane, at most

@@ -178,6 +178,14 @@ if [[ "${1:-}" == open-load ]]; then
     exit 0
 fi
 
+# A window whose keeper is gone (a bar.busy 10 s old) would make every hook
+# decline: let it go, and its mark with it, before the reading (which sees
+# what the mark was for), so a poke that comes in during this run stays marked.
+if [[ "${SWIFTBAR:-}" == 1 && -e "$BAR_RUN/bar.busy" ]]; then
+    _t=""; read -r _t < "$BAR_RUN/bar.busy" 2>/dev/null || true
+    if [[ ! "$_t" =~ ^[0-9]+$ ]] || [[ $(( $(date +%s) - _t )) -ge 10 ]]; then rm -f "$BAR_RUN/bar.busy" "$BAR_RUN/bar.dirty"; fi
+    unset _t
+fi
 if ! data="$("$AGENTS" tsv 2>/dev/null)"; then
     err="$("$AGENTS" tsv 2>&1 >/dev/null | head -1)"
     echo ":exclamationmark.triangle: | sfcolor=#FF9F0A"
@@ -1964,12 +1972,6 @@ bar_next_in "$n_tools" "$n_unhooked" "$ends" "$REPLY"; next="$REPLY"
 if [[ "${SWIFTBAR:-}" == 1 ]]; then
     bar_alive "$NOW_S"
     [[ $next -eq 0 ]] || bar_schedule "$next"
-    # A window whose keeper is gone (a bar.busy 10 s old) would make every
-    # hook decline: let it go.
-    if [[ -e "$BAR_RUN/bar.busy" ]]; then
-        t=""; read -r t < "$BAR_RUN/bar.busy" 2>/dev/null
-        if ! num "$t" || [[ $((NOW_S - t)) -ge 10 ]]; then rm -f "$BAR_RUN/bar.busy" "$BAR_RUN/bar.dirty"; fi
-    fi
 fi
 # Idle: nothing that changes on its own, so the next timed runs may print this
 # output again (the idle fast path). Not with a session (a daemon is none), a

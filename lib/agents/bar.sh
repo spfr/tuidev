@@ -10,8 +10,9 @@
 # runs. Each asks through a poke, which opens swiftbar://refreshplugin. A poke:
 #   - goes out only where SwiftBar runs the plugin now. On every run the plugin
 #     writes bar.alive (EPOCH SWIFTBAR_PID NAME LAUNCH); a poke needs that pid
-#     alive (kill -0, no fork) and the stamp younger than two backstops,
-#     because `open` launches an app that is not running. Anywhere else (Linux,
+#     alive (kill -0, no fork) and the stamp younger than two backstops (past
+#     one, a ps that the pid is still SwiftBar's, not a reused one), because
+#     `open` launches an app that is not running. Anywhere else (Linux,
 #     the Pi, a Mac without SwiftBar or with the plugin turned off) it is a
 #     silent no-op.
 #   - is debounced: at most one every _AGENTS_BAR_GAP seconds. The poke that
@@ -32,7 +33,7 @@
 #              knows the plugin by, SwiftBar's launch time
 #   bar.busy   EPOCH  a poke went out less than a window ago; its keeper holds it
 #   bar.dirty  a poke arrived while busy (the plugin's idle fast path defers
-#              to it too)
+#              to it too); dropped when no poke can go out
 #   bar.poked  EPOCH of the last poke sent (the idle fast path compares its age)
 #   bar.next   DUE TOKEN  the plugin's one pending early refresh (the plugin's)
 #
@@ -60,9 +61,12 @@ _agents_bar_secs() {
 # _agents_bar_target NOW — true when a poke can go out: macOS, the plugin ran
 # under SwiftBar lately and that SwiftBar still runs. Sets _AGENTS_BAR_NAME,
 # the plugin's name for the URL. Reads bar.alive twice at most: the plugin
-# rewrites it in place, and a read inside that write sees it empty.
+# rewrites it in place, and a read inside that write sees it empty. A stamp
+# older than one backstop means the plugin missed a run: the pid may have
+# been reused since SwiftBar quit, so one ps confirms it is SwiftBar (`open`
+# would launch a SwiftBar the user quit).
 _agents_bar_target() {
-    local f="$AGENTS_RUN_DIR/bar.alive" t="" pid="" name="" back try
+    local f="$AGENTS_RUN_DIR/bar.alive" t="" pid="" name="" back try c
     _AGENTS_BAR_NAME=""
     [[ "${OSTYPE:-}" == darwin* && -f "$f" ]] || return 1
     for try in 1 2; do
@@ -74,6 +78,10 @@ _agents_bar_target() {
     _agents_bar_secs back "$AGENTS_BAR_REFRESH"
     [[ $(( $1 - t )) -lt $(( 2 * back + 60 )) ]] || return 1
     kill -0 "$pid" 2>/dev/null || return 1
+    if [[ $(( $1 - t )) -ge $back ]]; then
+        c="$(ps -o comm= -p "$pid" 2>/dev/null)"
+        [[ "$c" == SwiftBar || "$c" == */SwiftBar ]] || return 1
+    fi
     _AGENTS_BAR_NAME="$name"
 }
 
@@ -116,13 +124,13 @@ _agents_bar_keeper() {
             rm -f "$r/bar.dirty"
             printf '%s\n' "$now" > "$r/bar.busy" 2>/dev/null
             _agents_bar_send "$now" && continue
-            rm -f "$r/bar.busy"; return 0
+            rm -f "$r/bar.busy" "$r/bar.dirty"; return 0
         fi
         rm -f "$r/bar.busy"
         [[ -e "$r/bar.dirty" ]] || return 0
         _agents_bar_take "$now" || return 0     # another poke took it: its keeper sees the mark
         rm -f "$r/bar.dirty"
-        _agents_bar_send "$now" || { rm -f "$r/bar.busy"; return 0; }
+        _agents_bar_send "$now" || { rm -f "$r/bar.busy" "$r/bar.dirty"; return 0; }
     done
 }
 
@@ -139,11 +147,14 @@ agents_bar_poke() {
         esac
     done
     _agents_now now
-    _agents_bar_target "$now" || return 0
+    # Nowhere to send it: a mark (the hook's guard writes one first) would only
+    # keep the plugin's timed runs off the idle fast path. A keeper still
+    # holding its window looks after its own.
+    _agents_bar_target "$now" || { [[ -e "$r/bar.busy" ]] || rm -f "$r/bar.dirty"; return 0; }
     : > "$r/bar.dirty" 2>/dev/null || return 0
     _agents_bar_take "$now" || return 0         # inside a window: its keeper sends the mark
     rm -f "$r/bar.dirty"
-    _agents_bar_send "$now" || { rm -f "$r/bar.busy"; return 0; }
+    _agents_bar_send "$now" || { rm -f "$r/bar.busy" "$r/bar.dirty"; return 0; }
     [[ "$settle" == false ]] || : > "$r/bar.dirty"
     _agents_detach _agents_bar_keeper
     return 0
