@@ -17,7 +17,8 @@
 #
 # It parses `agents tsv` row by row and ignores a row it doesn't know: during an
 # update the plugin and `agents` can be a version apart, so whatever an older
-# `agents` doesn't send (triage, pace, palette, swap, waitsum) has a fallback.
+# `agents` doesn't send (triage, pace, palette, glyph, swap, waitsum, map) has a
+# fallback.
 #
 # Closed and open are two jobs. On its timer (the menu closed) the plugin reads
 # what this machine alone can tell, and asks no other machine for anything. When
@@ -61,6 +62,7 @@ LAST=""
 [[ -z "${SWIFTBAR_PLUGIN_CACHE_PATH:-}" ]] || LAST="$SWIFTBAR_PLUGIN_CACHE_PATH/last"
 OPENED=""
 [[ "${SWIFTBAR_PLUGIN_REFRESH_REASON:-}" != MenuOpen || $# -ne 0 ]] || OPENED=1
+# load_on_open — start the loader (`open-load`, below) apart from this run.
 load_on_open() {
     [[ -n "$LAST" && -e "$LAST.nomap" ]] && return 0
     "$SELF" open-load </dev/null >/dev/null 2>&1 &
@@ -196,6 +198,36 @@ ROW="refresh=true"
 cl() { local s="${1//|/¦}" t='~'; s="${s#"${s%%[!-[:space:]]*}"}"; REPLY="${s/#"$HOME"/$t}"; }
 # sh60 TEXT — cl, then at most 60 characters.
 sh60() { cl "$1"; [[ ${#REPLY} -le 60 ]] || REPLY="${REPLY:0:57}..."; }
+# in_tmp PATH — is it under a temp directory (a build's scratch, $TMPDIR)?
+in_tmp() {
+    # Home is where projects live; only a $TMPDIR inside it makes part of it scratch.
+    if [[ -n "${HOME:-}" && "$1" == "$HOME"/* ]]; then
+        [[ -n "${TMPDIR:-}" && "${TMPDIR%/}" == "$HOME"/* && "$1" == "${TMPDIR%/}"/* ]]
+        return
+    fi
+    [[ "$1" == /var/folders/* || "$1" == /private/var/* || "$1" == /tmp/* || "$1" == /private/tmp/* ]] && return 0
+    [[ -n "${TMPDIR:-}" && "$1" == "${TMPDIR%/}"/* ]]
+}
+# stale_label ARGS PROJECT CWD — REPLY: a stale process as a person knows it: its
+# command with every absolute path cut to its base name (a go build's
+# /var/folders/…/go-build315/b001/web.test is web.test), at most 48
+# characters, then the project it started in when that is known and not a temp
+# directory. The full command line is in the row's submenu.
+stale_label() {
+    local w t out="" p="$2"
+    set -f
+    for w in $1; do
+        if [[ "$w" == /*/* ]]; then t="${w%/}"; t="${t##*/}"; [[ -z "$t" ]] || w="$t"; fi
+        out+="${out:+ }$w"
+    done
+    set +f
+    cl "$out"; out="$REPLY"
+    [[ ${#out} -le 48 ]] || out="${out:0:45}..."
+    if [[ -n "$p" && "$p" != - && "$p" != "~" ]] && ! in_tmp "$3"; then
+        cl "$p"; [[ "$out" == *"$REPLY"* ]] || out+=" · $REPLY"
+    fi
+    REPLY="$out"
+}
 # Params carry only fixed words, PID@START tokens and the two trusted paths
 # below (agents and this plugin), double-quoted. Nothing a process controls (a
 # cwd, a name, Herdr's text) ever goes into a param: SwiftBar unescapes
@@ -288,6 +320,7 @@ cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 # last incident. Hogs are rendered once it is known (hog_rows).
 mem_state=none mem_warn=0 mem_stop=0 mem_last=0 mem_ev=- mem_what=- mem_proj=- mem_fp=0
 hog_rows=()
+G_ANY=""
 BAR_TITLE="triage awake" BAR_SECTIONS="needs review running parked limits today stale hogs machines awake system" BAR_ICON=terminal CONF=""
 # Herdr's health (hhealth rows) is maintenance, at the bottom: never in Needs
 # you, the tint or the title.
@@ -311,6 +344,29 @@ map_at="" map_mach="" map_ports="" map_left="" map_fwd="" n_map_mach=0 n_map_rem
 aget() { local v="A_$1_$2"; REPLY="${!v-}"; }
 aadd() { local v="A_$1_$2"; printf -v "$v" '%s%s' "${!v-}" "$3"; }
 anum() { local v="A_$1_$2"; printf -v "$v" '%d' $(( ${!v:-0} + $3 )); }
+
+# The mark of each kind of session comes in the glyph rows (glyph KIND GLYPH:
+# the one table in lib/agents/glyph.sh, which this file reads and never sources),
+# kept in G_<kind> with the kind reduced to [A-Za-z0-9_]. A glyph is text from
+# the user's config: cleaned like any other, and at most 8 characters.
+# glyph_set KIND GLYPH — keep one.
+glyph_set() {
+    local k="${1//[!A-Za-z0-9_]/_}"
+    [[ -n "$k" ]] || return 0
+    cl "$2"
+    printf -v "G_$k" '%s' "${REPLY:0:8}"; G_ANY=1
+}
+# glyph_of KIND — REPLY: the mark and a space, for the front of a session row;
+# "" when no marks came (an older agents, or AGENTS_GLYPHS=off). A kind with no
+# mark of its own takes the "agent" one.
+glyph_of() {
+    local v="G_${1//[!A-Za-z0-9_]/_}"
+    REPLY=""
+    [[ -n "$G_ANY" ]] || return 0
+    REPLY="${!v-}"
+    [[ -n "$REPLY" ]] || REPLY="${G_agent-}"
+    [[ -z "$REPLY" ]] || REPLY+=" "
+}
 
 # dup_groups LINES — for "cwd\037cmd<TAB>age<TAB>token" lines, one line per
 # command running more than once in one directory, in DUPS: "count<TAB>
@@ -507,6 +563,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
     case "$type" in
         # palette NAME NEED DONE RUN WARN ACCENT BG: first, before anything tinted
         palette) use_palette "$kind" "$age_s" "$pcpu" "$avg" "$kids" ;;
+        # glyph KIND GLYPH: the mark of a kind of session
+        glyph)   glyph_set "$pid" "$kind" ;;
         # triage PID STATE AGE LABEL: what the session is, as `agents` says it
         triage) num "$pid" || continue
                 printf -v "T_state_$pid" '%s' "$kind"; printf -v "T_age_$pid" '%s' "$age_s"; printf -v "T_label_$pid" '%s' "$pcpu" ;;
@@ -576,13 +634,15 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         stale)
             n_stale=$((n_stale + 1))
             v="N_short_$pid"; vs=""; [[ -n "${!v-}" ]] && { cl "${!v}"; vs=" · $REPLY"; }
-            cl "${args:0:60}"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
+            stale_label "$args" "$project" "$cwd"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
             look=puzzlepiece.extension; [[ "$kind" == server ]] && look=network
             stale_menu+="$c · $a · $REPLY$vs | $ROW symbolize=false sfimage=$look"$'\n'
             c="--$kind · pid $pid"
             [[ "$cwd" != - ]] && { cl "$cwd"; c+=" · $REPLY"; }
             [[ "$ports" != - ]] && { cl "$ports"; c+=" · ports $REPLY"; }
             stale_menu+="$c | symbolize=false"$'\n'
+            # The command as it ran, when the label shortened it.
+            if [[ "$args" != "${c%% · *}" ]]; then cl "${args:0:300}"; stale_menu+="--$REPLY | symbolize=false size=11"$'\n'; fi
             if tok "$pid" "$start"; then
                 t="$REPLY"
                 kl="--Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"
@@ -717,6 +777,7 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
         n_in_herdr=$((n_in_herdr + 1))
         [[ "$herdr" == idle || "$herdr" == "done" ]] || herdr_busy=1
     fi
+    glyph_of "$kind"; mark="$REPLY"
     cl "${project:--}"; name="$REPLY"; [[ "$name" == - || -z "$name" ]] && { cl "$kind"; name="$REPLY"; }
     # Herdr's task title for the pane, when it has one, says it better than the
     # project (two sessions of a project are told apart by it); the project and
@@ -742,26 +803,26 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     click="$ROW"
     tok "$pid" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
     session_submenu "$pid" "$start" "$kind" "$age_s" "$kids" "$ports" "$cwd" "$herdr"; sub="$SUB"
-    warn_rows "$pid" "$who"
+    warn_rows "$pid" "$mark$who"
     i=1
     case "$state" in
         need)
             n_blocked=$((n_blocked + 1))
             t=""; if num "$tage"; then agev "$tage"; t=" · $REPLY"; fi
-            needs_menu+="$who · $label$t | sfimage=exclamationmark.circle.fill $TINT_NEED $click symbolize=false"$'\n'"$sub" ;;
+            needs_menu+="$mark$who · $label$t | sfimage=exclamationmark.circle.fill $TINT_NEED $click symbolize=false"$'\n'"$sub" ;;
         review)
             n_review=$((n_review + 1))
             t=""; if num "$tage"; then agev "$tage"; t=" $REPLY"; fi
-            review_menu+="$who · $label$t | sfimage=checkmark.circle $TINT_DONE $click symbolize=false"$'\n'"$sub" ;;
+            review_menu+="$mark$who · $label$t | sfimage=checkmark.circle $TINT_DONE $click symbolize=false"$'\n'"$sub" ;;
         parked)
             n_parked=$((n_parked + 1))
             t=""; if num "$tage"; then longv "$tage"; t=" · $REPLY"; [[ $tage -le $oldest ]] || oldest="$tage"; fi
             SUB="--${sub//$'\n'/$'\n'--}"
-            parked_menu+="--$who · $label$t | sfimage=circle $TINT_IDLE $click symbolize=false"$'\n'"${SUB%--}" ;;
+            parked_menu+="--$mark$who · $label$t | sfimage=circle $TINT_IDLE $click symbolize=false"$'\n'"${SUB%--}" ;;
         unknown)
             n_unknown=$((n_unknown + 1))
             memv "$rss"; m="$REPLY"; cores "$pcpu"
-            unknown_menu+="$who · $label · $REPLY · $m | sfimage=questionmark.circle $TINT_IDLE $click symbolize=false"$'\n'"$sub" ;;
+            unknown_menu+="$mark$who · $label · $REPLY · $m | sfimage=questionmark.circle $TINT_IDLE $click symbolize=false"$'\n'"$sub" ;;
         *)
             n_running=$((n_running + 1))
             if [[ $WN -gt 0 ]]; then
@@ -770,7 +831,7 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
                 i=2
             else
                 memv "$rss"; m="$REPLY"; cores "$pcpu"
-                running_menu+="$who · $label · $REPLY · $m | sfimage=circle.fill $TINT_RUN $click symbolize=false"$'\n'"$sub"
+                running_menu+="$mark$who · $label · $REPLY · $m | sfimage=circle.fill $TINT_RUN $click symbolize=false"$'\n'"$sub"
             fi ;;
     esac
     while [[ $i -le $WN ]]; do

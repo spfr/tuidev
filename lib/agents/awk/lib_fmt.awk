@@ -33,6 +33,17 @@ function dayhm(e,   z, era, doe, yoe, doy, mp, d, m, s) {
     return sprintf("%s %2d %02d:%02d", substr("JanFebMarAprMayJunJulAugSepOctNovDec", m * 3 - 2, 3), d, int(s / 3600), int((s % 3600) / 60))
 }
 function mem(k) { return k >= 1048576 ? sprintf("%.1fG", k / 1048576) : k >= 1024 ? sprintf("%dM", k / 1024) : k "K" }
+# plabel: a command line as a person knows it: every absolute path in it cut to
+# its base name (/var/folders/…/go-build315/b001/web.test is web.test).
+function plabel(a,   n, w, i, t, o) {
+    n = split(a, w, " "); o = ""
+    for (i = 1; i <= n; i++) {
+        t = w[i]
+        if (t ~ /^\/[^\/]+\//) { sub(/\/+$/, "", t); sub(/.*\//, "", t); if (t == "") t = w[i] }
+        o = o (i > 1 ? " " : "") t
+    }
+    return o
+}
 function cut(s, n) { return n < 8 ? "" : length(s) > n ? substr(s, 1, n - 3) "..." : s }
 # rough(s): minutes, hours past two (or on the hour), days past three.
 function rough(s) {
