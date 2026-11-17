@@ -33,7 +33,10 @@ _tuidev_state="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev"
 # parallel never sources a half-written cache.
 _cache_init() {
   local name=$1; shift
-  local bin=${commands[$1]} cache line tmp
+  local bin cache line tmp
+  # CMD may be an absolute path (a tool not on PATH yet, like brew before its
+  # own shellenv ran), else it is looked up on PATH.
+  if [[ $1 == /* ]]; then [[ -x $1 ]] && bin=$1; else bin=${commands[$1]}; fi
   [[ -n $bin ]] || return 1
   bin=${bin:A}
   cache=${XDG_CACHE_HOME:-$HOME/.cache}/zsh/init-$name.zsh
@@ -51,11 +54,15 @@ _cache_init() {
 # PATH Configuration
 # ============================================================================
 
-# Homebrew (supports both Apple Silicon and Intel Macs)
-if [[ -f "/opt/homebrew/bin/brew" ]]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-elif [[ -f "/usr/local/bin/brew" ]]; then
-    eval "$(/usr/local/bin/brew shellenv)"
+# Homebrew (supports both Apple Silicon and Intel Macs). `brew shellenv`
+# prints static exports (PATH and MANPATH are joined at source time, not when
+# it ran), so its output is cached like the other inits: that saves about
+# 25 ms of the brew process on every new shell. It runs again when brew
+# updates itself (the binary's file is then newer than the cache).
+if [[ -x "/opt/homebrew/bin/brew" ]]; then
+    _cache_init brew /opt/homebrew/bin/brew shellenv || eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[ -x "/usr/local/bin/brew" ]]; then
+    _cache_init brew /usr/local/bin/brew shellenv || eval "$(/usr/local/bin/brew shellenv)"
 fi
 # Prefix for the fpath/plugin lookups below. Falls back to the brew on PATH
 # (<prefix>/bin/brew) so no `brew --prefix` subprocess is ever spawned.
