@@ -453,10 +453,11 @@ _agents_collect_classify() {
 }
 
 # _agents_take_plan — split the caller's full (the classify output) into
-# recs and its last line, the plan: relisten and skip ("-" for none). Only
-# suffix and prefix removals, which stay cheap on a long output.
+# recs and its last line, the plan: relisten and skip ("-" for none). A
+# suffix removal and byte offsets, under LC_ALL=C: in a UTF-8 locale bash
+# widens the whole output first, ten times the cost.
 _agents_take_plan() {
-    local p
+    local p LC_ALL=C
     recs="${full%$'\n'lplan$'\t'*}"
     if [[ ${#recs} -lt ${#full} ]]; then
         p="${full:${#recs}+7}"
