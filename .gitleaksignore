@@ -1,0 +1,5 @@
+# Fixture values in the secret tests: made-up strings the scanner reads as keys.
+9c0615d42b779f2ebc7679c8f9b45d194e660f2d:scripts/lib/test_secret.sh:generic-api-key:362
+9c0615d42b779f2ebc7679c8f9b45d194e660f2d:scripts/lib/test_secret.sh:generic-api-key:369
+9c0615d42b779f2ebc7679c8f9b45d194e660f2d:scripts/lib/test_secret.sh:generic-api-key:391
+9c0615d42b779f2ebc7679c8f9b45d194e660f2d:scripts/lib/test_secret.sh:generic-api-key:479

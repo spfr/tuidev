@@ -188,7 +188,7 @@ pass "AGENTS_GLYPHS=off names without marks (and clears the display names); AGEN
 
 # --- 7. Hostile titles ------------------------------------------------------------------------
 fixture; rm -f "$AGENTS_RUN_DIR/herdr-labels.tsv"
-evil=$'\e]0;owned\a$(touch '"$tmp"$'/pwned) ‮`id`; x\n--source evil\x1fR\tw1:t4\tgot'
+evil=$'\e]0;owned\a$(touch '"$tmp"$'/pwned) \xe2\x80\xae`id`; x\n--source evil\x1fR\tw1:t4\tgot'
 title w1:p1 "$evil"
 title w2:p1 $'\e[31m'"-rf"$'\t'"/"
 fresh; agents_herdr_sync >/dev/null

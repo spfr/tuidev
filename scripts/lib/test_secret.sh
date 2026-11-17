@@ -380,7 +380,7 @@ export TUIDEV_SECRET_BACKEND=pass
 rc_file="$tmp/zshrc fixture"
 cat > "$rc_file" <<'EOF'
 # a comment GITHUB_TOKEN=ghp_notreallyatokenbutlongenough12345
-export GITHUB_TOKEN=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB
+export GITHUB_TOKEN=ghp_01230000000000000000000000000000
 export CACHE_TOKEN="abc def'12\"34567"
 API_KEY='s3cr3t-v@lue!'
 export EDITOR=nvim
@@ -450,7 +450,7 @@ pass "import --dry-run lists names and line numbers, stores nothing, changes not
 s import "$rc_file"
 [[ $rc -eq 0 ]] || fail "import rc=$rc: $(err)"
 cmp -s "$rc_file" "$tmp/orig" || fail "import without --remove changed the file"
-[[ "$(got GITHUB_TOKEN)" == ghp_0123456789abcdefghijklmnopqrstuvwxyzAB ]] || fail "import GITHUB_TOKEN"
+[[ "$(got GITHUB_TOKEN)" == ghp_01230000000000000000000000000000 ]] || fail "import GITHUB_TOKEN"
 [[ "$(got CACHE_TOKEN)" == "abc def'12\"34567" ]] || fail "import unquoted CACHE_TOKEN wrongly: [$(got CACHE_TOKEN)]"
 [[ "$(got API_KEY)" == 's3cr3t-v@lue!' ]] || fail "import API_KEY"
 [[ "$(got SIGNING_KEY)" == abcdefgh12345678 ]] || fail "import SIGNING_KEY"
