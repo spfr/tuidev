@@ -30,22 +30,29 @@ _tuidev_state="${XDG_CONFIG_HOME:-$HOME/.config}/tuidev"
 # (newer than the cache), or when the command line itself changes. Returns
 # non-zero, sourcing nothing, if CMD is missing or fails. The script is written
 # to a per-shell temp file and moved into place, so a shell starting in
-# parallel never sources a half-written cache.
+# parallel never sources a half-written cache. A CMD that prints nothing is
+# not cached (`brew shellenv` prints nothing when PATH already starts with its
+# prefix, as in a nested shell): there is nothing to source, and the next
+# shell asks again, so an empty cache never stands in for the real script.
 _cache_init() {
   local name=$1; shift
-  local bin cache line tmp
+  local bin cache line body tmp
   # CMD may be an absolute path (a tool not on PATH yet, like brew before its
   # own shellenv ran), else it is looked up on PATH.
   if [[ $1 == /* ]]; then [[ -x $1 ]] && bin=$1; else bin=${commands[$1]}; fi
   [[ -n $bin ]] || return 1
   bin=${bin:A}
   cache=${XDG_CACHE_HOME:-$HOME/.cache}/zsh/init-$name.zsh
-  [[ -r $cache ]] && read -r line < $cache
-  if [[ $line != "# $bin $*" || $bin -nt $cache ]]; then
+  # The header, and whether anything follows it.
+  [[ -r $cache ]] && { read -r line; read -r body || [[ -n $body ]] && body=1 } < $cache
+  if [[ $line != "# $bin $*" || -z $body || $bin -nt $cache ]]; then
     mkdir -p -- ${cache:h}
     tmp=$cache.$$
-    { { print -r -- "# $bin $*" && "$@" } >| $tmp 2>/dev/null && mv -f -- $tmp $cache } \
-      || { rm -f -- $tmp; return 1; }
+    { { print -r -- "# $bin $*" && "$@" } >| $tmp 2>/dev/null } || { rm -f -- $tmp; return 1; }
+    body=
+    { read -r line; read -r body || [[ -n $body ]] && body=1 } < $tmp
+    [[ -n $body ]] || { rm -f -- $tmp $cache; return 0; }
+    mv -f -- $tmp $cache || { rm -f -- $tmp; return 1; }
   fi
   source $cache
 }
