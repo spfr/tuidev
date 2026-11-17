@@ -193,7 +193,7 @@ _agents_map_list() {
         # The mark of a kind of session: its own, the "agent" one for a kind
         # the table does not name, the shell one for none. Looked up in a table
         # that is ours; the kind (a remote row said it) is only ever a key.
-        function mark(kind) {
+        function kmark(kind) {
             if (!gon) return ""
             if (kind == "" || kind == "-") kind = "shell"
             if (kind in gmap) return gmap[kind]
@@ -244,7 +244,7 @@ _agents_map_list() {
             }
             status = "-"; what = P_what
             if (what ~ / · /) { status = what; sub(/ · .*/, "", status) }
-            gm = mark(P_type)
+            gm = kmark(P_type)
             cur = $1 SUBSEP R_id; curname = (gm == "" ? "" : gm " ") P_type " " P_name
             se[++ns] = cur; sm[ns] = $1; sid[ns] = R_id
             stext[ns] = sprintf("%-12s %s%-8s %-16s %-9s %6s %6s %7s", $1, (gon ? lc(gm, gwid) " " : ""), P_type, substr(P_name, 1, 16), substr(status, 1, 9), P_cpu, P_mem, P_age)

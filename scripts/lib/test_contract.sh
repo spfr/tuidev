@@ -244,6 +244,26 @@ while IFS= read -r files; do
 done < <(grep -ohE '_agents_awk(_eval|_colored)? +"?[a-z_][a-z_ ]*"?' "$REPO_DIR"/lib/agents/*.sh "$REPO_DIR/bin/agents" \
     | sed -E 's/^_agents_awk(_eval|_colored)? +//; s/"//g; s/ +$//' | sort -u)
 [[ -z "$clash" ]] || fail "awk parameters named like functions, which mawk refuses:$clash"
+# The same for the awk programs written inline in a shell module: per module,
+# its inline functions together with the library files that module loads.
+clash=""
+for sh in "$REPO_DIR"/lib/agents/*.sh; do
+    grep -qE '^[ \t]+function[ \t]+[A-Za-z_][A-Za-z_0-9]*\(' "$sh" || continue
+    set --
+    for f in $(grep -ohE '_agents_awk(_eval|_colored)? +"[a-z_][a-z_ ]*"' "$sh" | sed -E 's/^[^"]*"//; s/"$//' | tr ' ' '\n' | sort -u); do
+        [[ -f "$REPO_DIR/lib/agents/awk/$f.awk" ]] && set -- "$@" "$REPO_DIR/lib/agents/awk/$f.awk"
+    done
+    found="$(cat "$@" "$sh" | awk '
+        /^[ \t]*function[ \t]+[A-Za-z_][A-Za-z_0-9]*[ \t]*\(/ {
+            name = $0; sub(/^[ \t]*function[ \t]+/, "", name); sub(/[ \t]*\(.*/, "", name)
+            args = $0; sub(/^[^(]*\(/, "", args); sub(/\).*/, "", args); gsub(/[ \t]/, "", args)
+            fn[name] = 1; m = split(args, a, ",")
+            for (j = 1; j <= m; j++) if (a[j] != "") par[a[j]] = name
+        }
+        END { for (x in par) if (x in fn) printf " %s (a parameter of %s)", x, par[x] }')"
+    [[ -z "$found" ]] || clash+=" [${sh##*/}]$found"
+done
+[[ -z "$clash" ]] || fail "awk functions named like a parameter of a program they are loaded with, which mawk refuses:$clash"
 pass "no awk parameter is named like a function"
 
 # CI's required-files job must list only files that exist, or a removal breaks CI
