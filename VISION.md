@@ -49,6 +49,7 @@ We refuse:
 - A showcase for every modern CLI.
 - AI agents running unsandboxed on the host by default.
 - In-editor ACP agents. Users can add them, but the repo won't ship them.
+- A team or deployment secret manager. `secret` is one person's tokens on one machine ([docs/secrets.md](docs/secrets.md#when-to-use-something-else)).
 - Non-FOSS defaults. Docker Desktop and OrbStack are never installed.
 - Piping remote install scripts into a shell. When a package manager can't supply a tool, the installer prints the official command instead.
 

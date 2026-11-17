@@ -69,6 +69,15 @@ agents open workbox /srv/app/report.html   # fetch one file and open it here
 
 Your machines are the ones saved in Herdr (`herdr machine list`) plus any ssh hosts in `AGENTS_REMOTE_HOSTS` (`~/.config/agents.conf`); any ssh host works by name too.
 
+**Use just this.** Each piece stands alone; take the one you need.
+
+| Feature | Needs | Works without Herdr? |
+|---|---|---|
+| `agents map`, `agents ports`, `agents forward` | `--pack monitoring` on both machines, and ssh between them | Yes: list the hosts in `AGENTS_REMOTE_HOSTS` |
+| `agents push`, `agents open` | `--pack monitoring` on this machine and ssh; `push` needs nothing of tuidev on the other end | Yes |
+| The click on a link in a pane | Herdr with the `tuidev.link` plugin (`--pack herdr`) and `--pack monitoring` on both machines; the watcher on the machine you sit at | No: the click is Herdr's |
+| Dropping a file onto a session | Claude Code on the other machine, `--pack monitoring` on both, the watcher and a Mac (for the dialog) where you sit | Yes: the watcher follows `AGENTS_REMOTE_HOSTS` hosts too |
+
 **The map: what runs where, and one key to stop it.** `agents map` (prefix+m in Herdr, a popup over whatever you are doing) is one list for this machine and your others, grouped by what you would do with a thing rather than by where it is:
 
 - **Previews and dev servers** come first: every port something was started to be looked at on, with its machine, command, project, CPU, memory and age, whether a session still owns it or it was left behind, and where it opens. A remote one that is already forwarded shows its local URL.
@@ -82,13 +91,15 @@ The other machines answer over one shared ssh connection each, so the list comes
 | Key | On a preview or dev server | On something left behind | On a session | On a machine |
 |---|---|---|---|---|
 | `enter` | open it in your browser, forwarding first when it is remote | | go to its pane (here) or peek at it (elsewhere) | |
-| `ctrl-k` | stop the process that holds it | stop its tree | stop its tree | |
+| `ctrl-k` (also `ctrl-x` and `delete`) | stop the process that holds it | stop its tree | stop its tree | |
 | `ctrl-s` | sweep its machine | sweep its machine | | sweep it: `agents reap` stops what sessions left behind, asked first |
 | `ctrl-p` | | | peek at its pane | |
+| `ctrl-e` | | | list what each session runs | |
+| `ctrl-r` | reload the list | | | |
+
+On a forward, `enter` opens it and `ctrl-k` closes it. `esc` quits.
 
 A stop is `agents kill` on the machine that runs the thing, with its refusals and its y/N question. A dev server here is a listener started in a project directory: not an agent's own port, not an app or system service, not a daemon in your home directory (`agents ports` lists every listener).
-
-What another machine sends is untrusted text. One set of checks (`lib/agents/awk/lib_maprows.awk`) decides, for the list and for the menu bar's board alike, whether a row is one: an id only in the shape of a process id (up to 10 digits, `@` and a start of up to 48 plain characters), a port a number, a file an absolute path of plain characters (up to 400), a forward only from this machine and with every field of its shape. No control character reaches your terminal: C0 and DEL, C1 (as UTF-8 writes it), and the bidi and line-separator characters (U+202A to U+202E, U+2066 to U+2069, U+2028, U+2029) become spaces. A long path is shortened so its recognisable part stays: a temp-directory binary shows its name first, and a file's path is cut in the middle.
 
 So nothing needs `pkill`, and nothing needs you to remember which machine a dev server was started on. `agents map workbox` or `agents map local` narrows it to one machine; piped, it prints the list.
 
@@ -111,6 +122,17 @@ So nothing needs `pkill`, and nothing needs you to remember which machine a dev 
 
 **What a forward is.** One `ssh -N -L` of its own, from this machine's `127.0.0.1` to the other machine's `localhost`: nothing is bound to a public address at either end. One you open yourself takes the same port number when that is free here, so the URL a program printed works as it stands; otherwise the next free one. ssh runs with `BatchMode`, so a machine that needs a password is reported, never prompted for: load the key (`ssh-add`) or reconnect it (`herdr machine reconnect workbox`) first. These connections carry nothing your ssh config would add for the host: no agent or X11 forwarding, and none of its `LocalForward` lines.
 
+**What leaves my machine.** Nothing goes to a service of tuidev's: there is none, and no telemetry. Between your own machines, over your own ssh:
+
+| Feature | What crosses the wire | Who sends it |
+|---|---|---|
+| The map, `agents ports` and the menu's Machines row | The other machine's process list: command line, directory, ports | The other machine, when you ask |
+| A click | The other machine sends a URL or a file path; your machine makes the tunnel or fetches the file | The other machine; the tunnel and the fetch are yours |
+| A dropped file | That one file, after you click **Send** | You, to the machine that asked |
+| `agents push` | The files you name | You |
+
+The map shows other machines' command lines, so a secret passed as an argument shows up there. Pass secrets in the environment of one command ([secrets.md](secrets.md)).
+
 **What another machine may ask for.** The watcher treats each line as a request and decides itself:
 
 - a URL must be `http(s)` on `localhost`, `127.0.0.1`, `0.0.0.0` or `[::1]`; it becomes a tunnel to that machine's `localhost` and a tab on your `127.0.0.1`. Nothing else is opened;
@@ -118,9 +140,18 @@ So nothing needs `pkill`, and nothing needs you to remember which machine a dev 
 - a file must be an absolute path with a viewer's extension (Markdown, text, JSON, CSV, HTML, PDF, images), at most 50 MB, a cap applied on your machine; it lands in `~/.local/state/tuidev/agents/remote/MACHINE/`, where a requested file is kept a day and the folder at most 500 MB. Scripts and apps are never opened;
 - at most five requests a machine in ten seconds.
 
+What another machine sends is untrusted text. One set of checks (`lib/agents/awk/lib_maprows.awk`) decides, for the list and for the menu bar's board alike, whether a row is one: an id only in the shape of a process id (up to 10 digits, `@` and a start of up to 48 plain characters), a port a number, a file an absolute path of plain characters (up to 400), a forward only from this machine and with every field of its shape. No control character reaches your terminal: C0 and DEL, C1 (as UTF-8 writes it), and the bidi and line-separator characters (U+202A to U+202E, U+2066 to U+2069, U+2028, U+2029) become spaces. A long path is shortened so its recognisable part stays: a temp-directory binary shows its name first, and a file's path is cut in the middle.
+
 Any process on the other machine can send a request, not only your click, so treat the watcher as "that machine may open a tab or a document here". The page it opens is that machine's content in your browser: the tab is on `127.0.0.1` so it shares no cookies with what you run on `localhost`, but like any forwarded dev server it can make requests to other loopback ports. Don't follow a machine you would not open a dev server from (`AGENTS_LINK=0`, or disable it in Herdr).
 
-Limits worth knowing:
+**When another tool is better.**
+
+- **VS Code Remote-SSH** forwards the ports it sees in its terminal. If an editor is attached to the remote machine, use that. tuidev is for agents in a terminal or Herdr, where no editor is.
+- **Tailscale Serve** publishes a service to your tailnet under a name, so a phone or a teammate can open it too. A tuidev forward is the opposite: loopback to loopback, on the machine you sit at, open while you need it, with nothing new reachable on the network.
+- **Plain `ssh -L`** does the tunnel. `agents forward` adds a free local port (the same number when it is free), a list of what is open and whether each still answers, no password prompt, no agent forwarding, and `agents forward close --all`.
+
+<details>
+<summary>Limits worth knowing</summary>
 
 - The click needs Herdr's mouse capture on (`ui.mouse_capture`, the default) and is Ctrl-click on every platform. In saved-machine panes Herdr does not open OSC 8 links yet ([herdr#4447](https://github.com/herdrdev/herdr/issues/4447)), so there a link has to be on screen as its URL; `agents ports --pick` and `agents forward open` need no click.
 - A forwarded server sees `Host: localhost:PORT`. One that checks the host name, or serves TLS for the machine's own name, may refuse.
@@ -128,6 +159,8 @@ Limits worth knowing:
 - After your laptop sleeps, the other machine can take a while to notice the watcher is gone; a click in that window is lost. The watcher reconnects on its own.
 - The LaunchAgent uses the ssh agent macOS gives every login session. A key that only an agent named in your shell's rc files holds (`SSH_AUTH_SOCK` set there) is not available to it: `agents link` then shows the machine as unreachable.
 - `AGENTS_LINK=0` turns the watcher off; `agents link restart` applies a changed setting.
+
+</details>
 
 ## Personal hosts stay local
 

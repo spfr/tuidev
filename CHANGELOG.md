@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The README tells the 3.22 story in the order you meet the problems.** New sections "See what runs where" (Herdr's tab names and sidebar rows), "Secrets agents don't inherit" and "Quiet when nothing happens" (what changed in the background, as a table); Remote, Cleanup, the menu bar and Cool to the touch are a screen each, with their detail in the owning docs.
+- **New pictures.** The Herdr GIF runs tuidev on all three demo machines, so it shows named tabs, each workspace's branch and roll-up, a red `blocked` and since when an agent waits; the menu picture is the glance menu.
+- **Docs.** [performance.md](docs/performance.md#what-tuidev-runs-in-the-background) lists everything tuidev runs in the background, with its trigger, how often and its off switch; [remote.md](docs/remote.md#remote-feels-local-ports-links-and-files) adds "Use just this", "What leaves my machine" and "When another tool is better", and every key of the map; [secrets.md](docs/secrets.md#when-to-use-something-else) says when another tool is the better choice; one table of the marks by kind of session; three FAQ entries; `SECURITY.md` describes `secret` and the link watcher's trust model.
+
+### Fixed
+
+- **`SECURITY.md` still told you to keep tokens in `~/.zshrc.local`.** It points at `secret` now.
+- **The README counted 25 credential paths.** The list has 33.
+
 ## [3.22.1] - 2026-11-17
 
 ### Changed

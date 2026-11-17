@@ -1,6 +1,6 @@
 # tuidev
 
-**The terminal dev environment for AI coding agents: every agent on every machine in one view, cleanup with evidence when they leave a mess, Claude Code and Codex sandboxed by default, a modern shell, and an install you can undo.**
+**The terminal dev environment for AI coding agents: every machine you run agents on feels like one, you see what runs where at a glance, cleanup comes with evidence, and your tokens stay out of the agents' reach. Claude Code and Codex sandboxed by default, a modern shell, and an install you can undo.**
 
 [![CI](https://github.com/spfr/tuidev/actions/workflows/ci.yml/badge.svg)](https://github.com/spfr/tuidev/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/spfr/tuidev?sort=semver)](https://github.com/spfr/tuidev/releases/latest)
@@ -14,33 +14,38 @@
 
 ## The problem
 
-You run Claude Code in one tab, Codex in another, and a long job on a Linux box that stays on. One of them has been waiting for your approval for twenty minutes, and you don't know which. A subagent that finished hours ago left a loop polling a file for a line that will never come. A crashed session left its MCP servers and a dev server running. The fan is on, and nothing says which project is burning the CPU. And any command an agent runs can read `~/.ssh`.
+You run Claude Code in one tab, Codex in another, and a long job on a Linux box that stays on. One of them has been waiting for your approval for twenty minutes, and you don't know which: the tabs read `1 2 3 4`. The agent on the other machine says its preview is at `localhost:5173`, and that is its localhost, not yours. A subagent that finished hours ago left a loop polling a file for a line that will never come. A crashed session left its MCP servers and a dev server running. The fan is on, and nothing says which project is burning the CPU. Any command an agent runs can read `~/.ssh`, and the API token you exported in `.zshrc` is in the environment of every agent you start.
 
 ## What tuidev does about it
 
 tuidev is shell scripts and configs for coding with AI agents from the terminal on macOS and Linux. Claude Code is the primary CLI and Codex the second: run them in a Ghostty tab and review the diff in VS Code or Cursor. It installs a small core, and everything else is an opt-in pack.
 
-- **[Every agent, on every machine, in one sidebar](#every-agent-on-every-machine-in-one-sidebar):** Herdr shows which agent needs you, here or on your always-on box.
+- **[See what runs where](#see-what-runs-where):** Herdr's sidebar shows which agent needs you, here or on your always-on box, and every tab is named after what runs in it.
+- **[Remote feels local](#remote-feels-local):** Ctrl-click another machine's `localhost` and it opens in your browser; one map of what runs where, with one key to stop it there.
 - **[Cleanup with evidence](#cleanup-with-evidence):** `agents` finds what sessions left behind, says whether it is safe to stop and why, and shows where the CPU and the tokens went.
-- **[In your menu bar](#in-your-menu-bar):** the same on macOS, one click away, with keep-awake and a system view.
-- **[Cool to the touch](#cool-to-the-touch):** on Apple Silicon MacBooks, fans that follow what your palms feel, not just what the chip can survive.
+- **[In your menu bar](#in-your-menu-bar):** on macOS, who needs you in about ten rows, with the rest one hover away.
+- **[Secrets agents don't inherit](#secrets-agents-dont-inherit):** `secret` keeps API tokens in the OS store and hands one to one command, instead of to everything your shell starts.
 - **[Sandboxed by default](#sandboxed-by-default):** Claude Code's and Codex's own sandboxes on, and `sbx` for everything else.
+- **[Quiet when nothing happens](#quiet-when-nothing-happens):** what tuidev runs in the background runs on events, not on a stopwatch.
+- **[Cool to the touch](#cool-to-the-touch):** on Apple Silicon MacBooks, fans that follow what your palms feel, not just what the chip can survive.
 - **[A modern shell in one command](#a-modern-shell-in-one-command):** Ghostty, zsh and the CLI tools you and your agents both reach for.
 - **[Subagents on the cheapest tier that works](#subagents-on-the-cheapest-tier-that-works)** and **[an install you can preview and undo](#an-install-you-can-preview-and-undo)**.
 
-## Every agent, on every machine, in one sidebar
+## See what runs where
 
-`--pack herdr` installs [Herdr](https://herdr.dev/), an agent runtime: a server owns the panes, so agents keep running when you detach, and its sidebar marks each one `working`, `blocked`, `done` or `idle`. Save an always-on box once with `herdr machine add workbox`, and its agents join the same sidebar, so you see which agent needs you, on which machine, and jump straight to it. The box is a Raspberry Pi, a NUC or a VM set up with `--profile remote` (Tailscale, SSH, mosh and tmux, on macOS or Linux), and its agents keep working while your laptop sleeps. Herdr installs as its own release binary, checked against the sha256 its GitHub release lists, and `update.sh --packages` upgrades it live with a handoff, so running agents keep going through an upgrade. [Fleet attention](docs/agent-workflows.md#fleet-attention--herdr---pack-herdr) · [Remote and mobile](docs/remote.md)
+`--pack herdr` installs [Herdr](https://herdr.dev/), an agent runtime: a server owns the panes, so agents keep running when you detach, and its sidebar marks each one `working`, `blocked`, `done` or `idle`. Save an always-on box once with `herdr machine add workbox`, and its agents join the same sidebar, so you see which agent needs you, on which machine, and jump straight to it. The box is a Raspberry Pi, a NUC or a VM set up with `--profile remote`, and its agents keep working while your laptop sleeps.
 
-<img src="docs/assets/herdr.gif" width="800" alt="Herdr in a terminal. The sidebar lists three machines, Local, devbox and workbox, with six agents across them: on Local, a Claude Code agent working in myapp and a Codex agent done in web; on devbox, a Claude Code agent in api marked blocked in red and one done in api-docs; on workbox, a Codex agent working in infra and a Claude Code agent working in api-tests. The view jumps to devbox's api, where the agent asks to allow git push origin fix-404; after a y it pushes, opens a draft PR and its mark turns from red to green. Then the view opens workbox's infra, where an agent waits for a canary.">
+With `--pack monitoring` beside it, the labels say what runs where. A tab bar of `1 2 3` reads `✳ API docs`, `✳ Fix login redirect`, `❯ api`: one mark per kind of session (`✳` Claude Code, `⬡` Codex, `❯` a shell), the same in Herdr, the map and the menu bar, then the session's own task title. In the sidebar, a workspace says in red how many of its agents wait on you (`api · 2 blocked`) and what runs there (`✳2 ❯1`); an agent row leads with what the session is doing and when it started waiting. A name you typed yourself is never touched. [Fleet attention](docs/agent-workflows.md#fleet-attention--herdr---pack-herdr) · [Tab names and sidebar rows](docs/agent-workflows.md#tabs-named-after-what-runs-in-them)
 
-<sub>Herdr with this Mac and two Linux containers saved as SSH machines, `devbox` and `workbox`. The agents are scripted stand-ins that report their state through Herdr's hook API, not live Claude Code or Codex sessions. Rendered with `make screenshots`.</sub>
+<img src="docs/assets/herdr.gif" width="800" alt="Herdr in a terminal. The tab bar reads ✳ Fix flaky cache test, ✳ Review diff and ❯ myapp instead of 1, 2, 3. The sidebar lists three machines, Local, devbox and workbox, and under each its workspaces on two lines: the name, then the branch and what runs there, such as fix-cache · ✳2 ❯1 for myapp and canary · ⬡1 for infra; api on devbox adds a red blocked after its name. Below, seven agents sorted by who needs you: first Fix 404 routes on devbox, blocked since 22:43, in red; then Review diff and API docs, done, in blue, each with the time it finished; then Rate limit and Canary 1.5 working on workbox, Fix flaky cache test working, and Sign-up form idle. The view jumps to devbox's api, tab ✳ Fix 404 routes, where the agent asks to allow git push origin fix-404; after a y it pushes and opens a draft PR, its red mark turns green and blocked leaves the workspace row. Then the view opens workbox's infra, tab ⬡ Canary 1.5, where an agent waits for a canary.">
+
+<sub>Herdr with this Mac and two Linux containers saved as SSH machines, `devbox` and `workbox`, and tuidev on all three. The agents are scripted stand-ins that set a task title and report their state through Herdr's hook API, not live Claude Code or Codex sessions; the names, roll-ups and times are what `agents herdr sync` wrote. Rendered with `make screenshots`.</sub>
 
 ## Remote feels local
 
-The dev server an agent started on another machine prints `http://localhost:5173`, and that is the other machine's localhost. With tuidev on both, you stop thinking about it. **Ctrl-click the URL** in its Herdr pane and it opens in your own browser, through an ssh tunnel made on the spot. Press **prefix+m** for the map: one list of what runs where, on every machine, grouped by what you would do with it: previews and dev servers first, with where each opens; the reports and pages sessions just wrote, which Enter fetches and opens here; what was left behind; then the sessions and the machines with their CPU and memory. Enter goes there and **ctrl-k stops what is under the cursor on the machine that runs it**, asked first, so nothing needs `pkill` or remembering where a server was started. **Drag a file onto a session on another machine** and it gets there: the session asks your Mac for it, your Mac asks you once, and nothing leaves without that click.
+The dev server an agent started on another machine prints `http://localhost:5173`, and that is the other machine's localhost. With tuidev on both, **Ctrl-click the URL** in its Herdr pane and it opens in your own browser, through an ssh tunnel made on the spot.
 
-It is plain ssh underneath. Your machine keeps one connection to each machine saved in Herdr, nothing listens anywhere, and what another machine may ask for is decided on yours: only its own loopback URLs, on a port your machine picks, and only files a viewer shows. [Remote feels local](docs/remote.md#remote-feels-local-ports-links-and-files)
+Press **prefix+m** for the map: one list of what runs where, on every machine, with previews and dev servers first, then the files sessions just wrote and what was left behind. Enter opens it here, and **ctrl-k stops what is under the cursor on the machine that runs it**, asked first. **Drag a file onto a session on another machine** and it gets there: your Mac asks you once, and nothing leaves without that click. It is plain ssh underneath: nothing listens anywhere, and what another machine may ask for is decided on yours. [Remote feels local](docs/remote.md#remote-feels-local-ports-links-and-files)
 
 <img src="docs/assets/remote.gif" width="800" alt="Herdr in a terminal with three machines in its sidebar: Local, atlas and kepler. The storefront session on atlas shows a preview server at http://localhost:5173 and a review it wrote. Back on Local, prefix+m opens the map: under Previews and dev servers, atlas port 5173 by the storefront session and kepler port 8080, left behind; under Files sessions just wrote, review.md on atlas; then sessions and machines. Enter on the atlas row forwards the port, and the checkout page served from atlas appears in a browser. Ctrl-x on the kepler row asks to send SIGTERM to one process; after y the row is gone and Left behind says nothing. Enter on review.md fetches it, and the review is read in the terminal on this Mac.">
 
@@ -56,44 +61,65 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
 
 - **Verdicts, not guesses.** `agents why PID` prints the evidence and a verdict for every stale process and every command flagged stuck, long or duplicated: "safe to stop: what it waits for already finished", "check first: dev server on :5173, its session is still active". `agents reap --stuck` stops the stuck loops. Kills go descendants first and re-check each process's start time before every signal.
 - **Fixed at the source.** Claude Code hooks stop the background commands a subagent left running once it hands back its report, and a rule in the orchestration pack tells agents not to poll in sleep loops and to stop what they start. Opt-in `AGENTS_AUTO_REAP=1` cleans up only the high-trust cases.
-- **One click to where it waits.** `agents show PID` details any process like Activity Monitor's inspector: its session and what it is doing now (from the end of its transcript), where it lives, its verdict, CPU, memory and children. `agents jump PID` takes you to its Herdr or tmux pane and the terminal tab that shows it, and `agents pick` browses everything in fzf with that view as the preview. MCP servers go by the names in your Claude Code and Codex configs, and `agents mcp` says who configured each, how many copies run (every session starts its own) and the memory they hold.
-- **MCP servers only when used.** Every session starts every server you configured, so five sessions with a browser MCP hold five copies of it, 60 MB or more each, used or not. `agents mcp lazy chrome-devtools` puts `mcp-lazy` in front: a 10 MB stand-in that answers the session's startup questions from a cache and starts the real server on its first tool call. Every tool is still there, and nothing needs turning on per project.
-- **Where the CPU goes.** CPU by job type (tests, builds, dev servers, browsers, MCP, agents, polling loops) per project and session, in the menu and in `agents json`. `agents report` adds CPU-hours over time and which projects leave processes behind, from a local history of names only, never command lines (`AGENTS_HISTORY=0` turns it off).
-- **What to change.** Every finished command lands in a run ledger (`agents runs`: how long, CPU, exit code, which subagent type started it), and `agents report` opens with its top insights, each with what to do; `--view runs|waste|trends|agents` has the detail, and the menu shows today's top one:
-
-  ```text
-  1. Explore subagents left 3 polling loops running in 24h (7.7 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
-  ```
-
 - **A runaway can't take the Mac.** A test an agent started once grew to 16 GB in under a minute, and macOS's out-of-memory dialog blamed Chrome. Now a memory guard (a LaunchAgent from the same pack) warns past 8 GB with the process, its script, project and session, and stops a runaway in an agent tree at half the RAM, before macOS starts killing its own daemons. Agents get a 4 GB Node heap cap, so the common case fails fast inside the test. `agents mem` shows who holds the memory by real footprint, and what the guard did.
-- **Who needs you, and a join key.** `agents` opens with what is blocked, what is yours to review and what runs, and everything parked in one line. `agents report --view waits` times each permission and idle prompt, in Herdr and in tmux or a plain tab too, and keeps blocked, fresh and parked apart, because a day's total of finished sessions is mostly nobody waiting. `agents json` gives every agent `herdr_pane` and `session_id`, so tools that run agents can match their records to ours.
 - **Where the tokens go.** `agents report --view tokens` reads the Claude Code and Codex transcripts already on disk: tokens by model, CLI, subagent type, project, session and who drove them (you, a headless run, a subagent), the cache hit rate, what polling cost, context compactions and the Codex plan's headroom, and what it all would cost at API list prices. `--view context` shows which MCP servers, skills and plugins your sessions load but never use, and `--view denials` which commands you or auto mode keep denying, each with what to change. All local; nothing is sent anywhere.
-- **How close to the limit.** `agents limits` and the menu's Limits section show every CLI's usage limits on a gauge marking the time gone in the window, under or over pace, with when each resets: Claude Code's 5-hour and weekly windows, per account if you use several `CLAUDE_CONFIG_DIR`s (from its status line, which the ai-clis pack points at `agents statusline`; yours keeps working through `AGENTS_STATUSLINE_CMD`), Codex's plan windows from its logs, and Antigravity's quotas from `agy -p /quota`, which costs no tokens. A window turns orange at 80% and red at 95%. Sessions of Claude Code, Codex, Antigravity, Grok and Cursor's CLI all count, and Grok's tokens join the token report.
 
-[Local processes: `agents`](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
+Also: `agents show`, `jump` and `pick` for one process and the pane it runs in; [MCP servers started on their first tool call](docs/agent-workflows.md#start-a-server-on-its-first-tool-call-agents-mcp-lazy); [CPU by job](docs/agent-workflows.md#where-the-cpu-goes-job-types) and [insights with what to change](docs/agent-workflows.md#reading-the-insights); [how long agents wait on you](docs/agent-workflows.md#waits-how-long-agents-wait-on-you); every CLI's [usage limits](docs/agent-workflows.md#usage-limits-agents-limits) on a gauge. [Local processes: `agents`](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 
 ## In your menu bar
 
-On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu that answers one question first: who needs you? The title counts only that, the sessions blocked and the ones to review, and stays calm otherwise. Below it, Needs you, To review and Running; everything parked for over an hour folds into one row. A flagged command reads as its verdict (`wait-loop stuck 5h10m · safe to stop`); every submenu starts with Jump to session, then Stop, Copy details, Peek and Details. Then your usage limits as gauges with a marker for the time gone, so 41% reads as fine or not (`Claude wk ████▏░░│░░░░░░ 41%`), swap only when it is high, and one Today row whose submenu holds the CPU by job, tokens, denials, compactions and the top insight. Stale processes and hogs appear only when there are some. Alerts know which Herdr pane you are looking at, so you are not pinged for the agent already in front of you. A newer Herdr waiting for a restart is a gray Maintenance line, not an alarm. It keeps the Mac awake while agents run, and with the lid closed too: each time it asks for your password, it is always time-boxed, and a guard turns lid sleep back on at timeout, on low battery or when the Mac runs hot. It runs when there is something to show, not on a stopwatch: Claude Code's hooks and Herdr's events refresh it the moment a session changes, it reads every 10 s only while a command runs, and with nothing going on it reads the machine 12 times an hour instead of 360.
+On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu that answers one question first: who needs you? The title counts only the sessions that are blocked and the ones to review, and shows a plain icon when nothing needs you.
+
+Open it and you can read it in two seconds. What needs an action is flat and first, one row each, with what it waits for and how long (`✳ api · permission · 6m`); a flagged command reads as its verdict (`wait-loop stuck 5h10m · safe to stop`), and every session's submenu starts with Jump to session. Everything else is one row that sums it up, its detail in the submenu: the usage limit closest to its cap as a gauge with a marker for the time gone, Today's CPU and tokens, what was left behind, your other machines, keep-awake and the system.
+
+The Machines row asks your other machines what runs there only when you open the menu, and a click on a dev server there opens it in your browser, through a forward. Alerts know which Herdr pane you are looking at, so you are not pinged for the agent in front of you. The menu keeps the Mac awake while agents run, with the lid closed too if you ask, always time-boxed. [Menu bar](docs/agent-workflows.md#menu-bar-swiftbar-macos)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/menu-dark.webp">
-  <img src="docs/assets/menu-light.webp" width="800" alt="The agents menu open under its menu-bar item, which shows a red alert with 1 and a blue check with 1 for what needs you, and a cup for keep-awake. Needs you lists the api session, permission, 6 minutes. To review lists web, done 12 minutes. Running lists myapp with its tests, its cores and memory, then a polling loop in api stuck for 5h10m marked safe to stop, and a dev server in web running 45 minutes marked check first. The loop&apos;s submenu is open: the command, then safe to stop, what it waits for already finished ([exited with code 0], 5h0m ago), its owner, the file it watches and that file&apos;s last line, then Stop command…, Copy details, Show session, Peek and Details. Below: Limits and memory with a monospaced gauge per window, Claude 5h, Claude wk and Codex 5h, each with a marker for the time gone in that window; Today with the time blocked, CPU-hours and tests the largest share; Stale with two items and Reap all stale; Hogs; Awake: while agents run; one row for CPU, memory and thermal pressure; Open agents watch; Refresh.">
+  <img src="docs/assets/menu-light.webp" width="800" alt="The agents menu open under its menu-bar item, which shows a red alert with 1 and a blue check with 1 for what needs you, and a cup for keep-awake. Needs you (1): a Claude Code session in api, permission, 6 minutes. To review (1): a Codex session in web, done 12 minutes. Running (3): myapp with its tests at 3m12s, 2.2 cores and 1.8G; a polling loop in api stuck for 5h10m, safe to stop; pnpm dev in web running 45 minutes, check first. Then one row each: Claude&apos;s weekly limit as a gauge at 83% with a marker for the time gone and +2 more windows; Today, 3.4 h blocked, 17.4 CPU-hours, tests 46%; Stale (2), server-memory and vite; Hogs (1); Awake, while agents run; CPU 27%, memory 59%, thermal nominal; Open agents watch; Refresh. The stuck loop&apos;s submenu is open: its command, Jump to session, then safe to stop, what it waits for already finished ([exited with code 0], 5h0m ago), its owner, how long it has waited, the file it watches and that file&apos;s last line, then Stop command…, Copy details, Show session, Peek and Details.">
 </picture>
 
 <sub>The plugin's actual output over the demo fixtures, drawn as a macOS menu by `scripts/render_menu.sh`; it is not a screenshot of a real menu bar. [More submenus, animated](docs/assets/menu.gif).</sub>
 
-## Cool to the touch
+## Secrets agents don't inherit
 
-Agents keep a MacBook's chip at 75–85 °C for hours, and macOS keeps its fans near their minimum until the chip nears its own limit, so the palm rest and keyboard soak up the heat. `--pack cooling` adds the fan curve macOS leaves out: a small Swift daemon you build from the repo ([`lib/fan/tuidev-fan.swift`](lib/fan/tuidev-fan.swift), one readable file, no network) follows the chip's temperature averaged over minutes, the way the chassis takes it in, so the fans settle at a steady speed instead of chasing every burst. Pick Cool (palms first), Balanced or Quiet in the menu or with `agents cool`. It only ever adds air to what macOS runs, hands the fans back on any error, exit or sleep, and switches modes without a password. [Fans](docs/agent-workflows.md#fans---pack-cooling)
+A token you export in `.zshrc` is in the environment of every program your shell starts: every agent you launch, every command it runs, every MCP server and install script. One `env` in a tool call and it is in a transcript.
+
+`secret` (in the core pack, one file, no packages) keeps tokens in the store your OS already has: the login Keychain on macOS, libsecret or `pass` on Linux. A token reaches one command, only when you ask:
+
+```bash
+secret scan                                 # tokens in your shell startup files, by name and line, never the value
+secret import --dry-run --remove ~/.zshrc   # what moving them into the store would change; drop --dry-run to do it
+secret set GITHUB_TOKEN                     # or add one at a hidden prompt
+secret run -n GITHUB_TOKEN -- ./release.sh  # in that command's environment, and nowhere else
+```
+
+The stores are on the sandbox's credential list, so a command under `sbx` can't read them, and Claude Code's shipped settings refuse `secret get`, `export` and `run` and the Keychain's own read commands. Codex's sandbox does not limit reads, so near tokens that matter, run it under `sbx`. It is not a team secret manager: for shared or deployed secrets, use the tool your team already has. What each sandbox stops, store by store, and how to check it on your machine: [Secrets](docs/secrets.md#what-an-agent-can-reach)
 
 ## Sandboxed by default
 
-`--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper, and gates git and gh writes behind a prompt. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 23 paths on one [credential list](configs/sandbox/credential-paths.txt). Codex's sandbox limits writes and network but not reads, so for anything else `sbx` runs a command under a macOS Seatbelt profile that denies the same list. A contract test keeps every copy of the list in step. And `--pack release-age` (in `--profile full`) keeps hijacked releases off the machine in the first place: npm, bun and uv wait 3 days before installing a new version, long enough for a compromised one like LiteLLM 1.107.0 to be pulled, while lockfiles still install as pinned. [Sandboxing](docs/sandboxing.md)
+`--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper, and gates git and gh writes behind a prompt. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 31 paths on one [credential list](configs/sandbox/credential-paths.txt). Codex's sandbox limits writes and network but not reads, so for anything else `sbx` runs a command under a macOS Seatbelt profile that denies the same list. A contract test keeps every copy of the list in step, and the secret stores are on it. And `--pack release-age` (in `--profile full`) keeps hijacked releases off the machine in the first place: npm, bun and uv wait 3 days before installing a new version, long enough for a compromised one like LiteLLM 1.107.0 to be pulled, while lockfiles still install as pinned. [Sandboxing](docs/sandboxing.md)
 
 <img src="docs/assets/sbx.png" width="800" alt="sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with &quot;Operation not permitted&quot;, so does appending to ~/.zshrc, and make test in the project still runs and passes.">
 
 <sub>Without a sandbox, any command an agent runs can read your keys. Under `sbx` (strict profile), the same read is refused, so are the other credentials and writes outside the project, and the project's own work still runs. Demo home with made-up files.</sub>
+
+## Quiet when nothing happens
+
+Something that watches your agents should not be what heats your laptop. Everything tuidev runs without being asked now runs when something happens:
+
+| What | Before | Now |
+|------|--------|-----|
+| Menu bar refresh, nothing going on | 360 an hour | 12 an hour, about 0.4 s each; a session's hooks and Herdr's events refresh it at once |
+| Memory guard | looks every 5 s | every 20 s, and every 5 s only while a process grows or memory is tight |
+| A new shell | `brew shellenv` on every start | cached, about 25 ms less |
+| tmux status line | redrawn every 5 s | every 15 s, and at once on an event |
+
+Your other machines are asked what runs there only when you open the menu or the map. Every background job, its trigger and its off switch: [what tuidev runs in the background](docs/performance.md#what-tuidev-runs-in-the-background)
+
+## Cool to the touch
+
+Agents keep a MacBook's chip at 75–85 °C for hours while macOS keeps the fans near their minimum, so the palm rest takes the heat. `--pack cooling` adds the fan curve macOS leaves out: a small Swift daemon you build from the repo ([`lib/fan/tuidev-fan.swift`](lib/fan/tuidev-fan.swift), one readable file, no network) follows the chip's temperature averaged over minutes, only ever adds air to what macOS runs, and hands the fans back on any error, exit or sleep. Pick Cool, Balanced or Quiet in the menu or with `agents cool`. [Fans](docs/agent-workflows.md#fans---pack-cooling)
 
 ## A modern shell in one command
 
@@ -110,16 +136,9 @@ Agents keep a MacBook's chip at 75–85 °C for hours, and macOS keeps its fans 
 | the GitHub website | `gh` | PRs, reviews and CI logs from the terminal |
 | `grep` over JSON and YAML | `jq`, `yq` | A query reads the structure |
 | bugs found at run time | `shellcheck` | Shell script mistakes caught before they run |
-| `git add -p`, `curl`, `time` | `lazygit`, `xh`, `hyperfine` (extras) | Hunk staging in one screen; formatted JSON; a benchmark with a spread |
-| `ps`, `du`, `man`, `cloc` | `procs`, `dust`, `tealdeer`, `tokei` (extras) | Simpler syntax, readable output |
-| pyenv, virtualenv, pip, pipx | `uv` (extras) | One binary for Python versions, venvs, lockfiles and tools |
-| nvm | `fnm` (`--pack fnm`) | Node per `.nvmrc` on `cd`, without the shell start-up cost |
-| reverse-search | `atuin` (extras) | History you search by directory and exit code, on Ctrl-R |
-| `top` | `btm` (`--pack monitoring`) | A system monitor you can read |
 | nothing: workflows and secrets went unchecked | `actionlint`, `zizmor`, `betterleaks` (`--pack ci`) | CI workflows linted and audited, and a secret scan, before a commit |
-| a long `git diff` | `hunk` (`--pack hunk`) | A review-first viewer for what an agent wrote |
 
-Tools with no label are in core. The extras (`--extras`) are optional, and whatever your package manager lacks is skipped. What each one replaces, why, and how an agent comes to use it is in [the toolbox](docs/toolbox.md); `make perf` checks what the OS does behind your agents (package stores in the Spotlight index or in backups, file limits, Low Power Mode, inotify on Linux), fixes what is safe and names the rest. `make disk` shows what your tools and agents have left on disk (caches, old runtimes, stale build trees and worktrees), explains each one, and only ever runs a tool's own cleanup command, one yes at a time: [performance](docs/performance.md).
+These are in core, apart from the `ci` pack. The extras (`--extras`) add `lazygit`, `xh`, `hyperfine`, `procs`, `dust`, `tealdeer`, `tokei`, `uv` and `atuin`, and whatever your package manager lacks is skipped. Every tool, what it replaces, why, and how an agent comes to use it is in [the toolbox](docs/toolbox.md); `make perf` checks what the OS does behind your agents (package stores in the Spotlight index or in backups, file limits, Low Power Mode, inotify on Linux), fixes what is safe and names the rest. `make disk` shows what your tools and agents have left on disk (caches, old runtimes, stale build trees and worktrees), explains each one, and only ever runs a tool's own cleanup command, one yes at a time: [performance](docs/performance.md).
 
 ## Subagents on the cheapest tier that works
 
@@ -199,7 +218,7 @@ The reasoning is in [VISION.md](VISION.md).
 
 | Profile   | Packs                                   | For                                     |
 |-----------|-----------------------------------------|-----------------------------------------|
-| `minimal` | core                                    | Servers, VMs, CI runners                |
+| `minimal` | core (the shell, the CLI tools, `secret`) | Servers, VMs, CI runners                |
 | `desktop` | core + ui + sandbox                     | **Default on macOS**: laptop or desktop |
 | `remote`  | core + remote + sandbox + `--pack tmux` | Headless machines, Tailscale nodes      |
 
@@ -213,8 +232,8 @@ Compose your own with `--core`, `--remote`, `--sandbox`, `--ui` and `--extras`, 
 |---------------|------|
 | `ai-clis` | Claude Code and Codex settings with their native sandboxes on, and git and gh write gates |
 | `orchestration` | Tiered subagents and the delegation skill for Claude Code and Codex |
-| `monitoring` | `agents` (cleanup verdicts, CPU by job, tokens by model and agent), its SwiftBar menu (macOS) and `bottom` |
-| `tmux`, `herdr` | Durable sessions; Herdr's agent-aware runtime |
+| `monitoring` | `agents` (cleanup verdicts, the map of what runs where, port forwards, CPU by job, tokens by model and agent), its SwiftBar menu (macOS) and `bottom` |
+| `tmux`, `herdr` | Durable sessions; Herdr's agent-aware runtime, with tabs named after what runs in them and the Ctrl-click that opens another machine's link here |
 | `nvim`, `vim` | LazyVim, or a zero-plugin vimrc for servers |
 | `sandbox-container` | Tier 2 sandboxing in a container runtime (Apple `container`, Podman or Docker) |
 | `fnm`, `hunk` | Node via fnm; a review-first diff viewer |
@@ -230,6 +249,9 @@ claude | codex                           # AI CLIs, sandboxed by their own nativ
 claude -w NAME                           # Claude Code in its own git worktree, for parallel agents
 agents [why PID | report]                # sessions, what's safe to stop, CPU by job (--pack monitoring)
 herdr                                    # every agent on this machine and saved ones (--pack herdr)
+agents map                               # what runs where on every machine; enter opens, ctrl-k stops (Herdr: prefix+m)
+agents forward open workbox 5173         # another machine's port, here, in your browser
+secret run -n NAME -- CMD                # a token from the OS store, in one command's environment
 sbx -- CMD                               # any command under the strict Seatbelt profile (macOS)
 t [NAME]                                 # attach-or-create a tmux session (--pack tmux)
 make check                               # health check for the installed profile
@@ -248,6 +270,7 @@ Every key binding and command is listed in [docs/CHEATSHEET.md](docs/CHEATSHEET.
 - AI CLI settings (`~/.claude/settings.json`, `~/.codex/config.toml`) are placed only where absent or unmodified. An edited `~/.claude/settings.json` gets new shipped settings merged in, and your values win ([docs/updating.md](docs/updating.md#shipped-configs-you-may-have-edited)).
 - Anything tuidev replaces is backed up to `~/.config/tuidev/backups/` first.
 - `~/.config/tuidev/manifest` records what was installed. `./uninstall.sh` removes only those records: a `ripgrep` you already had survives, and so do CLI logins and session state.
+- What runs in the background (a memory guard and the menu's refresh with `--pack monitoring`, Claude Code hooks with `--pack ai-clis`, a fan daemon with `--pack cooling`) is listed with its trigger and its off switch in [docs/performance.md](docs/performance.md#what-tuidev-runs-in-the-background).
 - tuidev sends no telemetry.
 
 ## Documentation

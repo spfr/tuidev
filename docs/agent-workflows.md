@@ -190,7 +190,7 @@ With `--pack monitoring` beside `--pack herdr`, Herdr's labels say what runs whe
 - **Where the rows come from.** The pack adds both layouts as one `tuidev-sidebar` block in `~/.config/herdr/config.toml`, and `update --configs` keeps it current. If your config sets `[ui.sidebar.spaces]` or `[ui.sidebar.agents]` itself, the block is not added (a second table of either kind is a TOML error that stops Herdr reading the file), and an update leaves a block an older tuidev wrote as it is. To keep your own rows, write them in your config and add the tokens above you want; to go back, delete your tables.
 - **Tip:** `ui.agent_panel_sort = "priority"` puts the agents that need you first. tuidev does not set it, because it lives in your `[ui]` table.
 
-**Your names stay yours.** A sync renames only a tab whose label is still Herdr's number, or the one a sync gave it. Rename a tab and it is never touched again; a rename by another tool through Herdr's `tab.rename` (Fleet, a script) counts as yours too. `agents herdr reset TAB_ID` hands a tab back: it is named again as a sync would name it now (or gets its number, when a sync has no name for it) and syncs keep it current from then on; take the id from `agents herdr`. `~/.config/tuidev/run/herdr-labels.tsv` remembers which tabs a sync named and the number each had, and when each agent's state began. A label is set only when it differs from what Herdr shows, so a sync with nothing new writes nothing.
+**Your names stay yours.** A sync renames only a tab whose label is still Herdr's number, or the one a sync gave it. Rename a tab and it is never touched again; a rename by another tool through Herdr's `tab.rename` (another tool, a script) counts as yours too. `agents herdr reset TAB_ID` hands a tab back: it is named again as a sync would name it now (or gets its number, when a sync has no name for it) and syncs keep it current from then on; take the id from `agents herdr`. `~/.config/tuidev/run/herdr-labels.tsv` remembers which tabs a sync named and the number each had, and when each agent's state began. A label is set only when it differs from what Herdr shows, so a sync with nothing new writes nothing.
 
 **What keeps it current.** No daemon of its own: the `tuidev.link` plugin's event hooks run `agents herdr sync` when a tab, pane or agent comes or goes or moves, when an agent changes state, when you switch tabs, and when the server starts. Herdr has no hook for a title or directory change alone, so the next of those catches it, as does the menu bar's refresh on macOS while an agent runs in Herdr (`--throttle`: at most every 30 seconds). An agent's own events (detected, its state changing, its pane exiting or closing) also refresh the menu bar, in the same process (`--poke`, which reads Herdr's agents again first). Syncs never overlap: one that finds another running leaves a mark, and the running one goes again a second later, so a burst of events costs two passes. Each machine's server runs its own plugin, so each machine names its own tabs; the panes of a saved machine are named there.
 
@@ -921,7 +921,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_LID_MIN_BATTERY` | `20` | Battery % (off AC) below which the lid guard turns lid sleep back on |
 | `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup and its hourly health check |
 | `AGENTS_LINK` | `1` | `0` turns off the link watcher (`agents link watch`), which opens here what you Ctrl-click in a Herdr pane of another machine; `agents link restart` applies a change ([remote.md](remote.md#remote-feels-local-ports-links-and-files)) |
-| `AGENTS_GLYPHS` | (empty) | The mark in front of each kind of session wherever one is listed (Herdr's tabs and sidebar, `agents map`, the menu bar): `claude=✳ codex=⬡ grok=✕ agy=▲ cursor-agent=◈ shell=❯ agent=◆` (`agent` is any other agent CLI, `shell` a pane without one). `KIND=GLYPH` words replace single ones; `off` shows none. |
+| `AGENTS_GLYPHS` | (empty) | The mark in front of each kind of session wherever one is listed (Herdr's tabs and sidebar, `agents map`, the menu bar): the [table of marks](#marks-by-kind-of-session) below. `KIND=GLYPH` words replace single ones (`AGENTS_GLYPHS="codex=C shell=$"`); `off` shows none. |
 | `AGENTS_HERDR_NAMES` | `1` | Herdr's labels say what runs where (`agents herdr`): each tab named after what runs in it, each workspace row's `$tuidev_agents` roll-up, the mark on agent rows. A tab you renamed is never touched (until `agents herdr reset TAB_ID`). `0` leaves Herdr's labels alone; `agents herdr reset` puts back what a sync set ([Herdr's labels](#tabs-named-after-what-runs-in-them)) |
 | `AGENTS_REMOTE_HOSTS` | empty | ssh hosts that count as your machines for `agents ports`, `forward`, `push`, `open` and the watcher, besides the ones saved in Herdr; space-separated |
 | `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
@@ -942,6 +942,22 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_BAR_ICON` | `terminal` | The title's SF Symbol |
 | `AGENTS_BAR_TOP` | `3` | Busiest processes in the system row's submenu (`0` for none) |
 | `AGENTS_BAR_REFRESH` | `1m` | The menu bar's backstop: how often it refreshes when nothing asks it to. Events refresh it anyway (hooks, Herdr, the menu opening), every 10 s while a command runs, and idle it skips its reading for up to 5 minutes ([Menu bar](#menu-bar-swiftbar-macos)). SwiftBar reads it from the plugin's file name: re-run `./install.sh --pack monitoring` (or `make update-configs`) after changing it, and the pack renames the plugin (an install from before 3.22 has `agents.10s.sh`, replaced by `agents.1m.sh` on the next update). One refresh takes 0.2–0.6 s depending on load |
+
+#### Marks by kind of session
+
+The one table. Herdr's tabs and sidebar, `agents map` and the menu bar show these marks and link here rather than list them.
+
+| Kind | Mark | What it is |
+|------|------|------------|
+| `claude` | `✳` | Claude Code |
+| `codex` | `⬡` | Codex |
+| `grok` | `✕` | Grok |
+| `agy` | `▲` | Antigravity |
+| `cursor-agent` | `◈` | Cursor Agent |
+| `shell` | `❯` | A pane with no agent in it |
+| `agent` | `◆` | Any other agent CLI |
+
+`AGENTS_GLYPHS` replaces single marks or turns them all off, as in the table above.
 
 The stale patterns are not a setting: extend `AGENTS_ORPHAN_PATTERNS` in `lib/agents/config.sh` and send the change upstream if it's general.
 

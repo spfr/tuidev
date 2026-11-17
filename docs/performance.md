@@ -367,6 +367,27 @@ On a Raspberry Pi 5, boot from NVMe, not an SD card. If it must be an SD card: `
 
 Ubuntu 24.04 and later restrict unprivileged user namespaces through AppArmor. A namespace-based sandbox that fails to start there needs an AppArmor profile for the program, not the `kernel.apparmor_restrict_unprivileged_userns=0` switch, which turns the protection off for everything.
 
+## What tuidev runs in the background
+
+Everything tuidev starts without you typing a command, by pack. Nothing here is a cloud service or phones home. A cost is given only where this repo measured one (on an M4 Pro, macOS 27.2); an empty cell means no figure was taken. The switches are the keys in [`~/.config/agents.conf`](agent-workflows.md#settings-configagentsconf).
+
+| What | Pack | Trigger | How often | Cost (measured) | Turn it off |
+|---|---|---|---|---|---|
+| [Memory guard](agent-workflows.md#memory-guard-agents-mem): a LaunchAgent, `dev.tuidev.memguard` (macOS; on Linux you run `agents mem guard` yourself) | `monitoring` | Loaded at login; restarted if it fails | Every `AGENTS_MEM_POLL` seconds (5) while something needs watching, every `AGENTS_MEM_IDLE` seconds (20) otherwise | About 2% of a core, nearly all of it the `ps` snapshot (0.05 s of CPU a look with nothing large running) | `AGENTS_MEM_GUARD=off` (it exits and stays down); `warn` keeps the warnings but stops nothing |
+| [Menu bar plugin](agent-workflows.md#menu-bar-swiftbar-macos) (SwiftBar runs it; macOS) | `monitoring` | Events (a Claude Code hook, a Herdr agent event, opening the menu); a timer as a backstop | `AGENTS_BAR_REFRESH` (1m); idle, a timed run may reuse the last output for up to 5 minutes; every 10 s while a command runs | One refresh: about 0.4 s of wall time, 0.3 s of CPU. Idle: 12 an hour instead of 360 | Quit SwiftBar, or remove the plugin from its plugin folder; `./uninstall.sh` removes it |
+| History sampler (`agents sample`), started by that refresh, or by `agents watch` where no menu bar runs | `monitoring` | A refresh finds a sample due | At most once a minute (due 55 s after the last); a quiet machine writes a stamp and skips the scan | | `AGENTS_HISTORY=0` |
+| Herdr health check (a stale server, outdated integrations), started by the menu refresh | `monitoring`, with Herdr | The menu refresh | Hourly while all is current, every minute while it reports something | | `AGENTS_NO_HERDR=1` |
+| Tab names (`agents herdr sync --throttle`), started by the menu refresh while an agent runs in a Herdr pane | `monitoring`, `herdr` | The menu refresh | At most every 30 s | | `AGENTS_HERDR_NAMES=0` |
+| Auto-reap, in the same refresh | `monitoring` | The menu refresh | At most once a minute | | Off unless you set `AGENTS_AUTO_REAP=1` |
+| [Link watcher](remote.md#remote-feels-local-ports-links-and-files): a LaunchAgent, `dev.tuidev.link` (macOS; on Linux `agents link watch` in a tmux pane or systemd user service) | `monitoring` | Loaded at login; restarted if it fails | Keeps one ssh to each of your other machines; nothing listens | | `AGENTS_LINK=0`, then `agents link restart` |
+| Herdr plugin event hooks (`tuidev.link`: `agents herdr sync`, and a menu bar poke on an agent's events) | `herdr` | A tab, pane or agent comes, goes or moves; an agent changes state; a tab is focused; the server starts. Herdr runs each on its own server | On each event; a burst costs one sync and one more pass | | `AGENTS_HERDR_NAMES=0` stops the renaming; `herdr plugin unlink tuidev.link` removes the hooks |
+| [Claude Code hooks](agent-workflows.md#cleanup-hooks-claude-code): `agents bar poke`, wait records, cleanup of what a finished subagent or cleared session left running, notifications | `ai-clis` | A prompt, a turn's end, a permission or idle prompt, a subagent's end, a session's end; never a tool call, except the wait hooks, which start `agents` only while that session has a wait open | On each event; the menu poke goes out at most once every 2 s | The hooks' guard: about 0.04 ms when it declines | `AGENTS_HOOK_REAP=0` stops the cleanups; `AGENTS_HISTORY=0` records no waits; remove a hook from `~/.claude/settings.json` |
+| Claude Code status line (`agents statusline`) | `ai-clis` | Claude Code draws its status line | Claude Code's own schedule | | Remove `statusLine` from `~/.claude/settings.json` |
+| Fan daemon, `dev.tuidev.fan`: a LaunchDaemon, root (macOS, Apple silicon) | `cooling` | Loaded at boot | Reads the sensors every 2 s while it holds the fans or the chip is within 10 °C of the curve, every 10 s otherwise | About 0.3% of one core while busy, 7 MB of memory | `agents cool off` hands the fans back to macOS; `./uninstall.sh` removes the daemon |
+| tmux status line | `tmux` | A timer | `status-interval 15` in `~/.config/tmux/tmux.conf`; bells and window changes redraw at once | | Raise or set the interval in your tmux config |
+
+The memory guard, the link watcher and the fan daemon are the processes that stay up; the rest start when something happens or a timer fires, and exit. Each cost figure was measured where its linked section says: the guard's on a Mac with a 6 GB VM running, the refresh's and the fan daemon's on an M4 Pro. Measure your own with Activity Monitor or `top`; the guard's process is `agents mem guard`.
+
 ## What tuidev sets today
 
 | Setting | Where |

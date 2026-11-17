@@ -141,6 +141,8 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 | [`agents why PID`](agent-workflows.md#flagged-is-it-safe-to-stop) | Why is this process flagged, and on what evidence? |
 | [`agents report`](agent-workflows.md#history-and-agents-report) | What should I change? Top insights first, then runs, waste, tokens, waits and denials. |
 | [`agents mem`](agent-workflows.md#memory-guard-agents-mem), [`agents cool`](agent-workflows.md#fans---pack-cooling) | Who holds the memory, and what did the guard stop? How hard do the fans work? |
+| [`agents map`](remote.md#remote-feels-local-ports-links-and-files), [`agents forward`](remote.md#remote-feels-local-ports-links-and-files) | What runs on each of my machines, and how do I stop it? How do I open another machine's dev server here? |
+| [`secret`](secrets.md) | Where do my API tokens live, so a command gets one and every agent I start does not? |
 | [`sbx -- CMD`](sandboxing.md#sbx-the-general-purpose-tool) | Run anything with no access to credentials and no writes outside the project. |
 | [`mcp-lazy`](agent-workflows.md#mcp-servers-by-name) | Start an MCP server on its first tool call instead of once per session. |
 | [`notify.sh`](agent-workflows.md#notifications) | Tell me an agent needs me, once, where I am looking. |

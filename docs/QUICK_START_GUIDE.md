@@ -56,6 +56,8 @@ tls           # list sessions
 
 Detach with `Ctrl+a d`; the session keeps running. Full key table: [CHEATSHEET.md#tmux---pack-tmux](CHEATSHEET.md#tmux---pack-tmux) (only relevant once `--pack tmux` is installed).
 
+Optional, once an agent runs: move API tokens out of your shell. `secret scan` lists token-looking `export` lines in your startup files (name and line, never the value), and `secret import --remove` stores them in the Keychain, libsecret or `pass`. Then use `secret run -n NAME -- CMD`, so only that command gets the token and not every agent you start. See [secrets.md](secrets.md).
+
 ## 3. tmux keys (if you installed `--pack tmux`)
 
 The prefix is `Ctrl+a`: press it, release, then press the key. The full table is in [CHEATSHEET.md#tmux-keys---pack-tmux](CHEATSHEET.md#tmux-keys---pack-tmux); the essentials:

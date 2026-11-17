@@ -74,6 +74,14 @@ tmux is optional now (`--pack tmux`), bundled automatically by the `remote` prof
 
 **Which instruction file does each CLI read?** See the table in [agent-workflows.md](agent-workflows.md#instruction-files).
 
+## Herdr, remote and secrets
+
+**A Herdr tab name I set keeps changing.** It should not: a sync renames only a tab whose label is still Herdr's number or the one a sync gave it, and a rename you make, or another tool makes through Herdr's `tab.rename`, is left alone. `agents herdr` shows each tab's label and whose it is; `agents herdr reset TAB_ID` hands one back to auto-naming, and `AGENTS_HERDR_NAMES=0` turns the naming off. See [Your names stay yours](agent-workflows.md#tabs-named-after-what-runs-in-them).
+
+**A Ctrl-click on a URL from another machine does nothing.** Run `agents link` on the machine you sit at: it says whether the watcher runs and, per machine, `connected`, `connecting`, `unreachable`, `disconnected` or `no agents there`. The click needs `--pack herdr` and `--pack monitoring` on both machines, and in a saved-machine pane Herdr does not open OSC 8 links yet, so the URL has to be on screen as text. `AGENTS_LINK=0` turns the watcher off, and `agents link restart` applies a change. See [remote.md](remote.md#remote-feels-local-ports-links-and-files).
+
+**`secret get` or `secret run` fails inside an agent session.** That is the sandbox and the deny rules doing their job: Claude Code refuses `secret get`, `secret export` and `secret run`, and under `sbx` the Keychain read fails (`the Keychain refused to read NAME`). Run it from your own shell. If a token has to reach an agent, start it as `secret run -n NAME -- claude`. See [secrets.md](secrets.md#what-an-agent-can-reach).
+
 ## Neovim
 
 Neovim is optional now (`--pack nvim`).

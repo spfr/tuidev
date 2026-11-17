@@ -109,6 +109,19 @@ secret run -n DATABASE_URL -n STRIPE_KEY -- pnpm dev
 
 For a team, the project's README lists the names each developer stores with `secret set`, never the values. A `.envrc` that runs `export X="$(secret get X)"` works with direnv, but it is level 2: the value is exported in that directory's shells, and in an agent started there.
 
+## When to use something else
+
+`secret` is one person's tokens on one machine, with the store the OS already has. If you need more than that, these do it better:
+
+- **1Password CLI (`op run`)** injects secrets into one command's environment from secret references, with biometric unlock and sharing across a team. If you already pay for 1Password, use it. `secret` is for no account and no app. They are not exclusive: `~/.config/op` is on the sandbox's credential list too.
+- **direnv** loads per-directory environment into your shell, which is the inheritance this page warns about: every agent started there gets the values, and a plain `.envrc` holds them in plaintext. Keep it for non-secret settings.
+- **sops** encrypts secret files you commit and share (with age, KMS or PGP). It is the better choice for team and deployment secrets. It does not stop an exported token from being inherited on your laptop.
+- **envchain** already does the core of `secret run`: Keychain or Secret Service, a namespace per set of variables, a command run with them. If that is all you need, it is a fine choice. `secret` adds the scan and the migration of startup files, a `pass` backend, and a store on the same sandbox list as the rest of tuidev.
+- **aws-vault** is the better choice for AWS credentials: short-lived sessions, not just storage.
+- **Doppler, Infisical** and similar hosted or self-hosted platforms are for secrets shared across a team and its environments.
+
+`secret` is not a sandbox. The command you pass a token to has it, and so does anything that command starts; `secret run` only narrows that from every process you start. `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` strips credentials from what Claude Code's subprocesses inherit, which helps for Claude Code only. Use both.
+
 ## After a leak
 
 1. Revoke or rotate the token where it was issued. That is the fix; everything else is cleanup.
