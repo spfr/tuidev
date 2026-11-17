@@ -46,6 +46,8 @@ case "$url" in
 esac'
 # shellcheck disable=SC2016
 stub ps 'printf "%s\n" "${STUB_PS:-}"'
+# No real lsof: with no /proc entry the lib would ask it about a pid of this machine.
+stub lsof ':'
 # shellcheck disable=SC2016
 stub launchctl 'printf "%s\n" "${STUB_LAUNCHCTL:-}"'
 # plutil -extract KEYPATH raw|xml1 -o - FILE, for the plists these tests

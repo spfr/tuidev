@@ -133,7 +133,7 @@ pass "strict.sb and standard.sb share one set of AI-CLI write rules"
 # `(allow file-write*` or `(deny file-write*` block of the write section.
 rules() {
     write_section "$2" | awk -v kind="$1" '
-        $0 ~ "^\\(" kind " file-write\\*" { f = 1; next }
+        $0 ~ "^\\(" kind " file-write\\*" { if (!d) f = 1; next }
         f && /^ *\((literal|subpath|prefix) +\(string-append \(param "HOME_DIR"\) "/ {
             t = $0; sub(/^ *\(/, "", t); sub(/ .*/, "", t)
             v = $0; sub(/^.*\(param "HOME_DIR"\) "/, "", v); sub(/".*/, "", v); print t, v
@@ -142,7 +142,8 @@ rules() {
             v = $0; sub(/^.*\(param "HOME_DIR"\) "/, "", v); sub(/"\)\)*$/, "", v)
             gsub(/\\\\/, "\\", v); print "regex", v
         }
-        f && /\)\)\)$/ { exit }'
+        # No exit: where SIGPIPE is ignored (CI), the writer would fail on a closed pipe.
+        f && /\)\)\)$/ { f = 0; d = 1 }'
 }
 # matches PATH RULES: does any rule match /H/PATH?
 matches() {
