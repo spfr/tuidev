@@ -4,10 +4,16 @@
 # sshd and Herdr, saved in the Mac's Herdr as SSH machines. The runtime is Apple
 # `container` or podman (TUIDEV_CONTAINER_RUNTIME; detection is
 # scripts/lib/container.sh). Each machine runs a few scripted agent stand-ins
-# (herdr/demo-agent.sh) that report their state through Herdr's hook API.
+# (herdr/demo-agent.sh) that report their state through Herdr's hook API, in
+# workspaces that are git repos, with tuidev as the herdr and monitoring packs
+# leave it: this checkout's `agents`, the tuidev.link plugin (its hooks name
+# the tabs and fill the sidebar's tokens) and its keys, and on the Mac the
+# sidebar rows (configs/herdr/sidebar.toml).
 #
 #   herdr-demo.sh up HOME     build the image if needed, start everything
 #   herdr-demo.sh env HOME    print the environment for a Herdr client (eval it)
+#   herdr-demo.sh go HOME     the cue for the stand-ins that finish once a
+#                             client is attached (herdr.tape runs it just before)
 #   herdr-demo.sh down HOME   stop the servers, remove the containers and HOME
 #
 # Everything lives in HOME, a throwaway home whose path must be short (Unix
@@ -17,7 +23,7 @@
 set -eo pipefail
 
 cmd="${1:-}" home="${2:-}"
-[[ -n "$cmd" && -n "$home" ]] || { echo "usage: herdr-demo.sh up|env|down HOME" >&2; exit 2; }
+[[ -n "$cmd" && -n "$home" ]] || { echo "usage: herdr-demo.sh up|env|go|down HOME" >&2; exit 2; }
 tapes="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$tapes/../../.." && pwd)"
 # The machines' names: devbox and workbox, or TUIDEV_DEMO_MACHINES (two
@@ -86,9 +92,10 @@ ctr() {
 # Herdr pane this may run in (HERDR_ENV, HERDR_SOCKET_PATH, ...), the demo
 # HOME, and the ssh wrapper first on PATH. AGENTS_MAP_ROOT keeps `agents map`
 # (remote-demo.sh; a plugin's popup gets the server's environment) to what
-# runs under the demo home.
+# runs under the demo home. TZ=UTC, the containers' zone: the times the sidebar
+# shows agree across machines and say nothing of where this Mac is.
 demo_env() {
-    printf '%s\n' "HOME=$home" "USER=dev" "LOGNAME=dev" "SHELL=/bin/bash" "TERM=${TERM:-xterm-256color}" \
+    printf '%s\n' "HOME=$home" "USER=dev" "LOGNAME=dev" "SHELL=/bin/bash" "TERM=${TERM:-xterm-256color}" "TZ=UTC" \
         "LANG=en_US.UTF-8" "BASH_SILENCE_DEPRECATION_WARNING=1" "AGENTS_MAP_ROOT=$home" \
         "PATH=$home/.demo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 }
@@ -123,7 +130,7 @@ up() {
             || { tail -20 "$home/.demo/build.log" >&2; die "$demo_runtime build failed"; }
     fi
 
-    mkdir -p "$home/.ssh" "$home/.demo/bin" "$home/.config/herdr" "$home/myapp" "$home/web"
+    mkdir -p "$home/.ssh" "$home/.demo/bin" "$home/.config/herdr"
     chmod 700 "$home/.ssh"
     key="$home/.ssh/demo_ed25519"
     [[ -f "$key" ]] || ssh-keygen -q -t ed25519 -N '' -C demo -f "$key"
@@ -173,10 +180,15 @@ EOF
     done
 
     # The shipped Herdr config, plus demo-only settings: no onboarding, no
-    # update checks or sounds, and plain ssh (through the wrapper above).
-    # TOML: top-level keys come before the first table.
+    # update checks or sounds, and plain ssh (through the wrapper above); with
+    # the cast, the pack's keys and sidebar rows too (its managed blocks; the
+    # rows last, since TOML cannot close their table). TOML: top-level keys
+    # come before the first table.
     { printf 'onboarding = false\n\n'; cat "$repo/configs/herdr/config.toml"
       printf '\n[update]\nversion_check = false\nmanifest_check = false\n\n[remote]\nmanage_ssh_config = false\n\n[ui.sound]\nenabled = false\n'
+      if [[ -z "${TUIDEV_DEMO_NO_POPULATE:-}" ]]; then
+          echo; cat "$repo/configs/herdr/keys.toml"; echo; cat "$repo/configs/herdr/sidebar.toml"
+      fi
     } > "$home/.config/herdr/config.toml"
 
     # Local panes: bash with the same short prompt as the containers.
@@ -199,16 +211,24 @@ EOF
             || { cat "$home/.demo/machine-$m.out" >&2; die "herdr machine add $m failed"; }
     done
 
-    # Workspaces and stand-ins: LABEL DIR (in that machine's home) KIND SCENARIO.
-    # TUIDEV_DEMO_NO_POPULATE=1 leaves the fleet empty, for a caller with its
-    # own cast (remote-demo.sh).
+    # tuidev on every machine, then the workspaces: LABEL DIR (in that
+    # machine's home) BRANCH, and a tab for each "KIND SCENARIO TITLE" stand-in
+    # or "shell". Titles are short: an agent row in tuidev's sidebar has about
+    # 24 columns for the tab's name, the machine and the time together.
+    # TUIDEV_DEMO_NO_POPULATE=1 leaves the fleet empty and without
+    # tuidev, for a caller with its own cast and setup (remote-demo.sh).
     if [[ -z "${TUIDEV_DEMO_NO_POPULATE:-}" ]]; then
-        populate "" myapp myapp claude tests
-        populate "" web web codex review
-        populate "${MACHINES[0]}" api api claude approve
-        populate "${MACHINES[0]}" api-docs api claude review
-        populate "${MACHINES[1]}" infra infra codex deploy
-        populate "${MACHINES[1]}" api-tests api claude tests
+        tuidev_here
+        for m in "${MACHINES[@]}"; do tuidev_on "$m"; done
+        # (review+N: it finishes N seconds after `go`, which herdr.tape runs
+        # just before its client attaches, so the client shows it as done.)
+        populate "" myapp myapp fix-cache \
+            "claude tests Fix flaky cache test" "claude review+5 Review diff" shell
+        populate "" web web signup-form "codex review Sign-up form"
+        populate "${MACHINES[0]}" api api fix-404 "claude approve Fix 404 routes" shell
+        populate "${MACHINES[0]}" api-docs api-docs docs "claude review+4 API docs"
+        populate "${MACHINES[1]}" infra infra canary "codex deploy Canary 1.5"
+        populate "${MACHINES[1]}" api-tests api-tests rate-limit "claude ratelimit Rate limit"
     fi
     # A new remote server opens with an empty "~" workspace; drop it.
     for m in "${MACHINES[@]}"; do
@@ -220,21 +240,73 @@ EOF
     sleep 3
 }
 
-# populate MACHINE LABEL DIR KIND SCENARIO — a workspace in ~/DIR on MACHINE
-# (empty: this Mac) running one stand-in.
+# on MACHINE SCRIPT — SCRIPT in a shell on MACHINE (empty: this Mac, in the
+# demo's environment).
+on() {
+    if [[ -n "$1" ]]; then run_demo ssh "$PREFIX$1" "$2"; else run_demo bash -c "$2"; fi
+}
+
+# tuidev_here — this checkout's agents and the tuidev.link plugin for the demo
+# home, as the monitoring and herdr packs install them (the keys and sidebar
+# rows are in its config already). The plugin's hooks run ~/.local/bin/agents.
+tuidev_here() {
+    mkdir -p "$home/.local/bin"
+    ln -sf "$repo/bin/agents" "$home/.local/bin/agents"
+    ln -sf "$repo/bin/agents" "$home/.demo/bin/agents"
+    herdr_demo plugin link "$repo/configs/herdr/plugins/tuidev-link" >/dev/null \
+        || die "could not link the plugin into the demo Herdr"
+    herdr_demo server reload-config >/dev/null
+}
+
+# tuidev_on MACHINE — the same on a container: this checkout's agents and
+# plugin copied into ~/.local/share/tuidev, linked into its Herdr.
+# shellcheck disable=SC2016  # the remote shell expands ~ and $HOME
+tuidev_on() {
+    (cd "$repo" && COPYFILE_DISABLE=1 tar -cf - bin/agents lib/agents configs/herdr/plugins configs/herdr/keys.toml 2>/dev/null) \
+        | on "$1" 'mkdir -p ~/.local/share/tuidev ~/.local/bin ~/.config/herdr && tar -xf - -C ~/.local/share/tuidev 2>/dev/null
+            ln -sf ~/.local/share/tuidev/bin/agents ~/.local/bin/agents
+            herdr plugin link ~/.local/share/tuidev/configs/herdr/plugins/tuidev-link >/dev/null
+            { echo; cat ~/.local/share/tuidev/configs/herdr/keys.toml; } >> ~/.config/herdr/config.toml
+            herdr server reload-config >/dev/null
+            grep -q "local/bin" ~/.bashrc || echo "export PATH=\$HOME/.local/bin:\$PATH" >> ~/.bashrc' \
+        || die "could not set up tuidev on $1"
+}
+
+# populate MACHINE LABEL DIR BRANCH TAB... — a workspace in ~/DIR on MACHINE
+# (empty: this Mac), a git repo on BRANCH with one commit, and a tab for each
+# TAB: "KIND SCENARIO TITLE..." runs a stand-in, "shell" is a shell. Tabs get
+# no label, so the plugin's sync names them.
 populate() {
-    local m="$1" label="$2" cwd="$home/$3" kind="$4" scenario="$5" pre=() out pane
-    if [[ -n "$m" ]]; then
-        pre=(--machine "$m")
-        # Herdr wants an absolute directory: the remote home, as ssh reports it.
-        cwd="$(run_demo ssh "$PREFIX$m" "mkdir -p ~/$3 && cd ~/$3 && pwd")"
-        [[ "$cwd" == /* ]] || die "no directory ~/$3 on $m"
-    fi
-    out="$(herdr_demo "${pre[@]}" workspace create --cwd "$cwd" --label "$label" --no-focus 2>&1)" \
-        || { echo "$out" >&2; die "workspace create $label on ${m:-Local} failed"; }
-    pane="$(jq -r '.result.root_pane.pane_id' <<<"$out")"
-    [[ -n "$pane" && "$pane" != null ]] || die "no pane in: $out"
-    herdr_demo "${pre[@]}" pane run "$pane" "demo-agent $kind $scenario" >/dev/null
+    local m="$1" label="$2" dir="$3" branch="$4" pre=() cwd out pane ws="" tab kind scenario title cmdline
+    shift 4
+    [[ -z "$m" ]] || pre=(--machine "$m")
+    # Herdr wants an absolute directory: the home as that machine reports it.
+    cwd="$(on "$m" "mkdir -p ~/$dir && cd ~/$dir && { [ -d .git ] || { git init -q -b $branch && printf '# $dir\n' > README.md && git add README.md && git -c user.name=dev -c user.email=dev@example.invalid commit -q -m 'first commit'; }; } && pwd")"
+    [[ "$cwd" == /* ]] || die "no directory ~/$dir on ${m:-Local}"
+    for tab in "$@"; do
+        if [[ -z "$ws" ]]; then
+            out="$(herdr_demo "${pre[@]}" workspace create --cwd "$cwd" --label "$label" --no-focus 2>&1)" \
+                || { echo "$out" >&2; die "workspace create $label on ${m:-Local} failed"; }
+            ws="$(jq -r '.result.workspace.workspace_id' <<<"$out")"
+        else
+            out="$(herdr_demo "${pre[@]}" tab create --workspace "$ws" --cwd "$cwd" --no-focus 2>&1)" \
+                || { echo "$out" >&2; die "tab create in $label on ${m:-Local} failed"; }
+        fi
+        pane="$(jq -r '.result.root_pane.pane_id' <<<"$out")"
+        [[ -n "$pane" && "$pane" != null ]] || die "no pane in: $out"
+        [[ "$tab" != shell ]] || continue
+        read -r kind scenario title <<<"$tab"
+        printf -v cmdline '%q ' demo-agent "$kind" "$scenario" "$title"
+        herdr_demo "${pre[@]}" pane run "$pane" "$cmdline" >/dev/null
+    done
+}
+
+# go — set the go mark (~/.demo/go) on every machine: the stand-ins started
+# with SCENARIO+N finish N seconds later.
+go() {
+    local m
+    : > "$home/.demo/go"
+    for m in "${MACHINES[@]}"; do run_demo ssh "$PREFIX$m" 'mkdir -p ~/.demo && : > ~/.demo/go'; done
 }
 
 down() {
@@ -264,6 +336,7 @@ down() {
 case "$cmd" in
     up)   up ;;
     env)  demo_env | sed "s/'/'\\\\''/g; s/^\([A-Z_]*\)=\(.*\)$/export \1='\2'/"; echo "unset HERDR_ENV HERDR_SOCKET_PATH HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_BIN_PATH HERDR_SESSION" ;;
+    go)   go ;;
     down) down ;;
-    *)    echo "usage: herdr-demo.sh up|env|down HOME" >&2; exit 2 ;;
+    *)    echo "usage: herdr-demo.sh up|env|go|down HOME" >&2; exit 2 ;;
 esac

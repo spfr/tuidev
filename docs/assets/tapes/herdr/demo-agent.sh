@@ -1,20 +1,27 @@
 #!/bin/bash
 # A scripted stand-in for an agent session, for the Herdr screenshot
-# (docs/assets/tapes/README.md): demo-agent KIND SCENARIO. It prints a short,
-# made-up transcript and reports its state to the Herdr server it runs under
-# through Herdr's hook API (`herdr pane report-agent`), the same call an agent
-# integration makes. No model runs and nothing is changed.
+# (docs/assets/tapes/README.md): demo-agent KIND SCENARIO [TITLE]. It prints a
+# short, made-up transcript and reports its state to the Herdr server it runs
+# under through Herdr's hook API (`herdr pane report-agent`), the same call an
+# agent integration makes. No model runs and nothing is changed.
 #   KIND      the agent label Herdr shows: claude or codex
-#   SCENARIO  tests (keeps working), approve (blocked on a y/n question, then
-#             done), review (done), deploy (keeps working), idle (waiting);
-#             for remote-demo.sh: preview (starts a real web server on
-#             localhost:5173 and writes a review), leftover (starts a server
-#             on :8080 that outlives it, then ends)
+#   SCENARIO  tests (keeps working), ratelimit (keeps working), approve
+#             (blocked on a y/n question, then done), review (done), deploy
+#             (keeps working), idle (waiting); for remote-demo.sh: preview
+#             (starts a real web server on localhost:5173 and writes a
+#             review), leftover (starts a server on :8080 that outlives it,
+#             then ends)
+#             SCENARIO+N works until `herdr-demo.sh go` (at most 60 s),
+#             then N seconds more (DEMO_AGENT_WORK=N)
+#   TITLE     the session's task, set as the terminal title (for claude the
+#             way Claude Code sets its own, `✳ TITLE`), so `agents herdr sync`
+#             names the tab after it
 # DEMO_AGENT_NAMED=1 (remote-demo.sh) runs it under KIND as its argv[0], so
 # `agents` lists the stand-in as that agent's session.
 set -u
 
-kind="${1:-claude}" scenario="${2:-idle}"
+kind="${1:-claude}" scenario="${2:-idle}" title="${3:-}"
+case "$scenario" in *+*) DEMO_AGENT_WORK="${scenario#*+}" scenario="${scenario%%+*}" ;; esac
 if [[ -n "${DEMO_AGENT_NAMED:-}" && -z "${_DEMO_AGENT_RENAMED:-}" ]]; then
     _DEMO_AGENT_RENAMED=1 exec -a "$kind" bash "$0" "$@"
 fi
@@ -43,10 +50,26 @@ step() { printf '  %s✓%s %s\n' "$G" "$N" "$1"; sleep "${2:-0.15}"; }
 
 trap 'report idle; exit 0' INT TERM
 clear
+if [[ -n "$title" ]]; then
+    [[ "$kind" != claude ]] || title="✳ $title"
+    printf '\033]0;%s\007' "$title"
+fi
 tilde='~'   # (a literal ~ in the replacement is expanded by bash 4.3+)
 printf '%sdemo-agent · %s stand-in · %s%s\n' "$D" "$kind" "${PWD/#$HOME/$tilde}" "$N"
 printf '%sscripted transcript; state reported with herdr pane report-agent%s\n\n' "$D" "$N"
 report working
+# A moment at work first, so the sync sees the state change that follows and
+# can say since when the agent has waited (its $tuidev_since). With
+# DEMO_AGENT_WORK=N, until herdr-demo.sh's go mark (~/.demo/go, set just
+# before herdr.tape's client attaches) and N seconds more: Herdr's client shows
+# "done" only for a completion it saw happen, and "idle" for one from before.
+if [[ -n "${DEMO_AGENT_WORK:-}" ]]; then
+    w=0
+    while [[ ! -e "$HOME/.demo/go" && $w -lt 60 ]]; do sleep 1; w=$((w + 1)); done
+    sleep "$DEMO_AGENT_WORK"
+else
+    sleep 1.5
+fi
 
 case "$scenario" in
     tests)
@@ -58,6 +81,16 @@ case "$scenario" in
         while :; do
             printf '\r    %s%d/412 tests passed%s ' "$D" "$i" "$N"
             i=$(( i < 405 ? i + 7 : 405 )); sleep 1
+        done ;;
+    ratelimit)
+        printf '%s›%s add a per-client rate limit to the API and test it\n\n' "$C" "$N"
+        step "read internal/http/middleware.go"
+        step "edit internal/http/ratelimit.go  ${D}(+42)${N}"
+        printf '  %s●%s go test ./...  %s(running)%s\n' "$Y" "$N" "$D" "$N"
+        i=12
+        while :; do
+            printf '\r    %s%d/57 packages ok%s ' "$D" "$i" "$N"
+            i=$(( i < 54 ? i + 3 : 54 )); sleep 1
         done ;;
     approve)
         printf '%s›%s return a 404 for unknown routes, then push the branch\n\n' "$C" "$N"
