@@ -1,6 +1,8 @@
 # tuidev
 
-**The terminal dev environment for AI coding agents: every machine you run agents on feels like one, you see what runs where at a glance, cleanup comes with evidence, and your tokens stay out of the agents' reach. Claude Code and Codex sandboxed by default, a modern shell, and an install you can undo.**
+**Run many AI coding agents, on more than one machine, and stay in control.**
+
+tuidev sets up your terminal for Claude Code and Codex so that you always know which agent needs you, a remote machine feels like the one you sit at, what sessions leave behind gets cleaned up, and your keys and tokens stay out of the agents' reach. macOS and Linux, one install you can preview and undo.
 
 [![CI](https://github.com/spfr/tuidev/actions/workflows/ci.yml/badge.svg)](https://github.com/spfr/tuidev/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/spfr/tuidev?sort=semver)](https://github.com/spfr/tuidev/releases/latest)
@@ -20,18 +22,18 @@ You run Claude Code in one tab, Codex in another, and a long job on a Linux box 
 
 tuidev is shell scripts and configs for coding with AI agents from the terminal on macOS and Linux. Claude Code is the primary CLI and Codex the second: run them in a Ghostty tab and review the diff in VS Code or Cursor. It installs a small core, and everything else is an opt-in pack.
 
-- **[See what runs where](#see-what-runs-where):** Herdr's sidebar shows which agent needs you, here or on your always-on box, and every tab is named after what runs in it.
-- **[Remote feels local](#remote-feels-local):** Ctrl-click another machine's `localhost` and it opens in your browser; one map of what runs where, with one key to stop it there.
-- **[Cleanup with evidence](#cleanup-with-evidence):** `agents` finds what sessions left behind, says whether it is safe to stop and why, and shows where the CPU and the tokens went.
-- **[In your menu bar](#in-your-menu-bar):** on macOS, who needs you in about ten rows, with the rest one hover away.
-- **[Secrets agents don't inherit](#secrets-agents-dont-inherit):** `secret` keeps API tokens in the OS store and hands one to one command, instead of to everything your shell starts.
-- **[Sandboxed by default](#sandboxed-by-default):** Claude Code's and Codex's own sandboxes on, and `sbx` for everything else.
-- **[Quiet when nothing happens](#quiet-when-nothing-happens):** what tuidev runs in the background runs on events, not on a stopwatch.
-- **[Cool to the touch](#cool-to-the-touch):** on Apple Silicon MacBooks, fans that follow what your palms feel, not just what the chip can survive.
-- **[A modern shell in one command](#a-modern-shell-in-one-command):** Ghostty, zsh and the CLI tools you and your agents both reach for.
-- **[Subagents on the cheapest tier that works](#subagents-on-the-cheapest-tier-that-works)** and **[an install you can preview and undo](#an-install-you-can-preview-and-undo)**.
+- **[Know which agent needs you](#know-which-agent-needs-you).** One sidebar for every agent on every machine, with tabs named after the task, not `1 2 3`.
+- **[Work on another machine as if it were yours](#remote-feels-local).** Ctrl-click its `localhost` link and the page opens in your browser.
+- **[Stop what agents left behind](#stop-what-agents-left-behind).** Every leftover process comes with a verdict and its evidence, so you stop the right thing.
+- **[See it all from the menu bar](#see-it-all-from-the-menu-bar).** Who needs you, in a menu you read in two seconds.
+- **[Keep your tokens to yourself](#keep-your-tokens-to-yourself).** API tokens live in the OS secret store and reach one command, not every agent you start.
+- **[Agents can't read your keys](#agents-cant-read-your-keys).** Claude Code and Codex run sandboxed by default.
+- **[No background tax](#no-background-tax).** tuidev runs when something happens, not on a stopwatch.
+- **[A MacBook that stays cool](#a-macbook-that-stays-cool).** Fans that follow what your palms feel.
+- **[A modern shell in one command](#a-modern-shell-in-one-command).** Ghostty, zsh and the tools you and your agents both reach for.
+- **[Pay less for subagents](#pay-less-for-subagents)** and **[undo the install any time](#an-install-you-can-preview-and-undo)**.
 
-## See what runs where
+## Know which agent needs you
 
 `--pack herdr` installs [Herdr](https://herdr.dev/), an agent runtime: a server owns the panes, so agents keep running when you detach, and its sidebar marks each one `working`, `blocked`, `done` or `idle`. Save an always-on box once with `herdr machine add workbox`, and its agents join the same sidebar, so you see which agent needs you, on which machine, and jump straight to it. The box is a Raspberry Pi, a NUC or a VM set up with `--profile remote`, and its agents keep working while your laptop sleeps.
 
@@ -51,7 +53,7 @@ Press **prefix+m** for the map: one list of what runs where, on every machine, w
 
 <sub>This Mac and two Linux containers saved as SSH machines, `atlas` and `kepler`. The sessions are scripted stand-ins; the tunnel, the browser page, the stop and the fetched file are real. Recorded with `docs/assets/tapes/remote.tape` on the fleet `remote-demo.sh` starts ([how](docs/assets/tapes/README.md#the-remote-screencasts-fleet)).</sub>
 
-## Cleanup with evidence
+## Stop what agents left behind
 
 Every `claude` session starts its own MCP servers, and its subagents start test runs, dev servers and polling loops. When a session crashes, or a subagent hands back its report, some of that keeps running. `agents` (`--pack monitoring`) lists each session with what it runs, flags what was left behind, and gives every flagged process a verdict with its evidence, so you stop the right thing and leave the rest.
 
@@ -66,7 +68,7 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
 
 Also: `agents show`, `jump` and `pick` for one process and the pane it runs in; [MCP servers started on their first tool call](docs/agent-workflows.md#start-a-server-on-its-first-tool-call-agents-mcp-lazy); [CPU by job](docs/agent-workflows.md#where-the-cpu-goes-job-types) and [insights with what to change](docs/agent-workflows.md#reading-the-insights); [how long agents wait on you](docs/agent-workflows.md#waits-how-long-agents-wait-on-you); every CLI's [usage limits](docs/agent-workflows.md#usage-limits-agents-limits) on a gauge. [Local processes: `agents`](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
 
-## In your menu bar
+## See it all from the menu bar
 
 On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu that answers one question first: who needs you? The title counts only the sessions that are blocked and the ones to review, and shows a plain icon when nothing needs you.
 
@@ -81,7 +83,7 @@ The Machines row asks your other machines what runs there only when you open the
 
 <sub>The plugin's actual output over the demo fixtures, drawn as a macOS menu by `scripts/render_menu.sh`; it is not a screenshot of a real menu bar. [More submenus, animated](docs/assets/menu.gif).</sub>
 
-## Secrets agents don't inherit
+## Keep your tokens to yourself
 
 A token you export in `.zshrc` is in the environment of every program your shell starts: every agent you launch, every command it runs, every MCP server and install script. One `env` in a tool call and it is in a transcript.
 
@@ -96,7 +98,7 @@ secret run -n GITHUB_TOKEN -- ./release.sh  # in that command's environment, and
 
 The stores are on the sandbox's credential list, so a command under `sbx` can't read them, and Claude Code's shipped settings refuse `secret get`, `export` and `run` and the Keychain's own read commands. Codex's sandbox does not limit reads, so near tokens that matter, run it under `sbx`. It is not a team secret manager: for shared or deployed secrets, use the tool your team already has. What each sandbox stops, store by store, and how to check it on your machine: [Secrets](docs/secrets.md#what-an-agent-can-reach)
 
-## Sandboxed by default
+## Agents can't read your keys
 
 `--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper, and gates git and gh writes behind a prompt. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 31 paths on one [credential list](configs/sandbox/credential-paths.txt). Codex's sandbox limits writes and network but not reads, so for anything else `sbx` runs a command under a macOS Seatbelt profile that denies the same list. A contract test keeps every copy of the list in step, and the secret stores are on it. And `--pack release-age` (in `--profile full`) keeps hijacked releases off the machine in the first place: npm, bun and uv wait 3 days before installing a new version, long enough for a compromised one like LiteLLM 1.107.0 to be pulled, while lockfiles still install as pinned. [Sandboxing](docs/sandboxing.md)
 
@@ -104,7 +106,7 @@ The stores are on the sandbox's credential list, so a command under `sbx` can't 
 
 <sub>Without a sandbox, any command an agent runs can read your keys. Under `sbx` (strict profile), the same read is refused, so are the other credentials and writes outside the project, and the project's own work still runs. Demo home with made-up files.</sub>
 
-## Quiet when nothing happens
+## No background tax
 
 Something that watches your agents should not be what heats your laptop. Everything tuidev runs without being asked now runs when something happens:
 
@@ -117,7 +119,7 @@ Something that watches your agents should not be what heats your laptop. Everyth
 
 Your other machines are asked what runs there only when you open the menu or the map. Every background job, its trigger and its off switch: [what tuidev runs in the background](docs/performance.md#what-tuidev-runs-in-the-background)
 
-## Cool to the touch
+## A MacBook that stays cool
 
 Agents keep a MacBook's chip at 75–85 °C for hours while macOS keeps the fans near their minimum, so the palm rest takes the heat. `--pack cooling` adds the fan curve macOS leaves out: a small Swift daemon you build from the repo ([`lib/fan/tuidev-fan.swift`](lib/fan/tuidev-fan.swift), one readable file, no network) follows the chip's temperature averaged over minutes, only ever adds air to what macOS runs, and hands the fans back on any error, exit or sleep. Pick Cool, Balanced or Quiet in the menu or with `agents cool`. [Fans](docs/agent-workflows.md#fans---pack-cooling)
 
@@ -140,7 +142,7 @@ Agents keep a MacBook's chip at 75–85 °C for hours while macOS keeps the fans
 
 These are in core, apart from the `ci` pack. The extras (`--extras`) add `lazygit`, `xh`, `hyperfine`, `procs`, `dust`, `tealdeer`, `tokei`, `uv` and `atuin`, and whatever your package manager lacks is skipped. Every tool, what it replaces, why, and how an agent comes to use it is in [the toolbox](docs/toolbox.md); `make perf` checks what the OS does behind your agents (package stores in the Spotlight index or in backups, file limits, Low Power Mode, inotify on Linux), fixes what is safe and names the rest. `make disk` shows what your tools and agents have left on disk (caches, old runtimes, stale build trees and worktrees), explains each one, and only ever runs a tool's own cleanup command, one yes at a time: [performance](docs/performance.md).
 
-## Subagents on the cheapest tier that works
+## Pay less for subagents
 
 `--pack orchestration` pins Claude Code's subagents to tiers: Haiku for `Explore` and `executor` (search and command runs), Sonnet for `implementor-standard`, Opus for `implementor-complex` and `reviewer`. Codex gets the same roles in `~/.codex/agents`, without `Explore`. A `delegation` skill runs implementors in parallel git worktrees and brings their work back. It installs on its own, without the rest of tuidev. [Orchestration](docs/orchestration.md)
 
