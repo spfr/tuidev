@@ -313,7 +313,15 @@ reset; psfix="$quiet"
 [[ "$(AGENTS_MEM_IDLE=10 next 7100)" == 10 ]] || fail "AGENTS_MEM_IDLE is honoured"
 [[ "$(AGENTS_MEM_IDLE=2 next 7100)" == 5 ]] || fail "idle is never below the poll"
 reset; psfix="$(printf '%s\n' "$quiet" | awk '$1 != 600 && $1 != 620 { print }')"
-[[ "$(next 7200)" == 60 ]] || fail "no agent session at all: 60 s"
+MACH=$'134217728\t40\tnormal\t1048576\t2097152'
+[[ "$(next 7200)" == 60 ]] || fail "no agent session at all (128 GB, a bound past the minute): 60 s"
+[[ "$(AGENTS_MEM_IDLE=90 next 7205)" == 76 ]] || fail "no agent session (128 GB), AGENTS_MEM_IDLE=90: the safety bound, (64 - 4) GB at 800 MB/s, 76 s"
+# ... never past the safety bound: 48 GB, (24 - 4) GB at 800 MB/s is 25 s; 16 GB, 5 s.
+MACH=$'16777216\t40\tnormal\t1048576\t2097152'
+[[ "$(next 7210)" == 5 ]] || fail "no agent session on 16 GB: the minute exceeds the 5 s safety bound"
+[[ "$(AGENTS_MEM_IDLE=90 next 7220)" == 5 ]] || fail "no agent session on 16 GB, AGENTS_MEM_IDLE=90: past the 5 s safety bound"
+MACH=$'50331648\t40\tnormal\t1048576\t2097152'
+[[ "$(next 7230)" == 25 ]] || fail "no agent session on 48 GB: the minute exceeds the 25 s safety bound"
 # Pressure, or free memory falling at half the rate, keep the poll.
 reset; psfix="$quiet"; MACH=$'50331648\t40\twarn\t1048576\t2097152'
 [[ "$(next 7300)" == 5 ]] || fail "memory pressure warn keeps the poll"

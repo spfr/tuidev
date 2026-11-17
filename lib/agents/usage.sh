@@ -32,7 +32,8 @@ LOOK
                                last incidents
   agents mem check [-n]        one look by the memory guard, saying what it did
                                (-n: what it would do)
-  agents mem guard             the guard's loop, every AGENTS_MEM_POLL (${AGENTS_MEM_POLL}s): warns
+  agents mem guard             the guard's loop, every AGENTS_MEM_POLL (${AGENTS_MEM_POLL}s) while
+                               something needs watching, else AGENTS_MEM_IDLE (${AGENTS_MEM_IDLE}s): warns
                                about a process past AGENTS_MEM_WARN (${AGENTS_MEM_WARN} GB), and at each
                                doubling, or growing faster than AGENTS_MEM_RATE (${AGENTS_MEM_RATE} MB/s);
                                stops one in an agent tree past AGENTS_MEM_KILL (0:
@@ -232,9 +233,9 @@ SETTINGS
   AGENTS_TERMINAL AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY, and the menu
   bar's AGENTS_BAR_TITLE
   AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. Memory guard:
-  AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL. The same
-  names in the environment win. NO_COLOR=1 turns colors off. Stale patterns:
-  AGENTS_ORPHAN_PATTERNS in $_AGENTS_LIB/config.sh. History: AGENTS_HISTORY
+  AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL
+  AGENTS_MEM_IDLE. The same names in the environment win. NO_COLOR=1 turns colors
+  off. Stale patterns: AGENTS_ORPHAN_PATTERNS in $_AGENTS_LIB/config.sh. History: AGENTS_HISTORY
   AGENTS_HISTORY_DAYS AGENTS_PRICES; extra job patterns (EREs): AGENTS_JOB_TEST
   AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Your status line:
   AGENTS_STATUSLINE_CMD. How long a finished session stays to review: AGENTS_PARKED_MIN.

@@ -394,7 +394,8 @@ agents_mem_tick() {
 # watching (a candidate at or past the screening size, memory pressure warn
 # or critical, free memory falling at half AGENTS_MEM_RATE or faster);
 # otherwise AGENTS_MEM_IDLE; and a minute (never less than the idle one) when
-# no agent session runs at all, since nothing is then stoppable.
+# no agent session runs at all, since nothing is then stoppable, within the
+# same safety bound.
 #
 # Safety bound: the idle interval is clamped to the time a runaway growing at
 # four times AGENTS_MEM_RATE needs to get from the screening size to the stop
@@ -404,7 +405,7 @@ agents_mem_tick() {
 # whatever AGENTS_MEM_IDLE says. The bound is never below AGENTS_MEM_POLL:
 # that is the guard's best.
 _agents_mem_next() {
-    local level="$1" fall="$2" hot="$3" stopkib="$4" screen="$5" cands="$6" snap="$7" idle bound
+    local level="$1" fall="$2" hot="$3" stopkib="$4" screen="$5" cands="$6" snap="$7" idle bound=""
     _AGENTS_MEM_NEXT="$AGENTS_MEM_POLL"
     [[ "$level" != warn && "$level" != critical && $hot == 0 && -z "$cands" ]] || return 0
     [[ $fall -lt $((AGENTS_MEM_RATE * 512)) ]] || return 0
@@ -417,7 +418,9 @@ _agents_mem_next() {
     fi
     _AGENTS_MEM_NEXT="$idle"
     if ! printf '%s\n' "$snap" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc memory" -v probe=1 | grep -q 1; then
-        [[ $idle -ge 60 ]] || _AGENTS_MEM_NEXT=60
+        [[ $idle -ge 60 ]] || idle=60
+        [[ -z "$bound" || $idle -le $bound ]] || idle="$bound"
+        _AGENTS_MEM_NEXT="$idle"
     fi
     return 0
 }
