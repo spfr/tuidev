@@ -380,9 +380,21 @@ if ps -o pid= -p $$ >/dev/null 2>&1; then
     hp=$!
     sleep 0.3
     got="$(_agents_pane_env "$hp" 1)"
+    # Kept per PID@START: a known token is answered from the cache, a token
+    # for another start (a reused pid) is asked about again.
+    if [[ ! -r /proc/self/environ ]]; then
+        ( AGENTS_RUN_DIR="$tmp/panes"; mkdir -p "$AGENTS_RUN_DIR"
+          hs="$(_agents_start "$hp")"
+          [[ "$(_AGENTS_PANE_TOKENS=" $hp@$hs" _agents_pane_env "$hp" 1)" == "$hp"$'\t'"wT:p9" ]] || fail "pane id with a token"
+          [[ "$(<"$AGENTS_RUN_DIR/pane.env")" == "$hp@$hs"$'\t'"wT:p9" ]] || fail "pane cache: $(<"$AGENTS_RUN_DIR/pane.env")"
+          printf '%s\t%s\n%s\t-\n' "$hp@$hs" wT:p7 "1@x" > "$AGENTS_RUN_DIR/pane.env"
+          [[ "$(_AGENTS_PANE_TOKENS="1@x $hp@$hs" _agents_pane_env 1 "$hp")" == "$hp"$'\t'"wT:p7" ]] || fail "the pane cache was not used"
+          [[ "$(_AGENTS_PANE_TOKENS=" $hp@Mon_Jan__1_00:00:00_2024" _agents_pane_env "$hp")" == "$hp"$'\t'"wT:p9" ]] \
+              || fail "a cached pane served for another start" ) || exit 1
+    fi
     kill "$hp" 2>/dev/null; wait "$hp" 2>/dev/null || true
     [[ "$got" == "$hp"$'\t'"wT:p9" ]] || fail "pane id of a live process: '$got'"
-    pass "HERDR_PANE_ID is read from a process's environment, for the processes asked about only"
+    pass "HERDR_PANE_ID is read from a process's environment, for the processes asked about only; kept per PID@START"
 else
     echo "SKIP: ps unavailable here (sandbox?): the live pane-id test not run"
 fi
