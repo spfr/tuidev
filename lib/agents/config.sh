@@ -31,7 +31,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_COLOR_WARN AGENTS_COLOR_DIM AGENTS_COLOR_ACCENT"
 _AGENTS_BAR_TOKENS="triage count cpu mem load battery thermal temp awake warn limit"
 # agents, usage and jobs are the names before the menu's triage (3.19): the
 # plugin reads them as running and parked, limits, and today.
-_AGENTS_BAR_SECTION_NAMES="needs review running parked limits today stale hogs awake system agents usage jobs"
+_AGENTS_BAR_SECTION_NAMES="needs review running parked limits today stale hogs machines awake system agents usage jobs"
 
 # _agents_ere_ok VALUE — empty, or a printable extended regex that compiles in
 # the awk that will use it, read the same way (ENVIRON, LC_ALL=C). Some awks
@@ -237,7 +237,7 @@ AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
 # has (in this order), its icon, how many top CPU processes the system
 # row's submenu lists, and the refresh interval the pack names the plugin file with.
 AGENTS_BAR_TITLE="${AGENTS_BAR_TITLE-triage awake}"
-AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs review running parked limits today stale hogs awake system}"
+AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs review running parked limits today stale hogs machines awake system}"
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"

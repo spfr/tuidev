@@ -1,10 +1,11 @@
 #!/bin/bash
 # <xbar.title>agents</xbar.title>
-# <xbar.version>v1.5</xbar.version>
+# <xbar.version>v1.6</xbar.version>
 # <xbar.desc>Who needs you: sessions by state (needs you, to review, running, parked), limits with their pace, what the day went to, stale helpers and hogs when there are any, keep-awake, fans and a compact system view, from tuidev's `agents` command.</xbar.desc>
 # <xbar.dependencies>bash,agents</xbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
+# <swiftbar.refreshOnOpen>true</swiftbar.refreshOnOpen>
 #
 # SwiftBar plugin. Installed by `./install.sh --pack monitoring` (macOS); the
 # refresh interval is the `10s` in the file name (AGENTS_BAR_REFRESH in
@@ -17,11 +18,20 @@
 # It parses `agents tsv` row by row and ignores a row it doesn't know: during an
 # update the plugin and `agents` can be a version apart, so whatever an older
 # `agents` doesn't send (triage, pace, palette, swap, waitsum) has a fallback.
+#
+# Closed and open are two jobs. On its timer (the menu closed) the plugin reads
+# what this machine alone can tell, and asks no other machine for anything. When
+# you open the menu (refreshOnOpen: SwiftBar runs the plugin first, and waits
+# for it) it prints its last output at once, then loads the rest behind the
+# open menu: `agents map --cache` asks your other machines what runs there, and
+# a refresh puts that, and a fresh reading of this machine, into the menu a
+# moment later. Nothing remote is ever polled.
 
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
 # A refresh runs every few seconds, so the plugin forks as little as it can:
-# one `agents tsv`, one awk for the jobs, and a clock read for keep-awake.
-# Everything else is bash builtins (helpers set REPLY instead of printing).
+# one `agents tsv`, one awk for the jobs, a clock read for keep-awake, and one
+# `mv` that keeps the output for the next open. Everything else is bash
+# builtins (helpers set REPLY instead of printing).
 if [[ -n "${SWIFTBAR_PLUGIN_PATH:-}" ]]; then SELF="$SWIFTBAR_PLUGIN_PATH"
 else
     case "$0" in */*) SELF="${0%/*}" ;; *) SELF=. ;; esac
@@ -43,6 +53,25 @@ case "${1:-}" in
         exit 0 ;;
 esac
 
+# The last full output, kept for the next time the menu opens. Opening must
+# not wait: print it (a read loop, no process), start the loader, and leave.
+# The loader is not started when the last run found the machines section
+# turned off ($LAST.nomap): nothing then asks another machine anything.
+LAST=""
+[[ -z "${SWIFTBAR_PLUGIN_CACHE_PATH:-}" ]] || LAST="$SWIFTBAR_PLUGIN_CACHE_PATH/last"
+OPENED=""
+[[ "${SWIFTBAR_PLUGIN_REFRESH_REASON:-}" != MenuOpen || $# -ne 0 ]] || OPENED=1
+load_on_open() {
+    [[ -n "$LAST" && -e "$LAST.nomap" ]] && return 0
+    "$SELF" open-load </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+}
+if [[ -n "$OPENED" && -n "$LAST" && -s "$LAST" ]]; then
+    while IFS= read -r _l || [[ -n "$_l" ]]; do printf '%s\n' "$_l"; done < "$LAST"
+    load_on_open
+    exit 0
+fi
+
 # AGENTS_BIN picks a specific agents (a checkout, while developing).
 AGENTS="${AGENTS_BIN:-}"
 if [[ -z "$AGENTS" ]]; then
@@ -58,6 +87,17 @@ if [[ -z "$AGENTS" ]]; then
     echo "The agents command is not on PATH | color=red"
     echo "Reinstall it: ./install.sh --pack monitoring"
     echo "Or remove this plugin: $SELF | symbolize=false"
+    [[ -z "$LAST" || ! -e "$LAST" ]] || rm -f "$LAST"
+    exit 0
+fi
+
+# open-load — what an open menu waits for: the machines board (throttled and
+# locked by `agents map --cache`), then one refresh of this plugin, by the name
+# SwiftBar knows it under (the file name up to its first dot).
+if [[ "${1:-}" == open-load ]]; then
+    "$AGENTS" map --cache >/dev/null 2>&1 || true
+    _n="${SELF##*/}"
+    open -g "swiftbar://refreshplugin?name=${_n%%.*}" 2>/dev/null || true
     exit 0
 fi
 
@@ -67,7 +107,32 @@ if ! data="$("$AGENTS" tsv 2>/dev/null)"; then
     echo "---"
     echo "agents tsv failed: ${err//|//} | symbolize=false color=red"
     echo "Refresh | refresh=true"
+    [[ -z "$LAST" || ! -e "$LAST" ]] || rm -f "$LAST"
     exit 0
+fi
+# Opened with no last output to show (the first open, or a SwiftBar without a
+# cache directory): this run is the menu, and the loader starts all the same.
+[[ -z "$OPENED" ]] || load_on_open
+
+# From here on the output goes to a file first, which is printed when the run
+# ends and kept for the next open only when the run reached its last line
+# (OUT_DONE): a refusal's page or a run cut short is shown, never kept. The
+# saved stdout is descriptor 3, which the background jobs below close.
+OUT_DONE=""
+keep_out() {
+    local l
+    exec 1>&3 3>&-
+    [[ -f "$LAST.$$" ]] || return 0
+    while IFS= read -r l || [[ -n "$l" ]]; do printf '%s\n' "$l"; done < "$LAST.$$"
+    if [[ -n "$OUT_DONE" ]] && mv -f "$LAST.$$" "$LAST" 2>/dev/null; then return 0; fi
+    rm -f "$LAST.$$" 2>/dev/null
+}
+if [[ -n "$LAST" ]] && { [[ -d "${LAST%/*}" ]] || mkdir -p "${LAST%/*}" 2>/dev/null; } && exec 3>&1 && : 2>/dev/null > "$LAST.$$"; then
+    exec > "$LAST.$$"
+    trap keep_out EXIT
+else
+    LAST=""
+    exec 3>&- 2>/dev/null || true
 fi
 
 # The tints: Apple's system hues for the menu's appearance, until `agents tsv`'s
@@ -172,6 +237,8 @@ NOREF="bash=\"$AGENTS\" terminal=false"
 TERM_OPEN="bash=\"$AGENTS\" param1=open-term terminal=false"
 CALLBACK="bash=\"$SELF\" terminal=false"
 num() { [[ "$1" =~ ^[0-9]+$ ]]; }
+# A machine's label, as `agents` writes one (it goes into a menu action).
+mlabel() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; }
 # humanize N — a count for people, in REPLY: 950, 64.2k, 640k, 12.4M, 1.2B.
 humanize() {
     local n="$1" u=1 s="" t
@@ -221,7 +288,7 @@ cpu=- load=- cores=- memfree=- mempress=- batt=- bstate=-
 # last incident. Hogs are rendered once it is known (hog_rows).
 mem_state=none mem_warn=0 mem_stop=0 mem_last=0 mem_ev=- mem_what=- mem_proj=- mem_fp=0
 hog_rows=()
-BAR_TITLE="triage awake" BAR_SECTIONS="needs review running parked limits today stale hogs awake system" BAR_ICON=terminal CONF=""
+BAR_TITLE="triage awake" BAR_SECTIONS="needs review running parked limits today stale hogs machines awake system" BAR_ICON=terminal CONF=""
 # Herdr's health (hhealth rows) is maintenance, at the bottom: never in Needs
 # you, the tint or the title.
 herdr_stale="" herdr_vers="" herdr_outdated=""
@@ -234,6 +301,10 @@ job_rows="" mcp_cfg="" hist_state="" hist_total=0 hist_top=- hist_top_s=0 insigh
 usage_rows="" limit_max=-1 n_denials=0 denials_top=- n_compacts=0
 # Swap, while it is high (the swap row); today's waits (the waitsum row).
 swap_pct="" swap_used=0 swap_total=0 swap_bar="" wait_blocked=""
+# The machines board (the map rows): loaded when the menu opens, never on the
+# timer. map_at is when; the rest are its lines, as `agents map --cache` wrote
+# them.
+map_at="" map_mach="" map_ports="" map_left="" map_fwd="" n_map_mach=0 n_map_remote=0 n_map_ports=0 n_map_left=0 n_map_fwd=0
 
 # Per-session activity, gathered from the act rows into variables named after
 # the session's pid (bash 3.2 has no associative arrays): A_<what>_<pid>.
@@ -551,6 +622,16 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
         pace)    [[ -z "$usage_rows" ]] || usage_rows="${usage_rows%$'\n'}"$'\t'"$pid"$'\t'"$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\n' ;;
         denials)  num "$pid" && { n_denials="$pid"; denials_top="$kind"; } ;;
         compacts) num "$pid" && n_compacts="$pid" ;;
+        # map at EPOCH · mach LABEL SUMMARY · port LABEL PORT COMMAND PROJECT
+        # LOCALPORT STALE · left LABEL COUNT · fwd LOCALPORT LABEL PORT STATE
+        map)
+            case "$pid" in
+                at)   num "$kind" && map_at="$kind" ;;
+                mach) mlabel "$kind" && { map_mach+="$kind"$'\t'"$age_s"$'\n'; n_map_mach=$((n_map_mach + 1)); [[ "$kind" == local ]] || n_map_remote=$((n_map_remote + 1)); } ;;
+                port) mlabel "$kind" && num "$age_s" && { map_ports+="$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$avg"$'\t'"$rss"$'\t'"$kids"$'\n'; n_map_ports=$((n_map_ports + 1)); } ;;
+                left) mlabel "$kind" && [[ "$kind" != local ]] && num "$age_s" && [[ ${#age_s} -le 6 ]] && { map_left+="$kind"$'\t'"$age_s"$'\n'; n_map_left=$((n_map_left + age_s)); } ;;
+                fwd)  num "$kind" && mlabel "$age_s" && num "$pcpu" && { map_fwd+="$kind"$'\t'"$age_s"$'\t'"$pcpu"$'\t'"$avg"$'\n'; n_map_fwd=$((n_map_fwd + 1)); } ;;
+            esac ;;
         conf)
             [[ "$kind" == - ]] && kind=""
             case "$pid" in
@@ -605,13 +686,13 @@ fi
 # own, `agents reap --auto` runs in the background, at most once a minute
 # (--throttle), and never holds up the menu.
 if [[ "$BAR_AUTO" == 1 && $n_auto -gt 0 ]]; then
-    ( "$AGENTS" reap --auto --throttle --notify </dev/null >/dev/null 2>&1 & )
+    ( "$AGENTS" reap --auto --throttle --notify </dev/null >/dev/null 2>&1 3>&- & )
 fi
 # `sys` packs battery state into the kids column, which can hold spaces.
 [[ "$bstate" == - ]] && bstate=""
 # History: a sample a minute (`agents sample`), in the background, never waited on.
 if [[ "$hist_state" == due ]]; then
-    ( trap '' HUP; exec "$AGENTS" sample ) </dev/null >/dev/null 2>&1 &
+    ( trap '' HUP; exec "$AGENTS" sample ) </dev/null >/dev/null 2>&1 3>&- &
 fi
 
 # Second pass: sessions, now that their activity is known. Each goes in the
@@ -1285,6 +1366,62 @@ section_hogs() {
     OUT+="$hogs_menu"
 }
 
+# Machines: what the menu loaded the last time it was opened. The dev servers
+# and previews first, each a click from your browser (one on another machine
+# through a forward `agents forward open` makes), then a line a machine with
+# what it left behind, then the forwards open here. Shown once there is
+# something beyond this machine's own summary. Stopping and sweeping stay in
+# `agents map`, which asks before it does either.
+section_machines() {
+    [[ -n "$map_at" ]] || return 0
+    [[ $n_map_remote -gt 0 || $n_map_ports -gt 0 || $n_map_fwd -gt 0 ]] || return 0
+    local m port cmd proj lport stale sum n line where look head lp rp st others=$n_map_remote
+    if [[ $others -gt 0 ]]; then
+        head="Machines ($others)"
+        [[ $n_map_ports -eq 0 ]] || { head+=" · $n_map_ports dev server"; [[ $n_map_ports -eq 1 ]] || head+="s"; }
+    elif [[ $n_map_ports -gt 0 ]]; then
+        head="Dev servers ($n_map_ports)"
+    else
+        head="Forwards"
+    fi
+    [[ $n_map_left -eq 0 ]] || head+=" · $n_map_left left behind"
+    put "$head | size=12"
+    while IFS=$'\t' read -r m port cmd proj lport stale; do
+        [[ -n "$m" ]] || continue
+        cl "$proj"; line="$REPLY"; [[ "$line" != - && -n "$line" ]] || line="port"
+        line+=" :$port"
+        cl "$cmd"; [[ "$REPLY" == - || -z "$REPLY" ]] || line+=" · $REPLY"
+        look="sfimage=globe"
+        if [[ "$m" == local ]]; then
+            where="href=http://localhost:$port"
+        else
+            line+=" · on $m"
+            num "$lport" && line+=" · forwarded"
+            where="$NOREF param1=forward param2=open param3=$m param4=$port"
+        fi
+        [[ "$stale" != stale ]] || { line+=" · left behind"; look="sfimage=globe $TINT_WARN"; }
+        put "$line | $look $where symbolize=false"
+    done <<<"$map_ports"
+    while IFS=$'\t' read -r m sum; do
+        [[ -n "$m" && "$m" != local ]] || continue
+        sh60 "$sum"; line="$m · $REPLY"
+        look="sfimage=desktopcomputer"
+        case "$sum" in "no answer"*|"needs tuidev"*) look="sfimage=desktopcomputer.trianglebadge.exclamationmark $TINT_IDLE" ;; esac
+        put "$line | $look $TERM_OPEN param2=map param3=$m symbolize=false"
+    done <<<"$map_mach"
+    [[ $n_map_fwd -eq 0 ]] || put "Forwards open here ($n_map_fwd) | sfimage=arrow.left.arrow.right $ROW"
+    while IFS=$'\t' read -r lp m rp st; do
+        [[ -n "$lp" ]] || continue
+        if [[ "$st" == dead ]]; then put "--localhost:$lp → $m:$rp · dead | $ACT param1=forward param2=close param3=$lp sfimage=xmark.circle symbolize=false"
+        else put "--localhost:$lp → $m:$rp | href=http://localhost:$lp sfimage=arrow.left.arrow.right symbolize=false"; fi
+    done <<<"$map_fwd"
+    [[ $n_map_fwd -eq 0 ]] || put "--Close every forward | $ACT param1=forward param2=close param3=--all sfimage=xmark.circle"
+    now_s; n=$((NOW_S - map_at)); [[ $n -ge 0 ]] || n=0
+    if [[ $n -lt 60 ]]; then REPLY="just now"; else agev "$n"; REPLY+=" ago"; fi
+    put "Open the map: go, stop, sweep | $TERM_OPEN param2=map sfimage=map"
+    put "--Checked $REPLY · loads when this menu opens | size=11"
+}
+
 # now_s — the epoch in NOW_S, read once (bash 3.2 has no $EPOCHSECONDS).
 now_s() { [[ -n "${NOW_S:-}" ]] || NOW_S="$(date +%s)"; }
 # left_text SECS PREFIX — REPLY = "PREFIX<1m left" or "PREFIX2h5m left".
@@ -1464,11 +1601,17 @@ sections_now() {
 
 bar_title
 sections_now
+# Tell the next open whether to load the machines board (a file's presence:
+# changed only when the setting is).
+if [[ -n "$LAST" ]]; then
+    if [[ "$REPLY" == *" machines "* ]]; then [[ ! -e "$LAST.nomap" ]] || rm -f "$LAST.nomap"
+    else [[ -e "$LAST.nomap" ]] || : > "$LAST.nomap"; fi
+fi
 last_group=""
 for section in $REPLY; do
     OUT=""
     case "$section" in
-        needs|review|running|parked|limits|today|stale|hogs|awake|system) "section_$section" ;;
+        needs|review|running|parked|limits|today|stale|hogs|machines|awake|system) "section_$section" ;;
     esac
     while [[ "$OUT" == *$'\n' ]]; do OUT="${OUT%$'\n'}"; done
     [[ -n "$OUT" ]] || continue
@@ -1492,3 +1635,4 @@ echo "Open agents watch | $TERM_OPEN param2=watch sfimage=rectangle.and.text.mag
 echo "--Full table (agents ls) | $TERM_OPEN param2=--hold param3=ls sfimage=tablecells"
 [[ -n "$CONF" && -f "$CONF" ]] && echo "--Edit settings… | $NOREF param1=config param2=--edit sfimage=slider.horizontal.3"
 echo "Refresh | refresh=true sfimage=arrow.clockwise"
+OUT_DONE=1

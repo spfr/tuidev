@@ -492,6 +492,24 @@ done
 [[ "$list" != *FORWARDS* ]] || fail "map: a forward shown on its server's row is listed again"
 # A forward is this machine's to report: one another machine sends changes nothing here.
 [[ "$list" != *31337* && "$list" != *fake* ]] || fail "map: another machine's fwd row was taken: $list"
+# The menu bar's copy of the board: the same rows under the same checks, written
+# only when asked (the menu opening), and not again while it is fresh.
+bar="$(_agents_map_bar)"
+[[ "$bar" == *"mach${T}local${T}cpu 12% · memory 60% free"* && "$bar" == *"mach${T}workbox${T}needs tuidev there"* ]] || fail "map bar: the machines: $bar"
+[[ "$bar" == *"port${T}local${T}5173${T}node${T}proj${T}-${T}-"* && "$bar" == *"port${T}devbox${T}8000${T}python3${T}app${T}8000${T}-"* ]] || fail "map bar: the servers: $bar"
+[[ "$bar" == *"left${T}devbox${T}1"* && "$bar" == *"fwd${T}8000${T}devbox${T}8000${T}active"* ]] || fail "map bar: leftovers and forwards: $bar"
+[[ "$bar" != *31337* && "$bar" != *reboot* && "$bar" != *"80;id"* && "$bar" != *$'\033'* && "$bar" != *$'\007'* ]] || fail "map bar: a hostile row got through: $(printf '%s' "$bar" | cat -v)"
+[[ -z "$(_agents_map_tsv)" ]] || fail "map tsv: rows before anything was loaded"
+AGENTS_NOW=1000 agents_map --cache
+[[ "$(sed -n 1p "$AGENTS_RUN_DIR/map.tsv")" == "at${T}1000" && ! -e "$AGENTS_RUN_DIR/map.lock" ]] || fail "map --cache: $(cat "$AGENTS_RUN_DIR/map.tsv" 2>&1)"
+AGENTS_NOW=1010 agents_map --cache
+[[ "$(sed -n 1p "$AGENTS_RUN_DIR/map.tsv")" == "at${T}1000" ]] || fail "map --cache: loaded again while fresh"
+AGENTS_NOW=1030 agents_map --cache
+[[ "$(_agents_map_tsv | sed -n 1p)" == "map${T}at${T}1030" && "$(_agents_map_tsv)" == *"map${T}port${T}devbox${T}8000${T}"* ]] || fail "map tsv: $(_agents_map_tsv)"
+mkdir "$AGENTS_RUN_DIR/map.lock"; printf '%s %s\n' "$$" "$(_agents_start "$$" 2>/dev/null || echo -)" > "$AGENTS_RUN_DIR/map.lock/holder"
+AGENTS_NOW=2000 agents_map --cache
+[[ "$(sed -n 1p "$AGENTS_RUN_DIR/map.tsv")" == "at${T}1030" ]] || fail "map --cache: wrote while another run held the lock"
+rm -rf "$AGENTS_RUN_DIR/map.lock"
 agents_forward open --no-open devbox 9999 >/dev/null
 [[ "$(NO_COLOR=1 agents_map --list | tr -s ' ')" == *"FORWARDS"*"local${T}fwd${T}9999${T} devbox :9999 http://localhost:9999"* ]] || fail "map: a forward to no listed server: $(NO_COLOR=1 agents_map --list)"
 agents_forward close 9999 >/dev/null
@@ -568,5 +586,60 @@ AGENTS_BIN="$tmp/nope" sh "$plugin/run.sh" click >/dev/null 2>&1 && fail "run.sh
 reset; HERDR_PLUGIN_CLICKED_URL='http://localhost:5173/a[1]' sh "$plugin/run.sh" click >/dev/null || fail "an odd local URL did not open here"
 [[ "$(opened)" == 'http://localhost:5173/a[1]' ]] || fail "odd URL: $(opened)"
 pass "the Herdr plugin: claims only loopback URLs and file links, and hands them to agents link click"
+
+# --- 10. The menu bar: closed reads this machine, open loads the rest ------------------------------
+menu_sh="$REPO_DIR/configs/swiftbar/agents.10s.sh"
+mkdir -p "$tmp/mbin" "$tmp/sbcache"
+{ printf 'sys\t5\t1.0\t8\t60\tnormal\t-\t-\n'
+  printf 'map\tat\t%s\n' "$(date +%s)"
+  printf 'map\tmach\tlocal\tcpu 5%% · 1 session\nmap\tmach\tdevbox\tcpu 40%% · 2 sessions\nmap\tmach\tbad|box;x\tevil\n'
+  printf 'map\tport\tlocal\t5173\tnode\tshop\t-\t-\nmap\tport\tdevbox\t8000\tpython3\tapp\t-\tstale\nmap\tport\tdevbox\t80;id\tsh\tx\t-\t-\n'
+  printf 'map\tleft\tdevbox\t2\nmap\tfwd\t47000\tdevbox\t3000\tactive\n'; } > "$tmp/menu.tsv"
+# shellcheck disable=SC2016  # the stub's own variables
+printf '#!/bin/bash\necho "$*" >> "%s/calls"\n[[ "$1" != tsv ]] || cat "%s/menu.tsv"\n' "$tmp/mbin" "$tmp" > "$tmp/mbin/agents"
+printf '#!/bin/bash\necho "$*" >> "%s/calls"\n' "$tmp/mbin" > "$tmp/mbin/open"
+chmod +x "$tmp/mbin/agents" "$tmp/mbin/open"
+mbar() { PATH="$tmp/mbin:$PATH" AGENTS_BIN="$tmp/mbin/agents" SWIFTBAR_PLUGIN_CACHE_PATH="$tmp/sbcache" SWIFTBAR_PLUGIN_PATH="$menu_sh" "$@" bash "$menu_sh"; }
+menu="$(mbar env)"
+[[ "$menu" == *"Machines (1) · 2 dev servers · 2 left behind"* ]] || fail "menu: the machines header: $(printf '%s\n' "$menu" | grep -i machines)"
+[[ "$menu" == *"shop :5173 · node | sfimage=globe href=http://localhost:5173"* ]] || fail "menu: a local server is not a link: $menu"
+[[ "$(printf '%s\n' "$menu" | grep 'app :8000')" == "app :8000 · python3 · on devbox · left behind |"*"param1=forward param2=open param3=devbox param4=8000"* ]] || fail "menu: a remote server does not forward: $(printf '%s\n' "$menu" | grep 8000)"
+[[ "$menu" == *"--localhost:47000 → devbox:3000 | href=http://localhost:47000"* && "$menu" == *"param2=map param3=devbox"* ]] || fail "menu: forwards and the machine's row: $menu"
+[[ "$menu" != *"80;id"* && "$menu" != *"box;x"* ]] || fail "menu: a row of another shape got in"
+# Its timer asked agents for the snapshot and nothing else.
+[[ "$(cat "$tmp/mbin/calls")" == tsv ]] || fail "menu: a timed refresh ran more than agents tsv: $(cat "$tmp/mbin/calls")"
+# Opening it prints the last output without asking anything, then loads the board and refreshes.
+[[ -s "$tmp/sbcache/last" ]] || fail "menu: the last output was not kept"
+: > "$tmp/mbin/calls"
+[[ "$(mbar env SWIFTBAR_PLUGIN_REFRESH_REASON=MenuOpen)" == "$menu" ]] || fail "menu: opening did not print the last output"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [[ "$(wc -l < "$tmp/mbin/calls" | tr -d ' ')" -ge 2 ]] && break; sleep 0.1; done
+[[ "$(cat "$tmp/mbin/calls")" == "map --cache"$'\n'"-g swiftbar://refreshplugin?name=agents" ]] || fail "menu: opening did not load the board and refresh: $(cat "$tmp/mbin/calls")"
+# A machine's long summary is cut, a label that reads as an option is no row, and a
+# run that ends in a refusal is shown but never kept for the next open.
+long="$(printf 'x%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70)"
+printf 'map\tmach\tworkbox\t%s\nmap\tmach\t--rows\tevil\n' "$long" >> "$tmp/menu.tsv"
+menu2="$(mbar env)"
+[[ "$menu2" == *"workbox · xxxxx"*"xxx... |"* && "$menu2" != *"$long"* && "$menu2" != *"--rows"* ]] || fail "menu: a long summary or an option-like label got through: $(printf '%s\n' "$menu2" | grep -e workbox -e rows)"
+[[ ! -e "$tmp/sbcache/last.nomap" ]] || fail "menu: the section is on, yet the next open is told not to load"
+printf 'conf\tAGENTS_BAR_SECTIONS\tneeds system\n' >> "$tmp/menu.tsv"; mbar env >/dev/null; : > "$tmp/mbin/calls"
+[[ -e "$tmp/sbcache/last.nomap" ]] || fail "menu: no marker with the machines section turned off"
+mbar env SWIFTBAR_PLUGIN_REFRESH_REASON=MenuOpen >/dev/null; sleep 0.5
+[[ ! -s "$tmp/mbin/calls" ]] || fail "menu: opening asked the machines with their section off: $(cat "$tmp/mbin/calls")"
+grep -v 'AGENTS_BAR_SECTIONS' "$tmp/menu.tsv" > "$tmp/menu.tsv.n" && mv "$tmp/menu.tsv.n" "$tmp/menu.tsv"; mbar env >/dev/null
+kept="$(cat "$tmp/sbcache/last")"
+# shellcheck disable=SC2016  # the stub's own variables
+printf '#!/bin/bash\n[[ "$1" != tsv ]] || exit 1\n' > "$tmp/mbin/agents-down"; chmod +x "$tmp/mbin/agents-down"
+[[ "$(PATH="$tmp/mbin:$PATH" AGENTS_BIN="$tmp/mbin/agents-down" SWIFTBAR_PLUGIN_CACHE_PATH="$tmp/sbcache" bash "$menu_sh")" == *"agents tsv failed"* && ! -e "$tmp/sbcache/last" ]] || fail "menu: a failed run left a last output for the next open"
+[[ -n "$kept" && -z "$(ls "$tmp/sbcache" | grep '^last\.[0-9]')" ]] || fail "menu: a temporary output file was left: $(ls "$tmp/sbcache")"
+# The saved stdout does not reach a background job: the output ends when the run does.
+# shellcheck disable=SC2016  # the stub's own variables
+printf '#!/bin/bash\ncase "$1" in tsv) printf "sys\\t5\\t1.0\\t8\\t60\\tnormal\\t-\\t-\\nhist\\tdue\\t0\\t-\\t0\\n" ;; sample) sleep 5 ;; esac\n' > "$tmp/mbin/agents-slow"; chmod +x "$tmp/mbin/agents-slow"
+SECONDS=0
+out="$(PATH="$tmp/mbin:$PATH" AGENTS_BIN="$tmp/mbin/agents-slow" SWIFTBAR_PLUGIN_CACHE_PATH="$tmp/sbcache" bash "$menu_sh")"
+[[ -n "$out" && $SECONDS -lt 4 ]] || fail "menu: its output waited ${SECONDS}s for a background job"
+# Without a board (nothing loaded yet) there is no section, and no last output means a full run.
+grep -v '^map' "$tmp/menu.tsv" > "$tmp/menu.tsv.n" && mv "$tmp/menu.tsv.n" "$tmp/menu.tsv"; rm -f "$tmp/sbcache/last"
+[[ "$(mbar env SWIFTBAR_PLUGIN_REFRESH_REASON=MenuOpen)" != *"Machines"* ]] || fail "menu: a machines section with nothing loaded"
+pass "the menu bar: its timer reads this machine only; opening shows the last output at once and loads the machines behind it"
 
 echo "All agents remote tests passed."

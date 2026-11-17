@@ -17,7 +17,8 @@
 # listed as needing tuidev. What they send is text: an id is used only when
 # it has the shape of one, and no control character reaches the terminal.
 #
-# Owns: `agents map`, its rows, list, actions and preview.
+# Owns: `agents map`, its rows, list, actions and preview, and the menu
+#   bar's copy of the board (map.tsv).
 # Uses: config.sh, util.sh, snapshot.sh (agents_collect), pick.sh
 #   (_agents_pick_list, _agents_fzf), remote.sh (machines, ssh, ports),
 #   forward.sh, link.sh (agents_link_click), system.sh (agents_system),
@@ -398,15 +399,90 @@ _agents_map_preview() {
     esac
 }
 
+# _agents_map_bar — the board as the menu bar reads it (`agents map --cache`
+# writes it, `agents tsv` passes it on), from every machine's rows:
+#   mach<TAB>LABEL<TAB>SUMMARY
+#   port<TAB>LABEL<TAB>PORT<TAB>COMMAND<TAB>PROJECT<TAB>LOCALPORT|-<TAB>stale|-
+#   left<TAB>LABEL<TAB>COUNT          (stale processes there)
+#   fwd<TAB>LOCALPORT<TAB>LABEL<TAB>PORT<TAB>active|dead
+# The same shapes _agents_map_list asks of a row, no control character, and
+# no text longer than a menu line.
+_agents_map_bar() {
+    _agents_map_all | LC_ALL=C awk -F '\t' '
+        function clean(s) { gsub(/[[:cntrl:]]/, " ", s); gsub(/\302[\200-\237]/, " ", s); return s }
+        $2 == "sys"  { if (!($1 in seen)) { seen[$1] = 1; mo[++nm] = $1 } msys[$1] = substr(clean($3), 1, 120); next }
+        $2 == "proc" {
+            if ($3 !~ /^[0-9]+(@[A-Za-z0-9_:+.-]+)?$/ || length($3) > 60 || $4 ~ /^  /) next
+            line = $4; sub(/^ +/, "", line)
+            if (line ~ /^stale /) { pid = $3; sub(/@.*/, "", pid); stale[$1, pid] = 1; left[$1]++ }
+            next
+        }
+        $2 == "port" {
+            if ($3 !~ /^[0-9]+$/ || length($3) > 5) next
+            np++; pm[np] = $1; pp[np] = $3; ppid[np] = ($4 ~ /^[0-9]+$/ && length($4) <= 10) ? $4 : "-"; pc[np] = clean($5)
+            proj = clean($6); sub(/\/+$/, "", proj); sub(/.*\//, "", proj); pw[np] = proj
+            next
+        }
+        $2 == "fwd" {
+            if ($1 != "local" || $3 !~ /^[0-9]+$/ || length($3) > 5 || $4 !~ /^[A-Za-z0-9._-]+$/ || $5 !~ /^[0-9]+$/ || length($5) > 5 || $6 !~ /^(active|dead)$/) next
+            nf++; fl[nf] = $3; fm[nf] = $4; fr[nf] = $5; fs[nf] = $6
+            if ($6 == "active") fwd[$4, $5] = $3
+        }
+        END {
+            for (i = 1; i <= nm; i++) printf "mach\t%s\t%s\n", mo[i], msys[mo[i]]
+            for (i = 1; i <= np; i++)
+                printf "port\t%s\t%s\t%s\t%s\t%s\t%s\n", pm[i], pp[i], (pc[i] == "" ? "-" : substr(pc[i], 1, 24)), (pw[i] == "" ? "-" : substr(pw[i], 1, 32)), \
+                    (((pm[i], pp[i]) in fwd) ? fwd[pm[i], pp[i]] : "-"), (((pm[i], ppid[i]) in stale) ? "stale" : "-")
+            for (i = 1; i <= nm; i++) if (left[mo[i]]) printf "left\t%s\t%d\n", mo[i], left[mo[i]]
+            for (i = 1; i <= nf; i++) printf "fwd\t%s\t%s\t%s\t%s\n", fl[i], fm[i], fr[i], fs[i]
+        }'
+}
+
+# _agents_map_cache [MAXAGE] — write that board to map.tsv in the run
+# directory, under an "at<TAB>EPOCH" line, unless the one there is younger
+# than MAXAGE seconds (20) or another run is writing it. The menu bar starts
+# this when its menu opens, and never on its timer: asking every machine is
+# work for when someone looks.
+_agents_map_cache() {
+    local f="$AGENTS_RUN_DIR/map.tsv" lock="$AGENTS_RUN_DIR/map.lock" max="${1:-20}" now at=0 tmp
+    [[ "$max" =~ ^[0-9]+$ ]] || max=20
+    _agents_now now
+    if [[ -r "$f" ]]; then { IFS=$'\t' read -r _ at _ < "$f"; } 2>/dev/null || true; fi
+    [[ "$at" =~ ^[0-9]+$ ]] || at=0
+    [[ $((now - at)) -ge $max ]] || return 0
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1
+    _agents_lock "$lock" || return 0
+    tmp="$f.$$"
+    if { printf 'at\t%s\n' "$now"; _agents_map_bar | head -n 200; } > "$tmp" 2>/dev/null; then
+        mv -f "$tmp" "$f"
+    else
+        rm -f "$tmp"
+    fi
+    _agents_unlock "$lock"
+}
+
+# _agents_map_tsv — `agents tsv`'s map rows: the cached board, each line
+# under "map", and nothing without one. Reading it costs no process.
+_agents_map_tsv() {
+    local f="$AGENTS_RUN_DIR/map.tsv" line n=0
+    [[ -r "$f" ]] || return 0
+    while IFS= read -r line && [[ $n -lt 201 ]]; do
+        n=$((n + 1))
+        [[ -z "$line" ]] || printf 'map\t%s\n' "$line"
+    done < "$f"
+}
+
 # agents_map [MACHINE|local] — the browser. Also:
 #   --rows                      this machine's rows (what the others ask for)
 #   --list [MACHINE]            the list, as fzf gets it
+#   --cache [MAXAGE]            refresh the menu bar's copy (_agents_map_cache)
 #   --act ACTION MACHINE KIND ID, --preview MACHINE KIND ID   fzf's bindings
 agents_map() {
     local a list list_all name=""
     case "${1:-}" in
         --rows)    _agents_map_rows; return ;;
         --list)    shift; _agents_map_list "$@"; return ;;
+        --cache)   _agents_map_cache "${2:-}"; return ;;
         --act)     [[ $# -eq 5 ]] || { echo "usage: agents map --act go|peek|stop|sweep MACHINE KIND ID" >&2; return 2; }
                    _agents_map_act "$2" "$3" "$4" "$5"; return ;;
         --preview) [[ $# -eq 4 ]] || return 2

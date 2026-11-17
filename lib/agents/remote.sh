@@ -55,10 +55,11 @@ _agents_target_ok() { [[ "${1:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._@:/-]*$ ]]; }
 
 # _agents_label VAR TEXT — set VAR to TEXT as a machine's label: only
 # [A-Za-z0-9._-], and never a name that means something else here ("local" is
-# this machine in a port list; "." and ".." are directories).
+# this machine in a port list; "." and ".." are directories; a leading "-"
+# would read as an option).
 _agents_label() {
     local _l="${2//[^A-Za-z0-9._-]/_}"
-    case "$_l" in local|.|..) _l="m-$_l" ;; esac
+    case "$_l" in local|.|..|-*) _l="m-$_l" ;; esac
     printf -v "$1" '%s' "$_l"
 }
 

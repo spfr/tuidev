@@ -8,7 +8,8 @@
 #   (_agents_hist_line), report.sh (_agents_insight_line,
 #   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv), cool.sh
 #   (_agents_cool_row), memory.sh (_agents_mem_tsv_row, _agents_swap_row),
-#   palette.sh (_agents_palette_row), triage.sh (_agents_waitsum_line).
+#   palette.sh (_agents_palette_row), triage.sh (_agents_waitsum_line),
+#   map.sh (_agents_map_tsv).
 # Public: agents_tsv.
 
 # agents_tsv — the palette row (the menu's tints: palette.sh), agents_assess's
@@ -81,6 +82,8 @@ agents_tsv() {
     # title came with the records ("herdr PID PANE TITLE", agents_enrich), and
     # so did each agent row's join key ("ident PID PANE SESSION").
     _agents_herdr_health
+    # The machines board, as the menu last loaded it (map.sh).
+    _agents_map_tsv
     for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP AGENTS_MEM_GUARD AGENTS_SERVICE_PATH; do
         val="${!key}"
         printf 'conf\t%s\t%s\n' "$key" "${val:--}"

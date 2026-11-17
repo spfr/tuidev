@@ -289,7 +289,7 @@ hist	ok	5400	test	3000
 lid	off	-	0	28800
 memg	none	-	8388608	25165824	0	-	-	-	0
 conf	AGENTS_BAR_TITLE	triage awake
-conf	AGENTS_BAR_SECTIONS	needs review running parked limits today stale hogs awake system
+conf	AGENTS_BAR_SECTIONS	needs review running parked limits today stale hogs machines awake system
 conf	AGENTS_BAR_ICON	terminal
 conf	AGENTS_BAR_TOP	3
 conf	AGENTS_BAR_REFRESH	10s
