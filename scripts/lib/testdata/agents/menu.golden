@@ -1,7 +1,7 @@
 :terminal: :cup.and.saucer.fill:
 ---
 Running (14) | size=12
-app · working · 1.0 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
+✳ app · working · 1.0 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=90419@Wed_Oct_14_07:31:08_2026 sfimage=arrow.up.forward.app
 --~/work/app | symbolize=false
 --claude · pid 90419 · up 1h42m · 4 children · ports 41234,41235 | symbolize=false
@@ -14,7 +14,7 @@ app · working · 1.0 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpb
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=90419@Wed_Oct_14_07:31:08_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=90419 sfimage=number
-shop/fix-cart · working · 0.1 cores · 632M | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
+✳ shop/fix-cart · working · 0.1 cores · 632M | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=84091@Wed_Oct_14_08:40:22_2026 sfimage=arrow.up.forward.app
 --~/work/shop/.claude/worktrees/fix-cart | symbolize=false
 --claude · pid 84091 · up 33m · 1 children | symbolize=false
@@ -28,7 +28,7 @@ shop/fix-cart · working · 0.1 cores · 632M | sfimage=circle.fill sfconfig=eyJ
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=84091@Wed_Oct_14_08:40:22_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=84091@Wed_Oct_14_08:40:22_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=84091 sfimage=number
-repo · 2× go test -race ./internal/web running | sfimage=square.stack.3d.up sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ repo · 2× go test -race ./internal/web running | sfimage=square.stack.3d.up sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --Stop duplicates (keep newest)… | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=--confirm-gui param3=--notify param4=1020@Wed_Oct_14_08:56:00_2026 sfimage=xmark.octagon
 -----
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1000@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
@@ -58,7 +58,7 @@ repo · 2× go test -race ./internal/web running | sfimage=square.stack.3d.up sf
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=1000@Wed_Oct_14_08:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=1000@Wed_Oct_14_08:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=1000 sfimage=number
-repo · tests 1m00s · 0.0 cores · 298M | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
+⬡ repo · tests 1m00s · 0.0 cores · 298M | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=2000@Wed_Oct_14_08:30:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --codex · pid 2000 · up 30m · 2 children | symbolize=false
@@ -75,7 +75,7 @@ repo · tests 1m00s · 0.0 cores · 298M | sfimage=circle.fill sfconfig=eyJyZW5k
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=2000@Wed_Oct_14_08:30:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=2000@Wed_Oct_14_08:30:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=2000 sfimage=number
-myapp · node dist/server.js · running 5h0m · check first | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ myapp · node dist/server.js · running 5h0m · check first | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --node dist/server.js | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5060@Wed_Oct_14_04:00:00_2026 sfimage=arrow.up.forward.app
 --check first — dev server on :3000, its session is still active | refresh=true sfimage=questionmark.circle symbolize=false
@@ -119,7 +119,7 @@ myapp · node dist/server.js · running 5h0m · check first | sfimage=clock sfco
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=5000@Wed_Oct_14_03:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=5000@Wed_Oct_14_03:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=5000 sfimage=number
-repo · tests 2m00s · 1.5 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
+⬡ repo · tests 2m00s · 1.5 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=100@Wed_Oct_14_08:00:00_2026 sfimage=arrow.up.forward.app
 --/Users/NAME/repo | symbolize=false
 --codex · pid 100 · up 1h0m · 9 children | symbolize=false
@@ -141,7 +141,7 @@ repo · tests 2m00s · 1.5 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5k
 --Copy path | bash="@TMP@/menu-agents" terminal=false param1=copy-path param2=100@Wed_Oct_14_08:00:00_2026 sfimage=doc.on.doc
 --Open in Finder | bash="@TMP@/menu-agents" terminal=false param1=reveal param2=100@Wed_Oct_14_08:00:00_2026 sfimage=folder
 --Copy PID | bash="@REPO@/configs/swiftbar/agents.10s.sh" terminal=false param1=copy param2=100 sfimage=number
-repo · make serve · running 45m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
+✳ repo · make serve · running 45m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
 --make serve | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=1080@Wed_Oct_14_08:15:00_2026 sfimage=arrow.up.forward.app
 --informational — running 45m; its session is still active | refresh=true sfimage=info.circle symbolize=false
@@ -154,7 +154,7 @@ repo · make serve · running 45m · informational | sfimage=clock sfconfig=eyJy
 --Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=1000 sfimage=terminal
 --Peek | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=peek param4=1080@Wed_Oct_14_08:15:00_2026 param5=60 sfimage=eye
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=1080@Wed_Oct_14_08:15:00_2026 sfimage=info.circle
-myapp · make test · running 25m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
+✳ myapp · make test · running 25m · informational | sfimage=clock sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 refresh=true symbolize=false
 --make test | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5070@Wed_Oct_14_08:35:00_2026 sfimage=arrow.up.forward.app
 --informational — running 25m; its session is still active | refresh=true sfimage=info.circle symbolize=false
@@ -167,7 +167,7 @@ myapp · make test · running 25m · informational | sfimage=clock sfconfig=eyJy
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5070@Wed_Oct_14_08:35:00_2026 sfimage=doc.on.doc
 --Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5070@Wed_Oct_14_08:35:00_2026 sfimage=info.circle
-myapp · wait-loop stuck 5h10m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ myapp · wait-loop stuck 5h10m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --until tail -1 $F ¦ grep -qE "^(ok¦FAIL)"; do sleep 5; done | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5010@Wed_Oct_14_03:50:00_2026 sfimage=arrow.up.forward.app
 --safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago) | refresh=true sfimage=checkmark.circle symbolize=false
@@ -182,7 +182,7 @@ myapp · wait-loop stuck 5h10m · safe to stop | sfimage=hourglass sfconfig=eyJy
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5010@Wed_Oct_14_03:50:00_2026 sfimage=doc.on.doc
 --Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5010@Wed_Oct_14_03:50:00_2026 sfimage=info.circle
-myapp · wait-loop stuck 1h40m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ myapp · wait-loop stuck 1h40m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --until grep -q "^built" @TMP@/w/build.log; d... | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5020@Wed_Oct_14_07:20:00_2026 sfimage=arrow.up.forward.app
 --safe to stop — nothing has written to the file it watches for 1h30m | refresh=true sfimage=checkmark.circle symbolize=false
@@ -197,7 +197,7 @@ myapp · wait-loop stuck 1h40m · safe to stop | sfimage=hourglass sfconfig=eyJy
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5020@Wed_Oct_14_07:20:00_2026 sfimage=doc.on.doc
 --Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5020@Wed_Oct_14_07:20:00_2026 sfimage=info.circle
-myapp · wait-loop stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ myapp · wait-loop stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --while kill -0 4242 2>/dev/null; do sleep 5; done | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5030@Wed_Oct_14_06:00:00_2026 sfimage=arrow.up.forward.app
 --check first — waiting 3h0m, with no file to judge by (age only) | refresh=true sfimage=questionmark.circle symbolize=false
@@ -210,7 +210,7 @@ myapp · wait-loop stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5030@Wed_Oct_14_06:00:00_2026 sfimage=doc.on.doc
 --Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5030@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
-myapp · wait-loop stuck 2h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ myapp · wait-loop stuck 2h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --until [ -s @TMP@/w/missing.out ]; do sleep ... | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5040@Wed_Oct_14_07:00:00_2026 sfimage=arrow.up.forward.app
 --check first — the file it watches is gone; waiting 2h0m | refresh=true sfimage=questionmark.circle symbolize=false
@@ -223,7 +223,7 @@ myapp · wait-loop stuck 2h0m · check first | sfimage=hourglass sfconfig=eyJyZW
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5040@Wed_Oct_14_07:00:00_2026 sfimage=doc.on.doc
 --Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5040@Wed_Oct_14_07:00:00_2026 sfimage=info.circle
-myapp · wait-loop stuck 2h30m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ myapp · wait-loop stuck 2h30m · safe to stop | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --until tail -1 @TMP@/w/fail.out ¦ grep -q P... | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5080@Wed_Oct_14_06:30:00_2026 sfimage=arrow.up.forward.app
 --safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago) | refresh=true sfimage=checkmark.circle symbolize=false
@@ -238,7 +238,7 @@ myapp · wait-loop stuck 2h30m · safe to stop | sfimage=hourglass sfconfig=eyJy
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=5080@Wed_Oct_14_06:30:00_2026 sfimage=doc.on.doc
 --Show session | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=--hold param3=ps param4=5000 sfimage=terminal
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=5080@Wed_Oct_14_06:30:00_2026 sfimage=info.circle
-myapp · wait-loop stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
+✳ myapp · wait-loop stuck 3h0m · check first | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false
 --while [ -f @TMP@/w/build.log ]; do sleep 5;... | symbolize=false
 --Jump to session | bash="@TMP@/menu-agents" terminal=false param1=jump param2=--notify param3=5090@Wed_Oct_14_06:00:00_2026 sfimage=arrow.up.forward.app
 --check first — waiting 3h0m on whether @TMP@/w/build.log exists | refresh=true sfimage=questionmark.circle symbolize=false
@@ -428,6 +428,7 @@ Today: 1.5 CPU-h · tests 56% | sfimage=chart.bar.xaxis bash="@TMP@/menu-agents"
 Stale (7) | size=12
 npm exec chrome-devtools-mcp@latest · 50m · 210M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
 --orphan · pid 60829 · ~ | symbolize=false
+--npm exec chrome-devtools-mcp@latest | symbolize=false size=11
 --safe to stop — probably left by an agent session that ended | refresh=true sfimage=checkmark.circle symbolize=false
 --owner: none, its session ended (the process now belongs to pid 1) | symbolize=false
 --running 50m · 0% CPU | symbolize=false
@@ -437,8 +438,9 @@ npm exec chrome-devtools-mcp@latest · 50m · 210M · safe to stop | refresh=tru
 --Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=xmark.octagon
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=60829@Wed_Oct_14_08:23:56_2026 sfimage=doc.on.doc
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60829@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
-node /Users/NAME/.local/lib/example-agent-mcp.cjs · 50m · 54M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
+node example-agent-mcp.cjs · 50m · 54M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
 --orphan · pid 60831 · ~ | symbolize=false
+--node /Users/NAME/.local/lib/example-agent-mcp.cjs | symbolize=false size=11
 --safe to stop — probably left by an agent session that ended | refresh=true sfimage=checkmark.circle symbolize=false
 --owner: none, its session ended (the process now belongs to pid 1) | symbolize=false
 --running 50m · 0% CPU | symbolize=false
@@ -450,6 +452,7 @@ node /Users/NAME/.local/lib/example-agent-mcp.cjs · 50m · 54M · safe to stop 
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=60831@Wed_Oct_14_08:23:56_2026 sfimage=info.circle
 caffeinate -i -t 300 · 0m · 1M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
 --orphan · pid 27681 · ~ | symbolize=false
+--caffeinate -i -t 300 | symbolize=false size=11
 --safe to stop — probably left by an agent session that ended | refresh=true sfimage=checkmark.circle symbolize=false
 --owner: none, its session ended (the process now belongs to pid 1) | symbolize=false
 --running 42s · 0% CPU | symbolize=false
@@ -459,8 +462,9 @@ caffeinate -i -t 300 · 0m · 1M · safe to stop | refresh=true symbolize=false 
 --Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=27681@Wed_Oct_14_09:13:19_2026 sfimage=xmark.octagon
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=27681@Wed_Oct_14_09:13:19_2026 sfimage=doc.on.doc
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=27681@Wed_Oct_14_09:13:19_2026 sfimage=info.circle
-node /Users/NAME/work/app/node_modules/.bin/vite · 3h0m · 78M · check first | refresh=true symbolize=false sfimage=network
+node vite · app · 3h0m · 78M · check first | refresh=true symbolize=false sfimage=network
 --server · pid 4100 · ~/work/app · ports 5173 | symbolize=false
+--node /Users/NAME/work/app/node_modules/.bin/vite | symbolize=false size=11
 --check first — a server on :5173, left behind when its session ended | refresh=true sfimage=questionmark.circle symbolize=false
 --owner: none, its session ended (the process now belongs to pid 1) | symbolize=false
 --running 3h0m · 1% CPU | symbolize=false
@@ -473,6 +477,7 @@ node /Users/NAME/work/app/node_modules/.bin/vite · 3h0m · 78M · check first |
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=4100@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
 npm exec chrome-devtools-mcp@latest · 50m · 210M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
 --orphan · pid 6000 · ~ | symbolize=false
+--npm exec chrome-devtools-mcp@latest | symbolize=false size=11
 --safe to stop — its session ended | refresh=true sfimage=checkmark.circle symbolize=false
 --owner: none, its session ended (the process now belongs to pid 1) | symbolize=false
 --running 50m · 0% CPU | symbolize=false
@@ -483,8 +488,9 @@ npm exec chrome-devtools-mcp@latest · 50m · 210M · safe to stop | refresh=tru
 --Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=xmark.octagon
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=6000@Wed_Oct_14_08:10:00_2026 sfimage=doc.on.doc
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6000@Wed_Oct_14_08:10:00_2026 sfimage=info.circle
-node /Users/NAME/work/app/node_modules/.bin/vite --port 5174 · 3h0m · 78M · check first | refresh=true symbolize=false sfimage=network
+node vite --port 5174 · app · 3h0m · 78M · check first | refresh=true symbolize=false sfimage=network
 --server · pid 6100 · ~/work/app · ports 5174 | symbolize=false
+--node /Users/NAME/work/app/node_modules/.bin/vite --port 5174 | symbolize=false size=11
 --check first — a server on :5174, left behind when its session ended | refresh=true sfimage=questionmark.circle symbolize=false
 --owner: none, its session ended (the process now belongs to pid 1) | symbolize=false
 --running 3h0m · 1% CPU | symbolize=false
@@ -495,8 +501,9 @@ node /Users/NAME/work/app/node_modules/.bin/vite --port 5174 · 3h0m · 78M · c
 --Kill tree | bash="@TMP@/menu-agents" terminal=false refresh=true param1=kill param2=-y param3=--notify param4=6100@Wed_Oct_14_06:00:00_2026 sfimage=xmark.octagon
 --Copy details | bash="@TMP@/menu-agents" terminal=false param1=why param2=--copy param3=6100@Wed_Oct_14_06:00:00_2026 sfimage=doc.on.doc
 --Details | bash="@TMP@/menu-agents" param1=open-term terminal=false param2=show param3=--watch param4=6100@Wed_Oct_14_06:00:00_2026 sfimage=info.circle
-npm exec @playwright/mcp@latest · 50m · 312M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
+npm exec @playwright/mcp@latest · app · 50m · 312M · safe to stop | refresh=true symbolize=false sfimage=puzzlepiece.extension
 --orphan · pid 200 · ~/work/app | symbolize=false
+--npm exec @playwright/mcp@latest | symbolize=false size=11
 --safe to stop — probably left by an agent session that ended | refresh=true sfimage=checkmark.circle symbolize=false
 --owner: none, its session ended (the process now belongs to pid 1) | symbolize=false
 --running 50m · 3% CPU | symbolize=false

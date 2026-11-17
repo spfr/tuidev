@@ -8,12 +8,14 @@
 #   (_agents_hist_line), report.sh (_agents_insight_line,
 #   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv), cool.sh
 #   (_agents_cool_row), memory.sh (_agents_mem_tsv_row, _agents_swap_row),
-#   palette.sh (_agents_palette_row), triage.sh (_agents_waitsum_line),
+#   palette.sh (_agents_palette_row), glyph.sh (_agents_glyphs_tsv),
+#   triage.sh (_agents_waitsum_line),
 #   map.sh (_agents_map_tsv).
 # Public: agents_tsv.
 
-# agents_tsv — the palette row (the menu's tints: palette.sh), agents_assess's
-# need/evid rows (so the menu knows an item's verdict when it meets the item),
+# agents_tsv — the palette row (the menu's tints: palette.sh), the glyph rows
+# (glyph KIND GLYPH: the mark of each kind of session, from glyph.sh's table;
+# none while AGENTS_GLYPHS=off), agents_assess's need/evid rows (so the menu knows an item's verdict when it meets the item),
 # each session's triage row, the records (agent, stale, hog, top,
 # total, act, herdr, ident, watched, job), then:
 #   mcpcfg cli scope name source project  each configured MCP server, while
@@ -50,6 +52,7 @@ agents_tsv() {
     _agents_now _AGENTS_CLOCK
     _agents_bg 6 _agents_tsv_machine
     _agents_palette_row          # first: the menu tints every row with it
+    _agents_glyphs_tsv           # and marks each kind of session
     _agents_awake_prime
     _agents_mcp_load
     if ! recs="$(AGENTS_HERDR_MODE=async _AGENTS_FEED=1 agents_collect)"; then

@@ -1,3 +1,10 @@
+glyph	claude	✳
+glyph	codex	⬡
+glyph	grok	✕
+glyph	agy	▲
+glyph	cursor-agent	◈
+glyph	shell	❯
+glyph	agent	◆
 need	1010	Wed_Oct_14_08:58:00_2026	dup	check	medium	dup	0	1000	check first	check first — the same command runs 3× in this directory	claude	repo	120	100	-	-	-	-	-
 evid	1010	fact	owner: claude 1000 in repo
 evid	1010	fact	running 2m · 100% CPU

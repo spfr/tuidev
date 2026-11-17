@@ -76,7 +76,7 @@ END {
         for (i = 1; i <= ns; i++) {
             split(s[i], f, "\t")
             line = sprintf("  %-7s %-7s %7s %6.1f %6s %4d  %-11s ", f[2], f[3], age(f[4]), f[5], mem(f[7]), f[8], f[10])
-            print line cut(f[14] (f[13] != "-" ? "  (in " tilde(f[13]) ")" : ""), w - 59)
+            print line cut(plabel(f[14]) (f[13] != "-" ? "  (in " tilde(f[13]) ")" : ""), w - 59)
         }
         if (!ns) print "  none"
         printed = 1

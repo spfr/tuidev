@@ -1267,6 +1267,44 @@ _agents_conf_valid AGENTS_BAR_SECTIONS "review running parked limits today" || f
 ! _agents_conf_valid AGENTS_BAR_SECTIONS "review bogus" || fail "a bogus section accepted"
 pass "AGENTS_BAR_SECTIONS: old names keep working, the old default reads as the new layout"
 
+# The mark of each kind of session leads its row in every section (the glyph
+# rows of `agents tsv`; the plugin reads them and sources no lib). An unknown
+# kind takes the "agent" mark, no glyph rows leave the rows as they were, and a
+# glyph is cleaned (no "|") and capped at 8 characters.
+g_sess() { printf 'agent\t%s\t%s\t600\t0.0\t0.0\t800000\t0\ts%s\t-\tme\t-\t/p/x\ta\t%s\ntriage\t%s\t%s\t60\t%s\n' "$1" "$2" "$1" "$4" "$1" "$3" "$5"; }
+g_recs="$(g_sess 11 claude run "Fleet IA" working)"$'\n'"$(g_sess 12 codex unknown - "no signal")"$'\n'"$(g_sess 13 claude need web blocked)"$'\n'"$(g_sess 14 claude review web "done")"$'\n'"$(g_sess 15 grok parked api idle)"$'\n'"$(g_sess 16 mystery-cli run odd working)"
+g_rows=$'glyph\tclaude\t✳\nglyph\tcodex\t⬡\nglyph\tgrok\t✕\nglyph\tagent\t◆'
+menu="$(plugin "$g_recs" "$g_rows")"
+for want in "✳ Fleet IA · working · " "⬡ codex · no signal · " "✳ web · blocked" "✳ web · done" "--✕ api · idle" "◆ odd · working · "; do
+    [[ "$menu" == *"$want"* ]] || fail "session row without its mark ($want): $menu"
+done
+section_of() { printf '%s\n' "$menu" | awk -v s="$1" '/^[A-Z]/ { on = (index($0, s) == 1) } on'; }
+[[ "$(section_of "Needs you")" == *"✳ web · blocked"* && "$(section_of "To review")" == *"✳ web · done"* \
+    && "$(section_of "Running")" == *"✳ Fleet IA"* && "$(section_of "No signal")" == *"⬡ codex"* && "$(section_of "Parked")" == *"✕ api"* ]] \
+    || fail "a mark in the wrong section: $menu"
+menu="$(plugin "$g_recs" "")"
+[[ "$menu" == *$'\nFleet IA · working · '* && "$menu" == *$'\ncodex · no signal · '* && "$menu" != *"✳"* && "$menu" != *"◆"* ]] \
+    || fail "no glyph rows (an older agents, or off) must leave the rows as they were: $menu"
+menu="$(plugin "$g_recs" $'glyph\tclaude\ta|b bash=x\nglyph\tcodex\t0123456789ABC')"
+[[ "$menu" == *$'\na¦b bash Fleet IA · working · '* && "$menu" != *"a|b"* && "$menu" == *$'\n01234567 codex · no signal'* ]] \
+    || fail "a hostile or long glyph: $menu"
+[[ "$(printf '%s\n' "$menu" | grep -c 'param[0-9]*=x')" == 0 ]] || fail "a glyph reached a param"
+pass "SwiftBar session rows lead with their kind's mark; unknown kinds take the agent mark; glyphs are cleaned and capped; none sent, none drawn"
+
+# A stale process reads as what it is: its command with paths cut to base names,
+# then the project it started in; a build's temp path shows its base name only,
+# whole in the submenu.
+st_row() { printf 'stale\t%s\torphan\t5520\t0.0\t0.0\t35840\t0\tWed_Oct_14_09:13:19_2026\t-\tme\t-\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
+menu="$(plugin "$(st_row 900 /work/agentic-vms "/var/folders/vr/x1/T/go-build315/b001/web.test -test.count=1" agentic-vms)"$'\n'"$(st_row 901 /var/folders/vr/x1/T/go-build9 /var/folders/vr/x1/T/go-build9/b001/api.test go-build9)"$'\n'"$(st_row 902 - "node $HOME/.local/lib/example-agent-mcp.cjs" -)" "")"
+[[ "$menu" == *$'\nweb.test -test.count=1 · agentic-vms · '* ]] || fail "stale label: base name and project: $menu"
+[[ "$menu" == *$'\napi.test · '* && "$menu" != *"api.test · go-build9"* ]] || fail "stale label: a temp cwd is no project: $menu"
+[[ "$menu" == *$'\nnode example-agent-mcp.cjs · '* ]] || fail "stale label: a home path cut to its base name: $menu"
+[[ "$(printf '%s\n' "$menu" | grep -c '^[^-].*/var/folders')" == 0 ]] || fail "a temp path on a stale row: $menu"
+[[ "$menu" == *"--/var/folders/vr/x1/T/go-build315/b001/web.test -test.count=1 | "* ]] || fail "the full command is in the submenu: $menu"
+[[ "$(_agents_awk_eval lib_fmt 'BEGIN { print plabel("/var/folders/vr/T/go-build1/b001/web.test -test.count=1 --cfg=/a/b /x/") }')" == "web.test -test.count=1 --cfg=/a/b x" ]] \
+    || fail "agents ls: plabel cuts absolute paths to base names"
+pass "SwiftBar stale rows: base names and the project, the full command in the submenu; agents ls cuts paths the same way"
+
 # Lid mode in the menu: the group by default, hidden with AGENTS_LID=0
 # (choices up to AGENTS_LID_MAX, each reporting by notification); the time
 # left and End lid mode now… while on; a red restore item when stale.
