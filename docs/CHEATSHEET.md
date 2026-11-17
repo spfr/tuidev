@@ -107,6 +107,22 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude   # agent teams, off by default
 
 `sbx` runs binaries, not shell functions or aliases. Seatbelt doesn't nest, so plain `claude` already runs under its native sandbox; to run it under `sbx` instead, turn that off for the run: `sbx -- claude --settings '{"sandbox":{"enabled":false}}'`. Details: [sandboxing.md](sandboxing.md).
 
+## Secrets (`secret`)
+
+API tokens in the macOS Keychain (or libsecret, or `pass`), never in a dotfile. The value is read from a hidden prompt or stdin, never from the command line.
+
+| Command | Effect |
+|---------|--------|
+| `secret set NAME` | Store a value (hidden prompt; `pbpaste \| secret set NAME` works too) |
+| `secret run -n NAME -- CMD` | Run CMD with NAME in its environment only (repeat `-n`; `--all` for every secret) |
+| `secret get NAME` | Print it, for `$(...)` |
+| `eval "$(secret export A B)"` | Export into this shell and everything it starts, agents included |
+| `secret ls` / `secret rm NAME` | List names / delete one |
+| `secret scan` | Token-looking `export` lines in your shell files (name and line, never the value) |
+| `secret import --dry-run --remove FILE` | What `import --remove` would move out of FILE; drop `--dry-run` to do it |
+
+Details: [secrets.md](secrets.md).
+
 ## Herdr (`--pack herdr`)
 
 ```bash

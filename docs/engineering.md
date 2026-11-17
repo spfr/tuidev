@@ -21,6 +21,7 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `configs/starship/starship.toml` | `~/.config/starship.toml` | managed block `tuidev-starship` |
 | `configs/ghostty/config` | `~/.config/ghostty/config` | managed block (ui pack) |
 | `configs/ssh/config`, `configs/ssh/sshd_config.d/` | `~/.ssh/config`, `/etc/ssh/sshd_config.d/` | managed block / copied when writable (remote pack) |
+| `bin/secret` | `~/.local/bin/secret` | overwrite (core pack) |
 | `bin/sbx`, `configs/sandbox/profiles/*.sb` | `~/.local/bin/sbx`, `~/.config/tuidev/sandbox/` | overwrite / upgrade-shipped (sandbox pack) |
 | `configs/{claude,codex}/` | `~/.claude/settings.json` (`settings.linux.json` on Linux), `~/.codex/config.toml` | upgrade-shipped (ai-clis pack) |
 | `configs/codex/rules/tuidev.rules` | `~/.codex/rules/tuidev.rules` | overwrite (ai-clis pack) |
@@ -36,6 +37,7 @@ tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFI
 
 ```
 bin/sbx                 Seatbelt wrapper
+bin/secret              API tokens in the OS secret store (core pack); plain bash, runs without the repo
 bin/agents              agent process monitor (monitoring pack): the entrypoint, sourceable for tests
 bin/mcp-lazy            stands in for a stdio MCP server until its first tool call (Perl, core modules only)
 lib/agents/             its modules and awk programs (map below); installed beside it, so it runs without the repo

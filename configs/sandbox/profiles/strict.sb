@@ -275,6 +275,8 @@
   (literal (string-append (param "HOME_DIR") "/.config/git/credentials"))
   (literal (string-append (param "HOME_DIR") "/.config/containers/auth.json"))
   (literal (string-append (param "HOME_DIR") "/.gem/credentials"))
+  (subpath (string-append (param "HOME_DIR") "/.local/share/keyrings"))
+  (literal (string-append (param "HOME_DIR") "/.config/zsh/secrets.zsh"))
   (subpath (string-append (param "HOME_DIR") "/.local/share/atuin"))
   (literal (string-append (param "HOME_DIR") "/.zsh_history"))
   (literal (string-append (param "HOME_DIR") "/.bash_history"))
