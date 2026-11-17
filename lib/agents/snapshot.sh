@@ -43,14 +43,21 @@ _agents_zombie() {
     [[ "$st" == Z* ]]
 }
 
-# "pid port" for every TCP listener we can see (our own processes, unprivileged).
-# Fails when they could not be listed (no lsof or ss, or it failed): "no
-# ports found" then is not "no ports" (agents_collect's probe row). lsof exits
-# 1 with no output when nothing listens; an error also says so on stderr.
+# _agents_listeners [--skip "PID…" | --only PID,…] — "pid port" for every
+# TCP listener we can see (our own processes, unprivileged). Fails when they
+# could not be listed (no lsof or ss, or it failed): "no ports found" then is
+# not "no ports" (agents_collect's probe row). lsof exits 1 with no output
+# when nothing listens; an error also says so on stderr. --skip leaves those
+# processes out, --only asks about those alone (agents_collect's listener
+# plan); ss, which lists every socket at once, ignores both.
 _agents_listeners() {
-    local out rc=0
+    local out rc=0 sel=()
+    case "${1:-}" in
+        --skip) [[ -z "${2:-}" ]] || sel=(-p "^${2// /,^}") ;;
+        --only) sel=(-a -p "${2:-}") ;;
+    esac
     if command -v lsof >/dev/null 2>&1; then
-        out="$(lsof -b -w -nP -iTCP -sTCP:LISTEN -Fpn 2>&1)" || rc=$?
+        out="$(lsof -b -w -nP "${sel[@]}" -iTCP -sTCP:LISTEN -Fpn 2>&1)" || rc=$?
         printf '%s\n' "$out" | awk '
             /^p/ { p = substr($0, 2) }
             /^n/ { port = $0; sub(/.*:/, "", port); if (!seen[p " " port]++) print p " " port }'
@@ -355,6 +362,66 @@ _agents_keep_pids() {
     return 0
 }
 
+# The listener plan. lsof spends its time in the file tables it walks, and a
+# few processes hold most of the descriptors (a virtual machine's tens of
+# thousands, browsers, system agents) while their ports reach no record. So
+# each classify pass names the processes whose ports no record can show
+# (classify.awk's lsink), and the next run's lsof leaves those out
+# (listen.skip in the run dir). Nothing is taken on trust: the pass checks
+# every pid that was left out against this run's snapshot and, before the
+# records are final, asks lsof about any whose ports may show now (a reused
+# pid, a process that exec'd another command). A damaged or half-written
+# list only costs that second ask: it is a plain write.
+
+# _agents_listen_skip VAR — set VAR to the last run's plan, the pids to
+# leave out: "" for none, or when the list is damaged or too long for one
+# argument.
+_agents_listen_skip() {
+    local _s=""
+    { read -r _s < "$AGENTS_RUN_DIR/listen.skip"; } 2>/dev/null || true
+    [[ ${#_s} -le 65536 && "$_s" =~ ^[0-9]+( [0-9]+)*$ ]] || _s=""
+    printf -v "$1" '%s' "$_s"
+}
+
+# _agents_collect_classify — agents_collect's classify pass, on its ps,
+# listen, keep, panes, hot, clock, feed and lskip (dynamic scope): sets
+# recs. When a pid lsof left out may matter now, lsof is asked about it
+# (lprobe=fail when that fails) and the pass runs again with its ports. The
+# next run's plan is kept; a plan line never reaches recs.
+_agents_collect_classify() {
+    local full relisten="-" skip="-" more
+    full="$(printf '%s\n' "$ps" | AGENTS_LISTEN_PLAN=1 AGENTS_LISTEN_SKIP="$lskip" AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+    _agents_take_plan
+    if [[ "$relisten" != - ]]; then
+        more="$(_agents_listeners --only "$relisten")" || lprobe=fail
+        [[ -z "$more" ]] || listen+="${listen:+$'\n'}$more"
+        full="$(printf '%s\n' "$ps" | AGENTS_LISTEN_PLAN=1 AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+        _agents_take_plan
+    fi
+    [[ "$skip" != - ]] || skip=""
+    if [[ "$skip" != "$lskip" && -d "$AGENTS_RUN_DIR" ]]; then
+        { printf '%s\n' "$skip" > "$AGENTS_RUN_DIR/listen.skip"; } 2>/dev/null
+    fi
+    return 0
+}
+
+# _agents_take_plan — split the caller's full (the classify output) into
+# recs and its last line, the plan: relisten and skip ("-" for none). Only
+# suffix and prefix removals, which stay cheap on a long output.
+_agents_take_plan() {
+    local p
+    recs="${full%$'\n'lplan$'\t'*}"
+    if [[ ${#recs} -lt ${#full} ]]; then
+        p="${full:${#recs}+7}"
+    elif [[ "$full" == lplan$'\t'* ]]; then
+        p="${full#lplan$'\t'}"; recs=""
+    else
+        return 0
+    fi
+    relisten="${p%%$'\t'*}"; skip="${p#*$'\t'}"
+    [[ "$relisten" =~ ^[0-9]+(,[0-9]+)*$ ]] || relisten=-
+}
+
 # agents_collect — the full record set for this moment, ending in
 # "probe listen ok|fail": whether the listening ports could be listed (when
 # not, a stale tree's "no ports" proves nothing, and auto-reap leaves it).
@@ -364,14 +431,16 @@ _agents_keep_pids() {
 # hands what it saw to the run ledger (_agents_runs_feed): the same snapshot
 # and lsof, plus the tool shells' stdout from that lsof.
 agents_collect() {
-    local ps listen keep kbg="" panes="" tbg="" recs pids lprobe=ok enr feed="" hint=""
+    local ps listen keep kbg="" panes="" tbg="" recs pids lprobe=ok enr feed="" hint="" lskip=""
     [[ "${_AGENTS_FEED:-}" == 1 && "$AGENTS_HISTORY" == 1 ]] && feed=1
     # Listing the listeners scans every process (lsof): the slowest probe, so
-    # it runs while ps reads the process table; so do launchctl on macOS,
-    # whose jobs (pids never stale) need no snapshot, tmux's pane list, and
-    # the cwd lookup for the pids the last run asked about
-    # (_agents_cwd_prefetch).
-    _agents_bg 5 _agents_listeners
+    # it runs while ps reads the process table, leaving out the processes
+    # whose ports no record could show last run (_agents_listen_skip); so do
+    # launchctl on macOS, whose jobs (pids never stale) need no snapshot,
+    # tmux's pane list, and the cwd lookup for the pids the last run asked
+    # about (_agents_cwd_prefetch).
+    _agents_listen_skip lskip
+    _agents_bg 5 _agents_listeners ${lskip:+--skip "$lskip"}
     if command -v launchctl >/dev/null 2>&1; then _agents_bg 7 _agents_keep_pids ""; kbg=1; fi
     if _agents_tmux_up; then _agents_bg 9 _agents_panes; tbg=1; fi
     _agents_cwd_prefetch 8 ${feed:+--stdout} || true
@@ -389,7 +458,7 @@ agents_collect() {
     # Hogs by CPU are judged over time: the streaks go from run to run.
     local hotf="$AGENTS_RUN_DIR/hog.state" hot="" newhot=""
     [[ -r "$hotf" ]] && hot="$(<"$hotf")"
-    recs="$(printf '%s\n' "$ps" | AGENTS_HOG_CLOCK="$clock" AGENTS_HOG_HOT="$hot" AGENTS_JOBS_PROC="$feed" agents_classify "$listen" "$keep" "$panes")"
+    _agents_collect_classify
     local type pid kind rest watch="" where="" runs="" herdr
     set --
     while IFS=$'\t' read -r type pid kind rest; do

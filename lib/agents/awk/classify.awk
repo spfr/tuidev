@@ -19,6 +19,20 @@ function act(p, cls, r, label, cmd) {
 function hot_row(p, since, ts, c, ok) { hotrows = hotrows sprintf("hot\t%d\t%s\t%d\t%d\t%d\t%d\n", p, st[p], since, ts, c, ok) }
 function hot_known(p) { return (p in hot_st) && hot_st[p] == st[p] }
 function hot_keep(p) { hot_row(p, hot_since[p], hot_ts[p], hot_ct[p], hot_ok[p]) }
+# The listener plan (AGENTS_LISTEN_PLAN: agents_collect). A process's
+# listening ports reach a record only through a tree whose ports are read: an
+# agent root, a session's direct child (act), an own orphan (stale) or dev
+# server (cand). lsink(q): q may be one of them. A wide test, from what is
+# fixed at exec (the command, the owner, an agent parent): no keep, shelter
+# or ppid, so a process that fails it keeps failing it as its parents exit.
+# Every process with no lsink on its walk up (the walk the ports take) is
+# one whose ports no record can show this run; the next run's lsof leaves
+# them out.
+function lsink(q) {
+    if (q in lsk) return lsk[q]
+    return lsk[q] = (kind[q] != "" || ((pp[q] in kind) && kind[pp[q]] != "") \
+        || (uid[q] == me && (av[q] !~ sysre || (orre != "" && av[q] ~ orre))))
+}
 # Is p using AGENTS_HOG_NOW CPU for real? One reading of ps is only a moment:
 # a daemon flickers past it during any build. A reading that high starts a
 # streak (a "hot" row, kept by agents_collect between runs). From then on the
@@ -62,6 +76,11 @@ BEGIN {
         if (split(t[i], f, "\t") != 7 || f[1] != "hot") continue
         q = f[2] + 0; hot_st[q] = f[3]; hot_since[q] = f[4] + 0; hot_ts[q] = f[5] + 0; hot_ct[q] = f[6] + 0; hot_ok[q] = f[7] + 0
     }
+    # AGENTS_LISTEN_SKIP: the pids whose listeners were not asked for (the
+    # last run's plan); orre: every orphan pattern in one regex.
+    lplan = (ENVIRON["AGENTS_LISTEN_PLAN"] != "")
+    n = split(ENVIRON["AGENTS_LISTEN_SKIP"], t, "[ ,\n]+"); for (i = 1; i <= n; i++) if (t[i] != "") lskip[t[i] + 0] = 1
+    if (lplan) for (i = 1; i <= np; i++) if (pat[i] != "") orre = orre (orre == "" ? "" : "|") "(" pat[i] ")"
     n = 0
 }
 NF >= 14 {
@@ -85,13 +104,20 @@ END {
     # agent tree) and whether it runs under this process; then add it to every
     # ancestor subtree sums, leaving out the subtree of this process (ps, us).
     for (k = 1; k <= n; k++) {
-        p = ord[k]; top = ""; under = 0; q = p; d = 0
+        p = ord[k]; top = ""; under = 0; q = p; d = 0; lr = 0
         while (q > 1 && (q in pp) && d++ < 64) {
             if (kind[q] != "") top = q
             if (q == self) under = 1
+            if (lplan && !lr && lsink(q)) lr = 1
             q = pp[q]
         }
         root[p] = top; mine[p] = under
+        # The plan: a pid left out that may matter now (reused, or exec'd
+        # into another command) is asked about again (relisten).
+        if (lplan) {
+            if (!lr) { if (p > 1) lout = lout (lout == "" ? "" : " ") p }
+            else if (p in lskip) relisten = relisten (relisten == "" ? "" : ",") p
+        }
         if (under) continue
         # A process that hosts a session (an agent, an interactive shell, a
         # tmux/screen/zellij/herdr/pm2 server) shelters every ancestor.
@@ -181,4 +207,5 @@ END {
     }
     jobs_emit()
     printf "%s", hotrows
+    if (lplan) printf "lplan\t%s\t%s\n", (relisten == "" ? "-" : relisten), (lout == "" ? "-" : lout)
 }

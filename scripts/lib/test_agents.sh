@@ -195,6 +195,50 @@ efield() { printf '%s\n' "$enriched" | awk -F '\t' -v t="$1" -v p="$2" -v c="$3"
 [[ "$(efield agent 84091 12)" == - ]]       || fail "Herdr status attached to the wrong session"
 pass "orphaned dev servers are stale only with a cwd under \$HOME; Herdr status matches by cwd"
 
+# The listener plan: the processes whose ports no record can show (apps,
+# system services, other users' processes) are named for the next lsof to
+# leave out; leaving them out changes no record; one left out that may matter
+# now (a reused pid) is named to ask about again.
+plan="$(printf '%s\n' "$fixture" | AGENTS_LISTEN_PLAN=1 agents_classify "$listen" "8800")"
+[[ "${plan%$'\n'lplan$'\t'*}" == "$records" ]] || fail "the listener plan changed the records"
+lplan="${plan##*$'\n'}"
+[[ "$lplan" == lplan$'\t-\t'* ]] || fail "plan line: $lplan"
+lskip=" ${lplan##*$'\t'} "
+for p in 3975 41198 48170 4200 4400 4500 606 710; do [[ "$lskip" == *" $p "* ]] || fail "plan does not leave out $p:$lskip"; done
+for p in 90419 22443 90466 60829 60831 27681 4100 4300 61904 197 84091 510; do [[ "$lskip" != *" $p "* ]] || fail "plan leaves out $p, whose ports may show"; done
+lfew="$(printf '%s\n' "$listen" | awk -v s="$lskip" 'index(s, " " $1 " ") == 0')"
+[[ "$(printf '%s\n' "$fixture" | agents_classify "$lfew" "8800")" == "$records" ]] || fail "leaving out the planned pids changed the records"
+plan="$(printf '%s\n' "$fixture" | AGENTS_LISTEN_PLAN=1 AGENTS_LISTEN_SKIP="4100 41198 22443 99999" agents_classify "$lfew" "8800")"
+[[ "${plan##*$'\n'}" == lplan$'\t22443,4100\t'* ]] || fail "relisten: ${plan##*$'\n'}"
+# agents_collect: the last run's plan goes to lsof; a pid in it that may
+# matter now is asked about again, so its ports still show; the new plan is kept.
+# shellcheck disable=SC2034,SC2317,SC2329  # read, and called, by agents_collect
+(
+    AGENTS_RUN_DIR="$tmp/lplan" AGENTS_TESTING=1 AGENTS_NOW=1000
+    lfix="$listen"   # agents_collect has a listen of its own
+    mkdir -p "$AGENTS_RUN_DIR"; printf '4100 41198\n' > "$AGENTS_RUN_DIR/listen.skip"
+    agents_snapshot() { printf '%s\n' "$fixture"; }
+    _agents_keep_pids() { echo 8800; }
+    _agents_cwds() { printf '4100\t%s\n' "$HOME/work/app"; }
+    _agents_listeners() {
+        printf '%s\n' "$*" >> "$AGENTS_RUN_DIR/calls"
+        case "${1:-}" in
+            --skip) printf '%s\n' "$lfix" | awk -v s=" $2 " 'index(s, " " $1 " ") == 0' ;;
+            --only) printf '%s\n' "$lfix" | awk -v s=",$2," 'index(s, "," $1 ",")' ;;
+            *) printf '%s\n' "$lfix" ;;
+        esac
+    }
+    out="$(agents_collect 2>/dev/null)"
+    [[ "$(printf '%s\n' "$out" | awk -F '\t' '$1 == "stale" && $2 == 4100 { print $10 }')" == 5173 ]] || fail "a relistened dev server lost its port: $out"
+    [[ "$(<"$AGENTS_RUN_DIR/calls")" == $'--skip 4100 41198\n--only 4100' ]] || fail "lsof calls: $(<"$AGENTS_RUN_DIR/calls")"
+    [[ "$out" != *lplan* && "$out" == *$'\nprobe\tlisten\tok' ]] || fail "the plan leaked, or the probe row moved: $out"
+    [[ " $(<"$AGENTS_RUN_DIR/listen.skip") " == "$lskip" ]] || fail "the next plan not kept: $(<"$AGENTS_RUN_DIR/listen.skip")"
+    printf '4100 x\n' > "$AGENTS_RUN_DIR/listen.skip"; : > "$AGENTS_RUN_DIR/calls"
+    agents_collect >/dev/null 2>&1
+    [[ "$(head -1 "$AGENTS_RUN_DIR/calls")" == "" ]] || fail "a damaged plan was used: $(<"$AGENTS_RUN_DIR/calls")"
+) || exit 1
+pass "listener plan: lsof leaves out what no record shows, asks again about a pid that may matter now"
+
 # Herdr: each session is the agent in its own pane (HERDR_PANE_ID), so two in
 # one directory get their own status and title; by directory only when the
 # pair is unique; never the pane another session claimed.
