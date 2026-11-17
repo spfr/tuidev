@@ -12,6 +12,11 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+      # Security updates: one PR per ecosystem for minor and patch bumps.
+      security-minor-patch:
+        applies-to: security-updates
+        update-types: ["minor", "patch"]
+        patterns: ["*"]
   - package-ecosystem: docker
     directories:
       - /
@@ -22,4 +27,8 @@ updates:
       default-days: 7
     groups:
       images:
+        patterns: ["*"]
+      security-minor-patch:
+        applies-to: security-updates
+        update-types: ["minor", "patch"]
         patterns: ["*"]
