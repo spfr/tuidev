@@ -183,12 +183,14 @@ MANAGED_BLOCKS=(
 # The Herdr keys block names the tuidev.link plugin's actions, so only
 # --pack herdr, which links that plugin first, ever creates it: an update
 # refreshes it where it already is. So does the sidebar block, which the pack
-# adds only while your config has no [ui.sidebar.spaces] of its own.
+# adds only while your config has no [ui.sidebar.spaces] or [ui.sidebar.agents]
+# of its own (an update never rewrites its block beside either: a duplicate table).
 managed_block_applies() {
     local dest="$1" id="$2"
     case "$id" in
         tuidev-tmux) tuidev_active_packs | grep -qx tmux && return 0 ;;
-        tuidev-keys|tuidev-sidebar) ;;
+        tuidev-keys) ;;
+        tuidev-sidebar) ! herdr_has_own_sidebar "$dest" || return 1 ;;
         *)           return 0 ;;
     esac
     [[ -f "$dest" ]] && grep -qxF "$(tuidev_block_begin "$id")" "$dest" 2>/dev/null

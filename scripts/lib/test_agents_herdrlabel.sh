@@ -347,16 +347,78 @@ pass "herdr sync --poke: Herdr's agents read again and the menu bar poked, only 
     set +e
     c="$tmp/herdr-config.toml"
     printf '[ui]\nstatus_indicators = "symbols"\n' > "$c"
-    _herdr_has_own_spaces "$c" && fail "a config without space rows has them"
-    printf '%s\n' "$(tuidev_block_begin tuidev-sidebar)" '[ui.sidebar.spaces]' 'rows = []' "$(tuidev_block_end tuidev-sidebar)" >> "$c"
-    _herdr_has_own_spaces "$c" && fail "tuidev's own block counted as yours"
-    printf '# [ui.sidebar.spaces]\n' >> "$c"
-    _herdr_has_own_spaces "$c" && fail "a commented table counted"
-    printf '[ ui.sidebar.spaces ]\nrows = []\n' >> "$c"
-    _herdr_has_own_spaces "$c" || fail "your own [ui.sidebar.spaces] was missed"
-    printf '[ui.sidebar]\nspaces.rows = []\n' > "$c"
-    _herdr_has_own_spaces "$c" || fail "spaces under [ui.sidebar] was missed"
-    grep -q '"\$agents"' "$REPO_DIR/configs/herdr/sidebar.toml" || fail "sidebar.toml has no \$agents"
-    [[ "$(grep -c '^\[' "$REPO_DIR/configs/herdr/sidebar.toml")" -eq 1 ]] || fail "sidebar.toml must hold one table"
+    herdr_has_own_sidebar "$c" && fail "a config without sidebar rows has them"
+    printf '%s\n' "$(tuidev_block_begin tuidev-sidebar)" '[ui.sidebar.spaces]' 'rows = []' '[ui.sidebar.agents]' 'rows = []' "$(tuidev_block_end tuidev-sidebar)" >> "$c"
+    herdr_has_own_sidebar "$c" && fail "tuidev's own block counted as yours"
+    printf '# [ui.sidebar.spaces]\n# [ui.sidebar.agents]\n' >> "$c"
+    herdr_has_own_sidebar "$c" && fail "a commented table counted"
+    for t in spaces agents; do
+        printf '[ ui.sidebar.%s ]\nrows = []\n' "$t" > "$c"
+        herdr_has_own_sidebar "$c" || fail "your own [ui.sidebar.$t] was missed"
+        printf '[ui.sidebar.%s.extra]\nx = 1\n' "$t" > "$c"
+        herdr_has_own_sidebar "$c" || fail "a sub-table of sidebar.$t was missed"
+        printf '[ui.sidebar]\n%s.rows = []\n' "$t" > "$c"
+        herdr_has_own_sidebar "$c" || fail "$t under [ui.sidebar] was missed"
+        printf '[ui]\nsidebar.%s.rows = []\n' "$t" > "$c"
+        herdr_has_own_sidebar "$c" || fail "sidebar.$t under [ui] was missed"
+    done
+    src="$REPO_DIR/configs/herdr/sidebar.toml"
+    grep -q '"\$agents"' "$src" || fail "sidebar.toml has no \$agents"
+    [[ "$(grep -c '^\[' "$src")" -eq 2 ]] || fail "sidebar.toml must hold the spaces and the agents table"
+    grep -qx '\[ui.sidebar.spaces\]' "$src" || fail "sidebar.toml has no spaces table"
+    grep -qx '\[ui.sidebar.agents\]' "$src" || fail "sidebar.toml has no agents table"
+
+    # Install: a fresh config gets the block; a second run changes nothing.
+    ok="$tmp/herdr-ok.toml"
+    printf '[ui]\nstatus_indicators = "symbols"\n' > "$ok"
+    _herdr_install_sidebar "$ok" >/dev/null 2>&1
+    grep -qxF "$(tuidev_block_begin tuidev-sidebar)" "$ok" || fail "a fresh config got no block"
+    [[ "$(read_managed_block "$ok" tuidev-sidebar)" == "$(cat "$src")" ]] || fail "the block is not sidebar.toml"
+    before="$(cat "$ok")"; _herdr_install_sidebar "$ok" >/dev/null 2>&1
+    [[ "$(cat "$ok")" == "$before" ]] || fail "a second install changed the config"
+
+    # Upgrade: the old block (one table) is replaced by the new content, and
+    # what you wrote around it stays.
+    up="$tmp/herdr-up.toml"
+    printf '[ui]\nstatus_indicators = "symbols"\n\n' > "$up"
+    old='[ui.sidebar.spaces]
+rows = [["state_icon", "workspace", "$agents"], ["branch", "git_status"]]'
+    write_managed_block "$up" tuidev-sidebar "$old" >/dev/null 2>&1
+    _herdr_install_sidebar "$up" >/dev/null 2>&1
+    [[ "$(read_managed_block "$up" tuidev-sidebar)" == "$(cat "$src")" ]] || fail "the old block was not replaced"
+    grep -q 'status_indicators = "symbols"' "$up" || fail "your own settings were lost"
+    [[ "$(grep -c '^\[ui.sidebar.spaces\]' "$up")" -eq 1 ]] || fail "a duplicate spaces table after the upgrade"
+
+    # Skip: your own spaces OR agents table, whether or not an old block is
+    # there; nothing is added or rewritten, and the config keeps one of each.
+    for t in spaces agents; do
+        mine="$tmp/herdr-mine-$t.toml"
+        printf '[ui.sidebar.%s]\nrows = [["agent"]]\n' "$t" > "$mine"
+        _herdr_install_sidebar "$mine" >/dev/null 2>&1
+        grep -qF "$(tuidev_block_begin tuidev-sidebar)" "$mine" && fail "a block was added beside your own $t rows"
+        printf '\n' >> "$mine"; write_managed_block "$mine" tuidev-sidebar "$old" >/dev/null 2>&1
+        before="$(cat "$mine")"; _herdr_install_sidebar "$mine" >/dev/null 2>&1
+        [[ "$(cat "$mine")" == "$before" ]] || fail "the install rewrote an old block beside your own $t rows"
+        out="$(_herdr_install_sidebar "$mine" 2>&1)"
+        [[ "$out" == *'[ui.sidebar.agents]'* ]] || fail "no note that your own rows won: $out"
+    done
 )
-pass "the pack's sidebar block: added only where your config has no space rows of its own"
+pass "the pack's sidebar block: added and upgraded as a managed block, skipped while your config has space or agent rows of its own"
+
+# update --configs: the same rule, through its drift check.
+(
+    # shellcheck source=../lib/config_write.sh disable=SC1091
+    . "$REPO_DIR/scripts/lib/config_write.sh"
+    # shellcheck source=../lib/herdr.sh disable=SC1091
+    . "$REPO_DIR/scripts/lib/herdr.sh"
+    eval "$(awk '/^managed_block_applies\(\) \{/,/^\}/' "$REPO_DIR/scripts/update.sh")"
+    set +e
+    c="$tmp/herdr-upd.toml"
+    write_managed_block "$c" tuidev-sidebar '[ui.sidebar.spaces]
+rows = []' >/dev/null 2>&1
+    managed_block_applies "$c" tuidev-sidebar || fail "an update skipped a block of ours"
+    printf '[ui.sidebar.agents]\nrows = []\n' >> "$c"
+    managed_block_applies "$c" tuidev-sidebar && fail "an update would rewrite the block beside your own agent rows"
+    exit 0
+)
+pass "update --configs refreshes the sidebar block, except beside your own space or agent rows"

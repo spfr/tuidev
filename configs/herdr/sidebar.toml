@@ -1,10 +1,15 @@
-# tuidev's sidebar rows for Herdr: each workspace row ends with what runs in
-# it, one mark and count per kind ("✳2 ❯1": two Claude Code sessions and a
-# shell), the $agents token `agents herdr sync` reports (--pack monitoring).
-# Herdr's default rows otherwise. For rows of your own, delete this whole
-# block, markers too, and write yours: a second [ui.sidebar.spaces] table
-# would be a TOML error, so the installer skips this block while your config
-# has one. Add your own settings above this block: TOML has no way to close
-# a table, so whatever follows it would land in [ui.sidebar.spaces].
+# tuidev's sidebar rows for Herdr. A workspace row keeps its name on the whole
+# first line, with the branch and what runs in it ("✳2 ❯1": two Claude Code
+# sessions and a shell, the $agents token `agents herdr sync` reports, from
+# --pack monitoring) below. An agent row leads with the tab's name, then the
+# machine unless it is Local; its second line is the agent and the workspace.
+# For rows of your own, delete this whole block, markers too, and write yours,
+# adding "$agents" to your spaces rows: a second [ui.sidebar.spaces] or
+# [ui.sidebar.agents] table would be a TOML error, so the installer skips this
+# block while your config has either. Keep your own settings above this block:
+# TOML has no way to close a table, so whatever follows lands in the last one.
 [ui.sidebar.spaces]
-rows = [["state_icon", "workspace", "$agents"], ["branch", "git_status"]]
+rows = [["state_icon", "workspace"], ["branch", "git_status", "$agents"]]
+
+[ui.sidebar.agents]
+rows = [["state_icon", "tab", { token = "machine", rules = [{ equals = "Local", hide = true }] }], ["agent", "workspace"]]
