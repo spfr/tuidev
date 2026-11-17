@@ -873,6 +873,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_LID_MIN_BATTERY` | `20` | Battery % (off AC) below which the lid guard turns lid sleep back on |
 | `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup and its hourly health check |
 | `AGENTS_LINK` | `1` | `0` turns off the link watcher (`agents link watch`), which opens here what you Ctrl-click in a Herdr pane of another machine; `agents link restart` applies a change ([remote.md](remote.md#remote-feels-local-ports-links-and-files)) |
+| `AGENTS_GLYPHS` | (empty) | The mark in front of each kind of session wherever one is listed (Herdr's tabs and sidebar, `agents map`, the menu bar): `claude=✳ codex=⬡ grok=✕ agy=▲ cursor-agent=◈ shell=❯ agent=◆` (`agent` is any other agent CLI, `shell` a pane without one). `KIND=GLYPH` words replace single ones; `off` shows none. |
 | `AGENTS_REMOTE_HOSTS` | empty | ssh hosts that count as your machines for `agents ports`, `forward`, `push`, `open` and the watcher, besides the ones saved in Herdr; space-separated |
 | `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
 | `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |

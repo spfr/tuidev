@@ -24,7 +24,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
 _AGENTS_CONF_KEYS+=" AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL"
-_AGENTS_CONF_KEYS+=" AGENTS_LINK AGENTS_REMOTE_HOSTS"
+_AGENTS_CONF_KEYS+=" AGENTS_LINK AGENTS_REMOTE_HOSTS AGENTS_GLYPHS"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
 _AGENTS_CONF_KEYS+=" AGENTS_PARKED_MIN AGENTS_THEME AGENTS_COLOR_NEED AGENTS_COLOR_DONE AGENTS_COLOR_RUN"
 _AGENTS_CONF_KEYS+=" AGENTS_COLOR_WARN AGENTS_COLOR_DIM AGENTS_COLOR_ACCENT"
@@ -76,6 +76,11 @@ _agents_conf_valid() {
         AGENTS_THEME)       [[ "$2" =~ ^[a-z0-9][a-z0-9_-]*$ ]] ;;
         AGENTS_COLOR_NEED|AGENTS_COLOR_DONE|AGENTS_COLOR_RUN|AGENTS_COLOR_WARN|AGENTS_COLOR_DIM|AGENTS_COLOR_ACCENT)
                             [[ -z "$2" || "$2" =~ ^(#[0-9a-fA-F]{6}|[a-z][a-z0-9_]*)$ ]] ;;
+        # "off", or KIND=GLYPH words: a glyph is a few printable characters,
+        # none of them one a menu or a table reads as its own (| and =).
+        AGENTS_GLYPHS)      [[ -z "$2" || "$2" == off ]] || { for w in $2; do
+                                [[ "$w" =~ ^[a-z][a-z0-9-]{0,31}=[^[:cntrl:][:space:]\|=]{1,8}$ ]] || return 1
+                            done; } ;;
         AGENTS_BAR_ICON)    [[ "$2" =~ ^[a-z0-9.]+$ ]] ;;
         AGENTS_BAR_REFRESH) [[ "$2" =~ ^[1-9][0-9]*[smhd]$ ]] ;;
         AGENTS_BAR_TITLE)    allowed="$_AGENTS_BAR_TOKENS" ;;
@@ -238,6 +243,9 @@ AGENTS_TERMINAL="${AGENTS_TERMINAL:-auto}"    # where open-term opens windows
 # row's submenu lists, and the refresh interval the pack names the plugin file with.
 AGENTS_BAR_TITLE="${AGENTS_BAR_TITLE-triage awake}"
 AGENTS_BAR_SECTIONS="${AGENTS_BAR_SECTIONS-needs review running parked limits today stale hogs machines awake system}"
+# The mark in front of each kind of session, wherever one is listed (glyph.sh
+# has the defaults): KIND=GLYPH words replace single ones, "off" shows none.
+AGENTS_GLYPHS="${AGENTS_GLYPHS:-}"
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"
