@@ -637,11 +637,7 @@ billing · tests 3m12s · 8.4 cores · 7.5G
 infra · wait-loop stuck 5h10m · safe to stop
 Parked (3) · oldest 39 h
 ---
-Limits and memory
-Claude 5h ██▌░░│░░░░░░░  23%
-Claude wk ████▏░░│░░░░░░  41%
-Swap      ██████████▍░  91%
----
+Claude wk ████▏░░│░░░░░░  41% +2
 Today: 3.4 h blocked · 48.0 CPU-h · tests 64%
 ---
 Awake: while agents run
@@ -651,7 +647,8 @@ Open agents watch
 Refresh"
 [[ "$top" == "$want" ]] || fail "the menu's rows and order:"$'\n'"$top"
 rows="$(printf '%s\n' "$top" | grep -vcE '^(---|:)')"
-[[ $rows -le 18 ]] || fail "more than about 17 rows: $rows"$'\n'"$top"
+[[ $rows -le 15 ]] || fail "more than 15 rows at the top: $rows"$'\n'"$top"
+[[ "$(printf '%s\n' "$top" | grep -c '^---$')" -le 5 ]] || fail "more than four separators (and the title's): $top"
 pass "menu: the mockup's rows, in its order, $rows rows"
 
 title="$(printf '%s\n' "$menu" | head -1)"
@@ -680,6 +677,8 @@ parked="$(printf '%s\n' "$menu" | awk '/^Parked/ { on = 1; next } on && /^---$|^
 run="$(printf '%s\n' "$menu" | awk '/^infra · wait-loop/ { on = 1; next } on && /^[^-]/ { exit } on')"
 [[ "$run" == "--until x; do sleep 5; done | symbolize=false"$'\n'"--Jump to session"* || "$run" == "--until x; do sleep 5; done | symbolize=false"$'\n'* ]] || fail "the flagged row's submenu: $run"
 [[ "$run" == *"--Stop command… | "* && "$run" == *"--Copy details | "* && "$run" == *"--Kill session… | "* ]] || fail "the flagged row keeps the verdict's and the session's actions: $run"
+limits="$(printf '%s\n' "$menu" | awk '/^Claude wk .* \+2 \|/ { on = 1; next } on && /^---$|^[^-]/ { exit } on' | grep -v '^----' | sed 's/ | .*//')"
+[[ "$limits" == "--Claude 5h ██▌░░│░░░░░░░  23%"$'\n'"--Claude wk ████▏░░│░░░░░░  41%"$'\n'"--Swap      ██████████▍░  91%" ]] || fail "the Limits submenu: $limits"
 today="$(printf '%s\n' "$menu" | awk '/^Today:/ { on = 1; next } on && /^---$|^[^-]/ { exit } on')"
 for w in "--Where the CPU goes" "--tests · 130% · " "--2.2B tokens · 98% read from the prompt cache" "--15 denials" "--17 context compactions" "--Open report"; do
     [[ "$today" == *"$w"* ]] || fail "Today's submenu has no '$w': $today"
@@ -699,18 +698,66 @@ pass "menu: every action is still there, one submenu down"
 quiet_tsv="$(sess 4 run 8460 working working 842 7969177 billing; sess 9 unknown - "no signal" - 0.1 301056 codexapp; printf 'awake\tagents\t9\t0\n')"
 menu="$(plugin "$quiet_tsv")"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: :cup.and.saucer.fill:" ]] || fail "no signal in the title: $(printf '%s\n' "$menu" | head -1)"
-[[ "$menu" == *$'\n'"Running (1) | size=12"$'\n'"billing · working"*$'\n'"No signal (1) | size=12"$'\n'"codexapp · no signal · 0.0 cores · 294M | sfimage=questionmark.circle "* ]] || fail "no signal's rows: $menu"
+[[ "$menu" == *$'\n'"billing · working"*$'\n'"No signal (1) | sfimage=questionmark.circle "*$'\n'"--codexapp · no signal · 0.0 cores · 294M | sfimage=questionmark.circle "* ]] || fail "no signal's rows: $menu"
+[[ "$menu" != *$'\n'"Running ("* ]] || fail "a header over one running session: $menu"
 [[ "$menu" != *"Parked ("* ]] || fail "no signal under Parked"
 # From an older agents too: no triage row, no Herdr status.
 menu="$(plugin "$(sess 9 unknown - x - 0.1 301056 codexapp | grep -v '^triage')")"
-[[ "$menu" == *$'\n'"No signal (1) | size=12"$'\n'"codexapp · no signal"* ]] || fail "older agents, no status: $menu"
-pass "menu: no signal is a row of its own, not parked and not in the title"
+[[ "$menu" == *$'\n'"No signal (1) | "*$'\n'"--codexapp · no signal"* ]] || fail "older agents, no status: $menu"
+pass "menu: no signal is one row, its sessions in its submenu, not parked and not in the title"
 
 menu="$(plugin "$calm_tsv")"
-[[ "$menu" != *"Swap "* && "$menu" != *"Limits and memory"* ]] || fail "swap when it isn't high: $menu"
+[[ "$menu" != *"Swap "* ]] || fail "swap when it isn't high: $menu"
 menu="$(plugin "$calm_tsv" $'swap\t91\t12373196\t13631488\t██████████▍░')"
-[[ "$menu" == *$'\n'"Limits and memory | size=12"$'\n'"Swap      ██████████▍░  91% | sfimage=memorychip "*"font=Menlo size=12"* ]] || fail "swap alone: $menu"
+[[ "$menu" == *$'\n'"---"$'\n'"Swap      ██████████▍░  91% | sfimage=memorychip "*"font=Menlo size=12"* ]] || fail "swap alone, a row as it is: $menu"
 pass "menu: swap only when high"
+
+# The glance: a short Running stays flat, a long one folds into one row; a
+# flagged command or two stay flat above it, more lead its submenu.
+GREEN="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19"
+ORANGE="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19"
+RED="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19"
+runs() { local i; for i in $(seq 21 "$1"); do sess "$i" run 600 working working 5 300000 "p$i"; done; }
+stuck() { printf 'act\t%s\ttool\t18600\t0.0\t0\t100\t1\tS%s\t-\t%s\t-\t/w\tuntil x%s; do sleep 5; done\tmain\twait,stuck\t1\n' "$1" "$1" "$2" "$1"; }
+top_of() { printf '%s\n' "$1" | awk '$0 == "---" || !/^--/' | sed 's/ | .*//'; }
+menu="$(plugin "$(runs 24)")"
+[[ "$(top_of "$menu" | sed -n 3,7p)" == "Running (4)"$'\n'"p21 · working · "*$'\n'"p24 · working · "* ]] || fail "four running sessions, flat: $(top_of "$menu")"
+menu="$(plugin "$(runs 25)")"
+[[ "$(top_of "$menu" | sed -n 2,4p)" == "---"$'\n'"Running (5)"$'\n'"---" ]] || fail "five running sessions, one row: $(top_of "$menu")"
+[[ "$menu" == *$'\n'"Running (5) | sfimage=circle.fill $GREEN refresh=true symbolize=false"$'\n'"--p21 · working · "* \
+   && "$(printf '%s\n' "$menu" | grep -c '^--p2[1-5] · working · ')" == 5 ]] || fail "five running sessions in the submenu: $menu"
+menu="$(plugin "$(runs 25; stuck 50 25)")"
+[[ "$(top_of "$menu" | sed -n 3,4p)" == "p25 · wait-loop stuck 5h10m"$'\n'"Running (5) · 1 flagged" ]] || fail "one flagged command stays flat: $(top_of "$menu")"
+[[ "$(printf '%s\n' "$menu" | grep -c '^--p2[1-4] · working · ')" == 4 && "$menu" != *$'\n'"--p25 · working"* ]] || fail "the flagged session's row twice: $menu"
+menu="$(plugin "$(runs 25; stuck 50 25; stuck 51 25; stuck 52 24)")"
+[[ "$(top_of "$menu" | sed -n 3,4p)" == "Running (5) · 3 flagged"$'\n'"---" ]] || fail "three flagged commands fold: $(top_of "$menu")"
+[[ "$menu" == *$'\n'"Running (5) · 3 flagged | sfimage=circle.fill $ORANGE refresh=true symbolize=false"$'\n'"--p24 · wait-loop stuck 5h10m | "* ]] || fail "flagged first in the submenu, the row orange: $menu"
+pass "menu: Running flat up to 4 rows, then one row; up to 2 flagged commands flat above it, more lead its submenu"
+
+# Limits: the window closest to its limit, over pace first on a tie, with how
+# many more; one window alone is shown as it is.
+menu="$(plugin "$(runs 21)"$'\n'"$(printf 'limit\tClaude\t5h\t41\t16:40\tclaude\t60\npace\t41\tunder\t-\tB5\nlimit\tClaude\tweek\t12\t-\tclaude\t60\npace\t60\tunder\t-\tBW\nlimit\tCodex\tweek\t41\t-\tcodex\t60\npace\t30\tover\t9000\tBC\n')")"
+[[ "$(top_of "$menu" | grep -A1 '^---$' | sed -n 4p)" == "Codex wk  BC  41% +2" ]] || fail "the Limits pick: $(top_of "$menu")"
+[[ "$menu" == *$'\n'"Codex wk  BC  41% +2 | sfimage=gauge.with.dots.needle.33percent $ORANGE font=Menlo size=12 "*$'\n'"--Claude 5h B5  41% | "*$'\n'* \
+   && "$menu" == *$'\n'"--Codex wk  BC  41% | "*$'\n'"----over pace, 3 h left at this rate | "* ]] || fail "the pick's tint and its submenu: $(printf '%s\n' "$menu" | grep -A3 '^Codex')"
+menu="$(plugin "$(runs 21)"$'\n'"$(printf 'limit\tClaude\t5h\t23\t16:40\tclaude\t60\npace\t41\tunder\t-\tB5\n')")"
+[[ "$menu" == *$'\n'"---"$'\n'"Claude 5h B5  23% | "*$'\n'"--resets 16:40 · under pace | "* ]] || fail "one window, as it is: $(printf '%s\n' "$menu" | grep -B1 -A2 'Claude 5h')"
+pass "menu: Limits is one row, the window closest to its limit, the rest in its submenu"
+
+# Machines: one row that says it, orange while one does not answer or left
+# something behind; only local dev servers read as Dev servers.
+mapr() { printf 'map\tat\t%s\nmap\tmach\tlocal\tcpu 5%% · 1 session\n' "$(date +%s)"; printf '%s\n' "$@"; }
+menu="$(plugin "$(runs 21)"$'\n'"$(mapr $'map\tmach\tdevbox\tcpu 40% · 2 sessions' $'map\tmach\tworkbox\tno answer (ssh timed out)' $'map\tport\tlocal\t5173\tnode\tshop\t-\t-')")"
+[[ "$menu" == *$'\n'"Machines (2) · 1 dev server · 1 not answering | sfimage=desktopcomputer $ORANGE refresh=true symbolize=false"$'\n'"--shop :5173 · node | "*$'\n'"--devbox · cpu 40% · 2 sessions | "*$'\n'"--workbox · no answer (ssh timed out) | "*$'\n'"-----"$'\n'"--Open the map: go, stop, sweep | "*$'\n'"--Checked "*" · loads when this menu opens | size=11"* ]] \
+    || fail "the Machines row and its submenu: $(printf '%s\n' "$menu" | sed -n '/^Machines/,/Checked/p')"
+menu="$(plugin "$(runs 21)"$'\n'"$(mapr $'map\tport\tlocal\t5173\tnode\tshop\t-\t-' $'map\tport\tlocal\t3000\tnode\tapi\t-\t-')")"
+[[ "$menu" == *$'\n'"Dev servers (2) | sfimage=globe refresh=true symbolize=false"$'\n'"--shop :5173 · node | "* ]] || fail "dev servers only: $(printf '%s\n' "$menu" | grep -A1 '^Dev servers')"
+pass "menu: Machines is one row that says how many, what runs and what is wrong, all else in its submenu"
+
+# Hogs: a red memory chip on the row while a memory hog is among them.
+menu="$(plugin "$(runs 21)"$'\n'"$(printf 'memg\ton\t42\t8388608\t25165824\t0\t-\t-\t-\t0\nhog\t77\tnode\t600\t5.0\t5.0\t9000000\t0\tS77\t-\tme\t-\t-\tnode x\t-\n')")"
+[[ "$menu" == *$'\n'"Hogs (1) · node | sfimage=memorychip $RED refresh=true symbolize=false"$'\n'"--node · 8.5G memory | "* ]] || fail "a memory hog's row: $(printf '%s\n' "$menu" | grep -A1 '^Hogs')"
+pass "menu: Hogs is one row naming them, red while a memory hog is among them"
 
 # An older agents: no triage rows, Herdr's status alone; nothing breaks.
 old="$(printf '%s\n' "$MENU_TSV" | grep -vE '^(triage|pace|waitsum|swap)'$'\t')"
@@ -718,7 +765,7 @@ menu="$(plugin "$old")"
 [[ "$menu" == *$'\n'"Needs you (1) | size=12"$'\n'"api · blocked | "* ]] || fail "older agents, blocked: $menu"
 [[ "$menu" == *$'\n'"To review (3) | size=12"$'\n'"web · done | "* ]] || fail "older agents, done: $menu"
 [[ "$menu" == *$'\n'"Parked (1) | "* ]] || fail "older agents, idle: $menu"
-[[ "$menu" == *$'\n'"Claude 5h 23% | "* ]] || fail "older agents, limits: $menu"
+[[ "$menu" == *$'\n'"Claude wk 41% +1 | "*$'\n'"--Claude 5h 23% | "* ]] || fail "older agents, limits: $menu"
 pass "menu with an older agents: Herdr's status and plain limits"
 
 # Tints: the theme's, base64 and all, when it suits the appearance.

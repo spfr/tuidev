@@ -318,7 +318,9 @@ case "\$1" in tsv) cat "$tmp/tsv" ;; esac
 EOF
 chmod +x "$tmp/agents-stub"
 menu() { AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10s.sh"; }
-usage() { printf '%s\n' "$1" | awk '/^Limits and memory \|/ { on = 1 } on && /^---$/ { exit } on'; }
+# usage MENU — the Limits rows: the block after the sessions' (none here: "No
+# agent sessions"), up to Today, which shares its block.
+usage() { printf '%s\n' "$1" | awk 'on && (/^---$/ || /^Today:/) { exit } on { print } /^No agent sessions$/ { getline; on = 1 }'; }
 A="bash=\"$tmp/agents-stub\" param1=open-term terminal=false param2=--hold"
 L="$A param3=limits symbolize=false"
 M="font=Menlo size=12 $L"
@@ -335,30 +337,32 @@ pace${T}-1${T}-${T}-${T}BARA"
 printf '%s\ntokens\t2637000\t91\ndenials\t12\tProduction Deploy\ncompacts\t3\n' "$usage_rows" > "$tmp/tsv"
 m="$(menu)"
 sec="$(usage "$m")"
-want="Limits and memory | size=12
-Claude 5h      BAR5  23% | $G.33percent $M
---resets 14:05 · under pace | $L
---updated 1m ago | size=11
-Claude wk      BARW  81% | $G.67percent $orange $M
---resets Mon 09:00 · over pace, 6 h left at this rate | $L
---updated 1m ago | size=11
-Antigravity 5h BARA   2% | $G.0percent $M
---Gemini 2% | $G.0percent $L
---updated 10m ago | size=11"
+# One row, the window closest to its limit and how many more; every window,
+# as it always read, in its submenu.
+want="Claude wk      BARW  81% +2 | $G.67percent $orange $M
+--Claude 5h      BAR5  23% | $G.33percent $M
+----resets 14:05 · under pace | $L
+----updated 1m ago | size=11
+--Claude wk      BARW  81% | $G.67percent $orange $M
+----resets Mon 09:00 · over pace, 6 h left at this rate | $L
+----updated 1m ago | size=11
+--Antigravity 5h BARA   2% | $G.0percent $M
+----Gemini 2% | $G.0percent $L
+----updated 10m ago | size=11"
 [[ "$sec" == "$want" ]] || fail "Limits section:"$'\n'"$sec"$'\n'"want:"$'\n'"$want"
 [[ "$(printf '%s\n' "$m" | head -1)" == ":terminal:" ]] || fail "81% tinted the icon: $(printf '%s\n' "$m" | head -1)"
-[[ $(printf '%s\n' "$m" | grep -n '^Limits and memory' | cut -d: -f1) -lt $(printf '%s\n' "$m" | grep -n '^Today:' | cut -d: -f1) ]] || fail "Today before Limits"
+[[ $(printf '%s\n' "$m" | grep -n '^Claude wk ' | cut -d: -f1) -lt $(printf '%s\n' "$m" | grep -n '^Today:' | cut -d: -f1) ]] || fail "Today before Limits"
 today="$(printf '%s\n' "$m" | awk '/^Today:/ { on = 1 } on && /^---$/ { exit } on')"
 want="Today: nothing recorded yet (a sample a minute) | sfimage=chart.bar.xaxis $A param3=report param4=--since param5=today symbolize=false
 --2.6M tokens · 91% read from the prompt cache | $A param3=report param4=--view param5=tokens param6=--since param7=today sfimage=text.bubble symbolize=false
 --12 denials · top: Production Deploy | $A param3=report param4=--view param5=denials param6=--since param7=today sfimage=hand.raised symbolize=false
 --3 context compactions | $A param3=report param4=--view param5=tokens param6=--since param7=today sfimage=arrow.down.right.and.arrow.up.left symbolize=false"
 [[ "$today" == "$want" ]] || fail "Today's submenu:"$'\n'"$today"
-pass "menu: one gauge row per window, its reset, pace and the reading's age in its submenu; tokens, denials and compactions under Today, each opening its view"
+pass "menu: Limits is one gauge row, the window closest to its limit; every window in its submenu, each with its reset, pace and the reading's age; tokens, denials and compactions under Today, each opening its view"
 
 # An older agents sends no pace rows: a plain row, no font.
 printf 'limit%sClaude%s5h%s23%s14:05%sclaude%s60\n' "$T" "$T" "$T" "$T" "$T" "$T" > "$tmp/tsv"
-[[ "$(usage "$(menu)")" == "Limits and memory | size=12"$'\n'"Claude 5h 23% | $G.33percent $L"$'\n'* ]] || fail "older agents: $(usage "$(menu)")"
+[[ "$(usage "$(menu)")" == "Claude 5h 23% | $G.33percent $L"$'\n'"--"* ]] || fail "older agents: $(usage "$(menu)")"
 pass "menu: without pace rows (an older agents) a plain limit row"
 
 # Accounts (claude:work, old and new names), a CLI by model collapsed to each
@@ -373,31 +377,31 @@ limit${T}Antigravity · Gemini${T}5h${T}81${T}17:10${T}agy:gemini${T}1751
 limit${T}Antigravity · Gemini 4 Argon${T}week${T}7${T}Fri 03:00${T}agy:gemini-argon${T}1751
 conf${T}AGENTS_BAR_TITLE${T}count limit" > "$tmp/tsv"
 m="$(menu)"; sec="$(usage "$m")"
-lines="$(printf '%s\n' "$sec" | grep -v '^--' | sed 's/ | .*//')"
-[[ "$lines" == "Limits and memory
-Claude 5h 40%
-Claude wk 10%
-Claude (work) 5h 97%
-Claude (home) 5h 5%
-Codex wk 0%
-Antigravity 5h 81%
-Antigravity wk 7%" ]] || fail "limit rows:"$'\n'"$lines"
-[[ "$sec" == *$'\n'"Claude (work) 5h 97% | $G.100percent $red $L"$'\n'* ]] || fail "95%: red"
-[[ "$sec" == *$'\n'"Codex wk 0% | $G.0percent $gray $L"$'\n'* ]] || fail "0%: gray"
-[[ "$sec" == *$'\n'"Antigravity 5h 81% | $G.67percent $orange $L"$'\n'"--resets 17:10 | $L"$'\n'"--Gemini 81% · resets 17:10 | $G.67percent $orange $L"$'\n'"--updated 29m ago | size=11"$'\n'"Antigravity wk 7% | "*$'\n'"--Claude and GPT 3% | "*$'\n'"--Gemini 4 Argon 7% · resets Fri 03:00 | "* ]] \
+lines="$(printf '%s\n' "$sec" | grep -v '^----' | sed 's/ | .*//')"
+[[ "$lines" == "Claude (work) 5h 97% +6
+--Claude 5h 40%
+--Claude wk 10%
+--Claude (work) 5h 97%
+--Claude (home) 5h 5%
+--Codex wk 0%
+--Antigravity 5h 81%
+--Antigravity wk 7%" ]] || fail "limit rows:"$'\n'"$lines"
+[[ "$sec" == "Claude (work) 5h 97% +6 | $G.100percent $red $L"$'\n'* && "$sec" == *$'\n'"--Claude (work) 5h 97% | $G.100percent $red $L"$'\n'* ]] || fail "95%: red"
+[[ "$sec" == *$'\n'"--Codex wk 0% | $G.0percent $gray $L"$'\n'* ]] || fail "0%: gray"
+[[ "$sec" == *$'\n'"--Antigravity 5h 81% | $G.67percent $orange $L"$'\n'"----resets 17:10 | $L"$'\n'"----Gemini 81% · resets 17:10 | $G.67percent $orange $L"$'\n'"----updated 29m ago | size=11"$'\n'"--Antigravity wk 7% | "*$'\n'"----Claude and GPT 3% | "*$'\n'"----Gemini 4 Argon 7% · resets Fri 03:00 | "* ]] \
     || fail "models in the submenu:"$'\n'"$sec"
-[[ "$sec" == *$'\n'"--updated 1h6m ago | size=11"* ]] || fail "the reading's age"
+[[ "$sec" == *$'\n'"----updated 1h6m ago | size=11"* ]] || fail "the reading's age"
 [[ "$(printf '%s\n' "$m" | head -1)" == ":terminal: :gauge.with.dots.needle.100percent: 97% | sfcolor=#FF9F0A sfcolor1=#1D1D1F,#F2F2F5" ]] || fail "95% title: $(printf '%s\n' "$m" | head -1)"
 pass "menu: each account its own, Antigravity's models collapsed to each window's highest, shortest window first; gray at 0%, orange from 80%, red and an orange icon from 95%; the limit title token"
 
 # Nothing to say: no section; hostile text stays text.
 printf 'denials\t0\t-\n' > "$tmp/tsv"
-[[ "$(menu)" != *"Limits and memory"* ]] || fail "an empty Limits section"
+[[ "$(menu)" != *"gauge.with.dots"* ]] || fail "an empty Limits section"
 printf 'limit\t---Evil | bash=/bin/rm\t5h\t1\t-\tclaude\t1\ncompacts\t2\n' > "$tmp/tsv"
 m="$(menu)"
 [[ "$m" == *$'\n'"Evil ¦ bash=/bin/rm 5h 1% | $G.0percent $L"$'\n'* && "$m" == *$'\n'"--2 context compactions | "* ]] || fail "hostile limit name: $(printf '%s\n' "$m" | grep -i evil)"
 printf 'conf\tAGENTS_BAR_SECTIONS\tagents\nlimit\tClaude\t5h\t1\t-\tclaude\t1\n' > "$tmp/tsv"
-[[ "$(menu)" != *"Limits and memory"* ]] || fail "Limits shown though AGENTS_BAR_SECTIONS leaves it out"
+[[ "$(menu)" != *"gauge.with.dots"* ]] || fail "Limits shown though AGENTS_BAR_SECTIONS leaves it out"
 pass "menu: no Limits section with nothing to show or when AGENTS_BAR_SECTIONS leaves it out; a hostile name stays text"
 grep -q '^        limits)' "$REPO_DIR/lib/agents/cli.sh" || fail "the menu opens agents limits, which the CLI lacks"
 

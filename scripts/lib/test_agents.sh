@@ -994,6 +994,8 @@ printf '#!/bin/bash\n[[ "$1" == tsv ]] && cat "%s"\n' "$tmp/tsv" > "$HOME/.local
 chmod +x "$HOME/.local/bin/agents"
 calm="$(printf '%s\n' "$enriched" | awk -F '\t' '$1 == "agent"')"
 sys_line=$'sys\t23\t7.8\t14\t66\tnormal\t85\tdischarging'
+GRAY_DOT="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19"     # the idle tint
+RED_DOT="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19"      # the need tint
 # plugin RECORDS EXTRA_LINES — the menu for that snapshot.
 plugin() {
     { printf '%s\n' "$1"; printf '%s\n' "$2"; } > "$tmp/tsv"
@@ -1020,7 +1022,10 @@ mine_recs="$(printf '%s\n' "$enriched" | awk -F '\t' -v OFS='\t' -v u="$(id -un)
 menu="$(plugin "$mine_recs" "$sys_line"$'\nawake\tagents\t8800\t0\nthermal\t2\theavy\npower\tautomatic')"
 title="$(printf '%s\n' "$menu" | head -1)"
 [[ "$title" == ":terminal: :cup.and.saucer.fill: | sfcolor=#FF453A sfcolor1=#1D1D1F,#F2F2F5" ]] || fail "default title, heavy thermal: $title"
-[[ "$menu" == *"Running (1) | size=12"* && "$menu" == *"No signal (1) | size=12"* ]] || fail "headers do not count sessions only: $menu"
+# One running session needs no header; No signal is one row that counts its
+# sessions (the daemon is not one).
+[[ "$menu" != *$'\n'"Running ("* && "$menu" == *$'\n'"No signal (1) | sfimage=questionmark.circle $GRAY_DOT refresh=true symbolize=false"$'\n'"--"* ]] \
+    || fail "headers do not count sessions only: $menu"
 [[ "$menu" == *$'\n'"app · working · 1.0 cores · 1.0G | sfimage=circle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMzBEMTU4Il19 bash="*" terminal=false param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"* ]] \
     || fail "agent row: project · what it does · cores · memory, with a green dot"
 [[ "$menu" == *$'\n'"--codex daemon · 0% · 70M | sfimage=gearshape refresh=true symbolize=false"* ]] || fail "daemon not in the system row's submenu"
@@ -1128,11 +1133,18 @@ pass "every menu action maps to an agents subcommand or plugin callback with val
     || fail "Who holds the Mac awake? does not hold its window open"
 [[ "$menu" == *"--Kill tree | bash="*" param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026"* ]] \
     || fail "a stale kill is not one click with a notification"
-reap_line="$(printf '%s\n' "$menu" | grep '^Reap all stale')"
+# Stale: one row naming them, the processes in its submenu, a separator, then
+# Reap all stale.
+[[ "$menu" == *$'\n'"Stale (4) · chrome-devtools-mcp, example-agent-mcp, … | sfimage=xmark.bin refresh=true symbolize=false"$'\n'"--npm exec chrome-devtools-mcp@latest · "* ]] \
+    || fail "the Stale row: $(printf '%s\n' "$menu" | grep -A1 '^Stale')"
+[[ "$(printf '%s\n' "$menu" | grep -B1 '^--Reap all stale' | head -1)" == "-----" ]] || fail "no separator before Reap all stale"
+reap_line="$(printf '%s\n' "$menu" | grep '^--Reap all stale')"
 [[ "$reap_line" == *"param1=kill param2=-y param3=--notify param4=60829@Wed_Oct_14_08:23:56_2026 param5=60831@Wed_Oct_14_08:23:56_2026 param6=27681@"*" param7=4100@"* ]] \
     || fail "Reap all stale does not pass the listed PID@START tokens: $reap_line"
 [[ "$menu" != *"param1=reap"* ]] || fail "Reap all stale re-collects at click time"
-[[ "$(printf '%s\n' "$menu" | grep -A2 '^yes · ' | grep -c 'Terminate (SIGTERM) | .*param3=--notify')" == 1 ]] || fail "a hog lost Terminate"
+[[ "$(printf '%s\n' "$menu" | grep -A2 '^--yes · ' | grep -c '^----Terminate (SIGTERM) | .*param3=--notify')" == 1 ]] || fail "a hog lost Terminate"
+# Hogs: the same shape, a flame unless a memory hog is among them.
+[[ "$menu" == *$'\n'"Hogs (2) · Messages, yes | sfimage=flame refresh=true symbolize=false"$'\n'"--Messages · "* ]] || fail "the Hogs row: $(printf '%s\n' "$menu" | grep -A1 '^Hogs')"
 # System: one row, the load, busiest processes and battery in its submenu.
 [[ "$menu" == *$'\n'"CPU 23% · Mem 34% · Thermal heavy | sfimage=thermometer.medium sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" param1=open-term terminal=false param2=watch"$'\n'"--Load 7.8/14 | size=11"$'\n'"--Busiest processes | size=11"$'\n'"--web.test · 102% · 180M | bash="*" terminal=false param1=activity-monitor symbolize=false"* ]] \
     || fail "system row with the load and busiest processes in its submenu: $(printf '%s\n' "$menu" | grep -A3 '^CPU ')"
@@ -1142,15 +1154,17 @@ reap_line="$(printf '%s\n' "$menu" | grep '^Reap all stale')"
 [[ "$menu" == *$'\n'"Awake: while agents run | sfimage=cup.and.saucer refresh=true"* ]] || fail "awake header"
 [[ "$menu" == *"--While agents run | "*"param2=agents checked=true"* && "$menu" != *"param2=off checked=true"* ]] || fail "awake check mark"
 # Default order: sessions, stale, hogs, awake, system.
-[[ $(line_no '^Running (') -lt $(line_no '^Stale (') && $(line_no '^Stale (') -lt $(line_no '^Hogs (') \
+[[ $(line_no '^app · working') -lt $(line_no '^Stale (') && $(line_no '^Stale (') -lt $(line_no '^Hogs (') \
    && $(line_no '^Hogs (') -lt $(line_no '^Awake:') && $(line_no '^Awake:') -lt $(line_no '^CPU ') ]] || fail "default section order"
 pass "SwiftBar menu: sessions first (project rows, dialog-confirmed kill), then stale, hogs, awake, compact system"
 
 # A process named "---evil" must not become a separator or a submenu.
 evil=$'hog\t9200\t---evil\t60\t95.0\t95.0\t1000\t0\tWed_Oct_14_09:13:30_2026\t-\tme\t-\t-\t---evil'
 menu_evil="$(plugin "$evil" "")"
-printf '%s\n' "$menu_evil" | grep -q '^evil · 95% now' || fail "leading dashes not stripped from a process name"
-! printf '%s\n' "$menu_evil" | grep -qE '^-+evil' || fail "a process name starts a menu line with dashes"
+# It is a row in the Hogs submenu: exactly one level down, named plainly above.
+printf '%s\n' "$menu_evil" | grep -q '^--evil · 95% now' || fail "leading dashes not stripped from a process name"
+printf '%s\n' "$menu_evil" | grep -q '^Hogs (1) · evil | ' || fail "leading dashes kept in the Hogs row"
+! printf '%s\n' "$menu_evil" | grep -qE '^(-|---+)evil' || fail "a process name starts a menu line with dashes"
 
 # Needs you: a blocked session leads the title and the menu.
 blocked_recs="$(printf '%s\n' "$records" | agents_enrich "$(printf '84091\t%s/code/shop/.claude/worktrees/fix-cart\n90419\t%s/work/app\n' "$HOME" "$HOME")" \
@@ -1187,7 +1201,6 @@ menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
 # restart restarts every Herdr session, so never Needs you, the tint or the
 # title; one gray line at the bottom, its submenu holding the rest. The
 # restart commands only while no Herdr session works or waits for you.
-GRAY_DOT="sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19"
 idle_calm="$(printf '%s\n' "$calm" | awk -F '\t' -v OFS='\t' '$12 == "working" { $12 = "idle" } { print }')"
 menu="$(plugin "$idle_calm" $'awake\toff\t-\t0\nthermal\t0\tnominal\nhhealth\tserver\tstale\t0.9.4\t0.9.5\nhhealth\toutdated\tclaude letta bad$(x)')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal:" ]] || fail "Herdr's health tinted the icon: $(printf '%s\n' "$menu" | head -1)"
@@ -1243,10 +1256,37 @@ pass "SwiftBar title follows AGENTS_BAR_TITLE and AGENTS_BAR_ICON"
 # AGENTS_BAR_SECTIONS picks and orders the sections.
 menu="$(plugin "$enriched" $'conf\tAGENTS_BAR_SECTIONS\thogs agents')"
 [[ "$menu" != *"Awake:"* && "$menu" != *"CPU "* && "$menu" != *"Stale ("* ]] || fail "unlisted sections shown"
-[[ $(line_no '^Hogs (') -lt $(line_no '^Running (') ]] || fail "sections not in AGENTS_BAR_SECTIONS order"
+[[ $(line_no '^Hogs (') -lt $(line_no '^app · working') ]] || fail "sections not in AGENTS_BAR_SECTIONS order"
 menu="$(plugin "$enriched" "$sys_line")"
-[[ "$(printf '%s\n' "$menu" | grep -c '^Messages · ')" == 1 && "$menu" != *"--Messages · "* ]] || fail "a hog listed twice (hogs and top)"
+# The hog's row is in the Hogs submenu; the busiest processes (the System
+# row's submenu, at the same depth) leave it out.
+[[ "$(printf '%s\n' "$menu" | grep -c -e '^--Messages · ' -e '^Messages · ')" == 1 && "$menu" == *$'\n'"--Messages · 116% now · 117% avg | "* ]] || fail "a hog listed twice (hogs and top)"
 pass "SwiftBar sections follow AGENTS_BAR_SECTIONS; top processes skip the hogs"
+
+# The plugin's cost stays linear in a busy snapshot: 80 sessions with three
+# commands each (one stuck), 120 stale trees, under /bin/bash (3.2 on macOS)
+# in a UTF-8 locale, where a global ${var//…} over a section's lines is
+# quadratic (once 1.4 s of a 2 s refresh). The bound is generous: the render
+# takes about 0.2 s; the quadratic form took tens of seconds.
+big="$(awk 'BEGIN {
+    for (i = 1; i <= 80; i++) {
+        p = 20000 + i * 10
+        printf "agent\t%d\tclaude\t3600\t5.0\t1.0\t800000\t3\ts%d\t-\tme\t-\t/w/p%d\tclaude\tproj%d\n", p, p, i, i
+        printf "triage\t%d\trun\t600\tworking\n", p
+        for (j = 1; j <= 3; j++)
+            printf "act\t%d\ttool\t%d\t1.0\t0.0\t3000\t0\tt%d\t-\t%d\t-\t/w/p%d\t%s\tmain\t%s\t1\n", p + j, (j == 1 ? 9000 : 60), p + j, p, i, (j == 1 ? "until [ -s /w/x ]; do sleep 5; done" : "go test ./pkg" j "/..."), (j == 1 ? "wait,stuck" : "-")
+    }
+    for (i = 1; i <= 120; i++)
+        printf "stale\t%d\torphan\t3005\t0.0\t0.0\t215168\t1\tz%d\t-\tme\t-\t/w/s%d\tnpm exec helper-%d-mcp@latest\ts%d\n", 40000 + i, i, i, i, i
+}')"
+utf8=C.UTF-8; [[ "$(uname -s)" != Darwin ]] || utf8=en_US.UTF-8
+printf '%s\n' "$big" > "$tmp/tsv"
+SECONDS=0
+big_menu="$(LC_ALL="$utf8" LANG="$utf8" /bin/bash "$REPO_DIR/configs/swiftbar/agents.10s.sh" 2>/dev/null)"
+took=$SECONDS
+[[ "$big_menu" == *$'\n'"Running (80) · 80 flagged | "* && "$big_menu" == *$'\n'"Stale (120) · "* ]] || fail "the large menu: $(printf '%s\n' "$big_menu" | grep -v '^--' | head -8)"
+[[ $took -le 5 ]] || fail "the menu took ${took}s over 80 sessions and 120 stale trees (a quadratic expansion?)"
+pass "SwiftBar: a menu over 80 sessions and 120 stale trees renders in ${took}s under /bin/bash in UTF-8"
 
 # The names from before the triage still work. The old default is the new layout;
 # a list of old names keeps what those sections held.
@@ -1261,7 +1301,7 @@ menu="$(sections "$done_recs" "needs")"
 menu="$(sections "$done_recs" "needs running")"
 [[ "$menu" == *"Needs you (1)"* && "$menu" != *"To review"* ]] || fail "a list in the new names means what it says"
 menu="$(sections "$done_recs" "usage jobs")"
-[[ "$menu" == *"Limits and memory"* && "$menu" == *"--1k tokens"* && "$menu" != *"Needs you"* ]] || fail "usage and jobs read as limits and today: $menu"
+[[ "$menu" == *$'\n'"Claude 5h 3% | sfimage=gauge."* && "$menu" == *"--1k tokens"* && "$menu" != *"Needs you"* ]] || fail "usage and jobs read as limits and today: $menu"
 _agents_conf_valid AGENTS_BAR_SECTIONS "agents usage jobs" || fail "old section names refused"
 _agents_conf_valid AGENTS_BAR_SECTIONS "review running parked limits today" || fail "new section names refused"
 ! _agents_conf_valid AGENTS_BAR_SECTIONS "review bogus" || fail "a bogus section accepted"
@@ -1283,10 +1323,10 @@ section_of() { printf '%s\n' "$menu" | awk -v s="$1" '/^[A-Z]/ { on = (index($0,
     && "$(section_of "Running")" == *"✳ Fleet IA"* && "$(section_of "No signal")" == *"⬡ codex"* && "$(section_of "Parked")" == *"✕ api"* ]] \
     || fail "a mark in the wrong section: $menu"
 menu="$(plugin "$g_recs" "")"
-[[ "$menu" == *$'\nFleet IA · working · '* && "$menu" == *$'\ncodex · no signal · '* && "$menu" != *"✳"* && "$menu" != *"◆"* ]] \
+[[ "$menu" == *$'\nFleet IA · working · '* && "$menu" == *$'\n--codex · no signal · '* && "$menu" != *"✳"* && "$menu" != *"◆"* ]] \
     || fail "no glyph rows (an older agents, or off) must leave the rows as they were: $menu"
 menu="$(plugin "$g_recs" $'glyph\tclaude\ta|b bash=x\nglyph\tcodex\t0123456789ABC')"
-[[ "$menu" == *$'\na¦b bash Fleet IA · working · '* && "$menu" != *"a|b"* && "$menu" == *$'\n01234567 codex · no signal'* ]] \
+[[ "$menu" == *$'\na¦b bash Fleet IA · working · '* && "$menu" != *"a|b"* && "$menu" == *$'\n--01234567 codex · no signal'* ]] \
     || fail "a hostile or long glyph: $menu"
 [[ "$(printf '%s\n' "$menu" | grep -c 'param[0-9]*=x')" == 0 ]] || fail "a glyph reached a param"
 pass "SwiftBar session rows lead with their kind's mark; unknown kinds take the agent mark; glyphs are cleaned and capped; none sent, none drawn"
@@ -1296,10 +1336,13 @@ pass "SwiftBar session rows lead with their kind's mark; unknown kinds take the 
 # whole in the submenu.
 st_row() { printf 'stale\t%s\torphan\t5520\t0.0\t0.0\t35840\t0\tWed_Oct_14_09:13:19_2026\t-\tme\t-\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
 menu="$(plugin "$(st_row 900 /work/agentic-vms "/var/folders/vr/x1/T/go-build315/b001/web.test -test.count=1" agentic-vms)"$'\n'"$(st_row 901 /var/folders/vr/x1/T/go-build9 /var/folders/vr/x1/T/go-build9/b001/api.test go-build9)"$'\n'"$(st_row 902 - "node $HOME/.local/lib/example-agent-mcp.cjs" -)" "")"
-[[ "$menu" == *$'\nweb.test -test.count=1 · agentic-vms · '* ]] || fail "stale label: base name and project: $menu"
-[[ "$menu" == *$'\napi.test · '* && "$menu" != *"api.test · go-build9"* ]] || fail "stale label: a temp cwd is no project: $menu"
-[[ "$menu" == *$'\nnode example-agent-mcp.cjs · '* ]] || fail "stale label: a home path cut to its base name: $menu"
-[[ "$(printf '%s\n' "$menu" | grep -c '^[^-].*/var/folders')" == 0 ]] || fail "a temp path on a stale row: $menu"
+[[ "$menu" == *$'\n--web.test -test.count=1 · agentic-vms · '* ]] || fail "stale label: base name and project: $menu"
+[[ "$menu" == *$'\n--api.test · '* && "$menu" != *"api.test · go-build9"* ]] || fail "stale label: a temp cwd is no project: $menu"
+[[ "$menu" == *$'\n--node example-agent-mcp.cjs · '* ]] || fail "stale label: a home path cut to its base name: $menu"
+[[ "$(printf '%s\n' "$menu" | grep -cE '^(--)?[^-].*/var/folders')" == 0 ]] || fail "a temp path on a stale row: $menu"
+# The Stale row says what they are, in a word each.
+[[ "$menu" == *$'\n'"Stale (3) · web.test, api.test, example-agent-mcp | sfimage=xmark.bin refresh=true symbolize=false"$'\n'* ]] \
+    || fail "the Stale row's names: $(printf '%s\n' "$menu" | grep '^Stale')"
 [[ "$menu" == *"--/var/folders/vr/x1/T/go-build315/b001/web.test -test.count=1 | "* ]] || fail "the full command is in the submenu: $menu"
 [[ "$(_agents_awk_eval lib_fmt 'BEGIN { print plabel("/var/folders/vr/T/go-build1/b001/web.test -test.count=1 --cfg=/a/b /x/") }')" == "web.test -test.count=1 --cfg=/a/b x" ]] \
     || fail "agents ls: plabel cuts absolute paths to base names"
@@ -1322,14 +1365,19 @@ menu="$(plugin "$calm" "awake"$'\t'"lid"$'\t'"8800"$'\t'"$lid_end"$'\n'"lid"$'\t
 [[ "$menu" == *$'\n'"Awake: lid closed · 2h41m left | sfimage=laptopcomputer refresh=true"* || "$menu" == *$'\n'"Awake: lid closed · 2h42m left | sfimage=laptopcomputer refresh=true"* ]] \
     || fail "lid awake line: $(printf '%s\n' "$menu" | grep '^Awake')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: :cup.and.saucer.fill:" ]] || fail "lid on is not a calm title"
-[[ "$menu" == *$'\n'"End lid mode now… | bash="*" param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"* ]] || fail "no End lid mode now… while on"
+# End lid mode now… leads the Awake submenu, a separator under it.
+[[ "$menu" == *$'\n'"Awake: lid closed · "*$'\n'"--End lid mode now… | bash="*" param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"$'\n'"-----"$'\n'"--Until turned off | "* ]] || fail "no End lid mode now… while on: $(printf '%s\n' "$menu" | grep -A2 '^Awake')"
 check_actions "$menu"
 [[ "$(plugin "$calm" "$lid_off")" != *"End lid mode now"* ]] || fail "End lid mode now… shown with lid mode off"
 menu="$(plugin "$calm" $'awake\toff\t-\t0\nlid\tstale\t-\t0\t28800')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal: | sfcolor=#FF453A" ]] || fail "stale lid sleep does not turn the icon red"
 [[ "$(printf '%s\n' "$menu" | sed -n 3,4p)" == "Needs you (1) | size=12"$'\n'"Restore lid sleep (disabled, nothing restores it)… | sfimage=exclamationmark.triangle.fill sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY0NTNBIl19 bash="*" param1=awake param2=restore param3=--notify symbolize=false" ]] \
     || fail "Restore lid sleep does not lead Needs you: $(printf '%s\n' "$menu" | sed -n 3,4p)"
-[[ "$menu" == *$'\n'"Restore lid sleep… | bash="*" param1=awake param2=restore param3=--notify sfimage=lock.open"* ]] || fail "Restore lid sleep missing from Awake"
+# Awake says it in red, and Restore lid sleep… leads its submenu; nothing else
+# about it is flat but the Needs you row.
+[[ "$menu" == *$'\n'"Awake: off · lid sleep disabled, nothing restores it | sfimage=exclamationmark.triangle.fill $RED_DOT refresh=true"$'\n'"--Restore lid sleep… | bash="*" param1=awake param2=restore param3=--notify sfimage=lock.open"$'\n'"-----"$'\n'* ]] \
+    || fail "Restore lid sleep missing from Awake: $(printf '%s\n' "$menu" | grep -A2 '^Awake')"
+[[ "$(printf '%s\n' "$menu" | grep -c -e '^Restore lid sleep' -e '^Lid sleep disabled')" == 1 ]] || fail "the lid warning flat twice"
 check_actions "$menu"
 pass "SwiftBar lid mode: the group by default (AGENTS_LID=0 hides it), End lid mode now… while on, a red restore item when stale"
 
@@ -1525,7 +1573,9 @@ menu="$(plugin "$st_menu_recs" "")"
 [[ "$menu" == *$'\n'"Running (2) | size=12"$'\n'* ]] || fail "a session's stuck loops not in Running"
 [[ "$menu" == *$'\n'"myapp · wait-loop stuck 3h27m | sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false"$'\n'"--until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; don... | symbolize=false"$'\n'"--Stop command… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=5010@Wed_Oct_14_05:33:00_2026 sfimage=xmark.octagon"* ]] \
     || fail "stuck row: $(printf '%s\n' "$menu" | grep -A1 'stuck')"
-[[ "$menu" == *$'\n'"--until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; don... · 3h27m · 0% · main · stuck | refresh=true sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 symbolize=false"* ]] \
+# The session itself has no signal: its row, with its Running list, is in
+# that row's submenu, a level down.
+[[ "$menu" == *$'\n'"No signal (1) | "*$'\n'"----until tail -1 \$F ¦ grep -qE \"^(ok¦FAIL)\"; do sleep 5; don... · 3h27m · 0% · main · stuck | refresh=true sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 symbolize=false"* ]] \
     || fail "Running line of a stuck loop: $(printf '%s\n' "$menu" | grep 'tail -1')"
 [[ "$menu" == *" · main · waiting | refresh=true sfimage=hourglass sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjOEU4RTkzIl19 "* ]] || fail "a young loop is not a gray waiting"
 [[ "$menu" != *"myapp · while"* ]] || fail "a loop that is not stuck has a row"
@@ -1574,17 +1624,19 @@ pass "variables before non-ASCII text are braced (bash 3.2)"
 act_menu_recs="$(printf '%s\n' "$act_enr" | awk -F '\t' '$1 == "agent" || $1 == "act"')"
 menu="$(plugin "$act_menu_recs" "")"
 [[ "$(printf '%s\n' "$menu" | head -1)" != *"sfcolor"* ]] || fail "duplicate/long commands tinted the title"
-[[ "$menu" == *$'\n'"--Running (6) | size=11"$'\n'* ]] || fail "Running list"
-[[ "$menu" == *$'\n'"--until [ -s /tmp/x ]; do sleep 5; done · 52m · 0% · main · waiting | refresh=true sfimage=hourglass "* ]] \
+# These sessions have no signal: each, with its Running list, is in the No
+# signal row's submenu, a level down.
+[[ "$menu" == *$'\n'"----Running (6) | size=11"$'\n'* ]] || fail "Running list"
+[[ "$menu" == *$'\n'"----until [ -s /tmp/x ]; do sleep 5; done · 52m · 0% · main · waiting | refresh=true sfimage=hourglass "* ]] \
     || fail "a polling loop is not marked as waiting"
-[[ "$menu" == *$'\n'"--go test -race ./internal/web · 2m · 100% · feat-a · 3× dup · hot | refresh=true symbolize=false"$'\n'"----Stop command… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=1010@Wed_Oct_14_08:58:00_2026 sfimage=xmark.octagon"* ]] \
+[[ "$menu" == *$'\n'"----go test -race ./internal/web · 2m · 100% · feat-a · 3× dup · hot | refresh=true symbolize=false"$'\n'"------Stop command… | bash="*" param1=kill param2=--confirm-gui param3=--notify param4=1010@Wed_Oct_14_08:58:00_2026 sfimage=xmark.octagon"* ]] \
     || fail "tool line with Stop command…"
 [[ "$menu" == *"Stop duplicates: 2× go test -race ./internal/web (keep newest)… | "*"param4=1020@Wed_Oct_14_08:56:00_2026 sfimage"* ]] \
     || fail "Stop duplicates keeps the newest (1010) and stops the older (1020): $(printf '%s\n' "$menu" | grep -E 'Stop duplicates|internal/web')"
 [[ "$menu" == *$'\n'"repo · 2× go test -race ./internal/web running | "* && "$menu" == *$'\n'"repo · make serve · running 45m | "* ]] \
     || fail "Running: duplicates and long-running commands"
 [[ "$menu" != *"repo · until [ -s"* ]] || fail "a polling loop counted as needing attention"
-[[ "$menu" == *$'\n'"--MCP: 2 servers · 4 procs · 302M | size=11"* ]] || fail "MCP collapsed to one line"
+[[ "$menu" == *$'\n'"----MCP: 2 servers · 4 procs · 302M | size=11"* ]] || fail "MCP collapsed to one line"
 check_actions "$menu"
 pass "menu: Running list with Stop command…, Stop duplicates (keep newest), flagged commands in Running"
 

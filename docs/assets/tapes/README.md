@@ -98,7 +98,7 @@ SwiftBar draws a native macOS menu, which VHS can't record, and a screenshot of 
 2. `docs/assets/menu/symbols.swift` renders every SF Symbol the output names (`sfimage=`, and `:name:` in titles) with AppKit, so the icons are the system's own.
 3. `docs/assets/menu/menu.html` parses SwiftBar's format (`--` submenus, `---` separators, `size`, `font`, `checked`, `sfconfig` and `sfcolor` colors, rows without an action dimmed, as SwiftBar shows them) and lays it out as a macOS menu in light and dark, with given submenus open. Headless Chrome captures it at 2x: `menu-light.webp` and `menu-dark.webp` with the first flagged command's verdict open, and `menu.gif`, which opens four submenus in turn.
 
-What it can't show: SwiftBar's own items at the bottom of a real menu, the live translucency of your wallpaper, and hover. When the plugin's output changes, `make screenshots TAPES=menu` redraws it (`MENU_OUT=DIR scripts/render_menu.sh` draws it elsewhere, to look at a change first).
+What it can't show: the live translucency of your wallpaper, and hover. When the plugin's output changes, `make screenshots TAPES=menu` redraws it (`MENU_OUT=DIR scripts/render_menu.sh` draws it elsewhere, to look at a change first).
 
 To capture the real menu by hand instead, `swiftbar-demo.sh` writes a demo plugin over the same fixtures:
 

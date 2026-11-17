@@ -721,10 +721,12 @@ printf '#!/bin/bash\necho "$*" >> "%s/calls"\n' "$tmp/mbin" > "$tmp/mbin/open"
 chmod +x "$tmp/mbin/agents" "$tmp/mbin/open"
 mbar() { PATH="$tmp/mbin:$PATH" AGENTS_BIN="$tmp/mbin/agents" SWIFTBAR_PLUGIN_CACHE_PATH="$tmp/sbcache" SWIFTBAR_PLUGIN_PATH="$menu_sh" "$@" bash "$menu_sh"; }
 menu="$(mbar env)"
-[[ "$menu" == *"Machines (1) · 2 dev servers · 2 left behind"* ]] || fail "menu: the machines header: $(printf '%s\n' "$menu" | grep -i machines)"
+# One row that says it, orange for what was left behind; the rest one level down.
+[[ "$menu" == *$'\n'"Machines (1) · 2 dev servers · 2 left behind | sfimage=desktopcomputer sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjRkY5RjBBIl19 refresh=true symbolize=false"$'\n'"--"* ]] \
+    || fail "menu: the machines row: $(printf '%s\n' "$menu" | grep -i machines)"
 [[ "$menu" == *"shop :5173 · node | sfimage=globe href=http://localhost:5173"* ]] || fail "menu: a local server is not a link: $menu"
-[[ "$(printf '%s\n' "$menu" | grep 'app :8000')" == "app :8000 · python3 · on devbox · left behind |"*"param1=forward param2=open param3=devbox param4=8000"* ]] || fail "menu: a remote server does not forward: $(printf '%s\n' "$menu" | grep 8000)"
-[[ "$menu" == *"--localhost:47000 → devbox:3000 | href=http://localhost:47000"* && "$menu" == *"param2=map param3=devbox"* ]] || fail "menu: forwards and the machine's row: $menu"
+[[ "$(printf '%s\n' "$menu" | grep 'app :8000')" == "--app :8000 · python3 · on devbox · left behind |"*"param1=forward param2=open param3=devbox param4=8000"* ]] || fail "menu: a remote server does not forward: $(printf '%s\n' "$menu" | grep 8000)"
+[[ "$menu" == *$'\n'"--Forwards open here (1) | "*$'\n'"----localhost:47000 → devbox:3000 | href=http://localhost:47000"* && "$menu" == *"param2=map param3=devbox"* ]] || fail "menu: forwards and the machine's row: $menu"
 [[ "$menu" != *"80;id"* && "$menu" != *"box;x"* ]] || fail "menu: a row of another shape got in"
 # Its timer asked agents for the snapshot and nothing else.
 [[ "$(cat "$tmp/mbin/calls")" == tsv ]] || fail "menu: a timed refresh ran more than agents tsv: $(cat "$tmp/mbin/calls")"

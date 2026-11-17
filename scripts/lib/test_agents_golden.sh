@@ -372,6 +372,11 @@ menu_case menu "$tmp/tsv.raw"
     $'tokens\t12400000\t94' $'denials\t12\tProduction Deploy' $'compacts\t3' \
     $'hhealth\tserver\tstale\t0.9.4\t0.9.5' $'hhealth\toutdated\tclaude codex'; } > "$tmp/tsv-usage.raw"
 menu_case menu-usage "$tmp/tsv-usage.raw"
+# The busy fixture still reads at a glance: its top level (the title and
+# separators aside) stays at 14 rows or fewer, with four separators at most.
+top_rows="$(grep -cvE '^(-|:)' "$tmp/out/menu-usage")"
+[[ $top_rows -le 14 ]] || fail "the busy menu's top level has $top_rows rows: $(grep -vE '^-' "$tmp/out/menu-usage" | sed 's/ | .*//')"
+[[ "$(grep -c '^---$' "$tmp/out/menu-usage")" -le 5 ]] || fail "the busy menu has more than four separators"
 # agents show: the process's own files and threads come from lsof and ps -M,
 # so they are fixed here; no session transcripts exist in this HOME.
 _agents_show_proc() { printf 'f\tfiles\t17\nf\tthreads\t%s\n' "$(( $1 % 7 + 1 ))"; }

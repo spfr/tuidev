@@ -1,11 +1,26 @@
 #!/bin/bash
 # <xbar.title>agents</xbar.title>
-# <xbar.version>v1.6</xbar.version>
+# <xbar.version>v1.7</xbar.version>
 # <xbar.desc>Who needs you: sessions by state (needs you, to review, running, parked), limits with their pace, what the day went to, stale helpers and hogs when there are any, keep-awake, fans and a compact system view, from tuidev's `agents` command.</xbar.desc>
 # <xbar.dependencies>bash,agents</xbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
+# <swiftbar.hideLastUpdated>true</swiftbar.hideLastUpdated>
+# <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
+# <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
 # <swiftbar.refreshOnOpen>true</swiftbar.refreshOnOpen>
+#
+# SwiftBar's own items (its menu, Updated…, Disable Plugin) are hidden: an
+# Option-click on the menu-bar item shows them all.
+#
+# The menu is a glance: its top level answers "does anything need me, and is
+# everything healthy?" in about ten rows, and everything else is one hover
+# away. What needs you stays flat and first (Needs you, To review, Running
+# while it is short, a flagged command or two); what informs is one row that
+# says it all out loud (`Stale (2) · web.test, vite`), its detail in its
+# submenu; a section of one row has no header. Four separators at most: the
+# sessions, then limits and today, then what to keep an eye on (stale, hogs,
+# machines), then the machine itself (awake, system), then the footer.
 #
 # SwiftBar plugin. Installed by `./install.sh --pack monitoring` (macOS); the
 # refresh interval is the `10s` in the file name (AGENTS_BAR_REFRESH in
@@ -228,6 +243,68 @@ stale_label() {
     fi
     REPLY="$out"
 }
+# short_name ARGS — REPLY: what a command is in one word, for a summary row:
+# the first word that is not a runner (node, npm exec, uv run, python -m), an
+# option or a VAR=value, its path cut to the base name, a package's @version
+# and a script's extension dropped: `npm exec @playwright/mcp@latest` is
+# @playwright/mcp (a long scope is dropped: @modelcontextprotocol/server-x is
+# server-x), `node …/.bin/vite --port 5174` is vite, a go build's
+# `/var/folders/…/b001/web.test -test.v` is web.test.
+short_name() {
+    local w first="" r
+    REPLY=""
+    set -f
+    for w in $1; do
+        if [[ "$w" == */* && "$w" != @*/* ]]; then w="${w%/}"; w="${w##*/}"; fi
+        [[ -n "$first" || -z "$w" ]] || first="$w"
+        case "$w" in
+            ""|-*|*=*|node|nodejs|npm|npx|pnpm|yarn|bun|bunx|deno|python|python3|python3.*|uv|uvx|ruby|perl|sh|bash|zsh|env|exec|run|dlx|tsx|ts-node) continue ;;
+        esac
+        REPLY="$w"; break
+    done
+    set +f
+    [[ -n "$REPLY" ]] || REPLY="$first"
+    r="${REPLY:1}"; [[ "$r" != *@* ]] || REPLY="${REPLY:0:1}${r%@*}"
+    case "$REPLY" in ?*.cjs|?*.mjs|?*.js|?*.ts|?*.py) REPLY="${REPLY%.*}" ;; esac
+    # A long scoped package by its own name (@modelcontextprotocol/server-x).
+    [[ "$REPLY" != @*/?* || ${#REPLY} -le 24 ]] || REPLY="${REPLY#*/}"
+    cl "$REPLY"; [[ ${#REPLY} -le 30 ]] || REPLY="${REPLY:0:27}..."
+}
+# name_add VAR NAME — append NAME to the tab-ended list in VAR, once.
+name_add() {
+    local v="$1"
+    [[ -n "$2" && $'\t'"${!v}" != *$'\t'"$2"$'\t'* ]] || return 0
+    printf -v "$v" '%s%s\t' "${!v}" "$2"
+}
+# list_fit NAMES MAX — REPLY: " · " and the tab-ended NAMES joined with ", ",
+# in their order, those that fit in MAX characters (a long one is skipped for
+# a shorter one after it), then ", …" when any was left out; "" for none.
+list_fit() {
+    local rest="$1" n out="" cut=""
+    while [[ -n "$rest" ]]; do
+        n="${rest%%$'\t'*}"; rest="${rest#*$'\t'}"
+        [[ -n "$n" ]] || continue
+        if [[ -z "$out" ]]; then
+            [[ ${#n} -le $2 ]] || { n="${n:0:$(($2 - 3))}..."; cut=1; }
+            out="$n"
+        elif [[ $(( ${#out} + 2 + ${#n} )) -le $2 ]]; then out+=", $n"
+        else cut=1; fi
+    done
+    [[ -z "$cut" ]] || out+=", …"
+    REPLY="${out:+ · $out}"
+}
+# indent TEXT — REPLY: menu lines one submenu level deeper. A read loop, never
+# ${1//$'\n'/…}: under bash 3.2 in a UTF-8 locale a global substitution is
+# quadratic in the string's length, and a section's lines run to tens of KB.
+# Every line gains "--"; a last line without its newline keeps going without.
+indent() {
+    local l r=""
+    REPLY=""
+    [[ -n "$1" ]] || return 0
+    while IFS= read -r l || [[ -n "$l" ]]; do r+="--$l"$'\n'; done <<<"${1%$'\n'}"
+    [[ "$1" == *$'\n' ]] || r="${r%$'\n'}"
+    REPLY="$r"
+}
 # Params carry only fixed words, PID@START tokens and the two trusted paths
 # below (agents and this plugin), double-quoted. Nothing a process controls (a
 # cwd, a name, Herdr's text) ever goes into a param: SwiftBar unescapes
@@ -311,6 +388,9 @@ battery_symbol() {
 me="${USER:-}"; [[ -n "$me" ]] || me="$(id -un)"
 n_agents=0 n_blocked=0 n_stale=0 n_hogs=0 n_review=0 n_running=0 n_parked=0 n_unknown=0 n_warned=0 oldest=-1
 needs_menu="" review_menu="" running_menu="" parked_menu="" unknown_menu="" daemon_menu="" stale_menu="" hogs_menu="" top_menu="" stale_tokens=""
+# The summary rows' names (tab-ended lists, each name once) and whether a
+# memory hog is among the hogs.
+stale_names="" hog_names="" hog_mem=""
 awake_mode=off awake_until=0 thermal=- thermal_name=unknown power=unknown
 lid_state=off lid_until=0 lid_max=28800 BAR_LID=1
 # Fan control (--pack cooling): absent until the cool row says otherwise.
@@ -633,8 +713,9 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             esac ;;
         stale)
             n_stale=$((n_stale + 1))
+            short_name "$args"; name_add stale_names "$REPLY"
             v="N_short_$pid"; vs=""; [[ -n "${!v-}" ]] && { cl "${!v}"; vs=" · $REPLY"; }
-            stale_label "$args" "$project" "$cwd"; c="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
+            stale_label "$args" "$project" "$cwd"; c="$REPLY" lbl="$REPLY"; agev "$age_s"; a="$REPLY"; memv "$rss"
             look=puzzlepiece.extension; [[ "$kind" == server ]] && look=network
             stale_menu+="$c · $a · $REPLY$vs | $ROW symbolize=false sfimage=$look"$'\n'
             c="--$kind · pid $pid"
@@ -642,7 +723,7 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
             [[ "$ports" != - ]] && { cl "$ports"; c+=" · ports $REPLY"; }
             stale_menu+="$c | symbolize=false"$'\n'
             # The command as it ran, when the label shortened it.
-            if [[ "$args" != "${c%% · *}" ]]; then cl "${args:0:300}"; stale_menu+="--$REPLY | symbolize=false size=11"$'\n'; fi
+            if [[ "$args" != "${lbl%% · *}" ]]; then cl "${args:0:300}"; stale_menu+="--$REPLY | symbolize=false size=11"$'\n'; fi
             if tok "$pid" "$start"; then
                 t="$REPLY"
                 kl="--Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"
@@ -714,9 +795,9 @@ for row in ${hog_rows[@]+"${hog_rows[@]}"}; do
     IFS=$'\t' read -r pid kind age_s pcpu avg rss start user args <<<"$row"
     num "$rss" || rss=0
     n_hogs=$((n_hogs + 1))
-    cl "$kind"; c="$REPLY"
+    cl "$kind"; c="$REPLY"; name_add hog_names "$c"
     if [[ $mem_warn -gt 0 && $rss -ge $mem_warn ]]; then
-        memv "$rss"
+        hog_mem=1; memv "$rss"
         hogs_menu+="$c · $REPLY memory | $ROW symbolize=false sfimage=memorychip $TINT_NEED"$'\n'
     else
         pctv "$pcpu"; a="$REPLY"; pctv "$avg"
@@ -757,9 +838,13 @@ fi
 
 # Second pass: sessions, now that their activity is known. Each goes in the
 # section of its state; a flagged command takes over a running session's row, and
-# gets a row of its own in Running under a session in any other state.
+# gets a row of its own in Running under a session in any other state. Running
+# is kept twice: as it reads flat (running_menu, then running_extra), and split
+# for when it folds (run_lead: the flagged rows that took over a session's,
+# run_plain: the rest), with n_flag flagged rows, n_flag_act of them in the
+# warn tint (safe to stop, check first).
 n_attn=0
-running_extra=""
+running_extra="" run_lead="" run_plain="" n_flag=0 n_flag_act=0
 for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
     IFS=$'\t' read -r pid kind age_s pcpu rss kids start ports herdr cwd project <<<"$row"
     if [[ "$kind" == daemon ]]; then
@@ -817,8 +902,8 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
         parked)
             n_parked=$((n_parked + 1))
             t=""; if num "$tage"; then longv "$tage"; t=" · $REPLY"; [[ $tage -le $oldest ]] || oldest="$tage"; fi
-            SUB="--${sub//$'\n'/$'\n'--}"
-            parked_menu+="--$mark$who · $label$t | sfimage=circle $TINT_IDLE $click symbolize=false"$'\n'"${SUB%--}" ;;
+            indent "$sub"
+            parked_menu+="--$mark$who · $label$t | sfimage=circle $TINT_IDLE $click symbolize=false"$'\n'"$REPLY" ;;
         unknown)
             n_unknown=$((n_unknown + 1))
             memv "$rss"; m="$REPLY"; cores "$pcpu"
@@ -827,15 +912,19 @@ for row in ${agent_rows[@]+"${agent_rows[@]}"}; do
             n_running=$((n_running + 1))
             if [[ $WN -gt 0 ]]; then
                 # The flag is what you'd want to read; the session is one level down.
-                running_menu+="${WT[1]} | sfimage=${WS[1]} ${WD[1]} $ROW symbolize=false"$'\n'"${WB[1]}"$'-----\n'"$sub"
+                v="${WT[1]} | sfimage=${WS[1]} ${WD[1]} $ROW symbolize=false"$'\n'"${WB[1]}"$'-----\n'"$sub"
+                running_menu+="$v"; run_lead+="$v"
+                n_flag=$((n_flag + 1)); [[ "${WD[1]}" != "$TINT_WARN" ]] || n_flag_act=$((n_flag_act + 1))
                 i=2
             else
                 memv "$rss"; m="$REPLY"; cores "$pcpu"
-                running_menu+="$mark$who · $label · $REPLY · $m | sfimage=circle.fill $TINT_RUN $click symbolize=false"$'\n'"$sub"
+                v="$mark$who · $label · $REPLY · $m | sfimage=circle.fill $TINT_RUN $click symbolize=false"$'\n'"$sub"
+                running_menu+="$v"; run_plain+="$v"
             fi ;;
     esac
     while [[ $i -le $WN ]]; do
-        n_warned=$((n_warned + 1))
+        n_warned=$((n_warned + 1)); n_flag=$((n_flag + 1))
+        [[ "${WD[i]}" != "$TINT_WARN" ]] || n_flag_act=$((n_flag_act + 1))
         running_extra+="${WT[i]} | sfimage=${WS[i]} ${WD[i]} $ROW symbolize=false"$'\n'"${WB[i]}"
         i=$((i + 1))
     done
@@ -945,6 +1034,7 @@ bar_title() {
 put() { OUT+="$1"$'\n'; }
 
 # Needs you: blocked sessions (and sleep left disabled), the most weight here.
+# Flat, like To review: they are what the menu is for.
 section_needs() {
     local n=$((n_blocked + n_attn))
     [[ $n -gt 0 ]] || return 0
@@ -958,18 +1048,38 @@ section_review() {
     OUT+="$review_menu"
 }
 
-# Running: working sessions, and what is flagged under any session. Then those
-# nothing says anything about: not running for sure, and not parked either.
+# Running: working sessions, and what is flagged under any session. Flat while
+# it is short (RUN_FLAT rows or fewer; a header only over two or more). Longer,
+# it folds into one row, `Running (7) · 2 flagged`, the sessions in its
+# submenu; a flagged command or two (FLAG_FLAT) stay flat above it, since they
+# may want you. More than that would bring the long list back: they lead the
+# submenu instead, and the row takes the warn tint while one of them is safe to
+# stop or to check.
+RUN_FLAT=4 FLAG_FLAT=2
 section_running() {
-    local n=$((n_running + n_warned))
+    local n=$((n_running + n_warned)) head sub look="$TINT_RUN"
     if [[ $n_agents -eq 0 ]]; then put "No agent sessions"; return 0; fi
-    if [[ $n -gt 0 ]]; then
-        put "Running ($n) | size=12"
+    if [[ $n -gt 0 && $n -le $RUN_FLAT ]]; then
+        [[ $n -eq 1 ]] || put "Running ($n) | size=12"
         OUT+="$running_menu$running_extra"
+    elif [[ $n -gt 0 ]]; then
+        if [[ $n_flag -le $FLAG_FLAT ]]; then
+            OUT+="$run_lead$running_extra"; indent "$run_plain"
+        else
+            indent "$run_lead$running_extra$run_plain"
+            [[ $n_flag_act -eq 0 ]] || look="$TINT_WARN"
+        fi
+        sub="$REPLY"
+        if [[ $n_running -eq 0 ]]; then head="Flagged commands ($n_flag)"
+        else head="Running ($n_running)"; [[ $n_flag -eq 0 ]] || head+=" · $n_flag flagged"; fi
+        put "$head | sfimage=circle.fill $look $ROW symbolize=false"
+        OUT+="$sub"
     fi
+    # Then those nothing says anything about: not running for sure, and not
+    # parked either. One gray row, like Parked under it.
     if [[ $n_unknown -gt 0 ]]; then
-        put "No signal ($n_unknown) | size=12"
-        OUT+="$unknown_menu"
+        put "No signal ($n_unknown) | sfimage=questionmark.circle $TINT_IDLE $ROW symbolize=false"
+        indent "$unknown_menu"; OUT+="$REPLY"
     fi
 }
 
@@ -1142,8 +1252,7 @@ job_submenu() {
     mcp_about "----" "${8:--}" "${9:--}"; SUB+="$REPLY"
     local keep="$SUB"
     SUB=""; look_items "$d" "$root"
-    SUB="$keep--${SUB//$'\n'--/$'\n'----}"
-    SUB="${SUB%----}"
+    indent "$SUB"; SUB="$keep$REPLY"
     [[ "$kind" != - ]] || SUB+="----Kill tree | $ACT param1=kill param2=-y param3=--notify param4=$t sfimage=xmark.octagon"$'\n'
 }
 job_rows_menu() {
@@ -1184,14 +1293,14 @@ job_rows_menu() {
                 tok "$root" "$start" && [[ "$cwd" != - ]] && click="$NOREF param1=reveal param2=$REPLY"
                 put "$d$line | $click symbolize=false"
                 job_submenu "$job" "$n" "$kind" "$root" "$start" "$name" "${unit:--}" "${about:--}" "${via:--}"
-                [[ "$tag" == S ]] || { SUB="--${SUB//$'\n'/$'\n'--}"; SUB="${SUB%--}"; }
+                [[ "$tag" == S ]] || { indent "$SUB"; SUB="$REPLY"; }
                 OUT+="$SUB" ;;
         esac
     done < <(job_lines)
 }
 
 # indent_out — OUT, one submenu level down.
-indent_out() { [[ -z "$OUT" ]] || { OUT="--${OUT//$'\n'/$'\n'--}"; OUT="${OUT%--}"; }; }
+indent_out() { indent "$OUT"; OUT="$REPLY"; }
 
 # today_summary — REPLY: Today's row: the time sessions blocked, the CPU-hours and
 # the job they went to, each when there is any; "" when nothing is known yet.
@@ -1256,7 +1365,8 @@ section_today() {
 # row per window, its highest model's, the rest in the row's submenu. The symbol
 # turns the warn tint from 80% or over pace, the need tint from 95% (and the icon
 # with it: bar_title), gray while nothing is used. Swap joins them only while it
-# is high.
+# is high. The top level shows one of these rows (section_limits), the rest one
+# hover away.
 MONO="font=Menlo size=12"
 
 # CLIs (limits.tsv's family, the cli before its ":") whose cli FAMILY:NAME
@@ -1301,6 +1411,7 @@ gauge() {
 # pass over the rows, then one over the groups: no subshell, no fork.
 usage_lines() {
     local name win pct rst cli age pv left bar fam key title model i j k n x ng=0 v p w line used best bm lw=0 lab sub
+    U_ROWS=0 PICK_P=-1 PICK_TEXT="" PICK_PARAMS="" PICK_OVER=""
     while IFS=$'\t' read -r name win pct rst cli age _ pv left bar; do
         num "$pct" || continue
         [[ -n "$win" ]] || continue
@@ -1359,10 +1470,17 @@ usage_lines() {
             gauge "$p" "$pv"; sub="$REPLY"
             if [[ -n "$bar" ]]; then
                 printf -v line '%-*s %s %3d%%' "$lw" "$lab" "$bar" "$p"
-                put "$line | $sub $MONO $LIMITS symbolize=false"
+                sub+=" $MONO"
             else
                 # An older `agents`: no bar to draw.
-                put "$lab $p% | $sub $LIMITS symbolize=false"
+                line="$lab $p%"
+            fi
+            put "$line | $sub $LIMITS symbolize=false"
+            # The closest to its limit: the highest share, over pace first.
+            U_ROWS=$((U_ROWS + 1))
+            if [[ $p -gt $PICK_P || ( $p -eq $PICK_P && "$pv" == over && -z "$PICK_OVER" ) ]]; then
+                PICK_P="$p" PICK_TEXT="$line" PICK_PARAMS="$sub $LIMITS symbolize=false" PICK_OVER=""
+                [[ "$pv" != over ]] || PICK_OVER=1
             fi
             # Its reset and pace, then what it folds, then how old the reading is.
             v="UR_${i}_$best"; line=""
@@ -1380,6 +1498,7 @@ usage_lines() {
         done
     done
     [[ -n "$swap_pct" ]] || return 0
+    U_ROWS=$((U_ROWS + 1))
     printf -v line '%-*s %s %3d%%' "$lw" Swap "$swap_bar" "$swap_pct"
     put "$line | sfimage=memorychip $TINT_WARN $MONO $TERM_OPEN param2=--hold param3=mem symbolize=false"
     memv "$swap_used"; line="$REPLY"; memv "$swap_total"
@@ -1405,48 +1524,66 @@ today_lines() {
     fi
 }
 
+# Limits: one row, the window closest to its limit as its gauge, with how many
+# more rows its submenu holds (`Claude 5h ████████▌░│░  86% +5`); the
+# submenu: every window as usage_lines draws them, then swap. A single row
+# (one window, or swap alone) is shown as it is.
 section_limits() {
     [[ -n "$usage_rows" || -n "$swap_pct" ]] || return 0
-    put "Limits and memory | size=12"
     usage_lines
+    [[ $U_ROWS -gt 1 && $PICK_P -ge 0 ]] || return 0
+    indent_out
+    OUT="$PICK_TEXT +$((U_ROWS - 1)) | $PICK_PARAMS"$'\n'"$OUT"
 }
 
+# Stale: one row that names them (`Stale (3) · web.test, vite`); its submenu
+# the processes, each as it has always read, then Reap all stale.
 section_stale() {
     [[ $n_stale -gt 0 ]] || return 0
-    put "Stale ($n_stale) | size=12"
     OUT+="$stale_menu"
     # Exactly the processes listed above, not whatever is stale at click time.
     local params="param1=kill param2=-y param3=--notify" i=4 tk
     for tk in $stale_tokens; do params+=" param$i=$tk"; i=$((i + 1)); done
+    put "---"
     put "Reap all stale | $ACT $params sfimage=trash"
+    indent_out
+    list_fit "$stale_names" 40
+    OUT="Stale ($n_stale)$REPLY | sfimage=xmark.bin $ROW symbolize=false"$'\n'"$OUT"
 }
 
+# Hogs: the same shape, `Hogs (2) · Messages, yes`; a red memory chip while
+# a memory hog is among them.
 section_hogs() {
+    local look="sfimage=flame"
     [[ $n_hogs -gt 0 ]] || return 0
-    put "Hogs ($n_hogs) | size=12"
-    OUT+="$hogs_menu"
+    [[ -z "$hog_mem" ]] || look="sfimage=memorychip $TINT_NEED"
+    list_fit "$hog_names" 40
+    put "Hogs ($n_hogs)$REPLY | $look $ROW symbolize=false"
+    indent "$hogs_menu"; OUT+="$REPLY"
 }
 
-# Machines: what the menu loaded the last time it was opened. The dev servers
-# and previews first, each a click from your browser (one on another machine
-# through a forward `agents forward open` makes), then a line a machine with
-# what it left behind, then the forwards open here. Shown once there is
-# something beyond this machine's own summary. Stopping and sweeping stay in
-# `agents map`, which asks before it does either.
+# Machines: what the menu loaded the last time it was opened, as one row that
+# says it (`Machines (3) · 1 dev server · 1 left behind`; `Dev servers (2)`
+# with no other machine), in the warn tint while something is left behind or
+# a machine does not answer. Its submenu: the dev servers and previews first,
+# each a click from your browser (one on another machine through a forward
+# `agents forward open` makes), then a line a machine with what it left
+# behind, then the forwards open here, Open the map, and when it was checked.
+# Shown once there is something beyond this machine's own summary. Stopping
+# and sweeping stay in `agents map`, which asks before it does either.
 section_machines() {
     [[ -n "$map_at" ]] || return 0
     [[ $n_map_remote -gt 0 || $n_map_ports -gt 0 || $n_map_fwd -gt 0 ]] || return 0
-    local m port cmd proj lport stale sum n line where look head lp rp st others=$n_map_remote
+    local m port cmd proj lport stale sum n line where look head sym lp rp st others=$n_map_remote noans=0
     if [[ $others -gt 0 ]]; then
-        head="Machines ($others)"
+        head="Machines ($others)" sym=desktopcomputer
         [[ $n_map_ports -eq 0 ]] || { head+=" · $n_map_ports dev server"; [[ $n_map_ports -eq 1 ]] || head+="s"; }
     elif [[ $n_map_ports -gt 0 ]]; then
-        head="Dev servers ($n_map_ports)"
+        head="Dev servers ($n_map_ports)" sym=globe
     else
-        head="Forwards"
+        head="Forwards ($n_map_fwd)" sym=arrow.left.arrow.right
     fi
     [[ $n_map_left -eq 0 ]] || head+=" · $n_map_left left behind"
-    put "$head | size=12"
     while IFS=$'\t' read -r m port cmd proj lport stale; do
         [[ -n "$m" ]] || continue
         cl "$proj"; line="$REPLY"; [[ "$line" != - && -n "$line" ]] || line="port"
@@ -1468,6 +1605,7 @@ section_machines() {
         sh60 "$sum"; line="$m · $REPLY"
         look="sfimage=desktopcomputer"
         case "$sum" in "no answer"*|"needs tuidev"*) look="sfimage=desktopcomputer.trianglebadge.exclamationmark $TINT_IDLE" ;; esac
+        case "$sum" in "no answer"*) noans=$((noans + 1)) ;; esac
         put "$line | $look $TERM_OPEN param2=map param3=$m symbolize=false"
     done <<<"$map_mach"
     [[ $n_map_fwd -eq 0 ]] || put "Forwards open here ($n_map_fwd) | sfimage=arrow.left.arrow.right $ROW"
@@ -1479,8 +1617,14 @@ section_machines() {
     [[ $n_map_fwd -eq 0 ]] || put "--Close every forward | $ACT param1=forward param2=close param3=--all sfimage=xmark.circle"
     now_s; n=$((NOW_S - map_at)); [[ $n -ge 0 ]] || n=0
     if [[ $n -lt 60 ]]; then REPLY="just now"; else agev "$n"; REPLY+=" ago"; fi
+    put "---"
     put "Open the map: go, stop, sweep | $TERM_OPEN param2=map sfimage=map"
-    put "--Checked $REPLY · loads when this menu opens | size=11"
+    put "Checked $REPLY · loads when this menu opens | size=11"
+    indent_out
+    [[ $noans -eq 0 ]] || head+=" · $noans not answering"
+    look="sfimage=$sym"
+    [[ $n_map_left -eq 0 && $noans -eq 0 ]] || look+=" $TINT_WARN"
+    OUT="$head | $look $ROW symbolize=false"$'\n'"$OUT"
 }
 
 # now_s — the epoch in NOW_S, read once (bash 3.2 has no $EPOCHSECONDS).
@@ -1490,8 +1634,13 @@ left_text() { if [[ $1 -lt 60 ]]; then REPLY="$2<1m left"; else agev "$1"; REPLY
 # ck MODE — REPLY = " checked=true" for the active keep-awake mode.
 ck() { REPLY=""; [[ "$awake_mode" == "$1" ]] && REPLY=" checked=true"; return 0; }
 
+# Awake: one row, the state; its submenu what changes it: End lid mode now…
+# while lid mode is on, the choices (a check on the active one), Lid closed
+# too…, and who holds the Mac awake. Sleep left disabled with nothing to
+# restore it leads Needs you (section_needs, flat); here the row says so in
+# red, and Restore lid sleep… leads its submenu.
 section_awake() {
-    local text sym=cup.and.saucer
+    local text sym=cup.and.saucer look
     case "$awake_mode" in
         off)    text="Awake: off" ;;
         agents) text="Awake: while agents run" ;;
@@ -1504,11 +1653,16 @@ section_awake() {
         num "$lid_until" || lid_until=0
         now_s; left_text $((lid_until - NOW_S)) "Awake: lid closed · "; text="$REPLY"; sym=laptopcomputer
     fi
+    look="sfimage=$sym"
+    [[ "$lid_state" != stale ]] || { text+=" · lid sleep disabled, nothing restores it"; look="sfimage=exclamationmark.triangle.fill $TINT_NEED"; }
+    put "$text | $look $ROW"
     if [[ "$lid_state" == stale ]]; then
-        put "Lid sleep disabled, nothing restores it | sfimage=exclamationmark.triangle.fill $TINT_NEED $ROW"
-        put "Restore lid sleep… | $ACT param1=awake param2=restore param3=--notify sfimage=lock.open"
+        put "--Restore lid sleep… | $ACT param1=awake param2=restore param3=--notify sfimage=lock.open"
+        put "-----"
+    elif [[ "$lid_state" == on ]]; then
+        put "--End lid mode now… | $ACT param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"
+        put "-----"
     fi
-    put "$text | sfimage=$sym $ROW"
     ck on; put "--Until turned off | $ACT param1=awake param2=on$REPLY"
     put "--For 1 hour | $ACT param1=awake param2=on param3=1h"
     put "--For 3 hours | $ACT param1=awake param2=on param3=3h"
@@ -1527,9 +1681,6 @@ section_awake() {
     ck off; put "--Off | $ACT param1=awake param2=off$REPLY"
     put "-----"
     put "--Who holds the Mac awake? | $TERM_OPEN param2=--hold param3=awake param4=status"
-    if [[ "$lid_state" == on ]]; then
-        put "End lid mode now… | $ACT param1=awake param2=off param3=--notify sfimage=laptopcomputer.slash"
-    fi
 }
 
 # System: one row, CPU, memory and thermal pressure, opening agents watch. A
@@ -1676,9 +1827,13 @@ for section in $REPLY; do
     esac
     while [[ "$OUT" == *$'\n' ]]; do OUT="${OUT%$'\n'}"; done
     [[ -n "$OUT" ]] || continue
-    # The sessions read as one block, and so do Awake and the system row.
+    # Four blocks, a separator between them: the sessions; limits and today;
+    # what to keep an eye on; the machine itself. A section a user moved
+    # elsewhere still joins its own block's neighbours only.
     case "$section" in
         needs|review|running|parked) group=sessions ;;
+        limits|today) group=glance ;;
+        stale|hogs|machines) group=watch ;;
         awake|system) group=machine ;;
         *) group="$section" ;;
     esac
