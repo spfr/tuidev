@@ -1266,12 +1266,12 @@ pass "SwiftBar: blocked sessions lead (title count, Needs you section)"
 # blocked ones, counted in the title in their own calm tint; Herdr's task title
 # names the session.
 done_recs="$(printf '%s\n' "$records" | agents_enrich "$(printf '84091\t%s/code/shop\n90419\t%s/work/app\n' "$HOME" "$HOME")" \
-    "$(printf 'claude\tdone\t%s/work/app\tw1:p1\tHerdr fleet smart notifications\nclaude\tblocked\t%s/code/shop\tw2:p1\t-\n' "$HOME" "$HOME")" \
+    "$(printf 'claude\tdone\t%s/work/app\tw1:p1\tFix login redirect\nclaude\tblocked\t%s/code/shop\tw2:p1\t-\n' "$HOME" "$HOME")" \
     "" $'90419\tw1:p1\n84091\tw2:p1' | awk -F '\t' '$1 == "agent" || $1 == "herdr"')"
 menu="$(plugin "$done_recs" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":exclamationmark.circle.fill: 1 :checkmark.circle: 1 | sfcolor=#FF453A sfcolor1=#0A84FF" ]] || fail "title with done: $(printf '%s\n' "$menu" | head -1)"
 [[ "$menu" == *$'\n'"Needs you (1) | size=12"$'\n'"shop · blocked | "* ]] || fail "Needs you counts only the blocked session"
-[[ "$menu" == *$'\n'"To review (1) | size=12"$'\n'"Herdr fleet smart notifications · done | sfimage=checkmark.circle sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMEE4NEZGIl19 bash="*" param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"$'\n'"--Jump to session | "* ]] \
+[[ "$menu" == *$'\n'"To review (1) | size=12"$'\n'"Fix login redirect · done | sfimage=checkmark.circle sfconfig=eyJyZW5kZXJpbmdNb2RlIjoiUGFsZXR0ZSIsImNvbG9ycyI6WyIjMEE4NEZGIl19 bash="*" param1=reveal param2=90419@Wed_Oct_14_07:31:08_2026 symbolize=false"$'\n'"--Jump to session | "* ]] \
     || fail "done item: $(printf '%s\n' "$menu" | grep -A1 'To review')"
 [[ $(line_no '^Needs you') -lt $(line_no '^To review') ]] || fail "To review before Needs you"
 [[ "$(printf '%s\n' "$menu" | grep -c '^---$')" -ge 1 && "$(printf '%s\n' "$menu" | awk '/^Needs you/ { on = 1 } /^To review/ { exit } on' | grep -c '^---$')" == 0 ]] || fail "a separator between the session sections"
@@ -1279,7 +1279,7 @@ check_actions "$menu"
 done_only="$(printf '%s\n' "$done_recs" | awk -F '\t' -v OFS='\t' '$1 == "agent" && $12 == "blocked" { $12 = "working" } { print }')"
 menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal')"
 [[ "$(printf '%s\n' "$menu" | head -1)" == ":checkmark.circle: 1 | sfcolor=#0A84FF" ]] || fail "title with only a done session: $(printf '%s\n' "$menu" | head -1)"
-[[ "$menu" != *"Needs you"* && "$menu" == *$'\n'"To review (1) | size=12"$'\n'"Herdr fleet smart notifications · done | "* ]] || fail "only a done session"
+[[ "$menu" != *"Needs you"* && "$menu" == *$'\n'"To review (1) | size=12"$'\n'"Fix login redirect · done | "* ]] || fail "only a done session"
 # Herdr's health is maintenance: a version mismatch is fine and a server
 # restart restarts every Herdr session, so never Needs you, the tint or the
 # title; one gray line at the bottom, its submenu holding the rest. The
