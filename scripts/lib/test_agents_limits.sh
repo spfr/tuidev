@@ -309,7 +309,9 @@ if command -v jq >/dev/null 2>&1; then
         "$(turn 2 2026-10-16T12:30:00Z grok-4.7-build 2000 1500 70)" "$(turn 3 2026-10-16T12:50:00Z grok-5 10 0 1)" > "$G/usage.json"
     # Changed after the last scan began (its stamp: the fixed clock, not the real one).
     touch -t "$(date -u -r $((NOW + 600)) +%Y%m%d%H%M.%S 2>/dev/null || date -u -d "@$((NOW + 600))" +%Y%m%d%H%M.%S)" "$G/usage.json"
-    ( umask 077; _agents_grok_scan "$((NOW + 900))" 2026-10-16 $((NOW - 13 * 3600)) )
+    # (The scan finds files by age against the real clock, and that fixed date
+    # falls out of the default window a month on: widen it here.)
+    ( umask 077; AGENTS_HISTORY_DAYS=9999; _agents_grok_scan "$((NOW + 900))" 2026-10-16 $((NOW - 13 * 3600)) )
     [[ "$(wc -l < "$D/tokens.tsv" | tr -d ' ')" == 3 && "$(tail -1 "$D/tokens.tsv" | cut -f6,7)" == "grok-5${T}10" ]] || fail "a new grok turn: $(cat "$D/tokens.tsv")"
     # A broken file doesn't stop the others.
     mkdir -p "$HOME/.grok/sessions/%2Fwork%2Fb/s2"; echo '{"turns":[{"turnNumber":1,' > "$HOME/.grok/sessions/%2Fwork%2Fb/s2/usage.json"
