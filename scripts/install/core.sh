@@ -12,7 +12,10 @@
 #   the shell an agent CLI runs in: search, nav, git UX, shell prompt,
 #   JSON/YAML, shell plugins, shellcheck. No editor and no multiplexer (those
 #   are --pack nvim and --pack tmux), no GUI apps, no remote stack, no sandbox
-#   tooling. Ghostty is added on macOS only.
+#   tooling. Ghostty is added on macOS only. Also `secret` (bin/secret) in
+#   ~/.local/bin: tokens in the OS secret store, not in dotfiles. It lives
+#   here, not in the macOS-only sandbox pack, because every profile and
+#   platform should have it (docs/secrets.md).
 #
 # Package managers: scripts/lib/pkg.sh — Homebrew on macOS (and on Linux when
 #   present), else apt-get / dnf / pacman. Homebrew has no aarch64 Linux build,
@@ -27,6 +30,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/../lib/ui.sh"
 # shellcheck source=../lib/pkg.sh disable=SC1091
 . "$SCRIPT_DIR/../lib/pkg.sh"
+# shellcheck source=../lib/config_write.sh disable=SC1091
+. "$SCRIPT_DIR/../lib/config_write.sh"
 
 # Formula list (Homebrew). Kept alphabetized for drift-diff friendliness.
 CORE_FORMULAE=(
@@ -68,6 +73,16 @@ _core_link_debian_binary() {
     print_info "linked $want -> $have in $bindir (Debian renames this binary)"
 }
 
+# ~/.local/bin/secret from the repo's bin/secret. tuidev owns the file; it runs
+# alone, without the repo or the libs.
+_core_install_secret() {
+    local src dest="$HOME/.local/bin/secret"
+    src="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/secret"
+    [[ -f "$src" ]] || { print_warning "bin/secret is missing from the repo; secret not installed"; return 0; }
+    install_config "$dest" "$src" --overwrite
+    [[ "${DRY_RUN:-false}" == true ]] || chmod 0755 "$dest"
+}
+
 core_install() {
     print_header "Pack: core"
 
@@ -80,6 +95,7 @@ core_install() {
         _core_link_debian_binary fd  fdfind
         _core_link_debian_binary bat batcat
     fi
+    _core_install_secret
 
     print_success "core pack complete"
 }

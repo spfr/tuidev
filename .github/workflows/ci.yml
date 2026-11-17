@@ -54,6 +54,7 @@ jobs:
             configs/sandbox/profiles/standard.sb
             configs/sandbox/profiles/off.sb
             bin/sbx
+            bin/secret
             bin/agents
             bin/mcp-lazy
             lib/agents/cli.sh

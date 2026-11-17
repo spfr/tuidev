@@ -73,3 +73,38 @@ prefix_rule(
     justification = "gh api can write to GitHub: ask first",
     match = ["gh api repos/OWNER/REPO/pulls"],
 )
+
+# Secret stores (docs/secrets.md): the commands that print or hand on a stored
+# secret are the user's, not an agent's. Codex's workspace-write sandbox does
+# not limit reads, so these rules are the only thing between a Codex agent and
+# `secret get`; like the rules above they match the plain command only.
+
+prefix_rule(
+    pattern = ["secret", ["get", "export", "run"]],
+    decision = "forbidden",
+    justification = "Stored secrets are for the user's own shell (docs/secrets.md)",
+    match = ["secret get GITHUB_TOKEN", "secret export NPM_TOKEN", "secret run -n NPM_TOKEN -- npm publish"],
+    not_match = ["secret ls", "secret scan"],
+)
+
+prefix_rule(
+    pattern = ["security", ["find-generic-password", "find-internet-password", "dump-keychain"]],
+    decision = "forbidden",
+    justification = "Reading the Keychain is the user's call",
+    match = ["security find-generic-password -s tuidev -a NPM_TOKEN -w", "security dump-keychain"],
+    not_match = ["security verify-cert -c cert.pem"],
+)
+
+prefix_rule(
+    pattern = ["secret-tool", ["lookup", "search"]],
+    decision = "forbidden",
+    justification = "Reading the keyring is the user's call",
+    match = ["secret-tool lookup service tuidev name NPM_TOKEN"],
+)
+
+prefix_rule(
+    pattern = ["pass", "show"],
+    decision = "forbidden",
+    justification = "Reading the password store is the user's call",
+    match = ["pass show tuidev/NPM_TOKEN"],
+)

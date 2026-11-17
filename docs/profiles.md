@@ -45,7 +45,7 @@ Neither `desktop` nor `minimal` installs tmux or Neovim by default — add `--pa
 What each tool replaces, and why it was picked, is in [toolbox.md](toolbox.md).
 
 **`--core`** (`scripts/install/core.sh`)
-: `bat`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `jq`, `ripgrep`, `shellcheck`, `starship`, `yq`, `zoxide`, and the zsh plugins `zsh-autosuggestions`, `zsh-completions` and `zsh-syntax-highlighting`. On macOS it also installs the Ghostty app. The installer then writes the managed blocks for `~/.zshrc` and `~/.config/starship.toml`, and sets [git defaults](#git-defaults).
+: `bat`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `jq`, `ripgrep`, `shellcheck`, `starship`, `yq`, `zoxide`, and the zsh plugins `zsh-autosuggestions`, `zsh-completions` and `zsh-syntax-highlighting`. On macOS it also installs the Ghostty app. It also puts `secret` in `~/.local/bin`, which keeps API tokens in the Keychain, libsecret or `pass` instead of dotfiles ([secrets.md](secrets.md)). The installer then writes the managed blocks for `~/.zshrc` and `~/.config/starship.toml`, and sets [git defaults](#git-defaults).
 
 **`--ui`** (macOS only)
 : The Ghostty config (as a managed block), and the Rectangle cask. Menu-bar items are hidden natively in System Settings. For CPU, memory, battery and thermal readings in the menu bar, add `--pack monitoring` (its SwiftBar menu replaces a stats app). The hotkeys are in the [cheatsheet](CHEATSHEET.md#macos-hotkeys-desktop-profile).

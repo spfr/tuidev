@@ -241,7 +241,7 @@ if $MANIFEST_MODE; then
     each_line "$M_FILES" _remove_helper
 else
     # Without a record, remove a helper only if it is still exactly ours.
-    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents" "mcp-lazy:bin/mcp-lazy"; do
+    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents" "mcp-lazy:bin/mcp-lazy" "secret:bin/secret"; do
         _remove_if_ours "$HOME/.local/bin/${pair%%:*}" "$SCRIPT_DIR/${pair#*:}"
     done
     while IFS= read -r src; do
