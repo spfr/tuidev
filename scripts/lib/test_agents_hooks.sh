@@ -404,6 +404,24 @@ run_hook wait-start "$(wait_json idle_prompt)"; IFS=$'\t' read -r _ wst _ < "$W/
 wclear
 pass "wait-start opens one wait per session (permission and elicitation blocked, idle done, the first start stands, but blocked replaces done); wait-end moves it to waited/, dated by the approved tool's start"
 
+# The menu bar hears of what changed from the hook itself, in the same
+# process: wait-start, a wait-end that ended a wait, subagent-stop. Not a
+# wait-end with nothing open (every tool call), a dry run, or session-end
+# (its own hook entry pokes, on every reason).
+(
+    agents_bar_poke() { echo "poke $*" >> "$tmp/pokes"; }
+    pokes() { local n=0; [[ ! -f "$tmp/pokes" ]] || n="$(grep -c . "$tmp/pokes")"; rm -f "$tmp/pokes"; echo "$n"; }
+    fresh; wclear; rm -f "$tmp/pokes"
+    run_hook wait-start "$(wait_json permission_prompt)"; [[ "$(pokes)" == 1 ]] || fail "wait-start did not poke the menu bar"
+    run_hook wait-end "$(event_json PostToolUse)"; [[ "$(pokes)" == 1 ]] || fail "a wait-end that ended a wait did not poke"
+    run_hook wait-end "$(event_json PostToolUse)"; [[ "$(pokes)" == 0 ]] || fail "a wait-end with no wait open poked"
+    run_hook wait-start "$(wait_json permission_prompt)" -n; [[ "$(pokes)" == 0 ]] || fail "a dry run poked"
+    AGENTS_HOOK_REAP=0 run_hook subagent-stop "$(event_json SubagentStop)"; [[ "$(pokes)" == 1 ]] || fail "subagent-stop did not poke"
+    run_hook session-end "$(event_json SessionEnd)"; [[ "$(pokes)" == 0 ]] || fail "session-end poked from agents (its hook entry does)"
+    wclear
+) || exit 1
+pass "agents hook pokes the menu bar on wait-start, a wait that ended and subagent-stop; never on a no-op wait-end or a dry run"
+
 # /clear and /resume end the old session's wait, cleanups on or off.
 for reap in 1 0; do
     wclear; run_hook wait-start "$(wait_json permission_prompt)"
@@ -512,8 +530,19 @@ pass "PermissionRequest opens the blocked wait as the dialog shows (permission_p
 S="$REPO_DIR/configs/claude/settings.json"
 start_cmd="$(jq -r '.hooks.Notification[] | select(.matcher == "permission_prompt|idle_prompt|elicitation_dialog") | .hooks[0].command' "$S")"
 end_cmd="$(jq -r '.hooks.PostToolUse[0].hooks[0].command' "$S")"
-for e in UserPromptSubmit PostToolUseFailure Stop; do
-    [[ "$(jq -r ".hooks.${e}[0].hooks[0].command" "$S")" == "$end_cmd" ]] || fail "settings.json: $e does not run the wait-end command"
+# The prompt and the turn's end also poke the menu bar (a guard in front of the
+# same command); a tool call does not.
+stop_cmd="$(jq -r '.hooks.Stop[0].hooks[0].command' "$S")"
+poke_pre="${stop_cmd%"$end_cmd"}"
+[[ "$poke_pre" == 'r="${AGENTS_RUN_DIR:-'*'bar poke </dev/null'*'; ' && "$stop_cmd" == "$poke_pre$end_cmd" ]] \
+    || fail "settings.json: Stop is not the poke guard then the wait-end command: $stop_cmd"
+for e in UserPromptSubmit Stop; do
+    [[ "$(jq -r ".hooks.${e}[0].hooks[0].command" "$S")" == "$poke_pre$end_cmd" ]] || fail "settings.json: $e does not poke, then run the wait-end command"
+done
+[[ "$(jq -r '.hooks.PostToolUseFailure[0].hooks[0].command' "$S")" == "$end_cmd" ]] || fail "settings.json: PostToolUseFailure does not run the wait-end command"
+[[ "$end_cmd" != *"bar poke"* ]] || fail "settings.json: a tool call pokes the menu bar"
+for f in "$S" "$REPO_DIR/configs/claude/settings.linux.json"; do
+    [[ "$(jq -c '[.hooks.PostToolUse, .hooks.PreToolUse] | tostring | contains("bar poke")' "$f")" == false ]] || fail "${f##*/}: a tool call pokes"
 done
 for e in PostToolUse PostToolUseFailure; do
     [[ "$(jq -r ".hooks.${e}[0].matcher // \"\"" "$S")" == "" ]] || fail "settings.json: $e must match every tool"
@@ -566,6 +595,57 @@ rm "$SH/.local/bin/agents"
 ship "$end_cmd"; [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "wait-end hook without agents: rc $(cat "$tmp/rc"), $(cat "$tmp/out")"
 ship "$start_cmd"; [[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" ]] || fail "wait-start hook without agents: rc $(cat "$tmp/rc"), $(cat "$tmp/out")"
 pass "shipped wait hooks: wait-start on permission, idle and elicitation notifications; wait-end on prompts, every tool call (done or failed) and turn ends, running agents only while this session has a wait open; exit 0 always, a no-op without the monitoring pack"
+
+# The menu bar's poke guard (UserPromptSubmit, Stop; SessionEnd with --settle):
+# a couple of [ -e ] tests in sh, and `agents bar poke` started in the
+# background only when the plugin runs under SwiftBar here (bar.alive) and no
+# poke went out in the last 2 s (bar.busy). Declining starts nothing; inside a
+# window it marks bar.dirty, and the window's keeper pokes once at its end.
+printf '#!/bin/sh\necho "$@" >> "%s/ran"\ncat > /dev/null\nexit 3\n' "$SH" > "$SH/.local/bin/agents"; chmod +x "$SH/.local/bin/agents"
+BR="$SH/.config/tuidev/run"; rm -rf "$BR" "$SH/.local/state/tuidev/agents/waiting"
+waitran() { local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [[ ! -s "$SH/ran" ]] || return 0; sleep 0.1; done; }
+SHIP_JSON="$(event_json Stop)" ship "$stop_cmd"; sleep 0.3
+[[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" && ! -e "$SH/ran" && ! -e "$BR" ]] || fail "poke guard with no plugin running: rc $(cat "$tmp/rc"), ran $(cat "$SH/ran" 2>/dev/null), $(ls -A "$BR" 2>/dev/null)"
+mkdir -p "$BR"; : > "$BR/bar.alive"
+SHIP_JSON="$(event_json Stop)" ship "$stop_cmd"; waitran
+[[ "$(cat "$tmp/rc")" == 0 && ! -s "$tmp/out" && "$(cat "$SH/ran")" == "bar poke" && -e "$BR/bar.dirty" ]] \
+    || fail "poke guard, the plugin running: rc $(cat "$tmp/rc"), ran $(cat "$SH/ran" 2>/dev/null), $(ls -A "$BR")"
+rm -f "$BR/bar.dirty"; : > "$BR/bar.busy"
+SHIP_JSON="$(event_json UserPromptSubmit)" ship "$poke_pre$end_cmd"; sleep 0.3
+[[ "$(cat "$tmp/rc")" == 0 && ! -e "$SH/ran" && -e "$BR/bar.dirty" ]] || fail "poke guard inside a window: ran $(cat "$SH/ran" 2>/dev/null), $(ls -A "$BR")"
+rm -f "$BR/bar.busy" "$BR/bar.dirty"
+# The wait-end part still sees the hook's JSON (the poke reads /dev/null).
+mkdir -p "$SH/.local/state/tuidev/agents/waiting"; : > "$SH/.local/state/tuidev/agents/waiting/$sess"
+SHIP_JSON="$(event_json Stop)" ship "$stop_cmd"; sleep 0.5
+[[ "$(sort "$SH/ran" | tr '\n' ' ')" == "bar poke hook wait-end " ]] || fail "poke guard then wait-end: ran $(cat "$SH/ran")"
+rm -rf "$SH/.local/state/tuidev/agents/waiting"
+# SessionEnd, every reason: the guard with --settle (a session's process exits
+# after its hook), beside the clear|resume cleanup.
+se="$(jq -c '[.hooks.SessionEnd[] | {m: (.matcher // ""), c: .hooks[0].command, t: .hooks[0].timeout}]' "$S")"
+[[ "$(jq -r '.[1].c' <<<"$se")" == "${poke_pre/bar poke /bar poke --settle }exit 0" && "$(jq -r '.[1].m' <<<"$se")" == "" && "$(jq -r '.[0].m' <<<"$se")" == "clear|resume" ]] \
+    || fail "settings.json: SessionEnd's poke entry: $se"
+rm -f "$BR"/bar.*; : > "$BR/bar.alive"
+SHIP_JSON="$(event_json SessionEnd)" ship "$(jq -r '.[1].c' <<<"$se")"; waitran
+[[ "$(cat "$tmp/rc")" == 0 && "$(cat "$SH/ran")" == "bar poke --settle" ]] || fail "SessionEnd's poke: rc $(cat "$tmp/rc"), ran $(cat "$SH/ran" 2>/dev/null)"
+for e in UserPromptSubmit Stop SessionEnd; do
+    [[ "$(jq -c ".hooks.$e" "$S")" == "$(jq -c ".hooks.$e" "$REPO_DIR/configs/claude/settings.linux.json")" ]] || fail "settings.linux.json: another $e hook"
+done
+# Declining costs builtins only: 2000 runs of the guard in one sh, no plugin
+# running, then inside a window, well under a millisecond each.
+rm -f "$BR"/bar.*
+loop="i=0; while [ \$i -lt 2000 ]; do ${poke_pre% } i=\$((i + 1)); done"
+for state in none busy; do
+    [[ "$state" == none ]] || { : > "$BR/bar.alive"; : > "$BR/bar.busy"; }
+    rm -f "$SH/ran"
+    t0="$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000' 2>/dev/null || echo 0)"
+    env -i PATH=/usr/bin:/bin HOME="$SH" /bin/sh -c "$loop" </dev/null >/dev/null 2>&1
+    t1="$(perl -MTime::HiRes=time -e 'printf "%d", time * 1000' 2>/dev/null || echo 0)"
+    [[ ! -e "$SH/ran" ]] || fail "the declining guard ($state) started agents"
+    # 2000 runs in under 2 s: under 1 ms each (about 0.01 ms here).
+    [[ $((t1 - t0)) -lt 2000 ]] || fail "the declining guard ($state) took $((t1 - t0)) ms for 2000 runs"
+done
+rm -rf "$BR"
+pass "shipped poke guard: on prompts, turn ends and session ends (--settle), never per tool; agents bar poke in the background only with the plugin running and no window open; declining starts no process (2000 declines: well under 1 ms each)"
 
 # The shipped PermissionRequest hook (every tool: no matcher) starts agents
 # only when a wait could open: the pack installed, not in Herdr, history not

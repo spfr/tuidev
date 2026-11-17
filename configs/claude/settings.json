@@ -170,7 +170,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
+            "command": "r=\"${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}\"; if [ -e \"$r/bar.alive\" ]; then : > \"$r/bar.dirty\"; [ -e \"$r/bar.busy\" ] || { \"$HOME/.local/bin/agents\" bar poke </dev/null >/dev/null 2>&1 & }; fi 2>/dev/null; d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
             "timeout": 10
           }
         ]
@@ -212,7 +212,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
+            "command": "r=\"${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}\"; if [ -e \"$r/bar.alive\" ]; then : > \"$r/bar.dirty\"; [ -e \"$r/bar.busy\" ] || { \"$HOME/.local/bin/agents\" bar poke </dev/null >/dev/null 2>&1 & }; fi 2>/dev/null; d=\"${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/waiting\"; for w in \"$d\"/*; do [ -e \"$w\" ] || exit 0; h=\"$(dd bs=8192 count=1 2>/dev/null)\"; s=; case \"$h\" in *'\"session_id\"'*'\"'*'\"'*) s=${h#*'\"session_id\"'}; s=${s#*'\"'}; s=${s%%'\"'*} ;; esac; case \"$s\" in ''|*[!A-Za-z0-9_-]*) ;; *) [ -e \"$d/$s\" ] || exit 0 ;; esac; [ -x \"$HOME/.local/bin/agents\" ] && { printf '%s' \"$h\"; cat; } | \"$HOME/.local/bin/agents\" hook wait-end; exit 0; done; exit 0",
             "timeout": 10
           }
         ]
@@ -237,6 +237,15 @@
             "type": "command",
             "command": "[ -x \"$HOME/.local/bin/agents\" ] && \"$HOME/.local/bin/agents\" hook session-end; exit 0",
             "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "r=\"${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}\"; if [ -e \"$r/bar.alive\" ]; then : > \"$r/bar.dirty\"; [ -e \"$r/bar.busy\" ] || { \"$HOME/.local/bin/agents\" bar poke --settle </dev/null >/dev/null 2>&1 & }; fi 2>/dev/null; exit 0",
+            "timeout": 10
           }
         ]
       }
