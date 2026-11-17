@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.22.1] - 2026-11-17
+
+### Changed
+
+- **The Herdr sidebar gives the name the line, and the session's name the agent row.** A workspace row keeps its name on the whole first line (`mactui_setup`, not `mactui_s…`) with the branch and the `✳3 ❯1` roll-up below it; a workspace with no branch shows the roll-up alone. An agent row now leads with the tab's name, which `agents herdr sync` sets to what the session is doing (`✳ Remote runners and …`), then the machine only when it is not `Local`; its second line is the agent and the workspace. Both layouts are one `tuidev-sidebar` block that `update --configs` rewrites, and it is skipped while your config has its own `[ui.sidebar.spaces]` or `[ui.sidebar.agents]` (a block an older tuidev wrote stays as it is beside your own agent rows). [Tabs named after what runs in them](docs/agent-workflows.md#tabs-named-after-what-runs-in-them)
+
 ## [3.22.0] - 2026-11-17
 
 ### Added

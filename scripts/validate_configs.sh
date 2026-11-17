@@ -141,6 +141,7 @@ toml_files=(
     "$REPO_DIR"/configs/orchestration/codex/agents/*.toml
     "$REPO_DIR/configs/herdr/config.toml"
     "$REPO_DIR/configs/herdr/keys.toml"
+    "$REPO_DIR/configs/herdr/sidebar.toml"
     "$REPO_DIR"/configs/herdr/plugins/*/herdr-plugin.toml
     "$REPO_DIR"/configs/themes/*/palette.toml
 )

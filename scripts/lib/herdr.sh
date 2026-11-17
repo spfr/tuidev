@@ -45,6 +45,7 @@
 #   herdr_path_note          when PATH doesn't find the release binary first
 #   herdr_cutover_hint       when to `brew uninstall herdr`
 #   herdr_switch_to_direct   Homebrew's herdr -> the release binary, then what is left by hand
+#   herdr_has_own_sidebar F  F sets the sidebar's space or agent rows outside tuidev's block
 
 if [[ -n "${_TUIDEV_HERDR_LOADED:-}" ]]; then
     return 0
@@ -494,4 +495,23 @@ herdr_switch_to_direct() {
         [[ -n "$unit" ]] && herdr_service_note "$unit"
     done < <(herdr_service_files)
     herdr_cutover_hint
+}
+
+# herdr_has_own_sidebar FILE — does FILE set the sidebar's space or agent rows
+# outside tuidev's tuidev-sidebar block (a [ui.sidebar.spaces] or
+# [ui.sidebar.agents] table, or the key under [ui.sidebar] or [ui])? Either
+# would make the block a duplicate table, a TOML error.
+herdr_has_own_sidebar() {
+    [[ -f "$1" ]] || return 1
+    awk -v begin="$(tuidev_block_begin tuidev-sidebar)" -v end="$(tuidev_block_end tuidev-sidebar)" '
+        $0 == begin { inside = 1; next }
+        $0 == end   { inside = 0; next }
+        inside      { next }
+        { sub(/#.*/, "") }
+        /^[[:space:]]*\[[[:space:]]*ui[[:space:]]*\.[[:space:]]*sidebar[[:space:]]*\.[[:space:]]*(spaces|agents)[[:space:]]*\]/ { found = 1 }
+        /^[[:space:]]*\[[[:space:]]*ui[[:space:]]*\.[[:space:]]*sidebar[[:space:]]*\.[[:space:]]*(spaces|agents)[[:space:]]*\./ { found = 1 }
+        /^[[:space:]]*\[/ { table = $0; gsub(/[[:space:]]/, "", table) }
+        table == "[ui.sidebar]" && /^[[:space:]]*(spaces|agents)[[:space:]]*[.=]/ { found = 1 }
+        table == "[ui]" && /^[[:space:]]*sidebar[[:space:]]*\.[[:space:]]*(spaces|agents)/ { found = 1 }
+        END { exit !found }' "$1"
 }
