@@ -72,13 +72,18 @@ notifications = true
 notification_condition = "unfocused"   # unfocused | always
 notification_method = "auto"           # auto | osc9 | bel
 
-# External notifier: wire to the same notify.sh helper Claude Code uses.
-# Commented out by default so Codex users opt in explicitly. It fires only for
+# External notifier: wire to the same notify.sh helper Claude Code uses, and
+# refresh the menu bar first (`agents bar poke`: outside Herdr, a Codex turn
+# has no other way to tell it it ended; a no-op without the monitoring pack or
+# SwiftBar). Commented out by default so Codex users opt in explicitly: Codex
+# runs one notify program, and yours stays yours. It fires only for
 # agent-turn-complete, and Codex appends the event JSON as one extra argument;
 # the `bash -c` shim below receives that JSON as $1 and drops it, so
 # notify.sh gets a clean title/message. (notify is argv, not a shell string,
 # which is why $HOME needs the shim to expand.)
-# notify = ["bash", "-c", "exec \"$HOME/.local/bin/notify.sh\" 'Codex CLI' 'Turn complete' 'Done'", "codex-notify"]
+# notify = ["bash", "-c", "a=\"$HOME/.local/bin/agents\"; [ -x \"$a\" ] && \"$a\" bar poke; exec \"$HOME/.local/bin/notify.sh\" 'Codex CLI' 'Turn complete' 'Done'", "codex-notify"]
+# The menu bar only, no notification:
+# notify = ["bash", "-c", "a=\"$HOME/.local/bin/agents\"; [ -x \"$a\" ] && \"$a\" bar poke; exit 0", "codex-notify"]
 
 # Codex reads AGENTS.md natively and ignores CLAUDE.md. Uncomment to let it
 # fall back to CLAUDE.md in directories that have no AGENTS.md:
