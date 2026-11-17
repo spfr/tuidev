@@ -42,6 +42,15 @@ pass "ps time/etime parse, including DD-HH:MM:SS and fractional seconds"
 ! agents_parse_duration 2x >/dev/null          || fail "unknown unit accepted"
 pass "durations parse (30m, 2h, 1h30m) and bad ones are rejected"
 
+# Clock formats: bash's own strftime where it has one, date otherwise; the same text.
+for fmt in '%s %z' %Y-%m-%d '%s %Y-%m-%d' %H:%M; do
+    want="$(date -r 1700000000 "+$fmt" 2>/dev/null || date -d @1700000000 "+$fmt")"
+    ( unset AGENTS_TESTING; _agents_strftime got "$fmt" 1700000000; [[ "$got" == "$want" ]] ) || fail "strftime $fmt for an epoch"
+    ( AGENTS_TESTING=1; _agents_strftime got "$fmt" 1700000000; [[ "$got" == "$want" ]] ) || fail "strftime $fmt through date"
+done
+( unset AGENTS_TESTING _AGENTS_CLOCK; _agents_strftime got %s; t="$(date +%s)"; [[ $((t - got)) -le 1 && $((t - got)) -ge 0 ]] ) || fail "strftime now"
+pass "clock formats: bash's strftime and date agree"
+
 # 2b. The config file: read as KEY=value, never sourced; allowlisted keys,
 #     validated values, quotes and trailing comments stripped, env wins.
 conf="$tmp/agents.conf"

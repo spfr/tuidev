@@ -10,9 +10,10 @@
 #   a lock's or a state file's holder.
 # Public: _AGENTS_TOKEN_RE, _agents_token, _agents_awk, _agents_awk_eval,
 #   agents_parse_duration, _agents_window, _agents_now, _agents_clock,
-#   _agents_field, _agents_quote, _agents_timeout, _agents_bg, _agents_bg_wait,
-#   _agents_detach, _agents_lock, _agents_unlock, _agents_holder_check,
-#   _agents_mypid, _agents_stamp_age, _agents_replace, _agents_rm_if_same.
+#   _agents_strftime, _agents_field, _agents_quote, _agents_timeout, _agents_bg,
+#   _agents_bg_wait, _agents_detach, _agents_lock, _agents_unlock,
+#   _agents_holder_check, _agents_mypid, _agents_stamp_age, _agents_replace,
+#   _agents_rm_if_same.
 
 # A process named across time: PID@START, START being its start time as
 # snapshot.sh records it (ps's lstart, spaces as underscores), so a pid
@@ -72,9 +73,11 @@ _agents_window() {
     local z secs
     if [[ "${2:-}" =~ ^[0-9]+$ ]]; then
         now=$2
-        z="$(date -d "@$now" +%z 2>/dev/null || date -r "$now" +%z 2>/dev/null || date +%z)"
+        _agents_strftime z %z "$now"
+        [[ -n "$z" ]] || z="$(date +%z)"
     else
-        read -r now z <<<"$(date '+%s %z')"
+        _agents_strftime z '%s %z'
+        read -r now z <<<"$z"
     fi
     off=0
     if [[ "$z" =~ ^([+-])([0-9][0-9])([0-9][0-9])$ ]]; then
@@ -295,7 +298,27 @@ _agents_rm_if_same() {
 _agents_now() {
     local t="${_AGENTS_CLOCK:-}"
     [[ -n "$t" || -z "${AGENTS_TESTING:-}" ]] || t="${AGENTS_NOW:-}"
-    printf -v "$1" '%s' "${t:-$(date +%s)}"
+    [[ -n "$t" ]] || _agents_strftime t %s
+    printf -v "$1" '%s' "$t"
+}
+
+# _agents_strftime VAR FORMAT [EPOCH] — set VAR to what `date +FORMAT` prints
+# for EPOCH (default: now). bash 4.2+ formats it itself (printf %()T, the same
+# strftime), with no date process: a menu refresh asked date six times. Else,
+# and under the test harness (AGENTS_TESTING: its tests stop the clock with
+# a date function), date: -d @EPOCH on GNU and BusyBox, -r on BSD.
+_agents_strftime() {
+    if [[ -z "${AGENTS_TESTING:-}" ]] && (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 2) )); then
+        printf -v "$1" "%($2)T" "${3:--1}"
+        return 0
+    fi
+    local _d
+    if [[ -n "${3:-}" ]]; then
+        _d="$(date -d "@$3" "+$2" 2>/dev/null || date -r "$3" "+$2" 2>/dev/null)"
+    else
+        _d="$(date "+$2")"
+    fi
+    printf -v "$1" '%s' "$_d"
 }
 
 # _agents_quote WORD — WORD as one single-quoted /bin/sh word.
