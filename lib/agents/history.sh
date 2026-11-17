@@ -25,7 +25,9 @@
 # waits.now, waits.today), scans the transcripts for tokens
 # (tokens.sh; a failure there never stops the sample), updates the run
 # ledger (runs.sh; a failure there never makes the next sample count history
-# twice) and then the menu's top insight (report.sh: insight.txt).
+# twice) and then the menu's top insight (report.sh: insight.txt). A sample
+# that finds nothing going on (_agents_sample_quiet) writes the stamp and the
+# baseline only; the history keeps a gap, which every reader takes for idle.
 #
 # Uses: config.sh, util.sh, snapshot.sh (_agents_herdr, _agents_herdr_panes),
 #   classify.sh, events.sh (the data directory and the events lock), runs.sh (the run
@@ -59,6 +61,15 @@ _agents_sample_locked() {
     ps="$(agents_snapshot)"
     [[ -n "$ps" ]] || { echo "agents: cannot read the process table (is ps blocked by a sandbox?)" >&2; return 1; }
     recs="$(printf '%s\n' "$ps" | AGENTS_JOBS_PROC=1 agents_classify "" "$(_agents_keep_pids "$ps")")"
+    # What the menu saw since the last sample (runs.sh), oldest first.
+    _agents_runs_take "$now"
+    # Nothing happened: no agent, no stale tree, no command running, nothing
+    # to read: the stamp is written (above) and the rest is skipped.
+    if _agents_sample_quiet "$recs" "$now"; then
+        _agents_replace "$dir/sample.state" "$now"
+        _agents_history_prune "$now" "$day"
+        return 0
+    fi
     set --
     while IFS=$'\t' read -r type pid kind rest; do
         case "$type" in
@@ -71,8 +82,6 @@ _agents_sample_locked() {
     # session's own pane (_agents_herdr_panes): what waits count.
     herdr="$(_agents_herdr sync)"
     enr="$(printf '%s\n' "$recs" | agents_enrich "$paths" "$herdr" "" "$(_agents_herdr_panes "$herdr" "$recs")")"
-    # What the menu saw since the last sample (runs.sh), oldest first.
-    _agents_runs_take "$now"
     [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || feed="$(cat "${_AGENTS_RUNS_FED[@]}" 2>/dev/null)"
     { printf '%s\n' "$enr"; printf '%s\n' "$recs"; [[ -z "$feed" ]] || printf '%s\n' "$feed"; } \
         | _agents_sample_rows "$now" "$day" "$dir" >> "$dir/history.tsv" || return 1
@@ -98,6 +107,29 @@ _agents_sample_locked() {
     _agents_history_prune "$now" "$day"
     # The menu's top insight, from the ledger this sample just updated.
     agents_insight_write || true
+}
+
+# _agents_sample_quiet RECORDS NOW — true when a sample would find nothing to
+# record: RECORDS (the classified snapshot) hold no agent, stale tree or
+# command process; the menu fed no observations (_AGENTS_RUNS_FED); the run
+# ledger has no open run to close; no hook wait is open or just ended to
+# credit; waits.now holds no session; and no transcript or Grok session
+# changed since the last scan, with none of the recent ones still waiting out
+# the quiet time that counts its last message (tokens.sh:
+# _agents_tokens_idle). The skipped sample would have appended nothing, so a
+# gap in history.tsv, which every reader takes for idle, says the same;
+# sample.state keeps only its epoch (the baseline the next sample's waits and
+# new processes count from), exactly as a full one would have written it.
+# Whatever is in doubt (a missing file: a first sample) says false.
+_agents_sample_quiet() {
+    local dir="$AGENTS_DATA_DIR" f
+    case $'\n'"$1" in
+        *$'\n'agent$'\t'*|*$'\n'stale$'\t'*|*$'\n'jp$'\t'*) return 1 ;;
+    esac
+    [[ ${#_AGENTS_RUNS_FED[@]} -eq 0 ]] || return 1
+    [[ -f "$dir/sample.state" && -f "$dir/waits.now" && ! -s "$dir/waits.now" && ! -s "$dir/runs.state" ]] || return 1
+    for f in "$dir"/waiting/* "$dir"/waited/*; do [[ ! -e "$f" ]] || return 1; done
+    _agents_tokens_idle "$2"
 }
 
 # _agents_sample_rows NOW DAY DIR < ENRICHED_AND_JP_RECORDS [RUNP_LINES] — the
