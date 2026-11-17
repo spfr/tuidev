@@ -114,8 +114,12 @@ done <<'EOF'
 0 1 -1 60|10|a working session nothing reports on (codex outside Herdr)
 0 0 30 60|31|a keep-awake that ends in 30 s: just after it
 0 0 0 60|2|a countdown ending now: 2 s at the soonest
-0 0 59 60|0|a countdown that ends with the backstop: the backstop
-0 0 300 60|0|a countdown past the backstop: the backstop
+0 0 59 60|60|a countdown ending just inside the backstop: its own refresh, at the backstop
+0 0 60 60|60|a countdown ending with the backstop: its own refresh all the same
+0 0 61 60|0|a countdown past the backstop: the timer (a later run asks for its end)
+0 0 300 60|0|a countdown well past the backstop: the timer
+0 0 1800 3600|1801|an hour's backstop, a countdown in half an hour: just after it
+1 1 5 10|6|a 10 s backstop, a countdown in 5 s: just after it
 1 0 3 60|4|a countdown before the next fast refresh
 1 0 30 60|10|a live command with a countdown later
 1 1 -1 10|0|a 10 s backstop is already as fast
@@ -224,6 +228,27 @@ for _ in $(seq 40); do grep -q '^bar poke$' "$M/calls" 2>/dev/null && break; sle
 [[ "$(grep -c '^bar poke$' "$M/calls")" == 1 ]] || fail "the sooner early refresh did not poke"
 printf '%s %s\n' "$((now + 100))" other > "$R/bar.next"   # what the 10 s sleeper finds when it wakes
 pass "early refresh: one pending at a time (bar.next), a sooner one replaces a later one, its sleeper pokes once and never holds the menu's output"
+
+# Keep-awake or lid sleep on: never the idle mark, so the timed runs stay full
+# and the cup and its countdown go when it ends (not up to BAR_IDLE_MAX later).
+# A countdown past the backstop leaves its end to the timer; one ending within
+# it gets its own refresh.
+for row in $'awake\ttimed\t123\t+90' $'awake\ton\t123\t0' $'lid\ton\t123\t+90\t28800'; do
+    idle_tsv; now="$(date +%s)"
+    r="${row//+90/$((now + 90))}"; printf '%s\n' "$r" >> "$M/tsv"
+    rm -f "$M/calls" "$R/bar.next" "$M/cache/last.idle"
+    mbar SWIFTBAR_PLUGIN_REFRESH_REASON=URLScheme
+    [[ ! -e "$M/cache/last.idle" ]] || fail "a full run with '$row' wrote the idle mark"
+    [[ ! -e "$R/bar.next" ]] || fail "a full run with '$row' (ending past the backstop) asked for an early refresh: $(cat "$R/bar.next")"
+    mbar; [[ "$(calls)" == 2 ]] || fail "a timed run took the idle fast path with '$row'"
+done
+idle_tsv; now="$(date +%s)"; printf 'awake\ttimed\t123\t%s\n' "$((now + 59))" >> "$M/tsv"
+rm -f "$R/bar.next"; mbar SWIFTBAR_PLUGIN_REFRESH_REASON=URLScheme
+read -r due tok < "$R/bar.next" || fail "no early refresh for a keep-awake ending 59 s out (the backstop is 60 s)"
+[[ $((due - now)) -ge 59 && $((due - now)) -le 61 ]] || fail "a keep-awake ending 59 s out: early refresh in $((due - now)) s"
+printf '%s %s\n' "$((now + 100))" other > "$R/bar.next"   # its sleeper stays quiet
+idle_tsv; mbar SWIFTBAR_PLUGIN_REFRESH_REASON=URLScheme; [[ -e "$M/cache/last.idle" ]] || fail "keep-awake off again, no idle mark"
+pass "keep-awake or lid sleep on: no idle mark (timed runs stay full); a countdown ending inside the backstop gets its own refresh"
 
 # bar.alive: SwiftBar's pid, found through a shell wrapper too; nothing by hand.
 rm -f "$R/bar.alive"

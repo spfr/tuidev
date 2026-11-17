@@ -43,9 +43,10 @@
 #     a run asks for the next one in 10 s itself (bar_next_in); a keep-awake
 #     countdown, at its end.
 #   - Idle: on the timer, a backstop (1m). When the last full run found
-#     nothing going on (no session, command, stale process, hog or warning) and
-#     nothing has poked since, a timed run up to 5 minutes later prints that
-#     output again without asking `agents` anything (the idle fast path).
+#     nothing going on (no session, command, stale process, hog, warning,
+#     keep-awake or lid sleep) and nothing has poked since, a timed run up to
+#     5 minutes later prints that output again without asking `agents`
+#     anything (the idle fast path).
 #   - Open: the timer reads what this machine alone can tell, and asks no other
 #     machine for anything. When you open the menu (refreshOnOpen: SwiftBar
 #     runs the plugin first, and waits for it) it prints its last output at
@@ -1910,17 +1911,22 @@ bar_secs() {
 #   UNHOOKED  working sessions nothing reports on (no hooks, not in a Herdr
 #             pane: Codex, agy, grok): BAR_FAST, to see them finish
 #   ENDS_IN   seconds until a keep-awake or lid countdown ends, -1 for none:
-#             then (the title's cup goes with it)
-#   BACKSTOP  the timer's interval in seconds: nothing sooner than it is asked
-#             for. A hog's streak needs no more: it is read every 30 s at best.
+#             then (the title's cup goes with it), when that is within the
+#             backstop (min(ENDS_IN + 1, BACKSTOP)); a later one is the timer's
+#   BACKSTOP  the timer's interval in seconds: no fast refresh it already
+#             matches is asked for. A hog's streak needs no more: it is read
+#             every 30 s at best.
 bar_next_in() {
     local n=0 e
     [[ $1 -eq 0 && $2 -eq 0 ]] || n=$BAR_FAST
-    if [[ $3 -ge 0 ]]; then
+    [[ $n -lt $4 ]] || n=0
+    # A countdown ending within the backstop gets its own refresh, at its end
+    # (the backstop's at the latest): the timer alone may come just before it.
+    if [[ $3 -ge 0 && $3 -le $4 ]]; then
         e=$(($3 + 1)); [[ $e -ge 2 ]] || e=2
+        [[ $e -le $4 ]] || e=$4
         [[ $n -gt 0 && $n -le $e ]] || n=$e
     fi
-    [[ $n -lt $4 ]] || n=0
     REPLY=$n
 }
 # bar_schedule SECS — the next refresh in SECS: a detached sleep, then `agents
@@ -1969,9 +1975,11 @@ fi
 # output again (the idle fast path). Not with a session (a daemon is none), a
 # live command, a run the ledger has open or a reading of one waiting for the
 # sample, a stale process, a hog or a hot streak toward one, a warning in the
-# title, or an earlier refresh asked for.
+# title, an earlier refresh asked for, or keep-awake or lid sleep on (the cup
+# and its countdown must go when it ends, not up to BAR_IDLE_MAX later).
 f="${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}/runs.state"
 if [[ $n_agents -eq 0 && $n_tools -eq 0 && $n_stale -eq 0 && $n_hogs -eq 0 && -z "$attention" && $next -eq 0 \
+      && $ends -lt 0 && "$awake_mode" == off && "$lid_state" == off \
       && ! -s "$f" && ! -s "$BAR_RUN/hog.state" ]]; then
     BAR_IDLE="$NOW_S"
     for f in "$BAR_RUN"/runs.feed/*; do [[ ! -e "$f" ]] || BAR_IDLE=""; break; done
