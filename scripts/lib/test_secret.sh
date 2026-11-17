@@ -71,6 +71,7 @@ op() {
     while (( $# )); do
         case "$1" in
             -a) a="$2"; shift 2 ;; -s) s="$2"; shift 2 ;; -X) x="$2"; shift 2 ;;
+            -l) printf '%s\n' "$2" >> "$FAKE_DIR/labels"; shift 2 ;; -D) printf '%s\n' "$2" >> "$FAKE_DIR/kinds"; shift 2 ;;
             -w) w=true; shift ;; *) shift ;;
         esac
     done
@@ -308,6 +309,8 @@ pass "names are validated everywhere (hostile ones exit 2, nothing runs)"
 set_value K1 < <(printf 'tuidev-hex:zz\n')
 [[ "$(cat "$FAKE_DIR/keychain/tuidev.K1")" == tuidev-hex:* && "$(got K1)" == 'tuidev-hex:zz' ]] || fail "prefix collision"
 [[ "$(cat "$FAKE_DIR/keychain/tuidev.A1")" == abc ]] || fail "a plain ASCII value is stored as is"
+# In Keychain Access an item is listed under its own name, with the kind "secret".
+grep -qx A1 "$FAKE_DIR/labels" && [[ "$(sort -u "$FAKE_DIR/kinds")" == secret ]] || fail "keychain items are not labelled with their name: $(cat "$FAKE_DIR/labels" 2>&1 | head -3)"
 FAKE_FAIL_PUT=K2 ; export FAKE_FAIL_PUT
 set_value K2 < <(printf 'never\n')
 [[ $rc -eq 1 ]] && grep -q 'not stored correctly' "$tmp/err" || fail "a failed Keychain write went unnoticed (rc=$rc): $(err)"

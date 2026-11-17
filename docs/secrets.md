@@ -23,7 +23,7 @@ An `export NPM_TOKEN=...` line in `~/.zshrc`:
 | `secret scan [FILE...]` | Lists token-looking literal exports as `FILE:LINE: NAME`, never the value. Exit 1 on a hit. Default files: `~/.zshrc`, `~/.zshrc.local`, `~/.zprofile`, `~/.zshenv`, `~/.bashrc`, `~/.bash_profile`, `~/.profile`, `~/.config/zsh/*.zsh`. |
 | `secret import [--dry-run] [--remove] FILE [NAME...]` | Stores FILE's literal `NAME=value` lines (the ones `scan` flags, or the NAMEs given). It lists names and line numbers first. `--remove` then replaces each line with a comment, after writing `FILE.secret-backup-<time>` (mode 600) with the values taken out. `--dry-run` only lists. |
 
-**Stores**, picked in this order: the macOS login Keychain (generic passwords, service `tuidev`, account NAME); libsecret through `secret-tool` when a desktop session bus is running (GNOME Keyring, KWallet); `pass` (entries `tuidev/NAME`). With none, `secret` says what to install and exits 3; it never writes a plaintext file. `TUIDEV_SECRET_BACKEND=keychain|secret-tool|pass` picks one.
+**Stores**, picked in this order: the macOS login Keychain (generic passwords, service `tuidev`, account NAME; Keychain Access lists each under its own name, kind `secret`); libsecret through `secret-tool` when a desktop session bus is running (GNOME Keyring, KWallet); `pass` (entries `tuidev/NAME`). With none, `secret` says what to install and exits 3; it never writes a plaintext file. `TUIDEV_SECRET_BACKEND=keychain|secret-tool|pass` picks one.
 
 **Names** are shell variable names (`[A-Za-z_][A-Za-z0-9_]*`). **A value is one line**: one trailing `\n`, `\r\n` or `\r` is dropped, and a value with a newline or NUL inside is refused. Any other byte is kept as is.
 
