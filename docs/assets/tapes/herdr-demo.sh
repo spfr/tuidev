@@ -20,7 +20,10 @@ cmd="${1:-}" home="${2:-}"
 [[ -n "$cmd" && -n "$home" ]] || { echo "usage: herdr-demo.sh up|env|down HOME" >&2; exit 2; }
 tapes="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$tapes/../../.." && pwd)"
-MACHINES=(devbox workbox)
+# The machines' names: devbox and workbox, or TUIDEV_DEMO_MACHINES (two
+# names; remote-demo.sh picks its own).
+read -r -a MACHINES <<<"${TUIDEV_DEMO_MACHINES:-devbox workbox}"
+[[ ${#MACHINES[@]} -eq 2 ]] || { echo "herdr-demo: TUIDEV_DEMO_MACHINES needs two names" >&2; exit 2; }
 PREFIX=tuidev-demo-
 
 die() { echo "herdr-demo: $*" >&2; exit 1; }
@@ -81,10 +84,12 @@ ctr() {
 
 # The environment every demo Herdr process gets: nothing inherited from a
 # Herdr pane this may run in (HERDR_ENV, HERDR_SOCKET_PATH, ...), the demo
-# HOME, and the ssh wrapper first on PATH.
+# HOME, and the ssh wrapper first on PATH. AGENTS_MAP_ROOT keeps `agents map`
+# (remote-demo.sh; a plugin's popup gets the server's environment) to what
+# runs under the demo home.
 demo_env() {
     printf '%s\n' "HOME=$home" "USER=dev" "LOGNAME=dev" "SHELL=/bin/bash" "TERM=${TERM:-xterm-256color}" \
-        "LANG=en_US.UTF-8" "BASH_SILENCE_DEPRECATION_WARNING=1" \
+        "LANG=en_US.UTF-8" "BASH_SILENCE_DEPRECATION_WARNING=1" "AGENTS_MAP_ROOT=$home" \
         "PATH=$home/.demo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 }
 run_demo() { local e=() l; while IFS= read -r l; do e+=("$l"); done < <(demo_env); env -i "${e[@]}" "$@"; }
@@ -154,6 +159,9 @@ EOF
 exec /usr/bin/ssh -F "$home/.ssh/config" "\$@"
 EOF
     chmod 755 "$home/.demo/bin/ssh"
+    # Herdr itself, wherever this machine has it (the pack puts it in
+    # ~/.local/bin, which the demo's PATH leaves out with the rest of HOME).
+    ln -sf "$(command -v herdr || die "needs herdr (./install.sh --pack herdr)")" "$home/.demo/bin/herdr"
     ln -sf "$tapes/herdr/demo-agent.sh" "$home/.demo/bin/demo-agent"
 
     # Wait for sshd, and record each host key on first contact.
@@ -181,7 +189,9 @@ EOF
     while IFS= read -r l; do e+=("$l"); done < <(demo_env)
     (cd "$home" && exec env -i "${e[@]}" herdr server > "$home/.demo/herdr-server.out" 2>&1 < /dev/null) &
     local tries=0
-    until herdr_demo status 2>/dev/null | grep -q 'status: running'; do
+    # (Not `| grep -q`: grep leaving early ends herdr with SIGPIPE, which
+    # pipefail counts as a failure however the status read.)
+    until [[ "$(herdr_demo status 2>/dev/null)" == *"status: running"* ]]; do
         tries=$((tries + 1)); [[ $tries -lt 30 ]] || die "the local Herdr server did not start"; sleep 0.5
     done
     for m in "${MACHINES[@]}"; do
@@ -190,12 +200,16 @@ EOF
     done
 
     # Workspaces and stand-ins: LABEL DIR (in that machine's home) KIND SCENARIO.
-    populate "" myapp myapp claude tests
-    populate "" web web codex review
-    populate devbox api api claude approve
-    populate devbox api-docs api claude review
-    populate workbox infra infra codex deploy
-    populate workbox api-tests api claude tests
+    # TUIDEV_DEMO_NO_POPULATE=1 leaves the fleet empty, for a caller with its
+    # own cast (remote-demo.sh).
+    if [[ -z "${TUIDEV_DEMO_NO_POPULATE:-}" ]]; then
+        populate "" myapp myapp claude tests
+        populate "" web web codex review
+        populate "${MACHINES[0]}" api api claude approve
+        populate "${MACHINES[0]}" api-docs api claude review
+        populate "${MACHINES[1]}" infra infra codex deploy
+        populate "${MACHINES[1]}" api-tests api claude tests
+    fi
     # A new remote server opens with an empty "~" workspace; drop it.
     for m in "${MACHINES[@]}"; do
         herdr_demo --machine "$m" workspace list \

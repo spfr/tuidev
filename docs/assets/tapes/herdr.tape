@@ -10,7 +10,9 @@ Set FontSize 15
 Set Framerate 10
 
 Hide
-Type `eval "$(bash docs/assets/tapes/herdr-demo.sh env "$DEMO_HOME")" && cd ~ && PS1='\[\e[1;36m\]\w\[\e[0m\] \[\e[1;32m\]❯\[\e[0m\] ' && clear`
+# (A prompt with no path in it: `cd ~` on the line that sets HOME still goes
+# to the home of whoever renders this, and the prompt then names it.)
+Type `eval "$(bash docs/assets/tapes/herdr-demo.sh env "$DEMO_HOME")" && builtin cd "$HOME" && PS1='\[\e[1;32m\]❯\[\e[0m\] ' && clear`
 Enter
 Sleep 1s
 Show
