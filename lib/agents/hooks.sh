@@ -22,6 +22,10 @@
 # agents_kill_tokens (start-time pinned, refusals, SIGTERM then SIGKILL).
 # Always exits 0; prints nothing unless it is a dry run.
 #
+# Each of them that changes what the menu bar shows asks it to refresh
+# (agents_bar_poke, bar.sh: nothing where SwiftBar doesn't run the plugin):
+# subagent-stop, wait-start, and a wait-end that ended a wait.
+#
 # `agents hook wait-start|wait-end` note when a Claude Code session outside
 # Herdr waits on you, for waits.tsv (see Waits below); session-end also
 # ends the wait of the session /clear or /resume left. wait-start runs from
@@ -31,7 +35,8 @@
 # Uses: config.sh (AGENTS_HOOK_REAP, AGENTS_HOOK_LOG, _AGENTS_HOOK_DRY,
 #   AGENTS_HISTORY, AGENTS_DATA_DIR), util.sh, snapshot.sh, classify.sh
 #   (agents_project), kill.sh (agents_kill_tokens), events.sh
-#   (agents_event, _agents_data_dir), notify.sh, where.sh (agents_root_of:
+#   (agents_event, _agents_data_dir), notify.sh, bar.sh (agents_bar_poke),
+#   where.sh (agents_root_of:
 #   the session a click goes to, and a wait's session), transcript.sh (the
 #   transcript reads); awk/hook_claude.awk, awk/hook_children.awk,
 #   awk/hook_match.awk.
@@ -335,6 +340,7 @@ _agents_hook_wait_end() {
         if [[ $end -lt $now ]]; then echo "agents hook: the wait ended when the tool started, $(( now - end ))s ago"; else echo "agents hook: the wait ends"; fi
         return 0
     fi
+    _AGENTS_HOOK_ENDED=1
     if [[ "$AGENTS_HISTORY" != 1 ]]; then rm -f "$dir/waiting/$sid"; return 0; fi
     ( umask 077; mkdir -p "$dir/waited" && mv -f "$dir/waiting/$sid" "$dir/waited/$sid@$end" ) 2>/dev/null
     return 0
@@ -347,9 +353,17 @@ _agents_hook_wait_end() {
 agents_hook() {
     local _AGENTS_HL_AID=- _AGENTS_HL_HB=- _AGENTS_HL_TASKS=0 _AGENTS_HL_MATCHED=0
     local _AGENTS_HOOK_DRY="$_AGENTS_HOOK_DRY"   # -n lasts for this call only
+    local _AGENTS_HOOK_ENDED=""                  # set by a wait-end that ended a wait
     _agents_hook_run "$@"
     # hooks.log is about cleanups; the wait hooks run at every tool call.
     case "${1:-}" in wait-*) ;; *) _agents_hook_log "${1:-}" ;; esac
+    # The menu bar shows what changed (session-end's hook entry pokes on its own).
+    if [[ "$_AGENTS_HOOK_DRY" != true ]]; then
+        case "${1:-}" in
+            subagent-stop|wait-start) agents_bar_poke ;;
+            wait-end) [[ -z "$_AGENTS_HOOK_ENDED" ]] || agents_bar_poke ;;
+        esac
+    fi
     return 0
 }
 

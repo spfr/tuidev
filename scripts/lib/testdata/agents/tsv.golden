@@ -299,7 +299,7 @@ conf	AGENTS_BAR_TITLE	triage awake
 conf	AGENTS_BAR_SECTIONS	needs review running parked limits today stale hogs machines awake system
 conf	AGENTS_BAR_ICON	terminal
 conf	AGENTS_BAR_TOP	3
-conf	AGENTS_BAR_REFRESH	10s
+conf	AGENTS_BAR_REFRESH	1m
 conf	AGENTS_LID	1
 conf	AGENTS_CONF	@TMP@/none.conf
 conf	AGENTS_AUTO_REAP	0

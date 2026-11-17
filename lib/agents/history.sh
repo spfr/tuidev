@@ -253,13 +253,14 @@ _agents_prune_file() {
 }
 
 # _agents_sample_due [NOW] — true when history is on and the last sample is a
-# minute old or more.
+# minute old or more (_AGENTS_MINUTE_DUE: 55 s, so the menu's 60 s timer
+# samples on every refresh, not every other).
 _agents_sample_due() {
     [[ "$AGENTS_HISTORY" == 1 ]] || return 1
     local now="${1:-}" age
     [[ -n "$now" ]] || now="$(date +%s)"
     _agents_stamp_age age "$AGENTS_DATA_DIR/sample.stamp" "$now"
-    [[ $age -ge 60 ]]
+    [[ $age -ge $_AGENTS_MINUTE_DUE ]]
 }
 
 # _agents_sample_kick — sample in the background when one is due (agents watch).

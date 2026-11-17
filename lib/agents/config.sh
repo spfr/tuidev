@@ -257,7 +257,9 @@ AGENTS_HERDR_NAMES="${AGENTS_HERDR_NAMES:-1}"
 _agents_env_check AGENTS_HERDR_NAMES 1
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
-AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-10s}"
+# The menu bar's backstop timer: it refreshes when something changes
+# (`agents bar poke`, bar.sh), sooner while a command runs, and else this often.
+AGENTS_BAR_REFRESH="${AGENTS_BAR_REFRESH:-1m}"
 AGENTS_RUN_DIR="${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}"
 # History: data, not config, so under XDG_STATE_HOME.
 AGENTS_DATA_DIR="${AGENTS_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/tuidev/agents}"

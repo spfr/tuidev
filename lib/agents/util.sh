@@ -12,7 +12,7 @@
 #   agents_parse_duration, _agents_window, _agents_now, _agents_clock,
 #   _agents_strftime, _agents_field, _agents_quote, _agents_timeout, _agents_bg,
 #   _agents_bg_wait, _agents_detach, _agents_lock, _agents_unlock,
-#   _agents_holder_check, _agents_mypid, _agents_stamp_age, _agents_replace,
+#   _agents_holder_check, _agents_mypid, _AGENTS_MINUTE_DUE, _agents_stamp_age, _agents_replace,
 #   _agents_rm_if_same.
 
 # A process named across time: PID@START, START being its start time as
@@ -256,6 +256,12 @@ _agents_mypid() {
         printf -v "$1" '%s' "$(exec sh -c 'echo "$PPID"')"
     fi
 }
+
+# _AGENTS_MINUTE_DUE — when a once-a-minute job (agents sample, auto-reap) is
+# due again: 55 s after the last. The menu bar's backstop is a 60 s timer, and
+# its whole-second clock reads land either side of the minute: at 60 a job
+# would wait for every other refresh.
+_AGENTS_MINUTE_DUE=55
 
 # _agents_stamp_age VAR FILE NOW — set VAR to the seconds from the epoch on
 # FILE's first line to NOW; NOW itself when FILE is missing or damaged (the
