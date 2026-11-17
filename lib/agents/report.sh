@@ -141,9 +141,10 @@ _agents_insight_line() {
 #   tokens TOTAL CACHE_PCT  when its day is today; nothing otherwise.
 _agents_tokens_line() {
     [[ "$AGENTS_HISTORY" == 1 && -r "$AGENTS_DATA_DIR/tokens.today" ]] || return 0
-    local d="" tot="" tin="" tcw="" tcr="" inputs hit=0
+    local d="" tot="" tin="" tcw="" tcr="" inputs hit=0 today
     IFS=$'\t' read -r d tot tin tcw tcr _ < "$AGENTS_DATA_DIR/tokens.today"
-    [[ "$d" == "$(date +%Y-%m-%d)" && "$tot" =~ ^[0-9]{1,15}$ && "$tin" =~ ^[0-9]{1,15}$ \
+    _agents_strftime today %Y-%m-%d
+    [[ "$d" == "$today" &&"$tot" =~ ^[0-9]{1,15}$ && "$tin" =~ ^[0-9]{1,15}$ \
        && "$tcw" =~ ^[0-9]{1,15}$ && "$tcr" =~ ^[0-9]{1,15}$ ]] || return 0
     inputs=$((10#$tin + 10#$tcw + 10#$tcr))
     # (bash 3.2 evaluates both arms of ?:, so no division in one.)

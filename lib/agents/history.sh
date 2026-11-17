@@ -276,7 +276,8 @@ _agents_sample_kick() {
 _agents_hist_line() {
     local now day d="" tot=0 top="-" tops=0 state=ok
     if [[ "$AGENTS_HISTORY" != 1 ]]; then printf 'hist\toff\t0\t-\t0\n'; return 0; fi
-    read -r now day <<<"$(date '+%s %Y-%m-%d')"
+    _agents_strftime day '%s %Y-%m-%d'
+    read -r now day <<<"$day"
     if [[ -r "$AGENTS_DATA_DIR/today.tsv" ]]; then
         { IFS=$'\t' read -r d tot; IFS=$'\t' read -r top tops; } < "$AGENTS_DATA_DIR/today.tsv"
     fi

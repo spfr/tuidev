@@ -42,6 +42,15 @@ pass "ps time/etime parse, including DD-HH:MM:SS and fractional seconds"
 ! agents_parse_duration 2x >/dev/null          || fail "unknown unit accepted"
 pass "durations parse (30m, 2h, 1h30m) and bad ones are rejected"
 
+# Clock formats: bash's own strftime where it has one, date otherwise; the same text.
+for fmt in '%s %z' %Y-%m-%d '%s %Y-%m-%d' %H:%M; do
+    want="$(date -r 1700000000 "+$fmt" 2>/dev/null || date -d @1700000000 "+$fmt")"
+    ( unset AGENTS_TESTING; _agents_strftime got "$fmt" 1700000000; [[ "$got" == "$want" ]] ) || fail "strftime $fmt for an epoch"
+    ( AGENTS_TESTING=1; _agents_strftime got "$fmt" 1700000000; [[ "$got" == "$want" ]] ) || fail "strftime $fmt through date"
+done
+( unset AGENTS_TESTING _AGENTS_CLOCK; _agents_strftime got %s; t="$(date +%s)"; [[ $((t - got)) -le 1 && $((t - got)) -ge 0 ]] ) || fail "strftime now"
+pass "clock formats: bash's strftime and date agree"
+
 # 2b. The config file: read as KEY=value, never sourced; allowlisted keys,
 #     validated values, quotes and trailing comments stripped, env wins.
 conf="$tmp/agents.conf"
@@ -195,6 +204,50 @@ efield() { printf '%s\n' "$enriched" | awk -F '\t' -v t="$1" -v p="$2" -v c="$3"
 [[ "$(efield agent 84091 12)" == - ]]       || fail "Herdr status attached to the wrong session"
 pass "orphaned dev servers are stale only with a cwd under \$HOME; Herdr status matches by cwd"
 
+# The listener plan: the processes whose ports no record can show (apps,
+# system services, other users' processes) are named for the next lsof to
+# leave out; leaving them out changes no record; one left out that may matter
+# now (a reused pid) is named to ask about again.
+plan="$(printf '%s\n' "$fixture" | AGENTS_LISTEN_PLAN=1 agents_classify "$listen" "8800")"
+[[ "${plan%$'\n'lplan$'\t'*}" == "$records" ]] || fail "the listener plan changed the records"
+lplan="${plan##*$'\n'}"
+[[ "$lplan" == lplan$'\t-\t'* ]] || fail "plan line: $lplan"
+lskip=" ${lplan##*$'\t'} "
+for p in 3975 41198 48170 4200 4400 4500 606 710; do [[ "$lskip" == *" $p "* ]] || fail "plan does not leave out $p:$lskip"; done
+for p in 90419 22443 90466 60829 60831 27681 4100 4300 61904 197 84091 510; do [[ "$lskip" != *" $p "* ]] || fail "plan leaves out $p, whose ports may show"; done
+lfew="$(printf '%s\n' "$listen" | awk -v s="$lskip" 'index(s, " " $1 " ") == 0')"
+[[ "$(printf '%s\n' "$fixture" | agents_classify "$lfew" "8800")" == "$records" ]] || fail "leaving out the planned pids changed the records"
+plan="$(printf '%s\n' "$fixture" | AGENTS_LISTEN_PLAN=1 AGENTS_LISTEN_SKIP="4100 41198 22443 99999" agents_classify "$lfew" "8800")"
+[[ "${plan##*$'\n'}" == lplan$'\t22443,4100\t'* ]] || fail "relisten: ${plan##*$'\n'}"
+# agents_collect: the last run's plan goes to lsof; a pid in it that may
+# matter now is asked about again, so its ports still show; the new plan is kept.
+# shellcheck disable=SC2034,SC2317,SC2329  # read, and called, by agents_collect
+(
+    AGENTS_RUN_DIR="$tmp/lplan" AGENTS_TESTING=1 AGENTS_NOW=1000
+    lfix="$listen"   # agents_collect has a listen of its own
+    mkdir -p "$AGENTS_RUN_DIR"; printf '4100 41198\n' > "$AGENTS_RUN_DIR/listen.skip"
+    agents_snapshot() { printf '%s\n' "$fixture"; }
+    _agents_keep_pids() { echo 8800; }
+    _agents_cwds() { printf '4100\t%s\n' "$HOME/work/app"; }
+    _agents_listeners() {
+        printf '%s\n' "$*" >> "$AGENTS_RUN_DIR/calls"
+        case "${1:-}" in
+            --skip) printf '%s\n' "$lfix" | awk -v s=" $2 " 'index(s, " " $1 " ") == 0' ;;
+            --only) printf '%s\n' "$lfix" | awk -v s=",$2," 'index(s, "," $1 ",")' ;;
+            *) printf '%s\n' "$lfix" ;;
+        esac
+    }
+    out="$(agents_collect 2>/dev/null)"
+    [[ "$(printf '%s\n' "$out" | awk -F '\t' '$1 == "stale" && $2 == 4100 { print $10 }')" == 5173 ]] || fail "a relistened dev server lost its port: $out"
+    [[ "$(<"$AGENTS_RUN_DIR/calls")" == $'--skip 4100 41198\n--only 4100' ]] || fail "lsof calls: $(<"$AGENTS_RUN_DIR/calls")"
+    [[ "$out" != *lplan* && "$out" == *$'\nprobe\tlisten\tok' ]] || fail "the plan leaked, or the probe row moved: $out"
+    [[ " $(<"$AGENTS_RUN_DIR/listen.skip") " == "$lskip" ]] || fail "the next plan not kept: $(<"$AGENTS_RUN_DIR/listen.skip")"
+    printf '4100 x\n' > "$AGENTS_RUN_DIR/listen.skip"; : > "$AGENTS_RUN_DIR/calls"
+    agents_collect >/dev/null 2>&1
+    [[ "$(head -1 "$AGENTS_RUN_DIR/calls")" == "" ]] || fail "a damaged plan was used: $(<"$AGENTS_RUN_DIR/calls")"
+) || exit 1
+pass "listener plan: lsof leaves out what no record shows, asks again about a pid that may matter now"
+
 # Herdr: each session is the agent in its own pane (HERDR_PANE_ID), so two in
 # one directory get their own status and title; by directory only when the
 # pair is unique; never the pane another session claimed.
@@ -336,9 +389,21 @@ if ps -o pid= -p $$ >/dev/null 2>&1; then
     hp=$!
     sleep 0.3
     got="$(_agents_pane_env "$hp" 1)"
+    # Kept per PID@START: a known token is answered from the cache, a token
+    # for another start (a reused pid) is asked about again.
+    if [[ ! -r /proc/self/environ ]]; then
+        ( AGENTS_RUN_DIR="$tmp/panes"; mkdir -p "$AGENTS_RUN_DIR"
+          hs="$(_agents_start "$hp")"
+          [[ "$(_AGENTS_PANE_TOKENS=" $hp@$hs" _agents_pane_env "$hp" 1)" == "$hp"$'\t'"wT:p9" ]] || fail "pane id with a token"
+          [[ "$(<"$AGENTS_RUN_DIR/pane.env")" == "$hp@$hs"$'\t'"wT:p9" ]] || fail "pane cache: $(<"$AGENTS_RUN_DIR/pane.env")"
+          printf '%s\t%s\n%s\t-\n' "$hp@$hs" wT:p7 "1@x" > "$AGENTS_RUN_DIR/pane.env"
+          [[ "$(_AGENTS_PANE_TOKENS="1@x $hp@$hs" _agents_pane_env 1 "$hp")" == "$hp"$'\t'"wT:p7" ]] || fail "the pane cache was not used"
+          [[ "$(_AGENTS_PANE_TOKENS=" $hp@Mon_Jan__1_00:00:00_2024" _agents_pane_env "$hp")" == "$hp"$'\t'"wT:p9" ]] \
+              || fail "a cached pane served for another start" ) || exit 1
+    fi
     kill "$hp" 2>/dev/null; wait "$hp" 2>/dev/null || true
     [[ "$got" == "$hp"$'\t'"wT:p9" ]] || fail "pane id of a live process: '$got'"
-    pass "HERDR_PANE_ID is read from a process's environment, for the processes asked about only"
+    pass "HERDR_PANE_ID is read from a process's environment, for the processes asked about only; kept per PID@START"
 else
     echo "SKIP: ps unavailable here (sandbox?): the live pane-id test not run"
 fi
