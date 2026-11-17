@@ -20,6 +20,7 @@ live_pids=""
 cleanup() {
     local p
     for p in $live_pids; do kill "$p" 2>/dev/null || true; done
+    chmod -R u+w "$tmp" 2>/dev/null || true   # the unwritable run dir, on a failure
     rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -630,6 +631,35 @@ SHIP_JSON="$(event_json SessionEnd)" ship "$(jq -r '.[1].c' <<<"$se")"; waitran
 for e in UserPromptSubmit Stop SessionEnd; do
     [[ "$(jq -c ".hooks.$e" "$S")" == "$(jq -c ".hooks.$e" "$REPO_DIR/configs/claude/settings.linux.json")" ]] || fail "settings.linux.json: another $e hook"
 done
+# A run dir the hook cannot write (a session under sbx): the mark fails, and
+# the rest of the command still runs. A failed redirection on the special
+# builtin `:` exits a POSIX sh (macOS /bin/sh, dash), so the guard uses `true`.
+# HOME has a space in it; nothing is printed either way.
+SPH="$tmp/space home"; mkdir -p "$SPH/.local/bin" "$SPH/.config/tuidev/run" "$SPH/.local/state/tuidev/agents/waiting"
+printf '#!/bin/sh\necho "$@" >> "%s/ran"\ncat > /dev/null\nexit 3\n' "$SPH" > "$SPH/.local/bin/agents"; chmod +x "$SPH/.local/bin/agents"
+: > "$SPH/.config/tuidev/run/bar.alive"; : > "$SPH/.local/state/tuidev/agents/waiting/$sess"
+chmod 500 "$SPH/.config/tuidev/run"
+if ( : > "$SPH/.config/tuidev/run/probe" ) 2>/dev/null; then
+    rm -f "$SPH/.config/tuidev/run/probe"; echo "SKIP: a mode 500 directory is writable here (root): the unwritable run dir is not testable"
+else
+    for f in "$S" "$REPO_DIR/configs/claude/settings.linux.json"; do
+        for e in UserPromptSubmit Stop SessionEnd; do
+            c="$(jq -r ".hooks.${e}[] | .hooks[0].command | select(contains(\"bar poke\"))" "$f")"
+            [[ -n "$c" ]] || fail "${f##*/}: no poke guard on $e"
+            rm -f "$SPH/ran"
+            rc=0; printf '%s\n' "$(event_json "$e")" | env -i PATH=/usr/bin:/bin HOME="$SPH" /bin/sh -c "$c" > "$tmp/out" 2>&1 || rc=$?
+            for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q 'bar poke' "$SPH/ran" 2>/dev/null && break; sleep 0.1; done
+            [[ $rc -eq 0 && ! -s "$tmp/out" && ! -e "$SPH/.config/tuidev/run/bar.dirty" ]] \
+                || fail "${f##*/} $e, run dir not writable: rc $rc, printed $(cat "$tmp/out")"
+            case "$e" in
+                SessionEnd) grep -qx 'bar poke --settle' "$SPH/ran" || fail "${f##*/} $e, run dir not writable: ran $(cat "$SPH/ran" 2>/dev/null)" ;;
+                *) [[ "$(sort "$SPH/ran" | tr '\n' ' ')" == "bar poke hook wait-end " ]] \
+                       || fail "${f##*/} $e, run dir not writable: the rest of the command did not run (ran $(cat "$SPH/ran" 2>/dev/null))" ;;
+            esac
+        done
+    done
+fi
+chmod 700 "$SPH/.config/tuidev/run"
 # Declining costs builtins only: 2000 runs of the guard in one sh, no plugin
 # running, then inside a window, well under a millisecond each.
 rm -f "$BR"/bar.*
