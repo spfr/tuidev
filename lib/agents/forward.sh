@@ -258,7 +258,7 @@ _agents_forward_sweep() {
         [[ -n "$l" ]] || continue
         rec="$l"$'\t'"$lab"$'\t'"$tgt"$'\t'"$rp"$'\t'"$e"$'\t'"$k"
         case "$s" in
-            active) rm -f "$dir/f.$l.miss" ;;
+            active) [[ ! -e "$dir/f.$l.miss" ]] || rm -f "$dir/f.$l.miss" ;;   # no mark, no process
             dead)
                 [[ "$k" == asked ]] || continue
                 _agents_forward_still "$l" "$rec" dead || continue
@@ -364,7 +364,7 @@ agents_forward_open() {
 
 # _agents_forward_answered LPORT — something answered there just now (a
 # click's check, agents forward open's): the watcher's misses are forgotten.
-_agents_forward_answered() { rm -f "$AGENTS_RUN_DIR/forward/f.$1.miss"; }
+_agents_forward_answered() { [[ ! -e "$AGENTS_RUN_DIR/forward/f.$1.miss" ]] || rm -f "$AGENTS_RUN_DIR/forward/f.$1.miss"; }
 
 # _agents_forward_close_server LABEL RPORT — close every forward to that
 # machine's port (by its label alone: another machine's ssh target may be

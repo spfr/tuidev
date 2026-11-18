@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The link watcher's minute starts one process fewer for each forward that answers:** it no longer runs `rm` for a miss mark that is not there.
+
 ## [3.22.2] - 2026-11-17
 
 ### Added
