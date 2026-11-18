@@ -62,7 +62,7 @@ case "$1 $2" in
                     n=$(( $(cat "$FAKE/wait.n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE/wait.n"
                     [[ -f "$FAKE/wait.$n" ]] || exit 1
                     cat "$FAKE/wait.$n" ;;
-    "agent attach") echo "$*" >> "$FAKE/attach.calls"
+    "agent attach") echo "$*" >> "$FAKE/attach.calls"; echo "$$" > "$FAKE/attach.pid"
                     if [[ -f "$FAKE/wait.hang" ]]; then
                         for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
                             [[ ! -s "$FAKE/wait.pid" ]] || break; sleep 0.1
@@ -86,7 +86,7 @@ _agents_hc_running() { [[ "$RUNNING" == true ]]; }
 _agents_hl_socket() { return 0; }
 
 reset() {
-    rm -f "${FAKE:?}"/*.calls "${FAKE:?}"/wait.* "${FAKE:?}"/attach.rc "${FAKE:?}"/pane.json "${FAKE:?}"/hang.* "${AGENTS_RUN_DIR:?}"/hc-pane.*
+    rm -f "${FAKE:?}"/*.calls "${FAKE:?}"/wait.* "${FAKE:?}"/attach.rc "${FAKE:?}"/attach.pid "${FAKE:?}"/report.* "${FAKE:?}"/pane.json "${FAKE:?}"/hang.* "${AGENTS_RUN_DIR:?}"/hc-pane.*
     rm -rf "${AGENTS_RUN_DIR:?}/hc-mirror.lock" "${AGENTS_RUN_DIR:?}/hc-mirror.started"
     unset AGENTS_NOW
     RUNNING=true
@@ -324,25 +324,67 @@ reset
 out="$(_agents_hm_follow p1)"; [[ -z "$out" && "$(calls herdr)" != *"agent wait"* ]] || fail "follow of a missing pane: $out"
 pass "follow of a pane with no agent reports nothing and ends"
 
+# The follower ends when its attach is gone: it looks before each wait.
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; st working 1; st idle 2
+# A pid that has ended. Not a killed `sleep &`: bash 3.2 can take the signal
+# in its fork before the exec and run this script's EXIT trap there.
+gone="$(/bin/sh -c 'echo $$')"
+out="$(_agents_hm_follow p1 "$gone")"
+[[ "$(calls herdr)" != *"agent wait"* ]] || fail "the follower waited for a pane whose attach is gone: $(calls herdr)"
+[[ "$out" == *"state=idle"* ]] || fail "the follower did not report before it ended: $out"
+ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "a follower with no attach left its file"
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; st working 1
+out="$(_agents_hm_follow p1 "$$")"
+[[ "$(calls herdr)" == *"agent wait"* && "$out" == *"state=working"* ]] || fail "a follower whose attach lives did not wait: $(calls herdr)"
+pass "a follower whose attach is gone ends before it waits; while the attach lives it waits"
+# A report the terminal does not take ends the follower: at once, or after a change.
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; st working 1; st blocked 2
+(_agents_hm_follow p1 "$$" >&-) 2>/dev/null
+[[ "$(calls herdr)" != *"agent wait"* ]] || fail "a follower whose first report failed waited: $(calls herdr)"
+ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "a follower whose first report failed left its file"
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; st working 1; st blocked 2
+( _agents_hm_report() { [[ ! -e "$FAKE/report.1" ]] || return 1; : > "$FAKE/report.1"; }
+  _agents_hm_follow p1 "$$" >/dev/null )
+[[ "$(grep -cx wait "$FAKE/herdr.calls")" == 1 ]] || fail "a follower whose report failed after a change went on: $(calls herdr)"
+ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "a follower whose report failed left its file"
+pass "a report the terminal does not take ends the follower, and it leaves no file"
+
 # --- _mirror ---
+# The attach takes the mirror's process (exec), so each call runs in a ( ).
+# The follower is a stand-in here that says what it was given; the real one
+# is tested with a real mirror process below.
+await() { local _; for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do [[ ! -s "$1" ]] || return 0; sleep 0.1; done; return 1; }
 reset
-for bad in "" "p 1" "p;x" "-p"; do
-    rc=0; agents_main hc _mirror "$bad" 100 40 >/dev/null 2>&1 || rc=$?
-    [[ "$rc" == 2 ]] || fail "bad pane '$bad': exit $rc"
-done
-for bad in "" x 1x -3; do
-    rc=0; agents_main hc _mirror p1 "$bad" 40 >/dev/null 2>&1 || rc=$?
-    [[ "$rc" == 2 ]] || fail "bad cols '$bad': exit $rc"
-    rc=0; agents_main hc _mirror p1 100 "$bad" >/dev/null 2>&1 || rc=$?
-    [[ "$rc" == 2 ]] || fail "bad rows '$bad': exit $rc"
-done
-[[ ! -e "$FAKE/herdr.calls" ]] || fail "a bad call reached herdr: $(calls herdr)"
-rc=0; agents_main hc _mirror p1 100 40 </dev/null >/dev/null 2>&1 || rc=$?
-[[ "$rc" == 0 && "$(cat "$FAKE/attach.calls")" == "agent attach p1" ]] || fail "attach: rc=$rc $(cat "$FAKE/attach.calls")"
-echo 7 > "$FAKE/attach.rc"
-rc=0; agents_main hc _mirror p1 100 40 </dev/null >/dev/null 2>&1 || rc=$?
-[[ "$rc" == 7 ]] || fail "attach's exit status: $rc"
-pass "_mirror refuses a bad pane or size with 2; otherwise it attaches and returns the attach's status"
+( _agents_hm_follow() { echo "$*" > "$FAKE/follow.calls"; }
+  for bad in "" "p 1" "p;x" "-p"; do
+      rc=0; (agents_main hc _mirror "$bad" 100 40 >/dev/null 2>&1) || rc=$?
+      [[ "$rc" == 2 ]] || fail "bad pane '$bad': exit $rc"
+  done
+  for bad in "" x 1x -3; do
+      rc=0; (agents_main hc _mirror p1 "$bad" 40 >/dev/null 2>&1) || rc=$?
+      [[ "$rc" == 2 ]] || fail "bad cols '$bad': exit $rc"
+      rc=0; (agents_main hc _mirror p1 100 "$bad" >/dev/null 2>&1) || rc=$?
+      [[ "$rc" == 2 ]] || fail "bad rows '$bad': exit $rc"
+  done
+  [[ ! -e "$FAKE/herdr.calls" && ! -e "$FAKE/follow.calls" ]] || fail "a bad call reached herdr or started a follower: $(calls herdr) $(calls follow)"
+  rc=0; (agents_main hc _mirror p1 100 40 </dev/null >/dev/null 2>&1) || rc=$?
+  [[ "$rc" == 0 && "$(cat "$FAKE/attach.calls")" == "agent attach p1" ]] || fail "attach: rc=$rc $(calls attach)"
+  await "$FAKE/follow.calls" || fail "no follower started"
+  [[ "$(cat "$FAKE/follow.calls")" == "p1 $$" ]] || fail "the follower was not given the pane and the attach's pid: $(calls follow)"
+  echo 7 > "$FAKE/attach.rc"
+  rc=0; (agents_main hc _mirror p1 100 40 </dev/null >/dev/null 2>&1) || rc=$?
+  [[ "$rc" == 7 ]] || fail "attach's exit status: $rc"
+) || fail "_mirror"
+reset
+( _agents_hm_follow() { echo "$*" > "$FAKE/follow.calls"; }
+  _agents_hm_tty() { return 0; }; stty() { echo "$*" >> "$FAKE/stty.calls"; }
+  PATH=/usr/bin:/bin HERDR_BIN_PATH="$tmp/nope"
+  rc=0; out="$(agents_main hc _mirror p1 100 40 </dev/null 2>&1)" || rc=$?
+  [[ "$rc" == 127 && "$out" == *"herdr is not installed"* ]] || fail "no herdr: rc=$rc $out"
+  sleep 0.2
+  [[ ! -e "$FAKE/follow.calls" && ! -e "$FAKE/stty.calls" ]] || fail "no herdr, yet a follower or a size: $(calls follow) $(calls stty)"
+) || fail "no herdr"
+pass "_mirror refuses a bad pane or size with 2, and 127 with no herdr, starting no follower; otherwise the attach takes its place, its status is the mirror's, and the follower gets the pane and the attach's pid"
 
 # --- an answer that is not one changes nothing ---
 # Read as "no mirrors", a failed list would start a second mirror for every
@@ -453,22 +495,23 @@ pass "herdr sync --throttle: the mirrors are synced only when the labels are; ag
 
 # --- the size ---
 reset
-( _agents_hm_tty() { return 0; }
+( _agents_hm_tty() { return 0; }; _agents_hm_follow() { echo "$*" > "$FAKE/follow.calls"; }
   stty() { [[ "$1" != size ]] || { echo "120 200"; return 0; }; echo "$*" >> "$FAKE/stty.calls"; return "${STTY_RC:-0}"; }
   for sz in "3 1:cols 20 rows 5" "120 40:cols 120 rows 40" "99999 0040:cols 1000 rows 40" "100 123456789012345678901:cols 100 rows 500"; do
       rm -f "$FAKE/stty.calls" "$FAKE/attach.calls"
       # shellcheck disable=SC2086  # COLS ROWS, two words
-      agents_main hc _mirror p1 ${sz%%:*} </dev/null >/dev/null 2>&1 || fail "_mirror ${sz%%:*} failed"
+      (agents_main hc _mirror p1 ${sz%%:*} </dev/null >/dev/null 2>&1) || fail "_mirror ${sz%%:*} failed"
       [[ "$(cat "$FAKE/stty.calls")" == "${sz#*:}" ]] || fail "size ${sz%%:*}: $(cat "$FAKE/stty.calls")"
       [[ -s "$FAKE/attach.calls" ]] || fail "size ${sz%%:*}: not attached"
   done
-  rm -f "$FAKE/attach.calls"; rc=0
-  STTY_RC=1 agents_main hc _mirror p1 120 40 </dev/null >/dev/null 2>&1 || rc=$?
-  [[ "$rc" == 1 && ! -e "$FAKE/attach.calls" ]] || fail "a tty that took no size was attached: rc=$rc"
+  rm -f "$FAKE/attach.calls" "$FAKE/follow.calls"; rc=0
+  (STTY_RC=1 agents_main hc _mirror p1 120 40 </dev/null >/dev/null 2>&1) || rc=$?
+  sleep 0.2
+  [[ "$rc" == 1 && ! -e "$FAKE/attach.calls" && ! -e "$FAKE/follow.calls" ]] || fail "a tty that took no size was attached or followed: rc=$rc"
 ) || fail "size"
 reset
-( stty() { echo "$*" >> "$FAKE/stty.calls"; return 1; }
-  agents_main hc _mirror p1 3 1 </dev/null >/dev/null 2>&1 || fail "_mirror with no tty failed"
+( stty() { echo "$*" >> "$FAKE/stty.calls"; return 1; }; _agents_hm_follow() { :; }
+  (agents_main hc _mirror p1 3 1 </dev/null >/dev/null 2>&1) || fail "_mirror with no tty failed"
   [[ ! -e "$FAKE/stty.calls" && -s "$FAKE/attach.calls" ]] || fail "no tty: stty=$(calls stty) attach=$(calls attach)"
 ) || fail "no tty"
 pass "_mirror sizes its tty to the pane, kept within 20x5 and 1000x500; no attach when the tty takes no size; no tty, no stty"
@@ -519,13 +562,28 @@ rm -f "$FAKE/procinfo.json"
 pass "a mirror starts at the pane's own size; a terminal back at the core's size gets the pane's size again, a viewer's size is left alone"
 
 # --- the follower ends with the attach ---
+# Nothing kills the follower by hand: the terminal's hangup, sent to the
+# mirror's process group when the attach ends, does. Here the mirror is a real
+# process in its own group, and the test sends that hangup.
 reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; : > "$FAKE/wait.hang"
-agents_main hc _mirror p1 100 40 </dev/null >/dev/null 2>&1 || fail "_mirror with a following wait failed"
+set -m
+bash "$REPO_DIR/bin/agents" hc _mirror p1 100 40 </dev/null >/dev/null 2>&1 &
+mpid=$!
+set +m
+rc=0; wait "$mpid" || rc=$?
+[[ "$rc" == 0 && "$(cat "$FAKE/attach.calls" 2>/dev/null)" == "agent attach p1" ]] || fail "the mirror did not attach: rc=$rc"
+[[ "$(cat "$FAKE/attach.pid")" == "$mpid" ]] || fail "the attach did not take the mirror's process: $(cat "$FAKE/attach.pid") vs $mpid"
 wpid="$(cat "$FAKE/wait.pid" 2>/dev/null)"
 [[ "$wpid" =~ ^[0-9]+$ ]] || fail "the wait never started"
-! kill -0 "$wpid" 2>/dev/null || { kill "$wpid" 2>/dev/null; fail "herdr agent wait outlived the mirror"; }
+kill -0 "$wpid" 2>/dev/null || fail "the wait ended before any hangup"
+kill -HUP -- "-$mpid" 2>/dev/null || fail "no process group to hang up"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+    kill -0 "$wpid" 2>/dev/null || break; sleep 0.1
+done
+! kill -0 "$wpid" 2>/dev/null || { kill "$wpid" 2>/dev/null; fail "herdr agent wait outlived the mirror's hangup"; }
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 || break; sleep 0.1; done
 ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "the follower left its file: $(ls "$AGENTS_RUN_DIR")"
-pass "when the attach ends, the follower ends and its herdr agent wait with it"
+pass "the attach takes the mirror's process; the hangup of its group ends the follower and its herdr agent wait, and no file is left"
 
 # --- off ends what an earlier sync started; `mirror end` ends them by hand ---
 reset; snap "p1|claude|idle|$tmp/proj-a"; terms "t1|a|live|p1" "t2|b|live|p2" "t3|mine|live|"

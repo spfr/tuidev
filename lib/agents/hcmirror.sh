@@ -367,16 +367,17 @@ _agents_hm_report() {
     printf '\033]7501;state=%s:app=%s\033\\' "$state" "$agent"
 }
 
-# _agents_hm_follow PANE — report PANE's state now, then each time it
-# changes, until Herdr no longer has an agent there, or a TERM or HUP. The
-# wait is a background job the trap ends with it (a signal is taken only
-# between commands, never inside a $( ) the shell waits for): herdr itself,
-# not a function around it, so its pid is the one to end. Its answer goes
-# through a file. Run only as its own process (`&`, a pipeline): the trap
-# is that process's, and a ( ) body would put it in a child the caller's
-# kill never reaches.
+# _agents_hm_follow PANE [OWNER] — report PANE's state now, then each time it
+# changes, until Herdr no longer has an agent there, the process OWNER (the
+# mirror's attach) is gone, the terminal takes no more reports, or a TERM or
+# HUP. The wait is a background job the trap ends with it (a signal is taken
+# only between commands, never inside a $( ) the shell waits for): herdr
+# itself, not a function around it, so its pid is the one to end. Its answer
+# goes through a file. Run only as its own process (`&`, a pipeline): the
+# trap is that process's, and a ( ) body would put it in a child the
+# caller's kill never reaches.
 _agents_hm_follow() {
-    local pane="$1" out cur="" agent s args wp h="${HERDR_BIN_PATH:-}"
+    local pane="$1" owner="${2:-}" out cur="" agent s args wp h="${HERDR_BIN_PATH:-}"
     [[ -n "$h" && -x "$h" ]] || h="$(command -v herdr 2>/dev/null)" || return 0
     _AGENTS_HM_OUT=""
     trap 'kill $(jobs -p) 2>/dev/null; wait; [[ -z "$_AGENTS_HM_OUT" ]] || rm -f "$_AGENTS_HM_OUT"; exit 0' HUP TERM
@@ -387,9 +388,10 @@ _agents_hm_follow() {
     [[ -n "$agent" ]] || return 0
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
     _AGENTS_HM_OUT="$(mktemp "$AGENTS_RUN_DIR/hc-mirror-wait.XXXXXX" 2>/dev/null)" || return 0
-    _agents_hm_report "$cur" "$agent"
-    _agents_hm_title "$(printf '%s' "$out" | jq -r '.result.pane.terminal_title_stripped // empty' 2>/dev/null)"
+    _agents_hm_tell "$cur" "$agent" "$(printf '%s' "$out" | jq -r '.result.pane.terminal_title_stripped // empty' 2>/dev/null)" \
+        || { rm -f "$_AGENTS_HM_OUT"; return 0; }
     while :; do
+        [[ -z "$owner" ]] || kill -0 "$owner" 2>/dev/null || break
         args=()
         for s in idle working blocked "done" unknown; do [[ "$s" == "$cur" ]] || args+=(--until "$s"); done
         "$h" agent wait "$pane" "${args[@]}" > "$_AGENTS_HM_OUT" 2>/dev/null &
@@ -400,10 +402,15 @@ _agents_hm_follow() {
         s="$(jq -r '.result.agent.agent_status // empty' "$_AGENTS_HM_OUT" 2>/dev/null)"
         [[ -n "$s" && "$s" != "$cur" ]] || { sleep 1; continue; }
         cur="$s"
-        _agents_hm_report "$cur" "$agent"
-        _agents_hm_title "$(jq -r '.result.agent.terminal_title_stripped // empty' "$_AGENTS_HM_OUT" 2>/dev/null)"
+        _agents_hm_tell "$cur" "$agent" "$(jq -r '.result.agent.terminal_title_stripped // empty' "$_AGENTS_HM_OUT" 2>/dev/null)" || break
     done
     rm -f "$_AGENTS_HM_OUT"
+}
+
+# _agents_hm_tell STATE AGENT TITLE — the report and the title; false when
+# the terminal did not take them (it is gone).
+_agents_hm_tell() {
+    _agents_hm_report "$1" "$2" 2>/dev/null && _agents_hm_title "$3" 2>/dev/null
 }
 
 # The size a pane gets back when the phone stops looking. A viewer of the
@@ -445,12 +452,23 @@ _agents_hm_size() {
 # runs: COLS by ROWS is the pane's terminal, W by H its place in the layout
 # (the same when not given). The size is kept to one a pane can have (a
 # sliver of a pane would otherwise leave the core's default in place).
+#
+# The attach takes this process's place (exec), so a mirror is three
+# processes, not four: the attach, the follower and the follower's wait.
+# Nothing is left to end the follower by hand, so it ends by itself: the
+# terminal's hangup reaches it (it stays in this process group, the
+# terminal's foreground one, which is also how it gets each WINCH), it looks
+# for the attach (this pid, which the exec keeps) before each wait, and a
+# report the terminal does not take ends it. Does not return once it
+# attaches; the attach's exit status is the mirror's.
 agents_hc_mirror_run() {
-    local pane="${1:-}" cols="${2:-}" rows="${3:-}" w="${4:-}" h="${5:-}" follow rc=0
+    local pane="${1:-}" cols="${2:-}" rows="${3:-}" w="${4:-}" h="${5:-}" herdr="${HERDR_BIN_PATH:-}"
     [[ "$pane" =~ $_AGENTS_HM_PANE_RE && "$cols" =~ ^[0-9]+$ && "$rows" =~ ^[0-9]+$ ]] \
         || { echo "usage: agents hc _mirror PANE COLS ROWS [W H]" >&2; return 2; }
     [[ -z "$w$h" || ( "$w" =~ ^[0-9]{1,4}$ && "$h" =~ ^[0-9]{1,4}$ ) ]] \
         || { echo "usage: agents hc _mirror PANE COLS ROWS [W H]" >&2; return 2; }
+    [[ -n "$herdr" && -x "$herdr" ]] || herdr="$(command -v herdr 2>/dev/null)" \
+        || { echo "agents hc _mirror: herdr is not installed" >&2; return 127; }
     [[ ${#cols} -le 4 ]] || cols=9999
     [[ ${#rows} -le 4 ]] || rows=9999
     cols=$((10#$cols)) rows=$((10#$rows))
@@ -467,12 +485,8 @@ agents_hc_mirror_run() {
         [[ $w -lt $cols || $((w - cols)) -gt 2 ]] || _AGENTS_HM_DC=$((w - cols))
         [[ $h -lt $rows || $((h - rows)) -gt 2 ]] || _AGENTS_HM_DR=$((h - rows))
     fi
-    _agents_hm_follow "$pane" &
-    follow=$!
-    _agents_hl_herdr agent attach "$pane" || rc=$?
-    kill "$follow" 2>/dev/null
-    wait "$follow" 2>/dev/null
-    return "$rc"
+    _agents_hm_follow "$pane" "$$" &
+    exec "$herdr" agent attach "$pane"
 }
 
 # agents_hc_mirror_end [-q] — end every mirror (the core terminals labelled

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **The palette renders its Markdown.** Cheatsheet and What's new open through the new `tuidev md [FILE]`: with `glow` installed (`--extras`) the page is rendered at the pane's width, tables and all, inside your pager; without it you get the file as written, as before.
+- **A phone mirror is three processes, not four.** A mirror's shell stayed alive only to wait for its `herdr agent attach` and then end the follower that reports the agent's state. The attach now takes the shell's place, and the follower ends by itself: when the terminal hangs up, when the attach is gone, or when the terminal takes no more reports. Measured with `ps` on one mirror of an idle agent: 24 MB instead of 36 MB. A pane still gets its own size back when the phone stops looking. Mirrors stay experimental and off by default (`AGENTS_HC_MIRROR=1`). [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
 
 ### Fixed
 
