@@ -67,14 +67,6 @@ _agents_forward_records() {
     return 0
 }
 
-# _agents_forward_same LPORT RECORD — is that forward's record still RECORD?
-# What checked a forward and then acts on it asks this first: in the second
-# a probe takes, a click can close a dead forward and open a new one on the
-# same local port, or reuse it.
-_agents_forward_same() {
-    _agents_forward_read "$1" && [[ "$_AGENTS_FWD_REC" == "$2" ]]
-}
-
 # _agents_forward_any — is there a record at all? (No process: the link
 # watcher asks this every minute.)
 _agents_forward_any() {
@@ -217,16 +209,16 @@ _agents_forward_states() {
     } | LC_ALL=C sort -t $'\t' -k1,1n | cut -f2-
 }
 
-# _agents_forward_still LPORT RECORD STATE — after a check found STATE, is
-# that forward still the one checked, and still not answering? The same
-# record (not closed and reopened on that port, not reused and made yours),
-# and for a dead one, an ssh that is still gone.
+# _agents_forward_still STATE LPORT LABEL TARGET RPORT EPOCH KIND — a check
+# found that forward in STATE: is it still the one checked, and still not
+# answering? What checks a forward and then acts on it asks this first: in
+# the second a probe takes, a click can close a dead forward and open a new
+# one on the same local port, or reuse it and make it yours. So: the same
+# record, and for a dead one, an ssh that is still gone.
 _agents_forward_still() {
-    local tgt
-    _agents_forward_same "$1" "$2" || return 1
-    [[ "$3" == dead ]] || return 0
-    IFS=$'\t' read -r _ _ tgt _ <<<"$2"
-    ! _agents_forward_alive "$1" "$tgt"
+    _agents_forward_read "$2" || return 1
+    [[ "$_AGENTS_FWD_REC" == "$2"$'\t'"$3"$'\t'"$4"$'\t'"$5"$'\t'"$6"$'\t'"$7" ]] || return 1
+    [[ "$1" != dead ]] || ! _agents_forward_alive "$2" "$4"
 }
 
 # _agents_forward_prune LABEL — check LABEL's forwards now, and close those
@@ -236,7 +228,7 @@ _agents_forward_prune() {
     local l lab tgt rp e k s
     while IFS=$'\t' read -r l lab tgt rp e k s; do
         [[ -n "$l" && "$k" == asked && "$s" != active ]] || continue
-        _agents_forward_still "$l" "$l"$'\t'"$lab"$'\t'"$tgt"$'\t'"$rp"$'\t'"$e"$'\t'"$k" "$s" || continue
+        _agents_forward_still "$s" "$l" "$lab" "$tgt" "$rp" "$e" "$k" || continue
         _agents_forward_drop "$l" "$tgt"
         echo "closed localhost:$l ($lab:$rp)"
     done < <(_agents_forward_states "$1")
@@ -251,17 +243,16 @@ _agents_forward_prune() {
 # show. Each acts only on the forward it checked (_agents_forward_still).
 # No record: no work at all.
 _agents_forward_sweep() {
-    local dir l lab tgt rp e k s rec now
+    local dir l lab tgt rp e k s now
     _agents_forward_any || return 0
     dir="$(_agents_forward_dir)"
     while IFS=$'\t' read -r l lab tgt rp e k s; do
         [[ -n "$l" ]] || continue
-        rec="$l"$'\t'"$lab"$'\t'"$tgt"$'\t'"$rp"$'\t'"$e"$'\t'"$k"
         case "$s" in
             active) [[ ! -e "$dir/f.$l.miss" ]] || rm -f "$dir/f.$l.miss" ;;   # no mark, no process
             dead)
                 [[ "$k" == asked ]] || continue
-                _agents_forward_still "$l" "$rec" dead || continue
+                _agents_forward_still "$s" "$l" "$lab" "$tgt" "$rp" "$e" "$k" || continue
                 _agents_forward_drop "$l" "$tgt"
                 echo "agents link: closed localhost:$l ($lab:$rp): its ssh had ended" >&2 ;;
             unanswered)
@@ -269,7 +260,7 @@ _agents_forward_sweep() {
                 _agents_forward_miss "$l" || true
                 # Too soon after the last miss that counted: this look adds nothing.
                 [[ $((now - _AGENTS_FWD_MISSAT)) -ge $_AGENTS_FORWARD_MISS_GAP ]] || continue
-                _agents_forward_still "$l" "$rec" unanswered || continue
+                _agents_forward_still "$s" "$l" "$lab" "$tgt" "$rp" "$e" "$k" || continue
                 _AGENTS_FWD_MISS=$((_AGENTS_FWD_MISS + 1)); [[ $_AGENTS_FWD_MISS -le 99 ]] || _AGENTS_FWD_MISS=99
                 if [[ "$k" == asked && $_AGENTS_FWD_MISS -ge 2 ]]; then
                     _agents_forward_drop "$l" "$tgt"
@@ -414,7 +405,7 @@ _agents_forward_close() {
         case "$what" in
             --all)   ;;
             --dead)  [[ "$s" != active ]] || continue
-                     _agents_forward_still "$l" "$l"$'\t'"$lab"$'\t'"$tgt"$'\t'"$rp"$'\t'"$e"$'\t'"$k" "$s" || continue ;;
+                     _agents_forward_still "$s" "$l" "$lab" "$tgt" "$rp" "$e" "$k" || continue ;;
             --local) [[ "$l" == "$port" ]] || continue ;;
             *)       [[ ( "$lab" == "$what" || "$tgt" == "$what" ) && "$rp" == "$port" ]] || continue ;;
         esac
