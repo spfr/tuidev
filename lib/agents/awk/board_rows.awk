@@ -17,7 +17,13 @@
 # lib_fmt (mem).
 
 function one(s) { gsub(/[[:cntrl:]]/, " ", s); gsub(/  +/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s == "" ? "-" : s }
-function base(s) { sub(/ .*/, "", s); sub(/.*\//, "", s); return s }
+# A process's name from its command line. An app's is its bundle's
+# ("/Applications/Some App.app/Contents/…" is Some App: a path with spaces
+# can't be cut at the first one); else the base name of its first word.
+function base(s,   i, t) {
+    if (substr(s, 1, 1) == "/" && (i = index(s, ".app/")) > 0) { t = substr(s, 1, i - 1); sub(/.*\//, "", t); if (t != "") return t }
+    sub(/ .*/, "", s); sub(/.*\//, "", s); return s
+}
 
 $1 == "sub" { nsub[$2]++; subl[$2, nsub[$2]] = $3 "\tsub\t" $6 "\t" $5 "\t" one($4); next }
 $1 == "triage" { st[$2] = $3; ag[$2] = $4; lb[$2] = $5; next }

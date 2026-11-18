@@ -157,6 +157,7 @@ Any process on the other machine can send a request, not only your click, so tre
 <details>
 <summary>Limits worth knowing</summary>
 
+- A click on a file link that can't open says why in a notification: the file is gone (moved or deleted since the link was printed, as with a file in a git worktree that was removed), or it is not a kind of file a click opens.
 - The click needs Herdr's mouse capture on (`ui.mouse_capture`, the default) and is Ctrl-click on every platform. In saved-machine panes Herdr does not open OSC 8 links yet ([herdr#4447](https://github.com/herdrdev/herdr/issues/4447)), so there a link has to be on screen as its URL; `agents ports --pick` and `agents forward open` need no click.
 - A forwarded server sees `Host: localhost:PORT`. One that checks the host name, or serves TLS for the machine's own name, may refuse.
 - Herdr itself already bridges a pasted clipboard image; a dropped file is the section above.

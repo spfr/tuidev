@@ -52,6 +52,7 @@ rows="$({
     printf 'act\t51\tmcp\t33\t0\t0\t10\t1\tMon_Jan_01_00:10:01_2026\t-\t2\tfs\t/w/api\tnode mcp.js\tmain\t-\t1\n'
     printf 'stale\t60\tserver\t99\t0\t0\t10\t0\tMon_Jan_01_00:00:06_2026\t3000\tme\t-\t/w/old\tnode server.js\told\n'
     printf 'hog\t70\tnode\t99\t10\t10\t9437184\t0\tMon_Jan_01_00:00:07_2026\t-\tme\t-\t/w/api\t/usr/bin/node big.js\tapi\n'
+    printf 'hog\t71\tother\t99\t98\t10\t1024\t0\tMon_Jan_01_00:00:08_2026\t-\tme\t-\t-\t/Applications/Some App.app/Contents/Frameworks/Some App Helper.app/Contents/MacOS/Some App Helper --type=x\t-\n'
 } | _agents_awk "lib_fmt board_rows" -F '\t' -v sys='cpu 4% · memory 50% free' -v warn_kib=8388608)"
 want="sys${T}cpu 4% · memory 50% free
 ses${T}$A${T}need${T}240${T}permission${T}claude${T}Fix flaky cache test${T}myapp
@@ -60,6 +61,7 @@ kid${T}$A${T}def456${T}sub${T}done${T}400${T}reviewer
 ses${T}$B${T}run${T}900${T}tests 12s${T}codex${T}-${T}api
 kid${T}$B${T}50@Mon_Jan_01_00:10:00_2026${T}cmd${T}wait${T}33${T}pnpm test
 warn${T}node holds 9.0G
+warn${T}Some App at 98% CPU
 warn${T}1 left behind"
 [[ "$rows" == "$want" ]] || fail "rows: $rows"
 pass "rows: a session's state and title, its sub-agents and commands, no daemon and no MCP server, what is wrong"

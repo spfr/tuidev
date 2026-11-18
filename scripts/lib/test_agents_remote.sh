@@ -349,9 +349,12 @@ agents_link_click "file://$tmp/my%20notes.md" >/dev/null || fail "a %20 in a fil
 [[ "$(opened)" == "http://localhost:5173/x"$'\n'"$tmp/notes.md"$'\n'"$tmp/my notes.md" ]] || fail "opened locally: $(opened)"
 agents_link_click "file://$tmp/run.command" >/dev/null 2>&1 && fail "opened a .command file"
 agents_link_click "file://$tmp/missing.md" >/dev/null 2>&1 && fail "opened a missing file"
+# With no terminal to read why (the plugin), a click that opens nothing says so in a banner.
+said="$( _agents_notify() { printf '%s\n' "$1"; }; agents_link_click "file://$tmp/missing.md" 2>/dev/null || true; agents_link_click "file://$tmp/run.command" 2>/dev/null || true )"
+[[ "$said" == *"that file is gone: missing.md"*"not opened: run.command"* ]] || fail "a click that opened nothing did not say why: $said"
 agents_link_click "javascript:alert(1)" >/dev/null 2>&1 && fail "accepted a javascript: link"
 agents_link_click "file:///a%zz.md" >/dev/null 2>&1 && fail "accepted a bad escape"
-pass "link click, nobody attached: the URL or a viewer's file opens here; nothing else does"
+pass "link click, nobody attached: the URL or a viewer's file opens here; nothing else does, and says why"
 
 # --- 4. serve and click: the request reaches the attached watcher ---------------------------
 bash "$REPO_DIR/bin/agents" link serve > "$tmp/serve.out" 2>&1 &

@@ -148,10 +148,18 @@ agents_link_click() {
         return 0
     fi
     if [[ "$kind" == open-file ]]; then
-        [[ -f "$arg" ]] || { echo "agents: no such file: $arg" >&2; return 1; }
-        _agents_open_ext "$arg" || { echo "agents: not opened (only: $_AGENTS_OPEN_EXTS): $arg" >&2; return 1; }
+        [[ -f "$arg" ]] || { _agents_link_click_fail "no such file: $arg" "that file is gone: ${arg##*/} (moved or deleted since the link was printed)"; return 1; }
+        _agents_open_ext "$arg" || { _agents_link_click_fail "not opened (only: $_AGENTS_OPEN_EXTS): $arg" "not opened: ${arg##*/} is not a kind of file a click opens"; return 1; }
     fi
-    _agents_open_local "$arg" || { echo "agents: nothing here opens $arg, and no machine is attached (agents link status)" >&2; return 1; }
+    _agents_open_local "$arg" || { _agents_link_click_fail "nothing here opens $arg, and no machine is attached (agents link status)" "nothing here opens ${arg##*/}"; return 1; }
+}
+
+# _agents_link_click_fail TEXT BANNER — a click that opened nothing says why:
+# TEXT on stderr, and where nobody reads that (the Herdr plugin runs it with
+# no terminal) BANNER as a notification, or the click does nothing you can see.
+_agents_link_click_fail() {
+    echo "agents: $1" >&2
+    [[ -t 2 ]] || AGENTS_NOTIFY=true _agents_notify "$2" || true
 }
 
 # ---- a dropped file: from the machine you sit at, into a session elsewhere --
