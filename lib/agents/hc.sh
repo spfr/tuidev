@@ -524,19 +524,22 @@ agents_hc_run() {
 # only once it is known to run, and never started from here.
 
 # The options an interactive session takes, per agent: flags (F), options
-# with one value (V: the next argument, or --opt=VALUE), options with any
-# number of values (M), and with an optional one (O). Any other option, or
+# with one value (V: the next argument, or --opt=VALUE), and with an optional
+# one (O). An option that takes several values is on V too: a second value
+# then runs the command as typed, where taking every next word would host
+# `codex --add-dir DIR exec ...`. Any other option, or
 # an argument that is no option's value (a prompt, a subcommand such as
 # `claude mcp` or `codex exec`), runs the command as typed: -p, --help and
 # --version are not on these lists. A new option of the agent's is one more
 # word here; until then the agent starts the plain way.
 _AGENTS_HC_AUTO_CLAUDE_F=" -c --continue --fork-session --verbose --ide --chrome --no-chrome --strict-mcp-config --dangerously-skip-permissions --allow-dangerously-skip-permissions "
-_AGENTS_HC_AUTO_CLAUDE_V=" --model --permission-mode --settings --setting-sources --append-system-prompt --system-prompt --agent --agents --session-id "
-_AGENTS_HC_AUTO_CLAUDE_M=" --add-dir --mcp-config --allowed-tools --allowedTools --disallowed-tools --disallowedTools --plugin-dir "
+_AGENTS_HC_AUTO_CLAUDE_V=" --model --permission-mode --settings --setting-sources --append-system-prompt --system-prompt --agent --agents --session-id --add-dir --mcp-config --allowed-tools --allowedTools --disallowed-tools --disallowedTools --plugin-dir "
 _AGENTS_HC_AUTO_CLAUDE_O=" -r --resume --debug "
 _AGENTS_HC_AUTO_CODEX_F=" --search --full-auto --dangerously-bypass-approvals-and-sandbox --oss --no-alt-screen --no-daemon "
-_AGENTS_HC_AUTO_CODEX_V=" -m --model -p --profile -s --sandbox -a --ask-for-approval -C --cd -c --config --local-provider --enable --disable "
-_AGENTS_HC_AUTO_CODEX_M=" -i --image --add-dir "
+_AGENTS_HC_AUTO_CODEX_V=" -m --model -p --profile -s --sandbox -a --ask-for-approval -C --cd -c --config --local-provider --enable --disable -i --image --add-dir "
+# Set in the pane, these choose the account, the provider or the network an
+# agent uses, and a hosted one would not have them: such a start is not hosted.
+_AGENTS_HC_AUTO_OWN="ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX OPENAI_API_KEY OPENAI_BASE_URL HTTPS_PROXY https_proxy HTTP_PROXY http_proxy ALL_PROXY NODE_EXTRA_CA_CERTS"
 # What a hosted agent gets from the pane besides its directory, when set
 # there: the PATH it was found on, the locale, the editor, and where the
 # agents keep their settings. Never the rest of the shell's environment: a
@@ -547,28 +550,27 @@ _AGENTS_HC_AUTO_ENV="PATH LANG LC_ALL LC_CTYPE LC_MESSAGES TZ EDITOR VISUAL CLAU
 # interactive session: claude or codex with only the options above (codex
 # also as `codex resume [--last|--all] [SESSION]`)? Pure bash, no fork.
 _agents_hc_auto_interactive() {
-    local cmd="${1##*/}" f v m o="" a want="" pos=0 maxpos=0
+    local cmd="${1##*/}" f v o="" a want="" pos=0 maxpos=0
     shift
     case "$cmd" in
-        claude) f="$_AGENTS_HC_AUTO_CLAUDE_F" v="$_AGENTS_HC_AUTO_CLAUDE_V" m="$_AGENTS_HC_AUTO_CLAUDE_M" o="$_AGENTS_HC_AUTO_CLAUDE_O" ;;
-        codex)  f="$_AGENTS_HC_AUTO_CODEX_F" v="$_AGENTS_HC_AUTO_CODEX_V" m="$_AGENTS_HC_AUTO_CODEX_M"
+        claude) f="$_AGENTS_HC_AUTO_CLAUDE_F" v="$_AGENTS_HC_AUTO_CLAUDE_V" o="$_AGENTS_HC_AUTO_CLAUDE_O" ;;
+        codex)  f="$_AGENTS_HC_AUTO_CODEX_F" v="$_AGENTS_HC_AUTO_CODEX_V"
                 if [[ "${1:-}" == resume ]]; then shift; f+="--last --all "; maxpos=1; fi ;;
         *)      return 1 ;;
     esac
     for a in "$@"; do
-        # The value of the option before it (an M option takes the next ones too).
+        # The value of the option before it.
         if [[ -n "$want" && "$a" != -* ]]; then
-            [[ "$want" == m ]] || want=""
+            want=""
             continue
         fi
         [[ "$want" != v ]] || return 1
         want=""
         case "$a" in
-            --*=*)  case "$v$m$o" in *" ${a%%=*} "*) continue ;; esac
+            --*=*)  case "$v$o" in *" ${a%%=*} "*) continue ;; esac
                     return 1 ;;
             -*)     case "$f" in *" $a "*) continue ;; esac
                     case "$v" in *" $a "*) want=v; continue ;; esac
-                    case "$m" in *" $a "*) want=m; continue ;; esac
                     case "$o" in *" $a "*) want=o; continue ;; esac
                     return 1 ;;
             *)      pos=$((pos + 1))
@@ -593,6 +595,9 @@ _agents_hc_auto_wanted() {
     [[ "${HERDR_ENV:-}" == 1 && -n "${HERDR_PANE_ID:-}" && -z "${HC_TERMINAL_ID:-}" ]] || return 1
     _agents_hc_auto_tty || return 1
     _agents_hc_auto_interactive "$@" || return 1
+    for hello in $_AGENTS_HC_AUTO_OWN; do
+        [[ -z "${!hello:-}" ]] || return 1
+    done
     ! _agents_hc_pane_marked "$HERDR_PANE_ID" || return 1
     command -v jq >/dev/null 2>&1 && _agents_hc_bin || return 1
     _agents_hc_running || return 1
@@ -607,13 +612,24 @@ _agents_hc_auto_wanted() {
     [[ "$(_agents_hc_gui "$hello")" == true ]]
 }
 
+# _agents_hc_auto_undo NAME — the core may have started the terminal whose
+# answer never came: end it, or the agent would run twice (the plain start
+# follows), two processes on one session with --continue. NAME was free a
+# moment ago (_agents_hc_name), so it is that terminal or none.
+_agents_hc_auto_undo() {
+    [[ -n "$1" ]] || return 0
+    : "$(_agents_timeout "$_AGENTS_HC_WAIT" "$_AGENTS_HC_BIN" kill "$1" 2>/dev/null)"
+}
+
 # _agents_hc_auto_host REAL [ARG...] — start REAL in herdr-core, in this
 # directory with _AGENTS_HC_AUTO_ENV from this shell, and attach to it.
 # False, with _AGENTS_HC_WHY, when the core did not start it; else true,
 # with the attach's status in _AGENTS_HC_RC.
 _agents_hc_auto_host() {
-    local real="$1" name out t shown rc=0 k envs=()
+    local real="$1" name out t shown rc=0 k envs=() pre=()
     shift
+    # herdr-core's own rule: a codex without it runs its commands outside the core.
+    [[ "${real##*/}" != codex || " $* " == *" --no-daemon "* ]] || pre=(--no-daemon)
     for k in $_AGENTS_HC_AUTO_ENV; do
         [[ -z "${!k+set}" ]] || envs+=("$k=${!k}")
     done
@@ -621,9 +637,10 @@ _agents_hc_auto_host() {
     # env(1) sets them: herdr-core's CLI has no option for it. No parent, as
     # in agents_hc_run.
     out="$(_agents_timeout "$_AGENTS_HC_WAIT" "$_AGENTS_HC_BIN" run --bg --json --no-parent --cwd "$PWD" \
-        ${name:+--name "$name"} -- /usr/bin/env ${envs[@]+"${envs[@]}"} "$real" "$@" 2>/dev/null)" || rc=$?
+        ${name:+--name "$name"} -- /usr/bin/env ${envs[@]+"${envs[@]}"} "$real" ${pre[@]+"${pre[@]}"} "$@" 2>/dev/null)" || rc=$?
     if [[ $rc -eq 124 ]]; then
         _AGENTS_HC_WHY="herdr-core did not answer within ${_AGENTS_HC_WAIT} s"
+        _agents_hc_auto_undo "$name"
         return 1
     elif [[ $rc -ne 0 ]]; then
         _AGENTS_HC_WHY="$(printf '%s' "$out" | jq -r '.error.message // empty' 2>/dev/null | head -n 1)"
@@ -633,6 +650,7 @@ _agents_hc_auto_host() {
     t="$(printf '%s' "$out" | jq -r '.address // empty' 2>/dev/null)"
     if [[ -z "$t" ]]; then
         _AGENTS_HC_WHY="herdr-core did not say what it started"
+        _agents_hc_auto_undo "$name"
         return 1
     fi
     shown="$(printf '%s' "$out" | jq -r '.name // empty' 2>/dev/null)"
@@ -663,10 +681,13 @@ _agents_hc_auto_exec() {
 agents_hc_auto() {
     local cmd="${1:-}" real
     [[ -n "$cmd" ]] || { echo "usage: agents hc auto CMD [ARG...]" >&2; return 2; }
+    # What the shell fragment asks before it defines its functions.
+    [[ "$cmd" != --supported ]] || return 0
     shift
     real="$(type -P "$cmd" 2>/dev/null)"
     [[ -n "$real" ]] || { echo "agents hc: $cmd: command not found" >&2; return 127; }
-    if _agents_hc_auto_wanted "$cmd" "$@"; then
+    # A path with = in it would be an assignment to env(1).
+    if [[ "$real" != *=* ]] && _agents_hc_auto_wanted "$cmd" "$@"; then
         _agents_hc_auto_host "$real" "$@" && return "$_AGENTS_HC_RC"
     fi
     [[ -z "$_AGENTS_HC_WHY" ]] || echo "agents hc: $_AGENTS_HC_WHY; $cmd starts here, not in herdr-core" >&2

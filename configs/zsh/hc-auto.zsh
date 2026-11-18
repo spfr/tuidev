@@ -15,27 +15,34 @@
 
 () {
   setopt local_options no_bash_rematch no_re_match_pcre
-  [[ -o interactive && -n $HERDR_ENV && -z $HC_TERMINAL_ID ]] || return 0
-  (( $+commands[agents] && $+commands[herdr-core] )) || return 0
+  [[ -o interactive && -n ${HERDR_ENV-} && -z ${HC_TERMINAL_ID-} ]] || return 0
+  [[ -x ${commands[agents]-} && -x ${commands[herdr-core]-} ]] || return 0
   local conf=${AGENTS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/agents.conf} on=${AGENTS_HC_AUTO-}
   if [[ -z ${AGENTS_HC_AUTO+set} && -r $conf ]]; then
-    # agents.conf's own rule: KEY=value lines, the last one wins, quotes and
-    # a trailing comment allowed.
+    # agents.conf's own rule (config.sh): KEY=value lines, the last one wins;
+    # a quoted value is the rest of the line, a bare one may have a comment.
     local line
     local -a lines=("${(@f)$(<$conf)}")
     for line in "${(@M)lines:#*AGENTS_HC_AUTO=*}"; do
-      [[ $line =~ '^[[:space:]]*AGENTS_HC_AUTO=["'\'']?([01]?)["'\'']?([[:space:]]|#|$)' ]] && on=$match[1]
+      if [[ $line =~ '^[[:space:]]*AGENTS_HC_AUTO=("([01]?)"|'\''([01]?)'\''|([01]?)([[:space:]]+#.*)?)[[:space:]]*$' ]]; then
+        on=$match[2]$match[3]$match[4]
+      fi
     done
   fi
   [[ $on == 1 ]] || return 0
+  # An agents from before `hc auto` would print its usage where claude starts.
+  command agents hc auto --supported 2>/dev/null || return 0
 
   _tuidev_hc_auto() {
-    if [[ -n $HERDR_ENV && -z $HC_TERMINAL_ID && -t 0 && -t 1 ]] && (( $+commands[agents] )); then
+    # -x, not $+commands: the hash outlives a removed file.
+    if [[ -n ${HERDR_ENV-} && -z ${HC_TERMINAL_ID-} && -t 0 && -t 1 && -x ${commands[agents]-} ]]; then
       command agents hc auto "$@"
     else
       command "$@"
     fi
   }
-  claude() { _tuidev_hc_auto claude "$@"; }
-  codex() { _tuidev_hc_auto codex "$@"; }
+  # `function NAME`: a claude or codex alias of yours would be expanded in
+  # `NAME() {`, and the file would not parse.
+  function claude { _tuidev_hc_auto claude "$@"; }
+  function codex { _tuidev_hc_auto codex "$@"; }
 }

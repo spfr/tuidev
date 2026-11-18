@@ -60,6 +60,7 @@ case "$1" in
     server)    [[ ! -e "$FAKE/server.fail" ]] || exit 1
                [[ "$2" != start ]] || echo "{\"result\":{\"login_session\":{\"gui\":$(cat "$FAKE/start.gui" 2>/dev/null || echo true)}}}" > "$FAKE/hello.json" ;;
     run)       [[ ! -e "$FAKE/run.fail" ]] || { echo '{"error":{"message":"name taken"}}'; exit 1; }
+               [[ ! -e "$FAKE/run.mute" ]] || { echo '{}'; exit 0; }
                name=""; while [[ $# -gt 0 ]]; do [[ "$1" != --name ]] || name="$2"; shift; done
                if [[ -n "$name" ]]; then printf '{"address":"t3","name":"%s","state":"live"}\n' "$name"
                else echo '{"address":"t3","name":null,"state":"live"}'; fi ;;
@@ -87,7 +88,7 @@ _AGENTS_HC_WAIT=2 _AGENTS_HC_HERDR_WAIT=1 _AGENTS_HC_PAUSE=0.2
 
 LS_ONE='{"terminals":[{"name":"api","state":"live"},{"name":"old","state":"finished"}]}'
 reset() {
-    rm -f "$AGENTS_RUN_DIR/hc-up.said" "$FAKE"/*.calls "$FAKE"/*.fail "$FAKE"/*.env "$FAKE"/*.hang "$FAKE"/attach.* "$FAKE"/events.* "$FAKE"/start.gui \
+    rm -f "$AGENTS_RUN_DIR/hc-up.said" "$FAKE"/*.calls "$FAKE"/*.fail "$FAKE"/*.env "$FAKE"/*.hang "$FAKE"/*.mute "$FAKE"/attach.* "$FAKE"/events.* "$FAKE"/start.gui \
           "$FAKE"/agent.*
     echo "$LS_ONE" > "$FAKE/ls.json"
 }
@@ -514,8 +515,8 @@ done <<'EOF'
 0|claude --resume 4f1c --fork-session
 0|claude --model opus
 0|claude --model=opus --verbose
-0|claude --permission-mode plan --add-dir ../a '../b c' --ide
-0|claude --dangerously-skip-permissions --mcp-config a.json b.json
+0|claude --permission-mode plan --add-dir ../a --add-dir '../b c' --ide
+0|claude --dangerously-skip-permissions --mcp-config a.json
 0|/opt/bin/claude --continue
 0|codex
 0|codex --model gpt-5 --search
@@ -533,6 +534,11 @@ done <<'EOF'
 1|claude --version
 1|claude -v
 1|claude 'fix the bug'
+1|claude --plugin-dir ./p mcp list
+1|claude --add-dir ../a ../b
+1|codex --add-dir ../x exec 'run tests'
+1|codex --add-dir ../x login status
+1|codex -i a.png review
 1|claude ''
 1|claude mcp list
 1|claude update
@@ -580,6 +586,10 @@ AGENTS_HC_AUTO=1 HERDR_ENV=1 HERDR_PANE_ID=w1:p1 AGENTS_NO_HERDR=1
 
 # auto ARG... — agents hc auto in "My Proj", in a subshell (it may exec):
 # what it printed in $out, its status in $rc.
+# The pane's own account or network settings keep a start out of the core
+# (below); a sandbox's proxy must not decide these tests.
+# shellcheck disable=SC2086  # a list of names
+unset $_AGENTS_HC_AUTO_OWN
 auto() { rc=0; out="$(cd "$tmp/My Proj" && agents_main hc auto "$@" 2>&1)" || rc=$?; }
 # ran_plain WHY RC ARG... — the agent ran here exactly as typed, with its
 # status, and nothing was said but what it said; herdr-core started nothing.
@@ -612,6 +622,9 @@ reset; RUNNING=false auto claude;           ran_plain "no core" 0 claude; no_cor
 reset; hello false; auto claude;            ran_plain "a core outside the desktop login" 0 claude
 reset; echo '{"result":{"version":"0.1.21"}}' > "$FAKE/hello.json"
 auto claude;                                ran_plain "a core that does not say where it runs (macOS)" 0 claude
+reset; hello true; HTTPS_PROXY=http://proxy.invalid:1 auto claude
+ran_plain "a proxy set in the pane" 0 claude; no_core "a proxy set in the pane"
+reset; hello true; ANTHROPIC_API_KEY=k auto claude; ran_plain "an API key set in the pane" 0 claude
 pass "every case that cannot host runs the agent as typed, with its status and no word of its own; no core is asked before it is known to run"
 
 # A core that does not answer: the start waited for it, so one line says why.
@@ -628,14 +641,14 @@ pass "a core that does not answer in time: the agent starts here, after one line
 # no token of the shell's, no Herdr identity. The pane attaches to it.
 reset; hello true; echo '{"state":"finished"}' > "$FAKE/get.json"; echo 5 > "$FAKE/attach.rc"
 export MY_TOKEN=s3cret
-CLAUDE_CONFIG_DIR="$tmp/cc" auto claude --model opus --add-dir "a b" c
+CLAUDE_CONFIG_DIR="$tmp/cc" auto claude --model opus --add-dir "a b" --add-dir c
 unset MY_TOKEN
 [[ $rc -eq 5 ]] || fail "hosted: the attach's status was not passed on: rc $rc ($out)"
 [[ ! -e "$FAKE/agent.calls" ]] || fail "hosted, and run here too: $(calls agent)"
 log="$(cat "$FAKE/hc.calls")"
 [[ "$log" == *"$(printf '%s\n' run --bg --json --no-parent --cwd "$tmp/My Proj" --name my-proj -- /usr/bin/env "PATH=$PATH")"* ]] \
     || fail "hosted: the start: $(calls hc)"
-[[ "$log" == *"$(printf '%s\n' "CLAUDE_CONFIG_DIR=$tmp/cc" "$tmp/bin/claude" --model opus --add-dir "a b" c --)"* ]] \
+[[ "$log" == *"$(printf '%s\n' "CLAUDE_CONFIG_DIR=$tmp/cc" "$tmp/bin/claude" --model opus --add-dir "a b" --add-dir c --)"* ]] \
     || fail "hosted: the command and its arguments: $(calls hc)"
 [[ "$log" == *"$(printf '%s\n' -- attach t3)"* ]] || fail "hosted: no attach: $(calls hc)"
 ! grep -qE '^(MY_TOKEN|HERDR_[A-Z_]*|AGENTS_[A-Z_]*|CODEX_HOME)=' "$FAKE/hc.calls" || fail "hosted: passed on what it must not: $(calls hc)"
@@ -647,6 +660,21 @@ auto claude --resume 4f1c
 [[ $rc -eq 6 && "$(cat "$FAKE/agent.calls")" == "$(printf '%s\n' -- claude --resume 4f1c)" ]] || fail "refused: rc $rc, $(calls agent)"
 [[ "$out" == "agents hc: herdr-core did not start it (name taken); claude starts here, not in herdr-core"$'\n'"agent here" ]] || fail "refused: $out"
 [[ "$(calls hc)" != *"-- attach"* ]] || fail "refused, and attached: $(calls hc)"
+[[ "$(calls hc)" != *"-- kill"* ]] || fail "refused, and something was ended: $(calls hc)"
+# A start whose answer has no address may have started: it is ended before
+# the agent starts here, or there would be two.
+reset; hello true; touch "$FAKE/run.mute"
+auto claude --continue
+rm -f "$FAKE/run.mute"
+[[ "$out" == *"did not say what it started; claude starts here"*"agent here" ]] || fail "no address: $out"
+[[ "$(cat "$FAKE/hc.calls")" == *"$(printf '%s\n' -- kill my-proj)"* ]] || fail "no address: the half start was not ended: $(calls hc)"
+# codex is hosted with --no-daemon (herdr-core's rule), once.
+reset; hello true; echo '{"state":"finished"}' > "$FAKE/get.json"
+auto codex --search
+[[ "$(cat "$FAKE/hc.calls")" == *"$(printf '%s\n' "$tmp/bin/codex" --no-daemon --search --)"* ]] || fail "codex without --no-daemon: $(calls hc)"
+reset; hello true; echo '{"state":"finished"}' > "$FAKE/get.json"
+auto codex --no-daemon
+[[ "$(cat "$FAKE/hc.calls")" == *"$(printf '%s\n' "$tmp/bin/codex" --no-daemon --)"* ]] || fail "codex --no-daemon twice: $(calls hc)"
 # Off macOS the core is not asked where it runs.
 reset; hello false; MAC=false auto codex
 [[ $rc -eq 0 && ! -e "$FAKE/agent.calls" && "$(calls hc)" != *"-- connect"* && "$(calls hc)" == *"-- run "* ]] \
@@ -693,7 +721,7 @@ else
     frag="$REPO_DIR/configs/zsh/hc-auto.zsh"
     zsh -n "$frag" || fail "hc-auto.zsh is not valid zsh"
     zb="$tmp/zbin"; mkdir -p "$zb"
-    printf '#!/bin/sh\n{ echo --; printf "%%s\\n" agents "$@"; } >> "$FAKE/zagents.calls"\n' > "$zb/agents"
+    printf '#!/bin/sh\n[ "$*" != "hc auto --supported" ] || exit "${ZOLD:-0}"\n{ echo --; printf "%%s\\n" agents "$@"; } >> "$FAKE/zagents.calls"\n' > "$zb/agents"
     printf '#!/bin/sh\nexit 0\n' > "$zb/herdr-core"
     cp "$tmp/bin/claude" "$tmp/bin/codex" "$zb/"
     chmod +x "$zb"/*
@@ -706,7 +734,7 @@ else
         env -i PATH="$zb:/usr/bin:/bin" HOME="$HOME" FAKE="$FAKE" AGENTS_CONF="$tmp/z.conf" ${envs[@]+"${envs[@]}"} \
             zsh -f "${@:--i}" -c "source '$frag'; $ZCMD" 2>&1
     }
-    printf 'AGENTS_HC_MIRROR=0\nAGENTS_HC_AUTO="1"   # on\n' > "$tmp/z.conf"
+    printf 'AGENTS_HC_MIRROR=0\nAGENTS_HC_AUTO=1   # on\n' > "$tmp/z.conf"
     ZCMD='whence -w claude codex'
     [[ "$(zsh_frag HERDR_ENV=1)" == $'claude: function\ncodex: function' ]] || fail "fragment, on: $(zsh_frag HERDR_ENV=1)"
     # Not typed at a terminal (an agent's tool shell, a pipe): the real command, agents not run.
@@ -733,6 +761,21 @@ else
         [[ "$(zsh_frag HERDR_ENV=1 AGENTS_HC_AUTO=1)" == "claude: command" ]] || fail "fragment without $b"
         mv "$tmp/$b.keep" "$zb/$b"
     done
+    # An agents from before `hc auto`: nothing defined. agents.conf as config.sh
+    # reads it: a quoted value with a comment after it is no value.
+    [[ "$(zsh_frag HERDR_ENV=1 AGENTS_HC_AUTO=1 ZOLD=2)" == "claude: command" ]] || fail "fragment with an agents that has no hc auto"
+    printf 'AGENTS_HC_AUTO="1"   # on\n' > "$tmp/z.conf"
+    [[ "$(zsh_frag HERDR_ENV=1)" == "claude: command" ]] || fail "fragment: a conf line config.sh refuses turned it on"
+    printf "AGENTS_HC_AUTO='1'\n" > "$tmp/z.conf"
+    [[ "$(zsh_frag HERDR_ENV=1)" == "claude: function" ]] || fail "fragment: a quoted value"
+    rm -f "$tmp/z.conf"
+    # A claude alias of the user's, and nounset: the file still loads, in
+    # every shell, with nothing said.
+    ZCMD='echo loaded'
+    got="$(env -i PATH="$zb:/usr/bin:/bin" HOME="$HOME" zsh -f -i -c "setopt nounset; alias claude='claude --verbose' codex=x; source '$frag'; $ZCMD" 2>&1)"
+    [[ "$got" == loaded ]] || fail "fragment with an alias, outside Herdr: $got"
+    got="$(env -i PATH="$zb:/usr/bin:/bin" HOME="$HOME" FAKE="$FAKE" HERDR_ENV=1 AGENTS_HC_AUTO=1 zsh -f -i -c "setopt nounset; alias claude='claude --verbose'; source '$frag'; whence -w _tuidev_hc_auto" 2>&1)"
+    [[ "$got" == "_tuidev_hc_auto: function" ]] || fail "fragment with an alias, on: $got"
     pass "the fragment defines claude and codex only in an interactive Herdr pane with the setting on, and a call not typed at a terminal is the real command"
 
     # Typed at a terminal: agents hc auto gets the command and its arguments
@@ -757,7 +800,7 @@ else
             || fail "fragment at a terminal: agents got: $(calls zagents) (the agent: $(calls agent))"
         [[ ! -e "$FAKE/agent.calls" ]] || fail "fragment at a terminal: the agent ran here as well: $(calls agent)"
         cp "$zb/agents" "$tmp/agents.keep"
-        reset; ztty 'rm -f '"'$zb/agents'"'; rehash; codex --search'
+        reset; ztty 'rm -f '"'$zb/agents'"'; codex --search'
         cp "$tmp/agents.keep" "$zb/agents"
         [[ "$(cat "$FAKE/agent.calls" 2>/dev/null)" == "$(printf '%s\n' -- codex --search)" ]] \
             || fail "fragment at a terminal, agents gone: the agent ran as: $(calls agent)"

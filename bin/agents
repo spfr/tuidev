@@ -105,10 +105,13 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" && "${1:-}" == hc && "${2:-}" == auto ]]; th
     _AGENTS_ENV_IN=$'\n'"$(compgen -e)"$'\n'
     _agents_load="$_AGENTS_AUTO_MODULES"
 fi
+# In front of an agent, what agents.conf has wrong is not said at every start.
+[[ -z "${_AGENTS_ENV_IN:-}" ]] || exec 8>&2 2>/dev/null
 for _agents_m in $_agents_load; do
     # shellcheck source=/dev/null  # each module is linted on its own (Makefile SHELL_FILES)
     . "$_AGENTS_LIB/$_agents_m.sh"
 done
+[[ -z "${_AGENTS_ENV_IN:-}" ]] || exec 2>&8 8>&-
 unset _agents_m _agents_missing _agents_load
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
