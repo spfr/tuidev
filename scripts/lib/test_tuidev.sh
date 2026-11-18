@@ -202,13 +202,19 @@ mkdir -p "$CACHE/lock"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock/at"
 for _ in 1 2 3 4 5 6 7 8; do CURL_SLEEP=1 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1 & done; wait
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" && -z "$(find "$CACHE" -name 'lock.*')" ]] \
     || fail "eight checks taking over one stale lock: $(calls) / $(ls -A "$CACHE")"
-# A lock with no time in it is given a second (its holder may be about to
-# write one), then taken over: its holder died before it wrote one.
+# A lock with no time in it belongs to a check between its mkdir and its
+# echo: never taken over, however long that takes. One left like that for
+# two minutes (the directory's own time) is removed, and the next check asks.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
 mkdir -p "$CACHE/lock"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" ]] || fail "a lock with no time was not taken over: $(calls) / $(ls -A "$CACHE")"
-pass "a stale lock: one of several takes it over, in place; another's claim is left alone and a dead one cleared; one with no time is taken after a second"
+[[ -z "$(calls)" && -d "$CACHE/lock" ]] || fail "a fresh lock with no time was taken or removed: $(calls) / $(ls -A "$CACHE")"
+touch -t 202001010000 "$CACHE/lock"
+CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+[[ -z "$(calls)" && ! -e "$CACHE/lock" ]] || fail "an old lock with no time was not removed: $(calls) / $(ls -A "$CACHE")"
+CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+[[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" ]] || fail "the check after it did not ask once: $(calls)"
+pass "a stale lock: one of several takes it over, in place; another's claim is left alone and a dead one cleared; one with no time is left to its holder, and removed once it is old"
 
 # --newer: silent, 0 newer known, 1 the latest is installed, 2 unknown.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"

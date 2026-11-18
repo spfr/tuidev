@@ -206,8 +206,14 @@ _tuidev_lock() {
         return
     fi
     _tuidev_lock_at "$l"
-    # No time in it yet: its holder may be between its mkdir and its echo.
-    if [[ "$REPLY" == 0 ]]; then sleep 1; _tuidev_lock_at "$l"; fi
+    # No time in it: its holder is between its mkdir and its echo, however
+    # long a busy machine makes that, so it is never taken over. One that has
+    # sat like that for _TUIDEV_LOCK_STALE by the directory's own clock was
+    # left by a check that died there: it is removed, for the next to take.
+    if [[ "$REPLY" == 0 ]]; then
+        [[ -z "$(find "$l" -maxdepth 0 -mmin "+$(( _TUIDEV_LOCK_STALE / 60 ))" 2>/dev/null)" ]] || rm -rf "$l"
+        return 1
+    fi
     seen="$REPLY"
     (( now - seen > _TUIDEV_LOCK_STALE )) || return 1
     if ! mkdir "$l/claim" 2>/dev/null; then
