@@ -115,4 +115,4 @@ claude                   # sandboxed automatically, run it in the project direct
 
 If you installed `--pack tmux`, `t myproject` gives you a session that survives a disconnect, and tmux-resurrect/tmux-continuum save and restore it automatically (continuum saves every 15 minutes).
 
-With `--pack monitoring`, `agents` shows every session, what it runs and what a crashed one left behind (`agents reap` cleans that up). For parallel agents, see [agent-workflows.md](agent-workflows.md). To work from another machine or your phone, see [remote.md](remote.md). When something breaks, check [FAQ.md](FAQ.md).
+With `--pack monitoring`, `agents` shows every session, what it runs and what a crashed one left behind (`agents reap` cleans that up). For parallel agents, see [agent-workflows.md](agent-workflows.md). To work from another machine or your phone (a terminal app, or Herdr's phone app with `--pack herdr-core`), see [remote.md](remote.md). When something breaks, check [FAQ.md](FAQ.md).

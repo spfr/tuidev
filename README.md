@@ -99,6 +99,22 @@ Press **prefix+m** for the map: one list of what runs where, on every machine. E
 
 <sub>A preview running on `atlas` opens in the browser on this Mac, a server left behind on `kepler` is stopped from the same list, and a review written on `atlas` is read here.</sub>
 
+## Pick up an agent from your phone
+
+Herdr has a free phone app with an inbox of the agents that need you. It reaches your machine over SSH and lists what runs in [herdr-core](https://herdr.dev/core/), Herdr's own runtime; it does not see an agent you started in a Herdr pane. tuidev connects the two:
+
+```bash
+tuidev install --pack monitoring --pack herdr-core   # agents hc, and herdr-core started when you log in
+agents hc                                            # is herdr-core running, and in your desktop login?
+agents hc run claude                                 # in a Herdr pane: the agent, hosted in herdr-core
+```
+
+- **An agent started with `agents hc run`** is in the pane, in Herdr's sidebar and in the phone's inbox, and keeps running when the pane closes.
+- **The agents you already run show up too.** While herdr-core is up, each agent pane of this machine's Herdr gets a mirror in it. Typing on the phone reaches the agent in the pane. `AGENTS_HC_MIRROR=0` turns the mirrors off.
+- **What it needs:** herdr-core on the machine (its own installer, or Herdr's desktop app; tuidev does not install it), Herdr's phone app, and SSH from the phone, which Tailscale gives you. Each machine runs its own herdr-core and is added in the app by itself.
+
+The pack is not part of any of the four install choices: add it with the first command above. Tested so far on one Mac with one phone; the login item across a logout, and Linux with a real herdr-core, are not yet tested. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
+
 ## Stop what agents left behind
 
 Every `claude` session starts its own MCP servers, and its subagents start test runs, dev servers and polling loops. When a session crashes, or a subagent hands back its report, some of that keeps running. `agents` (`--pack monitoring`) lists each session with what it runs, flags what was left behind, and gives every flagged process a verdict with its evidence, so you stop the right thing and leave the rest.
@@ -224,6 +240,7 @@ herdr                                    # every agent on this machine and saved
 agents board                             # every session on every machine, by who needs you (Herdr: prefix+space)
 agents map                               # what runs where on every machine; enter opens, ctrl-k stops (Herdr: prefix+m)
 agents forward open workbox 5173         # another machine's port, here, in your browser
+agents hc run claude                     # an agent you can pick up in Herdr's phone app (--pack herdr-core)
 secret run -n NAME -- CMD                # a token from the OS store, in one command's environment
 sbx -- CMD                               # any command under the strict Seatbelt profile (macOS)
 t [NAME]                                 # attach-or-create a tmux session (--pack tmux)
@@ -248,7 +265,7 @@ In a clone, `make help` lists the same as Makefile targets. Every key binding an
 | [Secrets](docs/secrets.md) | API tokens in the Keychain, libsecret or `pass` with `secret`, not in dotfiles; what agents can reach |
 | [Agent workflows](docs/agent-workflows.md) | AI CLIs, editor integration, agent teams, worktrees, Herdr, `agents` and the menu bar, notifications |
 | [Orchestration](docs/orchestration.md) | The `orchestration` pack: subagent tiers, skills, git gates, CI runners |
-| [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, iOS clients |
+| [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, Herdr's phone app, iOS clients |
 | [Neovim](docs/nvim.md) | The `nvim` pack: LazyVim essentials |
 | [Vim](docs/vim.md) | The `vim` pack: a zero-plugin vimrc for servers |
 | [Theming](docs/theming.md) | Palette contract and `theme.sh` |

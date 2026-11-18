@@ -154,6 +154,16 @@ agents herdr reset                      # every tab a sync named gets its number
 agents herdr reset TAB_ID               # one tab back to auto-naming, one you renamed too (ids: agents herdr)
 ```
 
+Herdr's phone app, through herdr-core (`--pack herdr-core`; [remote.md](remote.md#herdrs-phone-app-agents-hc)):
+
+```bash
+agents hc                               # is herdr-core running, and in your desktop login?
+agents hc run claude                    # in a Herdr pane: the agent, hosted in herdr-core, listed on the phone
+agents hc attach NAME                   # come back to one; ctrl+\ detaches and leaves it running
+agents hc mirror                        # each agent pane and its mirror in herdr-core (AGENTS_HC_MIRROR=0 turns mirrors off)
+agents hc up --restart                  # at the Mac, not over SSH: replace a core outside the desktop login (ends its terminals)
+```
+
 Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. Plain `herdr` is the `default` session; keep one per machine and split projects into workspaces. Upgrade with `herdr update --handoff` from outside Herdr: the server keeps its panes. A server a systemd unit runs upgrades with `tuidev update --packages` (the unit's reload hands over), never `--handoff`. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
 
 ## macOS hotkeys (desktop profile)

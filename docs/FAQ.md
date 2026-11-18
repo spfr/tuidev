@@ -88,6 +88,10 @@ tmux is optional now (`--pack tmux`), bundled automatically by the `remote` prof
 
 **A Ctrl-click on a URL from another machine does nothing.** Run `agents link` on the machine you sit at: it says whether the watcher runs and, per machine, `connected`, `connecting`, `unreachable`, `disconnected` or `no agents there`. The click needs `--pack herdr` and `--pack monitoring` on both machines, and in a saved-machine pane Herdr does not open OSC 8 links yet, so the URL has to be on screen as text. `AGENTS_LINK=0` turns the watcher off, and `agents link restart` applies a change. See [remote.md](remote.md#remote-feels-local-ports-links-and-files).
 
+**Can I see my agents on my phone?** Two ways. Herdr's phone app has an inbox of the agents that need you; it lists what runs in herdr-core, so install `--pack herdr-core` beside `--pack monitoring`, start an agent with `agents hc run claude`, and the agents already in Herdr panes are mirrored there while herdr-core runs. Or use a terminal app (Blink, Moshi, Termius) and `herdr session attach` or `t` over SSH, which shows the whole TUI and needs no pack. Both are in [remote.md](remote.md#herdrs-phone-app-agents-hc).
+
+**Claude Code says "Not logged in" in a session I opened from the phone (macOS).** herdr-core was started over SSH, outside your desktop login, so the agent cannot reach the Keychain. `agents hc` says so. At the Mac itself, not over SSH, run `agents hc up --restart`; it ends the terminals that core holds. `--pack herdr-core` starts the core at login so the phone finds the right one. See [remote.md](remote.md#herdrs-phone-app-agents-hc).
+
 **`secret get` or `secret run` fails inside an agent session.** That is the sandbox and the deny rules doing their job: Claude Code refuses `secret get`, `secret export` and `secret run`, and under `sbx` the Keychain read fails (`the Keychain refused to read NAME`). Run it from your own shell. If a token has to reach an agent, start it as `secret run -n NAME -- claude`. See [secrets.md](secrets.md#what-an-agent-can-reach).
 
 ## Neovim

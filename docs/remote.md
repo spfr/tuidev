@@ -197,6 +197,7 @@ Things to know:
 - **Each machine has its own herdr-core.** The phone app adds machines one by one over SSH (it suggests your SSH hosts and Tailscale devices), and each machine mirrors its own Herdr.
 - **A machine with no desktop** (a Linux node) has no Keychain to miss: log Claude Code in there with `claude setup-token`.
 - herdr-core is a 0.1 preview and is not installed by tuidev: [herdr.dev/core](https://herdr.dev/core/) has its installer, and Herdr's desktop app brings it too.
+- **What was tested.** On one Mac (herdr-core 0.1.21, Herdr 0.9.5) with one phone: an agent started with `agents hc run` appeared in the phone's inbox, typing from the phone reached a mirrored pane, and the pane took its desk size back. The automatic start and end of mirrors ran against a separate test core with five real agent panes, not with a phone watching. The login item was not tested across a real logout and login, and on Linux only the unit tests ran, with no real herdr-core.
 
 The rest of this section is the terminal-app path, which needs none of the above and shows the whole TUI.
 
