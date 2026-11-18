@@ -95,8 +95,14 @@ arg() { awk -v f="$2" '$0 == f { getline; print }' "$FAKE/$1.calls" 2>/dev/null;
 reset
 
 # --- the socket a core would listen on ---
-[[ "$(_agents_hc_socket)" == "$HOME/.local/state/herdr-core/default/default.sock" ]] || fail "default socket: $(_agents_hc_socket)"
-[[ "$(HC_SESSION=work XDG_STATE_HOME="$tmp/st" _agents_hc_socket)" == "$tmp/st/herdr-core/work/work.sock" ]] || fail "session socket"
+# With a runtime dir (a Linux login has /run/user/UID) the state dir is not used.
+if [[ -d "/run/user/$(id -u)" ]]; then
+    [[ "$(_agents_hc_socket)" == "/run/user/$(id -u)/herdr-core/default.sock" ]] || fail "default socket: $(_agents_hc_socket)"
+    [[ "$(HC_SESSION=work _agents_hc_socket)" == "/run/user/$(id -u)/herdr-core/work.sock" ]] || fail "session socket"
+else
+    [[ "$(_agents_hc_socket)" == "$HOME/.local/state/herdr-core/default/default.sock" ]] || fail "default socket: $(_agents_hc_socket)"
+    [[ "$(HC_SESSION=work XDG_STATE_HOME="$tmp/st" _agents_hc_socket)" == "$tmp/st/herdr-core/work/work.sock" ]] || fail "session socket"
+fi
 [[ "$(HC_SOCKET=/x/y.sock _agents_hc_socket)" == /x/y.sock ]] || fail "HC_SOCKET"
 mkdir -p "$tmp/rt"
 [[ "$(XDG_RUNTIME_DIR="$tmp/rt" _agents_hc_socket)" == "$tmp/rt/herdr-core/default.sock" ]] || fail "runtime dir socket"
