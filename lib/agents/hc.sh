@@ -15,7 +15,8 @@
 #   - On macOS a core started over SSH (the phone connecting first) runs
 #     outside the desktop login: its programs cannot reach the Keychain, and
 #     Claude Code comes up "Not logged in". `agents hc up` starts it in the
-#     desktop session (the pack runs it at login), and says so when it is
+#     desktop session (the pack runs it at login and every 5 minutes, on
+#     Linux too, so a core that stopped comes back), and says so when it is
 #     not, restarting it only when told to (a restart ends its terminals).
 #   - A detached agent is easy to forget: leaving the pane says it still
 #     runs, and how to come back to it or end it.
@@ -24,9 +25,10 @@
 # stream per attached pane, for as long as it is attached (opened again when
 # the core restarts under it).
 #
-# Owns: `agents hc` (status, up, run, attach), the hc-pane.* marks.
+# Owns: `agents hc` (status, up, run, attach), the hc-pane.* marks, hc-up.said.
 # Uses: config.sh (AGENTS_RUN_DIR, AGENTS_NO_HERDR), herdrlabel.sh
-#   (_agents_hl_herdr, _agents_hl_ready), util.sh (_agents_timeout).
+#   (_agents_hl_herdr, _agents_hl_ready), util.sh (_agents_timeout,
+#   _agents_replace).
 # Public: agents_hc.
 
 _AGENTS_HC_SOURCE="tuidev-hc"    # our reports' source in Herdr: what leaving a pane releases
@@ -128,9 +130,24 @@ _agents_hc_ask_hello() {
 # _agents_hc_start — start a core. Without the Herdr pane's identity when we
 # are in one: every terminal the core starts later gets the core's
 # environment, and an agent there must not report into this pane.
+#
+# Under the herdr-core pack's systemd unit (AGENTS_HC_SCOPE=1) the core gets
+# a scope of its own: the unit's job ends when `agents hc up` does, and the
+# core, with every agent in it, must not be part of that job (on macOS the
+# LaunchAgent abandons its process group for the same reason). Where that
+# scope cannot be made, the core is started the plain way.
 _agents_hc_start() {
+    local scope=""
+    [[ "${AGENTS_HC_SCOPE:-}" != 1 ]] || scope="$(command -v systemd-run 2>/dev/null)" || scope=""
+    if [[ -n "$scope" ]]; then
+        _agents_hc_start_env "$scope" --user --scope --quiet --collect --description="herdr-core (tuidev-hc)" -- \
+            "$_AGENTS_HC_BIN" server start && return 0
+    fi
+    _agents_hc_start_env "$_AGENTS_HC_BIN" server start
+}
+_agents_hc_start_env() {
     env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID -u HERDR_SOCKET_PATH -u HERDR_BIN_PATH \
-        "$_AGENTS_HC_BIN" server start >/dev/null 2>&1
+        -u AGENTS_HC_SCOPE "$@" >/dev/null 2>&1
 }
 
 # _agents_hc_gui HELLO — true, false, or nothing where the core does not say
@@ -196,8 +213,16 @@ agents_hc_status() {
 # agents_hc_up [--restart] [-q] — a core in the desktop session: started when
 # none runs, left alone when one does, and restarted (ending its terminals)
 # only with --restart, when it is the headless kind.
+#
+# -q is the herdr-core pack's job, run at login and then every 5 minutes
+# (AGENTS_HC_UP=0: it does nothing, and a core you stopped stays down): it
+# prints nothing while all is well, and a problem once, not at every run
+# that finds it again. What it said last is in AGENTS_RUN_DIR/hc-up.said
+# (digits left out: a count of terminals is not a new problem), and is
+# cleared once all is well, so the same problem is said again when it comes
+# back. While all is well that is one subshell and one file test more.
 agents_hc_up() {
-    local restart=false quiet=false a hello gui live
+    local restart=false quiet=false a err said="" rc=0 mark="$AGENTS_RUN_DIR/hc-up.said"
     for a in "$@"; do
         case "$a" in
             --restart)  restart=true ;;
@@ -205,6 +230,27 @@ agents_hc_up() {
             *)          echo "usage: agents hc up [--restart] [-q]" >&2; return 2 ;;
         esac
     done
+    if [[ "$quiet" != true ]]; then
+        _agents_hc_up "$restart" false
+        return
+    fi
+    [[ "$AGENTS_HC_UP" != 0 ]] || return 0
+    err="$(_agents_hc_up "$restart" true 2>&1 >/dev/null)" || rc=$?
+    if [[ -z "$err" ]]; then
+        [[ ! -e "$mark" ]] || rm -f "$mark"
+        return "$rc"
+    fi
+    [[ ! -r "$mark" ]] || said="$(cat "$mark" 2>/dev/null)"
+    if [[ "${err//[0-9]/}" != "$said" ]]; then
+        printf '%s\n' "$err" >&2
+        { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$mark" "${err//[0-9]/}"; } 2>/dev/null || true
+    fi
+    return "$rc"
+}
+
+# _agents_hc_up RESTART QUIET — agents_hc_up's work.
+_agents_hc_up() {
+    local restart="$1" quiet="$2" hello gui live
     _agents_hc_need || return 1
     if _agents_hc_running; then
         hello="$(_agents_hc_hello)"

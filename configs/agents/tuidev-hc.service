@@ -1,0 +1,29 @@
+# herdr-core kept running on this machine (`agents hc up -q`), installed by
+# ./install.sh --pack herdr-core into ~/.config/systemd/user (Linux). Started
+# by tuidev-hc.timer: shortly after your user manager starts (at boot, once
+# lingering is on) and every 5 minutes after that. A core that runs is left
+# alone; one that is gone is started again. Nothing here ever stops a core.
+# Turn it off: systemctl --user disable --now tuidev-hc.timer
+# Change it with a drop-in (systemctl --user edit tuidev-hc.service): the
+# pack writes this file again on every install and update.
+
+[Unit]
+Description=herdr-core kept running (agents hc up)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash %h/.local/bin/agents hc up -q
+Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin
+# The core gets a scope of its own (systemd-run --user --scope): this job
+# ends when `agents hc up` does, and the core and its agents are not part of
+# it. Should that scope fail, the core starts in this job, and KillMode=process
+# keeps it running when the job ends.
+Environment=AGENTS_HC_SCOPE=1
+KillMode=process
+# `agents hc up -q` exits 1 while a problem lasts and says it once; the job
+# does not fail every 5 minutes for it.
+SuccessExitStatus=1
+# What `agents hc up` writes is a warning; systemd's own lines about each
+# run (starting, finished) are left out of the journal.
+SyslogLevel=warning
+LogLevelMax=notice

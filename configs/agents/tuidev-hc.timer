@@ -1,0 +1,16 @@
+# Runs tuidev-hc.service (herdr-core kept running) shortly after your user
+# manager starts and every 5 minutes after that. Installed and enabled by
+# ./install.sh --pack herdr-core (Linux). Without lingering
+# (sudo loginctl enable-linger $USER) a user manager runs only while you are
+# logged in, and so does this.
+# Turn it off: systemctl --user disable --now tuidev-hc.timer
+
+[Unit]
+Description=Start herdr-core again if it stopped (every 5 minutes)
+
+[Timer]
+OnStartupSec=15s
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

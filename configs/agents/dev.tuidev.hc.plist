@@ -2,10 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   herdr-core in your desktop login (`agents hc up`), installed by
-  ./install.sh --pack herdr-core into ~/Library/LaunchAgents. Run once at
-  login, before Herdr's phone app can connect over SSH and start a core
-  outside the desktop login, where its agents cannot reach the Keychain. A
-  core that already runs is left alone. The pack fills in the @...@ values.
+  ./install.sh --pack herdr-core into ~/Library/LaunchAgents. Run at login,
+  before Herdr's phone app can connect over SSH and start a core outside the
+  desktop login, where its agents cannot reach the Keychain; then every 5
+  minutes, so a core that stopped is started again. A core that runs is left
+  alone (about 40 ms of a few small processes), and a problem is logged once,
+  not every 5 minutes. The pack fills in the @...@ values.
 -->
 <plist version="1.0">
 <dict>
@@ -26,6 +28,9 @@
     </dict>
     <key>RunAtLoad</key>
     <true/>
+    <!-- Not KeepAlive: `agents hc up` exits once the core is up. -->
+    <key>StartInterval</key>
+    <integer>300</integer>
     <!-- The core outlives this one-shot job, and is not a Background-band
          process: the agents it hosts must run as they do in a terminal. -->
     <key>AbandonProcessGroup</key>

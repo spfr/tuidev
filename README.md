@@ -110,16 +110,17 @@ Press **prefix+m** for the map: one list of what runs where, on every machine. E
 Herdr has a free phone app with an inbox of the agents that need you. It reaches your machine over SSH and lists what runs in [herdr-core](https://herdr.dev/core/), Herdr's own runtime; it does not see an agent you started in a Herdr pane. tuidev connects the two:
 
 ```bash
-tuidev install --pack monitoring --pack herdr-core   # agents hc, and herdr-core started when you log in
+tuidev install --pack monitoring --pack herdr-core   # agents hc, and herdr-core kept running
 agents hc                                            # is herdr-core running, and in your desktop login?
 agents hc run claude                                 # in a Herdr pane: the agent, hosted in herdr-core
 ```
 
 - **An agent started with `agents hc run`** is in the pane, in Herdr's sidebar and in the phone's inbox, and keeps running when the pane closes.
 - **The agents you already run can show up too, as an experiment.** `AGENTS_HC_MIRROR=1` mirrors each agent pane of this machine's Herdr into herdr-core. While the phone shows a session, its pane at your desk has the phone's size, and gets its own back when the phone stops. It is off by default until that has been tested with the phone app itself.
+- **Your agents keep going with the laptop shut,** on a box that stays on (a Raspberry Pi, a VM). There the pack installs a systemd user timer that starts herdr-core at boot; on a Mac, a login item. Either one starts it again within 5 minutes if it stops.
 - **What it needs:** herdr-core on the machine (its own installer, or Herdr's desktop app; tuidev does not install it), Herdr's phone app, and SSH from the phone, which Tailscale gives you. Each machine runs its own herdr-core and is added in the app by itself.
 
-The pack is not part of any of the four install choices: add it with the first command above. Tested so far on one Mac with one phone; the login item across a logout, and Linux with a real herdr-core, are not yet tested. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
+The pack is not part of any of the four install choices: add it with the first command above. Tested so far on one Mac with one phone; the login item across a logout, the 5-minute restart with a real core, and the Linux timer on a real systemd box are not yet tested. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
 
 ## Stop what agents left behind
 

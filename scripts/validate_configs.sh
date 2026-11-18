@@ -298,6 +298,57 @@ fi
 echo ""
 
 # ============================================================================
+# systemd units (the herdr-core pack's timer and service). systemd-analyze
+# runs only on a host with systemd, so this is a structural check that runs
+# everywhere: known sections, Key=value lines with keys from a short list,
+# a known Type=, plain time spans in [Timer], and what each kind needs.
+# ============================================================================
+print_step "systemd units"
+
+# unit_check FILE — nothing and 0 when FILE passes; the first problem and 1.
+unit_check() {
+    LC_ALL=C awk -v kind="${1##*.}" '
+        BEGIN {
+            keys["Unit"] = " Description Documentation After Before Wants Requires PartOf "
+            keys["Service"] = " Type ExecStart ExecStartPre ExecStop Environment KillMode SuccessExitStatus SyslogLevel LogLevelMax "
+            keys["Timer"] = " OnBootSec OnStartupSec OnActiveSec OnUnitActiveSec OnUnitInactiveSec OnCalendar AccuracySec RandomizedDelaySec Persistent Unit "
+            keys["Install"] = " WantedBy RequiredBy Alias "
+        }
+        function bad(m) { if (!err) err = "line " NR ": " m; }
+        /^[ \t]*([#;]|$)/ { next }
+        /^\[[A-Za-z]+\]$/ {
+            sec = substr($0, 2, length($0) - 2)
+            if (!(sec in keys)) bad("unknown section [" sec "]")
+            next
+        }
+        !/^[A-Za-z][A-Za-z0-9]*=/ { bad("not Key=value: " $0); next }
+        {
+            k = $0; sub(/=.*/, "", k); v = $0; sub(/^[^=]*=/, "", v)
+            if (sec == "") { bad(k " before any section"); next }
+            if (index(keys[sec], " " k " ") == 0) bad(k " is not a key this check knows in [" sec "]")
+            if (k == "Type" && v !~ /^(simple|exec|forking|oneshot|notify|dbus|idle)$/) bad("Type=" v)
+            if (sec == "Timer" && k ~ /Sec$/ && v !~ /^[0-9]+(us|ms|s|min|h|d|w)?$/) bad(k "=" v " is not a time span")
+            has[sec, k] = 1
+        }
+        END {
+            if (!err && kind == "service" && !has["Service", "ExecStart"]) err = "a service needs [Service] ExecStart="
+            if (!err && kind == "timer" && !(has["Timer", "OnBootSec"] || has["Timer", "OnStartupSec"] || has["Timer", "OnActiveSec"] || has["Timer", "OnUnitActiveSec"] || has["Timer", "OnCalendar"])) err = "a timer needs an On...= key in [Timer]"
+            if (!err && !has["Unit", "Description"]) err = "[Unit] needs Description="
+            if (err) { print err; exit 1 }
+        }' "$1"
+}
+
+for f in "$REPO_DIR"/configs/agents/*.service "$REPO_DIR"/configs/agents/*.timer; do
+    [[ -f "$f" ]] || continue
+    if err="$(unit_check "$f")"; then
+        pass "$(rel "$f")"
+    else
+        fail "$(rel "$f") - $err"
+    fi
+done
+echo ""
+
+# ============================================================================
 # Theme palettes: every configs/themes/*/palette.toml must carry the exact
 # 26-key color contract (see docs/theming.md); key sets must match across
 # themes so `theme.sh apply` renders identically for any of them.

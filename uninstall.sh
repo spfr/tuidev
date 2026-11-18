@@ -284,6 +284,23 @@ for agent_label in dev.tuidev.memguard dev.tuidev.link dev.tuidev.hc; do
     run_cmd rm -f "$agent_plist"
     done_msg "removed $agent_plist"
 done
+# herdr-core's systemd user timer and service (Linux) run `agents` the same
+# way. Only the timer is stopped: the core runs in a scope of its own and
+# stays up, as on macOS.
+hc_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+if [[ -f "$hc_unit_dir/tuidev-hc.timer" || -f "$hc_unit_dir/tuidev-hc.service" ]]; then
+    if command -v systemctl >/dev/null 2>&1; then
+        run_cmd systemctl --user disable --now tuidev-hc.timer 2>/dev/null || true
+    fi
+    for hc_unit in tuidev-hc.timer tuidev-hc.service; do
+        grep -q 'tuidev' "$hc_unit_dir/$hc_unit" 2>/dev/null || continue
+        run_cmd rm -f "$hc_unit_dir/$hc_unit"
+        done_msg "removed $hc_unit_dir/$hc_unit"
+    done
+    if command -v systemctl >/dev/null 2>&1; then
+        run_cmd systemctl --user daemon-reload 2>/dev/null || true
+    fi
+fi
 # Unset SwiftBar's plugin folder only if it is still ours and now empty.
 if is_macos && [[ "$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null)" == "$swiftbar_dir" ]] \
    && [[ -z "$(ls -A "$swiftbar_dir" 2>/dev/null)" ]]; then

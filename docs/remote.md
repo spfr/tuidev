@@ -178,7 +178,7 @@ Herdr has a free phone app (iPhone, iPad, Android) with an inbox of the agents t
 `agents hc run` closes that gap: it starts the agent in herdr-core and puts the pane on it.
 
 ```bash
-tuidev install --pack monitoring --pack herdr-core   # agents hc, and herdr-core started at login
+tuidev install --pack monitoring --pack herdr-core   # agents hc, and herdr-core kept running
 agents hc                      # is herdr-core running, and in your desktop login?
 agents hc run claude           # in a Herdr pane: the agent, hosted in herdr-core
 agents hc run --name api codex --no-daemon
@@ -192,15 +192,17 @@ The same agent is now in three places: the pane, Herdr's sidebar (each status th
 
 On the phone: install Tailscale and Herdr's app, then add the machine by its Tailscale name. Tailscale SSH needs no key; plain SSH needs Remote Login on and the phone's key in `authorized_keys`, as [below](#iphone-and-ipad).
 
+**On an always-on Linux box.** To start agents on a machine that stays on (a Raspberry Pi, a VM) and pick them up from the phone with the laptop shut, install the two packs there too: `tuidev install --pack monitoring --pack herdr-core`, and herdr-core with its own installer (it has a linux-aarch64 build). The pack installs a systemd user timer, `tuidev-hc.timer`, that starts the core shortly after your user manager starts and checks it every 5 minutes. A user manager runs without a login only with lingering on, and the pack prints the command when it is off: `sudo loginctl enable-linger $USER`, once. The core runs in a scope of its own, so stopping or removing the timer never ends it or its agents. There is no Keychain there: log Claude Code in with `claude setup-token`. Then add the box in Herdr's app by its Tailscale name, and start agents on it with `agents hc run claude` over SSH. Without systemd (a container), the pack says so and installs nothing that runs; start the core with `agents hc up`.
+
 Things to know:
 
 - **macOS: the core must run in your desktop login.** A core that the phone starts over SSH runs outside it, and Claude Code there says "Not logged in", because it cannot reach the Keychain. The pack's LaunchAgent (`dev.tuidev.hc`) starts the core at login so the phone finds that one. `agents hc` says when the running core is the wrong kind, and `agents hc run` refuses to start a program in it. tuidev never stops a core by itself: `agents hc up --restart`, at the Mac and not over SSH, replaces it, which ends the terminals it holds.
+- **The core is started again if it stops.** The pack's job runs `agents hc up -q` at login and then every 5 minutes (the LaunchAgent on macOS, `tuidev-hc.timer` on Linux). With a core running it costs about 40 ms and changes nothing; with none, it starts one, so a core that crashed, or that you stopped with `herdr-core server stop`, is back within 5 minutes. A problem it cannot fix, such as a core started over SSH on a Mac, goes to its log once (`~/Library/Logs/tuidev-hc.log`, or `journalctl --user -u tuidev-hc`), not every 5 minutes. To keep a core you stopped down, set `AGENTS_HC_UP=0` in `~/.config/agents.conf`: the job then starts nothing, and `agents hc up` still works by hand. Unloading the job (`launchctl bootout gui/$(id -u)/dev.tuidev.hc`, `systemctl --user disable --now tuidev-hc.timer`) lasts only until the next login on macOS, and until the next `tuidev update` on both.
 - **The agent gets herdr-core's environment, not the pane's.** It starts in the pane's directory, but a variable you exported in that shell is not there. `herdr-core server restart --fresh`, from a terminal outside Herdr, gives the core that shell's environment for new terminals.
 - **Typing from the phone takes the terminal's size.** The last viewer that types sets it, so the pane redraws at phone width until you type at the desk again, which gives it the desk's size back. Watching from the phone changes nothing.
 - **Each machine has its own herdr-core.** The phone app adds machines one by one over SSH (it suggests your SSH hosts and Tailscale devices).
-- **A machine with no desktop** (a Linux node) has no Keychain to miss: log Claude Code in there with `claude setup-token`.
 - herdr-core is a 0.1 preview and is not installed by tuidev: [herdr.dev/core](https://herdr.dev/core/) has its installer, and Herdr's desktop app brings it too.
-- **What was tested.** On one Mac (herdr-core 0.1.21, Herdr 0.9.5) with one phone: an agent started with `agents hc run` appeared in the phone's inbox, and with mirrors on, five agent panes were listed there. Getting a pane's size back was tested on that Mac with a 43x31 viewer attached to a mirror and then closed, not with the phone app. The login item was not tested across a real logout and login, and on Linux only the unit tests ran, with no real herdr-core.
+- **What was tested.** On one Mac (herdr-core 0.1.21, Herdr 0.9.5) with one phone: an agent started with `agents hc run` appeared in the phone's inbox, and with mirrors on, five agent panes were listed there. Getting a pane's size back was tested on that Mac with a 43x31 viewer attached to a mirror and then closed, not with the phone app. The login item was not tested across a real logout and login, nor the 5-minute restart with a real core. On Linux only the unit tests ran, with stand-ins for systemd and no real herdr-core.
 
 The rest of this section is the terminal-app path, which needs none of the above and shows the whole TUI.
 

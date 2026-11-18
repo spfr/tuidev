@@ -85,7 +85,7 @@ _AGENTS_HC_WAIT=2 _AGENTS_HC_HERDR_WAIT=1 _AGENTS_HC_PAUSE=0.2
 
 LS_ONE='{"terminals":[{"name":"api","state":"live"},{"name":"old","state":"finished"}]}'
 reset() {
-    rm -f "$FAKE"/*.calls "$FAKE"/*.fail "$FAKE"/*.env "$FAKE"/*.hang "$FAKE"/attach.* "$FAKE"/events.* "$FAKE"/start.gui
+    rm -f "$AGENTS_RUN_DIR/hc-up.said" "$FAKE"/*.calls "$FAKE"/*.fail "$FAKE"/*.env "$FAKE"/*.hang "$FAKE"/attach.* "$FAKE"/events.* "$FAKE"/start.gui
     echo "$LS_ONE" > "$FAKE/ls.json"
 }
 hello() { printf '{"result":{"login_session":{"gui":%s}}}\n' "$1" > "$FAKE/hello.json"; }
@@ -209,6 +209,66 @@ out="$(SSH_CONNECTION="$SSH" agents_main hc up --restart 2>&1)" && fail "up --re
 [[ "$out" == *"at the Mac"* && "$(calls hc)" != *server* ]] || fail "up --restart over SSH: $out / $(calls hc)"
 pass "a shell that looks like SSH is not refused; a core that starts outside the desktop login is reported, never stopped"
 
+# --- the pack's job: up -q at login and every 5 minutes ---
+# A problem is said once, not at every run that finds it again; all well
+# clears that, so the same problem is said again when it comes back.
+MARK="$AGENTS_RUN_DIR/hc-up.said"
+reset; rm -f "$MARK"; RUNNING=true; hello false
+out="$(agents_main hc up -q 2>&1)" && fail "up -q passed a headless core"
+[[ "$out" == *"started over SSH"* ]] || fail "up -q, headless, first run: $out"
+out="$(agents_main hc up -q 2>&1)" && fail "up -q passed a headless core the second time"
+[[ -z "$out" ]] || fail "up -q said the same problem twice: $out"
+echo '{"terminals":[{"name":"a","state":"live"},{"name":"b","state":"live"}]}' > "$FAKE/ls.json"
+out="$(agents_main hc up -q 2>&1)" || true
+[[ -z "$out" ]] || fail "a new count of terminals counted as a new problem: $out"
+out="$(agents_main hc up 2>&1)" || true
+[[ "$out" == *"started over SSH"* ]] || fail "up without -q is quiet about a known problem: $out"
+touch "$FAKE/connect.hang"
+out="$(agents_main hc up -q 2>&1)" || true
+[[ "$out" == *"did not answer"* ]] || fail "a different problem was not said: $out"
+rm -f "$FAKE/connect.hang"; hello true
+out="$(agents_main hc up -q 2>&1)" || fail "up -q failed with a good core: $out"
+[[ -z "$out" && ! -e "$MARK" ]] || fail "all well: '$out', mark: $(cat "$MARK" 2>/dev/null)"
+hello false
+out="$(agents_main hc up -q 2>&1)" || true
+[[ "$out" == *"started over SSH"* ]] || fail "a problem that came back was not said: $out"
+[[ "$(calls hc)" != *"server stop"* ]] || fail "the job stopped a core: $(calls hc)"
+pass "up -q says a problem once, again when it changes or comes back, and never stops a core"
+
+# AGENTS_HC_UP=0: the job starts nothing; up without -q still does.
+reset; rm -f "$MARK"; RUNNING=false; hello true
+out="$(AGENTS_HC_UP=0 agents_main hc up -q 2>&1)" || fail "up -q, AGENTS_HC_UP=0: $out"
+[[ -z "$out" && -z "$(calls hc)" ]] || fail "AGENTS_HC_UP=0 and the job ran: $out / $(calls hc)"
+out="$(AGENTS_HC_UP=0 agents_main hc up 2>&1)" || fail "up, AGENTS_HC_UP=0: $out"
+[[ "$(calls hc)" == *"server start"* ]] || fail "AGENTS_HC_UP=0 kept up itself from starting a core: $(calls hc)"
+RUNNING=true
+pass "AGENTS_HC_UP=0 turns the job off, not agents hc up"
+
+# Under the systemd unit (AGENTS_HC_SCOPE=1) the core gets a scope of its
+# own, and does not inherit the switch; a scope that fails falls back.
+mkdir -p "$tmp/sd"
+cat > "$tmp/sd/systemd-run" <<'EOF'
+#!/bin/bash
+{ echo "--"; printf '%s\n' "$@"; env | grep '^AGENTS_HC_SCOPE=' || true; } >> "$FAKE/sdrun.calls"
+[[ ! -e "$FAKE/sdrun.fail" ]] || exit 1
+while [[ $# -gt 0 && "$1" != -- ]]; do shift; done
+shift; exec "$@"
+EOF
+chmod +x "$tmp/sd/systemd-run"
+reset; rm -f "$FAKE/sdrun.calls" "$FAKE/sdrun.fail"; RUNNING=false; hello true
+out="$(PATH="$tmp/sd:$PATH" AGENTS_HC_SCOPE=1 agents_main hc up -q 2>&1)" || fail "up -q in a scope: $out"
+[[ "$(calls sdrun)" == *"-- --user --scope "*"-- $AGENTS_HC_BIN server start"* ]] || fail "no scope: $(calls sdrun)"
+[[ "$(calls sdrun)" != *"AGENTS_HC_SCOPE="* ]] || fail "the core inherits AGENTS_HC_SCOPE: $(calls sdrun)"
+[[ "$(grep -c '^start$' "$FAKE/hc.calls")" == 1 ]] || fail "started more than once: $(calls hc)"
+reset; rm -f "$FAKE/sdrun.calls"; touch "$FAKE/sdrun.fail"
+out="$(PATH="$tmp/sd:$PATH" AGENTS_HC_SCOPE=1 agents_main hc up -q 2>&1)" || fail "up -q, scope failed: $out"
+[[ -s "$FAKE/sdrun.calls" && "$(calls hc)" == *"server start"* ]] || fail "no plain start after a failed scope: $(calls hc)"
+reset; rm -f "$FAKE/sdrun.calls" "$FAKE/sdrun.fail"
+out="$(PATH="$tmp/sd:$PATH" agents_main hc up -q 2>&1)" || fail "up -q, no scope: $out"
+[[ ! -e "$FAKE/sdrun.calls" && "$(calls hc)" == *"server start"* ]] || fail "systemd-run without AGENTS_HC_SCOPE: $(calls sdrun)"
+RUNNING=true
+pass "under the systemd unit the core starts in a scope of its own (plainly when that fails), and only there"
+
 # --- a pane's mark ---
 # kill -0 says EPERM for someone else's live process in a sandbox: still alive.
 echo 424242 > "$(_agents_hc_pane_mark w1:p1)"; echo 999999 > "$(_agents_hc_pane_mark w1:p2)"
@@ -223,7 +283,7 @@ rm -f "$AGENTS_RUN_DIR"/hc-pane.*
 pass "a pane's mark counts while its process lives, even where kill -0 may not signal it"
 
 # --- names ---
-reset
+reset; _agents_hc_bin
 [[ "$(_agents_hc_name "/src/My App.v2")" == "my-app-v2" ]] || fail "name: $(_agents_hc_name "/src/My App.v2")"
 [[ "$(_agents_hc_name /src/api)" == "api-2" ]] || fail "taken name: $(_agents_hc_name /src/api)"
 [[ "$(_agents_hc_name /src/old)" == "old" ]] || fail "a finished terminal's name is free"

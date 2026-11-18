@@ -166,7 +166,9 @@ FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herd
                                start it in the desktop login; a core that runs is left
                                alone, and one started over SSH is restarted only with
                                --restart (that ends its terminals). At the Mac, not
-                               over SSH
+                               over SSH. -q: the herdr-core pack's job (at login and
+                               every 5 minutes) says a problem once; AGENTS_HC_UP=0
+                               turns that job off
   agents hc run [--name NAME] [--] CMD [ARG...]
                                start CMD (claude, codex --no-daemon) in herdr-core, in
                                this directory, and put this terminal on it: the phone
