@@ -71,7 +71,7 @@ agents_cool() {
         esac
     done
     if [[ ! -f "$_AGENTS_FAN_PLIST" ]]; then
-        echo "agents: fan control isn't installed (Apple Silicon: ./install.sh --pack cooling)" >&2
+        echo "agents: fan control isn't installed (Apple Silicon: tuidev install --pack cooling)" >&2
         return 1
     fi
     if [[ "$what" == status ]]; then
@@ -80,7 +80,7 @@ agents_cool() {
     local file="$_AGENTS_FAN_DIR/mode" text
     if [[ ! -w "$file" ]]; then
         if id -Gn 2>/dev/null | tr ' ' '\n' | grep -qx admin; then
-            echo "agents: can't write $file (it should be root:admin 0664; reinstall: ./install.sh --pack cooling)" >&2
+            echo "agents: can't write $file (it should be root:admin 0664; reinstall: tuidev install --pack cooling)" >&2
         else
             echo "agents: only an admin user can switch the fans (the mode file is root:admin 0664)" >&2
         fi

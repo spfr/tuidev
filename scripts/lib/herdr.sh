@@ -258,7 +258,7 @@ herdr_handoff_blocker() {
     unit="$(_herdr_server_unit "$pid")"
     [[ -n "$unit" ]] || return 1
     if [[ "$(_herdr_unit_reload "$unit")" == handoff ]]; then
-        echo "the server is systemd unit $unit, which hands it over itself: systemctl --user reload $unit (update.sh --packages runs it)"
+        echo "the server is systemd unit $unit, which hands it over itself: systemctl --user reload $unit (tuidev update --packages runs it)"
     else
         echo "the server is systemd unit $unit, which would stop the new server and its panes once the old one exits (or, with KillMode=process, lose track of it); $HERDR_RELOAD_HINT"
     fi
@@ -352,7 +352,7 @@ herdr_systemd_update() {
     else
         print_step "herdr: installing $tag to $bin (no handoff: systemd units hand over through their reload)"
         if ! TUIDEV_HERDR_VERSION="$tag" herdr_install_direct; then
-            print_warning "herdr: $tag not installed; nothing reloaded (update.sh --packages tries again)"
+            print_warning "herdr: $tag not installed; nothing reloaded (tuidev update --packages tries again)"
             return 0
         fi
         installed=true
@@ -393,7 +393,7 @@ herdr_self_update() {
     units="$(herdr_systemd_units)"
     if [[ "${HERDR_ENV:-}" == 1 ]]; then
         if [[ -n "$units" ]]; then
-            print_warning "herdr: not upgraded from inside a Herdr pane: detach (Ctrl+b q), then run ./scripts/update.sh --packages from a plain shell (it reloads the systemd units)"
+            print_warning "herdr: not upgraded from inside a Herdr pane: detach (Ctrl+b q), then run tuidev update --packages from a plain shell (it reloads the systemd units)"
         else
             print_warning "herdr update refuses to run inside a Herdr pane: detach (Ctrl+b q), then run herdr update --handoff from a plain shell"
         fi
@@ -425,7 +425,7 @@ herdr_self_update() {
         || print_warning "herdr ${args[*]} did not finish cleanly (continuing; its output says what is left)"
     # Herdr's own updater picks the file: check what it installed afterwards.
     release_attest "$HERDR_REPO" "$bin" "$(file_sha256 "$bin")" herdr \
-        || print_warning "the updated $bin did not verify; reinstall it with: ./install.sh --pack herdr"
+        || print_warning "the updated $bin did not verify; reinstall it with: tuidev install --pack herdr"
     return 0
 }
 

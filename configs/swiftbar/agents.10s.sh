@@ -1,6 +1,6 @@
 #!/bin/bash
 # <xbar.title>agents</xbar.title>
-# <xbar.version>v1.7</xbar.version>
+# <xbar.version>v1.8</xbar.version>
 # <xbar.desc>Who needs you: sessions by state (needs you, to review, running, parked), limits with their pace, what the day went to, stale helpers and hogs when there are any, keep-awake, fans and a compact system view, from tuidev's `agents` command.</xbar.desc>
 # <xbar.dependencies>bash,agents</xbar.dependencies>
 # <swiftbar.hideAbout>true</swiftbar.hideAbout>
@@ -162,7 +162,7 @@ if [[ -z "$AGENTS" ]]; then
     echo ":exclamationmark.triangle: | sfcolor=#FF9F0A"
     echo "---"
     echo "The agents command is not on PATH | color=red"
-    echo "Reinstall it: ./install.sh --pack monitoring"
+    echo "Reinstall it: tuidev install --pack monitoring"
     echo "Or remove this plugin: $SELF | symbolize=false"
     [[ -z "$LAST" || ! -e "$LAST" ]] || rm -f "$LAST"
     exit 0
@@ -478,6 +478,9 @@ BAR_TITLE="triage awake" BAR_SECTIONS="needs review running parked limits today 
 # Herdr's health (hhealth rows) is maintenance, at the bottom: never in Needs
 # you, the tint or the title.
 herdr_stale="" herdr_vers="" herdr_outdated=""
+# A newer tuidev release (the release row): maintenance too, not activity, so
+# it never changes the title, Needs you or the idle fast path.
+rel_have="" rel_new=""
 # Herdr sessions (in a Herdr pane), and whether one works or waits for you:
 # a server restart restarts them all.
 n_in_herdr=0 herdr_busy=""
@@ -788,6 +791,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                           fi ;;
                 outdated) herdr_outdated="$kind" ;;
             esac ;;
+        release)   # release INSTALLED LATEST: both X.Y.Z, else the row is ignored
+            if [[ "$pid" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$kind" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then rel_have="$pid" rel_new="$kind"; fi ;;
         stale)
             n_stale=$((n_stale + 1))
             short_name "$args"; name_add stale_names "$REPLY"
@@ -1048,6 +1053,14 @@ if [[ -n "$herdr_names" ]]; then
     maint_menu+="--Herdr integrations outdated:$herdr_names | sfimage=puzzlepiece.extension $TINT_IDLE $ROW symbolize=false"$'\n'
     maint_menu+="----Reinstall each, in a terminal: | size=11"$'\n'
     for v in $herdr_names; do maint_menu+="----herdr integration install $v | $ROW sfimage=terminal symbolize=false"$'\n'; done
+fi
+# A newer tuidev release: one row, its submenu the update (in your terminal,
+# which asks first) and the release notes.
+if [[ -n "$rel_new" ]]; then
+    n_maint=$((n_maint + 1))
+    maint_menu+="--tuidev $rel_new is out · you have $rel_have | sfimage=arrow.down.circle $TINT_IDLE $ROW symbolize=false"$'\n'
+    maint_menu+="----Update now… | $TERM_OPEN param2=--hold param3=tuidev param4=update param5=--ask sfimage=arrow.down.circle"$'\n'
+    maint_menu+="----What changed | href=https://github.com/spfr/tuidev/releases/tag/v$rel_new sfimage=safari"$'\n'
 fi
 
 # --- Title -------------------------------------------------------------------------

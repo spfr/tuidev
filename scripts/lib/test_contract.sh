@@ -266,12 +266,176 @@ done
 [[ -z "$clash" ]] || fail "awk functions named like a parameter of a program they are loaded with, which mawk refuses:$clash"
 pass "no awk parameter is named like a function"
 
+# VERSION is what get.sh, dist.sh and `tuidev version` report: X.Y.Z, and not
+# behind the newest released section of the changelog.
+# shellcheck source=version.sh disable=SC1091
+. "$SCRIPT_DIR/version.sh"
+version="$(cat "$REPO_DIR/VERSION" 2>/dev/null)" || version=""
+version_valid "$version" || fail "VERSION must be X.Y.Z (got '$version')"
+newest="0.0.0"
+while IFS= read -r h; do
+    h="${h#\#\# \[}"; h="${h%%\]*}"
+    ! { version_valid "$h" && version_newer "$h" "$newest"; } || newest="$h"
+done < <(grep -E '^## \[' "$REPO_DIR/CHANGELOG.md")
+! version_newer "$newest" "$version" || fail "VERSION $version is behind CHANGELOG.md's newest release, $newest"
+pass "VERSION is X.Y.Z and not behind the changelog ($version, newest section $newest)"
+
+# Copies kept in step. get.sh, bin/tuidev and lib/agents/release.sh run
+# without scripts/lib, so each holds copies of a few of its functions; every
+# copy is run here against its twin, and one that drifts fails.
+# fn_from FILE NAME — top-level function NAME's text, out of a script that
+# runs when sourced.
+fn_from() {
+    awk -v n="$2" 'index($0, n "() {") == 1 { print; if ($0 !~ /\{[[:space:]]*$/) exit; f = 1; next }
+                   f { print; if (/^}/) exit }' "$1"
+}
+copies=""
+for f in _tuidev_is_version _tuidev_newer _tuidev_managed _tuidev_release_home _tuidev_flip; do
+    copies+="$(fn_from "$REPO_DIR/bin/tuidev" "$f")"$'\n'
+done
+copies+="$(fn_from "$REPO_DIR/get.sh" _get_flip)"$'\n'"$(fn_from "$REPO_DIR/get.sh" _get_sha256)"
+[[ "$(grep -cE '^_[a-z0-9_]+\(\) \{' <<<"$copies")" == 7 ]] || fail "could not read the copies out of bin/tuidev and get.sh: $copies"
+eval "$copies"
+# shellcheck source=../../lib/agents/release.sh disable=SC1091
+. "$REPO_DIR/lib/agents/release.sh"
+# shellcheck source=ui.sh disable=SC1091
+. "$SCRIPT_DIR/ui.sh"
+
+for v in 1.2.3 0.0.0 10.20.30 03.09.0 v1.2.3 1.2 1.2.3.4 1.2.3-rc1 "" " 1.2.3" 1.2.x; do
+    a=no b=no; version_valid "$v" && a=yes; _tuidev_is_version "$v" && b=yes
+    [[ "$a" == "$b" ]] || fail "'$v' is a version to version_valid: $a, to bin/tuidev's _tuidev_is_version: $b"
+done
+cvt="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-contract.XXXXXX")"
+vers="0.0.0 0.0.1 1.0.0 1.0.1 3.08.0 3.9.0 3.10.0 3.99.99 4.0.0"
+{ echo "# Changelog"; for v in $vers; do printf '\n## [%s] - 2026-01-01\n\n- %s\n' "$v" "$v"; done; } > "$cvt/CHANGELOG.md"
+printf '#!/bin/bash\n' > "$cvt/install.sh"; chmod +x "$cvt/install.sh"
+for b in $vers; do
+    want=""
+    for a in $vers; do
+        x=no y=no z=no; version_newer "$a" "$b" && x=yes; _tuidev_newer "$a" "$b" && y=yes; _agents_release_newer "$a" "$b" && z=yes
+        [[ "$x" == "$y" && "$x" == "$z" ]] || fail "is $a newer than $b? version_newer: $x, bin/tuidev: $y, lib/agents/release.sh: $z"
+        [[ "$x" == no ]] || want+="$a "
+    done
+    got="$(TUIDEV_REPO="$cvt" HOME="$cvt" bash "$REPO_DIR/bin/tuidev" whatsnew "$b" | sed -n 's/^## \[\([^]]*\)\].*/\1/p' | tr '\n' ' ')"
+    [[ "$(tr ' ' '\n' <<<"$got" | sort | tr '\n' ' ')" == "$(tr ' ' '\n' <<<"$want" | sort | tr '\n' ' ')" ]] \
+        || fail "tuidev whatsnew $b lists '$got'; version_newer says '$want'"
+done
+pass "version_valid and version_newer agree with bin/tuidev's copies, lib/agents/release.sh's and the newer() in tuidev whatsnew"
+
+mkdir -p "$cvt/r/versions/1.2.3" "$cvt/git" "$cvt/nogetsh" "$cvt/gitfile"
+for d in "$cvt/r/versions/1.2.3" "$cvt/git" "$cvt/nogetsh" "$cvt/gitfile"; do echo 1.2.3 > "$d/VERSION"; : > "$d/get.sh"; done
+mkdir "$cvt/git/.git"; : > "$cvt/gitfile/.git"; rm "$cvt/nogetsh/get.sh"
+for d in "$cvt/r/versions/1.2.3" "$cvt/git" "$cvt/nogetsh" "$cvt/gitfile" "$cvt/none"; do
+    a=no b=no; tuidev_is_release "$d" && a=yes; _tuidev_managed "$d" && b=yes
+    [[ "$a" == "$b" ]] || fail "is $d a release? tuidev_is_release: $a, bin/tuidev's _tuidev_managed: $b"
+done
+for d in /h/current /h/x/versions/1.2.3 /h/versions/1.2 /h/versions/1.2.3/sub /h/versions/x/current /h/other /current; do
+    a=no b=no; REPLY=""; tuidev_release_home "$d" && a="yes $REPLY"; REPLY=""; _tuidev_release_home "$d" && b="yes $REPLY"
+    [[ "$a" == "$b" ]] || fail "the home of $d: tuidev_release_home says '$a', bin/tuidev's _tuidev_release_home '$b'"
+done
+pass "tuidev_is_release and tuidev_release_home agree with bin/tuidev's copies"
+
+for fn in _get_flip _tuidev_flip; do
+    h="$cvt/$fn"; mkdir -p "$h/versions/1.0.0" "$h/versions/2.0.0" "$h/dir/current"
+    "$fn" "$h" 1.0.0 || fail "$fn: a first current failed"
+    [[ "$(readlink "$h/current")" == versions/1.0.0 ]] || fail "$fn: a first current"
+    "$fn" "$h" 2.0.0 || fail "$fn: a flip failed"
+    [[ "$(readlink "$h/current")" == versions/2.0.0 && -z "$(find "$h" -name '.current.*')" ]] || fail "$fn: a flip"
+    [[ -z "$(find "$h/versions" -type l)" ]] || fail "$fn: a link went into a version: $(find "$h/versions" -type l)"
+    if "$fn" "$h/dir" 1.0.0 || [[ -n "$(ls -A "$h/dir/current")" ]]; then fail "$fn: a current that is a directory was replaced or written into"; fi
+done
+printf 'tuidev\n' > "$cvt/sum"
+[[ "$(_get_sha256 "$cvt/sum")" == "$(file_sha256 "$cvt/sum")" && "$(file_sha256 "$cvt/sum")" =~ ^[0-9a-f]{64}$ ]] \
+    || fail "get.sh's _get_sha256 and ui.sh's file_sha256 disagree"
+rm -rf "$cvt"
+pass "get.sh's _get_flip and _get_sha256 do what bin/tuidev's _tuidev_flip and ui.sh's file_sha256 do"
+
+# The update check's files: bin/tuidev writes them, lib/agents/release.sh
+# reads them with builtins, uninstall.sh removes them. Same places, same names.
+# shellcheck disable=SC2016  # the spellings, as the scripts write them
+for spelling in '${XDG_CACHE_HOME:-$HOME/.cache}/tuidev' '${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}'; do
+    for f in bin/tuidev lib/agents/release.sh; do
+        grep -qF -- "$spelling" "$REPO_DIR/$f" || fail "$f does not spell its path as $spelling"
+    done
+done
+# shellcheck disable=SC2016
+grep -qF -- '${XDG_CACHE_HOME:-$HOME/.cache}/tuidev' "$REPO_DIR/uninstall.sh" || fail "uninstall.sh looks for the update check's cache elsewhere"
+# shellcheck disable=SC2016
+grep -qF -- ': "${TUIDEV_STATE_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}"' "$SCRIPT_DIR/ui.sh" || fail "ui.sh's TUIDEV_STATE_DIR is not the one bin/tuidev and lib/agents/release.sh assume"
+# shellcheck disable=SC2016  # literal $ in the patterns
+writes="$(grep -oE '\$_TUIDEV_CACHE/[a-z]+' "$REPO_DIR/bin/tuidev" | sed 's|.*/||' | sort -u | tr '\n' ' ')"
+# shellcheck disable=SC2016
+removes="$(grep -oE '\$_tuidev_cache"?/[a-z]+' "$REPO_DIR/uninstall.sh" | sed 's|.*/||' | sort -u | tr '\n' ' ')"
+[[ "$writes" == "latest lock notified " && "$removes" == "$writes" ]] || fail "bin/tuidev writes '$writes' in its cache, uninstall.sh removes '$removes'"
+grep -qF 'tuidev/latest"' "$REPO_DIR/lib/agents/release.sh" || fail "lib/agents/release.sh does not read the cache's latest"
+# shellcheck disable=SC2016
+for pair in 'bin/tuidev|"$_TUIDEV_STATE/version"' 'lib/agents/release.sh|tuidev}/version"' 'scripts/lib/config_write.sh|"$TUIDEV_STATE_DIR/version"'; do
+    grep -qF -- "${pair#*|}" "$REPO_DIR/${pair%%|*}" || fail "${pair%%|*} does not use the installed version tuidev_install_cli writes, ${pair#*|}"
+done
+for f in get.sh bin/tuidev configs/swiftbar/agents.10s.sh; do
+    grep -qF 'https://github.com/spfr/tuidev/releases' "$REPO_DIR/$f" || fail "$f does not name the releases at https://github.com/spfr/tuidev/releases"
+done
+pass "the update check's cache and the installed version: one spelling of each path in bin/tuidev, lib/agents/release.sh, uninstall.sh and ui.sh; one releases URL"
+
+# The release tooling is shellchecked, and bin/tuidev's usage lists every
+# command its main handles.
+shell_files="$(awk '/^SHELL_FILES/ {f=1} f {print} f && !/\\$/ {exit}' "$REPO_DIR/Makefile" | sed 's/[\\]//g' | tr -s '[:space:]' '\n')"
+for f in get.sh bin/tuidev; do
+    grep -qxF "$f" <<<"$shell_files" || fail "$f is not in the Makefile's SHELL_FILES"
+done
+usage_text="$(grep -E '^#   tuidev' "$REPO_DIR/bin/tuidev")"
+commands="$(awk '/^main\(\) \{/ {f=1} f && /^    case "\$cmd" in/ {c=1; next} c && /^    esac/ {exit} c && /^        [A-Za-z"|-]+\)/ {print $1}' "$REPO_DIR/bin/tuidev" | tr -d ')"' | tr '|' '\n' | grep -E '^[a-z]+$' | grep -vx help || true)"
+[[ "$(wc -w <<<"$commands")" -ge 10 ]] || fail "could not read the commands out of bin/tuidev's main (got: $commands)"
+for c in $commands; do
+    grep -qw -- "$c" <<<"$usage_text" || fail "bin/tuidev's usage does not mention the command '$c'"
+done
+pass "get.sh and bin/tuidev are shellchecked; bin/tuidev's usage mentions every command"
+
 # CI's required-files job must list only files that exist, or a removal breaks CI
 # while every local check stays green.
 while IFS= read -r f; do
     [[ -e "$REPO_DIR/$f" ]] || fail ".github/workflows/ci.yml requires $f, which no longer exists"
 done < <(awk '/^ *required=\($/{f=1; next} f && /^ *\)$/{exit} f {print $1}' "$REPO_DIR/.github/workflows/ci.yml")
 pass "every file CI requires exists"
+
+# A release carries three assets, named alike wherever they are built, signed,
+# published and downloaded; a mismatch breaks get.sh and `tuidev update`.
+rel_yml="$REPO_DIR/.github/workflows/release.yml"
+want_assets="tuidev.tar.gz tuidev.tar.gz.sha256 get.sh"
+got="$(sed -n 's/^ASSETS=(\(.*\))$/\1/p' "$REPO_DIR/scripts/release.sh")"
+[[ "$got" == "$want_assets" ]] || fail "scripts/release.sh publishes '$got', not '$want_assets'"
+# The workflows are not in the release archive or the test container: their
+# checks run where .github is (a clone, CI).
+have_workflows=false; [[ -f "$rel_yml" ]] && have_workflows=true
+if $have_workflows; then
+    got="$(awk '/subject-path: \|/ {f=1; next} f && /^ +dist\// {sub(/^ +dist\//, ""); printf "%s%s", s, $0; s=" "; next} f {exit}' "$rel_yml")"
+    [[ "$got" == "$want_assets" ]] || fail "release.yml attests '$got', not '$want_assets'"
+fi
+# shellcheck disable=SC2016  # a literal $out, as dist.sh spells it
+got="$(grep -oE '"\$out/[a-z0-9.]+"' "$REPO_DIR/scripts/dist.sh" | grep -oE '[a-z0-9.]+"$' | tr -d '"' | sort -u | tr '\n' ' ')"
+[[ "$got" == "get.sh tuidev.tar.gz tuidev.tar.gz.sha256 " ]] || fail "scripts/dist.sh writes '$got'"
+for a in tuidev.tar.gz tuidev.tar.gz.sha256; do
+    grep -qF "\"\$from/$a\"" "$REPO_DIR/get.sh" || fail "get.sh does not download $a"
+done
+grep -qF 'latest/download/get.sh' "$REPO_DIR/bin/tuidev" || fail "bin/tuidev no longer names latest/download/get.sh"
+if $have_workflows; then
+    # The workflow runs the tested steps, after all of CI on the tagged commit.
+    for step in 'uses: ./.github/workflows/ci.yml' 'needs: ci' 'scripts/release.sh check' 'scripts/dist.sh --release' \
+                'scripts/release.sh notes' 'scripts/release.sh publish' 'persist-credentials: false'; do
+        grep -qF -- "$step" "$rel_yml" || fail "release.yml no longer has: $step"
+    done
+    grep -qE '^  workflow_call:' "$REPO_DIR/.github/workflows/ci.yml" || fail "ci.yml cannot be called, and release.yml gates on it"
+    # Least privilege: read-only at the top, write only in the job that publishes.
+    [[ "$(awk '/^permissions:/ {f=1; next} f && /^[^ ]/ {exit} f' "$rel_yml" | tr -d ' ')" == "contents:read" ]] \
+        || fail "release.yml's top-level permissions must be contents: read alone"
+fi
+pass "release assets are named alike in release.sh, release.yml, dist.sh and get.sh; release.yml runs CI and the tested steps"
+
+# Every action a workflow uses is pinned to a commit, its version beside it.
+unpinned="$(grep -hE '^[ -]+uses: ' "$REPO_DIR"/.github/workflows/*.yml 2>/dev/null | grep -vE 'uses: \./' \
+    | grep -vE 'uses: [A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40} # v[0-9]+(\.[0-9]+)*$' || true)"
+[[ -z "$unpinned" ]] || fail "actions not pinned to a full commit SHA with a '# vX.Y.Z' comment: $unpinned"
+pass "every action in .github/workflows is pinned to a commit SHA"
 
 echo ""
 echo "All cross-file contract tests passed."

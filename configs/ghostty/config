@@ -118,6 +118,13 @@ keybind = ctrl+shift+down=scroll_page_down
 # Quick edit (open scrollback in editor)
 keybind = ctrl+shift+e=write_scrollback_file:open
 
+# tuidev palette: Cmd+P sends ctrl+b then a, Herdr's prefix+a (tuidev.link.palette).
+# Only meaningful inside Herdr: elsewhere the shell or app receives a literal
+# ctrl+b (readline: cursor left; Claude Code: run in the background) and "a";
+# tmux here uses ctrl+a, not ctrl+b. To turn it off, add below this block:
+#   keybind = cmd+p=unbind
+keybind = cmd+p=text:\x02a
+
 # Quick terminal (system-wide dropdown terminal)
 keybind = global:ctrl+grave_accent=toggle_quick_terminal
 

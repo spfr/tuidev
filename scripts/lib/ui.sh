@@ -95,6 +95,7 @@ file_mode()  { _stat_fmt '%a' '%Lp' "$1"; }
 file_owner() { _stat_fmt '%U' '%Su' "$1"; }
 
 # file_sha256 PATH — hex SHA-256 of a file (shasum on macOS, sha256sum on Linux).
+# get.sh has its own copy, _get_sha256 (it runs without libs; test_contract.sh).
 file_sha256() {
     if command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$1" | cut -d' ' -f1

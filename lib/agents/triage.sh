@@ -124,6 +124,8 @@ agents_triage() {
     _agents_awake_prime
     r="$(agents_collect)" || return 1
     _agents_triage_render "$r"
+    # Last, and only while a newer tuidev is out (release.sh).
+    ! _agents_release || printf '%stuidev %s is out (you have %s): tuidev update%s\n' "$C_DIM" "$REPLY" "$REPLY_HAVE" "$C_0"
 }
 
 # agents_watch [SECONDS] — the triage, redrawn.

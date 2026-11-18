@@ -423,8 +423,12 @@ evs="$(sed -n 's/^on = "\(.*\)"$/\1/p' "$plugin/herdr-plugin.toml")"
 [[ -n "$evs" ]] || fail "the plugin has no event hooks"
 for e in $evs; do [[ "$known" == *" $e "* ]] || fail "the plugin hooks $e, which Herdr does not run hooks for"; done
 [[ "$evs" != *tab.renamed* ]] || fail "hooking tab.renamed would answer the sync's own renames"
-[[ "$(grep -cE '^command = \["sh", "run.sh", "sync(-poke)?"\]$' "$plugin/herdr-plugin.toml")" -eq $(( $(printf '%s\n' "$evs" | wc -l) + 1 )) ]] \
-    || fail "every event hook and the startup hook run run.sh sync or sync-poke"
+[[ "$(grep -cE '^command = \["sh", "run.sh", "sync(-poke)?"\]$' "$plugin/herdr-plugin.toml")" -eq "$(printf '%s\n' "$evs" | wc -l)" ]] \
+    || fail "every event hook runs run.sh sync or sync-poke"
+# The startup hook syncs too, after the update check when it is due.
+[[ "$(grep -A1 '^\[\[startup\]\]$' "$plugin/herdr-plugin.toml" | tail -1)" == 'command = ["sh", "run.sh", "startup"]' ]] \
+    || fail "the startup hook runs run.sh startup"
+grep -A6 '^    startup)$' "$plugin/run.sh" | grep -q 'herdr sync -q' || fail "run.sh startup does not sync"
 # An agent's events refresh the menu bar too (sync-poke); the others don't.
 pokes="$(awk '/^on = / { e = $3; gsub(/"/, "", e) } /^command = .*"sync-poke"/ { print e }' "$plugin/herdr-plugin.toml" | sort | tr '\n' ' ')"
 [[ "$pokes" == "pane.agent_detected pane.agent_status_changed pane.closed pane.exited " ]] || fail "sync-poke runs on: $pokes"
@@ -437,6 +441,16 @@ for v in sync sync-poke; do
     out="$(AGENTS_BIN="$tmp/nope" sh "$plugin/run.sh" "$v" 2>&1)" || fail "run.sh $v without agents failed (a hook error on every event)"
     [[ -z "$out" ]] || fail "run.sh $v without agents said: $out"
 done
+# startup: with agents, only its sync (which starts the due check itself); without it, tuidev's check.
+printf '#!/bin/sh\necho "$*" >> "%s/tuidev.rec"\n' "$tmp" > "$tmp/tuidev-stub"; chmod +x "$tmp/tuidev-stub"
+rm -f "$tmp/stub" "$tmp/tuidev.rec"
+AGENTS_BIN="$tmp/agents-stub" TUIDEV_BIN="$tmp/tuidev-stub" sh "$plugin/run.sh" startup || fail "run.sh startup with agents failed"
+sleep 0.3
+[[ "$(cat "$tmp/stub")" == "herdr sync -q" && ! -e "$tmp/tuidev.rec" ]] || fail "startup with agents: sync='$(cat "$tmp/stub" 2>&1)' tuidev called: $(cat "$tmp/tuidev.rec" 2>&1)"
+AGENTS_BIN="$tmp/nope" TUIDEV_BIN="$tmp/tuidev-stub" sh "$plugin/run.sh" startup || fail "run.sh startup without agents failed"
+for _ in 1 2 3 4 5 6 7 8 9 10; do [[ -s "$tmp/tuidev.rec" ]] && break; sleep 0.1; done
+[[ "$(cat "$tmp/tuidev.rec" 2>&1)" == "latest --if-due --notify" ]] || fail "startup without agents: $(cat "$tmp/tuidev.rec" 2>&1)"
+rm -f "$tmp/stub" "$tmp/tuidev.rec"
 pass "the plugin: hooks only events Herdr runs hooks for (not tab.renamed), each runs agents herdr sync -q, an agent's with --poke; quiet without agents"
 
 # --poke: where the menu bar would refresh (bar.alive names a live SwiftBar),
@@ -544,3 +558,57 @@ rows = []' >/dev/null 2>&1
     exit 0
 )
 pass "update --configs refreshes the sidebar block, except beside your own space or agent rows"
+
+# --- 13. The herdr pack's plugin: linked again only when it changed ---------------------------------------
+(
+    # shellcheck source=../install/packs/herdr.sh disable=SC1091
+    . "$REPO_DIR/scripts/install/packs/herdr.sh"
+    set +e
+    export HERDR_INSTALL_DIR="$tmp/hbin" DRY_RUN=false
+    unset TUIDEV_PLUGIN_PANE
+    mkdir -p "$HERDR_INSTALL_DIR"
+    hlog="$tmp/herdr.log" linked="$tmp/herdr.linked"
+    # A stub herdr that remembers whether tuidev.link is linked.
+    cat > "$HERDR_INSTALL_DIR/herdr" <<STUB
+#!/bin/bash
+echo "\$*" >> "$hlog"
+case "\$1 \$2" in
+    "plugin list") [[ ! -e "$linked" ]] || echo "tuidev.link  linked" ;;
+    "plugin link") : > "$linked" ;;
+    "plugin unlink") rm -f "$linked" ;;
+esac
+exit 0
+STUB
+    chmod +x "$HERDR_INSTALL_DIR/herdr"
+    dest="$TUIDEV_LIB_DIR/herdr-plugins/tuidev-link"
+    keys="$HOME/.config/herdr/config.toml"
+    rm -rf "$dest" "$linked" "$keys"; : > "$hlog"
+    relinks() { grep -cE '^plugin (un)?link' "$hlog"; }
+
+    _herdr_install_plugin >/dev/null 2>&1
+    [[ -e "$linked" && "$(grep -c '^plugin link ' "$hlog")" == 1 && -f "$dest/run.sh" && -f "$keys" ]] || fail "a first install did not link: $(cat "$hlog")"
+    # Unchanged and already linked: no unlink, no link; the keys block is still refreshed.
+    : > "$hlog"; rm -f "$keys"
+    _herdr_install_plugin >/dev/null 2>&1
+    [[ "$(relinks)" == 0 && -e "$linked" ]] || fail "an unchanged, linked plugin was linked again: $(cat "$hlog")"
+    grep -q 'tuidev-keys' "$keys" 2>/dev/null || fail "the keys block was not refreshed for an unchanged plugin"
+    # Changed, from a shell: unlinked and linked again.
+    echo "# edited" >> "$dest/run.sh"; : > "$hlog"
+    _herdr_install_plugin >/dev/null 2>&1
+    [[ "$(grep -c '^plugin unlink' "$hlog")" == 1 && "$(grep -c '^plugin link ' "$hlog")" == 1 ]] || fail "a changed plugin was not linked again: $(cat "$hlog")"
+    cmp -s "$dest/run.sh" "$REPO_DIR/configs/herdr/plugins/tuidev-link/run.sh" || fail "the changed plugin's files were not refreshed"
+    # Changed, from inside the plugin's own popup: files copied, a warning, no unlink or link.
+    echo "# edited" >> "$dest/run.sh"; : > "$hlog"
+    out="$(TUIDEV_PLUGIN_PANE=1 _herdr_install_plugin 2>&1)"
+    [[ "$(relinks)" == 0 ]] || fail "linked from inside the plugin's popup: $(cat "$hlog")"
+    [[ "$out" == *"tuidev update --configs"* && "$out" == *"outside this popup"* ]] || fail "no warning to update outside the popup: $out"
+    cmp -s "$dest/run.sh" "$REPO_DIR/configs/herdr/plugins/tuidev-link/run.sh" || fail "the popup run did not copy the files"
+    [[ "$out" == *"plugin changed"* ]] || fail "a changed plugin's warning does not say it changed: $out"
+    # Unchanged but not linked, from inside the popup: the warning says that, not "changed".
+    rm -f "$linked"; : > "$hlog"
+    out="$(TUIDEV_PLUGIN_PANE=1 _herdr_install_plugin 2>&1)"
+    [[ "$(relinks)" == 0 && "$out" == *"plugin is not linked"*"to link it"* && "$out" != *"changed"* ]] \
+        || fail "an unchanged, unlinked plugin from the popup: $out / $(cat "$hlog")"
+    exit 0
+) || exit 1
+pass "the herdr pack's plugin: linked on first install or a change; an unchanged linked one is left alone; inside its own popup it copies and warns (changed, or not linked)"

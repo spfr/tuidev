@@ -86,6 +86,7 @@ agents_main() {
         cool)     agents_cool "$@" ;;
         mem)      agents_mem "$@" ;;
         map)      agents_map "$@" ;;
+        board)    agents_board "$@" ;;
         ports)    agents_ports "$@" ;;
         forward)  agents_forward "$@" ;;
         link)     agents_link "$@" ;;

@@ -15,7 +15,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
-for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME TUIDEV_STATE_DIR COLORTERM COLUMNS OS_APPEARANCE NO_COLOR TUIDEV_NO_COLOR; do unset "$v"; done
+for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME TUIDEV_STATE_DIR COLORTERM COLUMNS OS_APPEARANCE NO_COLOR TUIDEV_NO_COLOR; do unset "$v"; done
 export HOME="$tmp/home" TERM=xterm AGENTS_TESTING=1 TZ=UTC
 export AGENTS_CONF="$tmp/none.conf" AGENTS_RUN_DIR="$tmp/run" AGENTS_DATA_DIR="$tmp/data" AGENTS_UID=501 AGENTS_SELF=99999
 mkdir -p "$HOME" "$AGENTS_DATA_DIR" "$AGENTS_RUN_DIR"

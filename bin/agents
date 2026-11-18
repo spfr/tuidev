@@ -68,10 +68,10 @@ _agents_find_lib() {
 }
 
 # config first: it reads agents.conf. The others only define functions.
-_AGENTS_MODULES="config palette glyph util snapshot classify mcp lazy where watched system awake lid cool remote forward link map herdrlabel kill notify events reap memory assess triage transcript history runs tokens grok limits statusline context report render json tsv terminal activity show pick bar hooks usage cli"
+_AGENTS_MODULES="config palette glyph util release snapshot classify mcp lazy where watched system awake lid cool remote forward link map board herdrlabel kill notify events reap memory assess triage transcript history runs tokens grok limits statusline context report render json tsv terminal activity show pick bar hooks usage cli"
 # The awk programs the modules run (awk/NAME.awk; test_agents_install.sh keeps
 # this list and the directory in step).
-_AGENTS_AWK_FILES="assess classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_maprows lib_price lib_proc lib_sort lib_waits lib_where limits mcp mem_view memory mcp_toml mcp_toml_launch mcp_view new_members pick refusal render report report_context report_denials report_fmt report_insights report_runs report_tokens report_views report_waits root runs runs_obs runs_view sample show show_tree statusline tokens tokens_plan tokens_rollup tokens_session tokens_state tree triage triage_view waits_state where"
+_AGENTS_AWK_FILES="assess board_rows board_trace board_view classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_maprows lib_price lib_proc lib_sort lib_waits lib_where limits mcp mem_view memory mcp_toml mcp_toml_launch mcp_view new_members pick refusal render report report_context report_denials report_fmt report_insights report_runs report_tokens report_views report_waits root runs runs_obs runs_view sample show show_tree statusline tokens tokens_plan tokens_rollup tokens_session tokens_state tree triage triage_view waits_state where"
 
 # Every module and awk program is checked before any is sourced: never half a
 # program.
@@ -88,7 +88,7 @@ else
     _agents_missing=" ${_agents_m%/*}/lib/tuidev/agents/"
 fi
 if [[ -n "$_agents_missing" ]]; then
-    echo "agents: missing$_agents_missing (reinstall: ./install.sh --pack monitoring)" >&2
+    echo "agents: missing$_agents_missing (reinstall: tuidev install --pack monitoring)" >&2
     if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then exit 1; fi
     return 1
 fi

@@ -36,7 +36,7 @@ esac
 
 if tuidev_profile_add_pack opencode "$profile"; then
     print_success "added opencode to extra_packs in $profile (keeps the oc wrapper)"
-    print_info "Apply it with: ./scripts/update.sh --configs"
+    print_info "Apply it with: tuidev update --configs"
 else
     print_info "opencode pack already recorded"
 fi

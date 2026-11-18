@@ -21,6 +21,6 @@ if command -v fnm >/dev/null 2>&1; then
 fi
 
 print_warning "the shipped .zshrc no longer loads nvm: new shells get Node only through fnm"
-print_info "Move over:  ./install.sh --pack fnm   (installs fnm and the latest LTS)"
+print_info "Move over:  tuidev install --pack fnm   (installs fnm and the latest LTS)"
 print_info "Then reinstall global CLIs, e.g.:  npm i -g <package>   (list them: ls $nvm_dir/versions/node/*/lib/node_modules)"
 print_info "Or keep nvm: source $nvm_dir/nvm.sh from ~/.zshrc.local"

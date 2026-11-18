@@ -1,0 +1,525 @@
+#!/usr/bin/env bash
+# tuidev: one command for the install on this machine.
+#
+#   tuidev [palette]           the palette: everything you can do, searchable
+#   tuidev install [FLAGS]     add a profile or packs (install.sh's flags; --dry-run previews)
+#   tuidev update              update tuidev itself: the latest release, migrations, configs
+#   tuidev update --check      preview: packages, migrations, config drift, performance
+#   tuidev update --ask        say what is installed and what is out, then ask
+#   tuidev update --packages | --all | --configs | --migrations | --security | --perf
+#                              the other modes of scripts/update.sh
+#   tuidev update --rollback   back to the release before this one
+#   tuidev latest [--refresh] [on|off]
+#                              the newest release this machine has heard of (--refresh
+#                              asks now); the daily check on or off
+#   tuidev whatsnew [FROM]     the changelog of this release (or of all since FROM)
+#   tuidev check | perf | disk | theme [NAME] | uninstall
+#                              health check, the audits, themes, removal
+#   tuidev version | home      the installed version; where its files are
+#
+# It finds tuidev's files through the path the installer recorded
+# (~/.config/tuidev/profile, repo=): a git clone, or the release get.sh
+# unpacked under ~/.local/share/tuidev. Installed alone into ~/.local/bin by
+# every install; plain bash 3.2, no tuidev libs.
+#
+# The update check: once a day at most, `tuidev latest --refresh` asks
+# github.com which release is the latest (one request for a redirect, no API,
+# nothing sent but the request itself) and keeps the answer in
+# ~/.cache/tuidev/latest. The menu bar, `agents` and Herdr read that file.
+# `tuidev latest off` (or TUIDEV_UPDATE_CHECK=0) turns it off. Nothing is
+# ever updated without you asking. See docs/updating.md.
+#
+# Globals: a helper answers in REPLY. _tuidev_cache_read alone sets LATEST,
+# NEXT and CHECKED (the cache as last read), and _tuidev_update_available
+# alone sets INSTALLED.
+#
+# Copies, since this file runs without the repo's libs: _tuidev_is_version,
+# _tuidev_newer, _tuidev_managed and _tuidev_release_home are
+# scripts/lib/version.sh's; _tuidev_flip is get.sh's _get_flip; the cache and
+# state paths are spelled as lib/agents/release.sh and uninstall.sh spell
+# them. test_contract.sh fails when a copy and its twin disagree.
+
+set -uo pipefail
+
+_TUIDEV_STATE="${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}"
+_TUIDEV_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/tuidev"
+_TUIDEV_HOME="${TUIDEV_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/tuidev}"
+_TUIDEV_RELEASES="${TUIDEV_RELEASE_URL:-https://github.com/spfr/tuidev/releases}"
+_TUIDEV_CHECK_EVERY=86400   # a day between checks
+_TUIDEV_RETRY_AFTER=3600    # an hour after one that failed
+_TUIDEV_LOCK_STALE=120      # a check lock older than this was left by one that died
+
+_tuidev_err() { printf 'tuidev: %s\n' "$*" >&2; }
+_tuidev_die() { _tuidev_err "$1"; exit "${2:-1}"; }
+
+# The header, from line 2 through the command list.
+usage() { awk 'NR > 1 { sub(/^# ?/, ""); print } /tuidev version \| home/ { exit }' "$0"; }
+
+# ---------------------------------------------------------------------------
+# Versions and the releases get.sh unpacks
+# ---------------------------------------------------------------------------
+
+_tuidev_is_version() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+
+# _tuidev_newer A B — is version A newer than B? Part by part, as numbers.
+_tuidev_newer() {
+    local a b i IFS=.
+    # shellcheck disable=SC2206  # split on dots
+    a=($1) b=($2)
+    for i in 0 1 2; do
+        (( 10#${a[i]:-0} > 10#${b[i]:-0} )) && return 0
+        (( 10#${a[i]:-0} < 10#${b[i]:-0} )) && return 1
+    done
+    return 1
+}
+
+# _tuidev_managed DIR — is DIR a release get.sh unpacked (no git checkout)?
+_tuidev_managed() { [[ ! -e "$1/.git" && -f "$1/VERSION" && -f "$1/get.sh" ]]; }
+
+# _tuidev_release_home DIR — REPLY: the home DIR lives in, when DIR is its
+# current or one of its versions/X.Y.Z; false for any other path.
+_tuidev_release_home() {
+    case "$1" in
+        */current) REPLY="${1%/current}" ;;
+        */versions/*) _tuidev_is_version "${1##*/versions/}" || return 1
+                      REPLY="${1%/versions/*}" ;;
+        *) return 1 ;;
+    esac
+}
+
+# _tuidev_flip HOME VERSION — point HOME/current at versions/VERSION with one
+# rename, so it never dangles (ln -sfn unlinks it first). mv -T (GNU) and
+# mv -h (BSD) rename onto a link to a directory instead of into it; ln -sfn
+# only where neither exists. A current that is not a link is never touched.
+_tuidev_flip() {
+    local link="$1/current" tmp="$1/.current.$$"
+    [[ -L "$link" || ! -e "$link" ]] || return 1
+    rm -f "$tmp" && ln -s "versions/$2" "$tmp" || return 1
+    mv -T "$tmp" "$link" 2>/dev/null || mv -h "$tmp" "$link" 2>/dev/null \
+        || { rm -f "$tmp"; ln -sfn "versions/$2" "$link"; }
+}
+
+# _tuidev_repo — REPLY: where tuidev's files are; else "", and false after
+# saying how to get them back.
+_tuidev_repo() {
+    local line
+    REPLY="${TUIDEV_REPO:-}"
+    if [[ -z "$REPLY" && -r "$_TUIDEV_STATE/profile" ]]; then
+        while IFS= read -r line; do
+            case "$line" in repo=*) REPLY="${line#repo=}" ;; esac
+        done < "$_TUIDEV_STATE/profile"
+    fi
+    [[ -n "$REPLY" && -x "$REPLY/install.sh" ]] || REPLY="$_TUIDEV_HOME/current"
+    [[ -x "$REPLY/install.sh" ]] && return 0
+    REPLY=""
+    _tuidev_err "tuidev's files are not on this machine any more."
+    _tuidev_err "Get them back: curl -fsSL $_TUIDEV_RELEASES/latest/download/get.sh | bash -s -- --fetch"
+    return 1
+}
+
+# _tuidev_installed — REPLY: the installed version (X.Y.Z), "" when unknown.
+# What install or update last applied here, which `agents` and the menu read
+# too; the files' own VERSION only where that was never recorded.
+_tuidev_installed() {
+    local f
+    for f in "$_TUIDEV_STATE/version" ${TUIDEV_REPO:+"$TUIDEV_REPO/VERSION"}; do
+        REPLY=""
+        [[ -r "$f" ]] && read -r REPLY < "$f"
+        _tuidev_is_version "$REPLY" && return 0
+    done
+    REPLY=""
+    _tuidev_repo 2>/dev/null || return 0
+    f="$REPLY/VERSION"; REPLY=""
+    [[ -r "$f" ]] && read -r REPLY < "$f"
+    _tuidev_is_version "$REPLY" || REPLY=""
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# The update check. Its cache is one line, "LATEST NEXT CHECKED": the latest
+# release heard of ("-" for none yet), when the next check is due, and when
+# the last one that answered ran. lib/agents/release.sh reads it with builtins.
+#
+# A check (_tuidev_refresh), in order:
+#   lock    one at a time; --if-due goes without when another holds it,
+#           --refresh does not wait for it
+#   due     nothing is asked while the check is off or NEXT is still ahead
+#           (--refresh is always due)
+#   book    NEXT = now + an hour, written before asking: checks started
+#           together make one request, and a failed one is retried in an hour
+#   ask     one request; the redirect names the latest release's tag
+#   write   LATEST, and NEXT = now + a day
+# Then --notify tells you once per release (_tuidev_notify_once).
+# ---------------------------------------------------------------------------
+
+_tuidev_now() { printf -v "$1" '%s' "${TUIDEV_NOW:-$(date +%s)}"; }
+
+_tuidev_check_off() {
+    local w=""
+    [[ "${TUIDEV_UPDATE_CHECK:-1}" == 0 ]] && return 0
+    [[ -r "$_TUIDEV_STATE/update-check" ]] && read -r w < "$_TUIDEV_STATE/update-check"
+    [[ "$w" == off ]]
+}
+
+_tuidev_cache_read() {
+    LATEST="-" NEXT=0 CHECKED=0
+    [[ -r "$_TUIDEV_CACHE/latest" ]] || return 0
+    read -r LATEST NEXT CHECKED _ < "$_TUIDEV_CACHE/latest" || true
+    _tuidev_is_version "$LATEST" || LATEST="-"
+    [[ "$NEXT" =~ ^[0-9]+$ ]] || NEXT=0
+    [[ "$CHECKED" =~ ^[0-9]+$ ]] || CHECKED=0
+}
+
+# _tuidev_cache_write LATEST NEXT CHECKED — in one rename.
+_tuidev_cache_write() {
+    mkdir -p "$_TUIDEV_CACHE" 2>/dev/null || return 1
+    printf '%s %s %s\n' "$1" "$2" "$3" > "$_TUIDEV_CACHE/latest.$$" 2>/dev/null \
+        && mv -f "$_TUIDEV_CACHE/latest.$$" "$_TUIDEV_CACHE/latest"
+}
+
+# _tuidev_lock_at DIR — REPLY: when the lock DIR was taken (its `at`), 0 when
+# it says nothing.
+_tuidev_lock_at() {
+    REPLY=0
+    { read -r REPLY < "$1/at"; } 2>/dev/null
+    [[ "$REPLY" =~ ^[0-9]+$ ]] || REPLY=0
+}
+
+# _tuidev_lock / _tuidev_unlock — the check's lock, a directory: mkdir alone
+# decides who holds it. One older than _TUIDEV_LOCK_STALE was left by a check
+# that died and is taken over: renamed aside first, so of several that find
+# it stale only one moves it, then removed only while it is still the lock
+# that was found stale (a lock taken meanwhile goes back), then made anew.
+_tuidev_lock() {
+    local l="$_TUIDEV_CACHE/lock" now seen
+    mkdir -p "$_TUIDEV_CACHE" 2>/dev/null || return 1
+    _tuidev_now now
+    if ! mkdir "$l" 2>/dev/null; then
+        _tuidev_lock_at "$l"
+        # No time in it yet: its holder may be between its mkdir and its echo.
+        if [[ "$REPLY" == 0 ]]; then sleep 1; _tuidev_lock_at "$l"; fi
+        seen="$REPLY"
+        (( now - seen > _TUIDEV_LOCK_STALE )) || return 1
+        rm -rf "$l.$$"
+        mv "$l" "$l.$$" 2>/dev/null || return 1
+        _tuidev_lock_at "$l.$$"
+        if [[ "$REPLY" != "$seen" ]]; then
+            [[ -e "$l" ]] || mv "$l.$$" "$l" 2>/dev/null
+            rm -rf "$l.$$"
+            return 1
+        fi
+        rm -rf "$l.$$"
+        mkdir "$l" 2>/dev/null || return 1
+    fi
+    # This fails when the lock was taken from under this process: it holds none.
+    echo "$now" > "$l/at" 2>/dev/null
+}
+_tuidev_unlock() { rm -rf "$_TUIDEV_CACHE/lock"; }
+
+# _tuidev_refresh force|due — the check above; false when it asked and had
+# no answer (or, forced, could not write it down).
+_tuidev_refresh() {
+    local rc=0
+    if [[ "$1" == force ]]; then _tuidev_check force; return; fi
+    _tuidev_lock || return 0
+    _tuidev_check due || rc=$?
+    _tuidev_unlock
+    return "$rc"
+}
+
+_tuidev_check() {
+    local now
+    _tuidev_now now
+    _tuidev_cache_read
+    if _tuidev_check_off; then
+        _tuidev_cache_write "$LATEST" "$(( now + _TUIDEV_CHECK_EVERY ))" "$CHECKED"
+        return 0
+    fi
+    [[ "$1" == force ]] || (( now >= NEXT )) || return 0
+    # A check that cannot be booked would be asked again by every caller:
+    # with a cache that cannot be written, only a forced one asks.
+    _tuidev_cache_write "$LATEST" "$(( now + _TUIDEV_RETRY_AFTER ))" "$CHECKED" \
+        || [[ "$1" == force ]] || return 1
+    _tuidev_ask_latest || return 1
+    _tuidev_cache_write "$REPLY" "$(( now + _TUIDEV_CHECK_EVERY ))" "$now"
+}
+
+# _tuidev_ask_latest — REPLY: the latest release's version. releases/latest
+# answers with a redirect to releases/tag/vX.Y.Z.
+_tuidev_ask_latest() {
+    local url tag
+    command -v curl >/dev/null 2>&1 || return 1
+    url="$(curl -q -fsS -o /dev/null -w '%{redirect_url}' --connect-timeout 10 --max-time 20 \
+        "$_TUIDEV_RELEASES/latest" 2>/dev/null)" || return 1
+    tag="${url##*/}"
+    [[ "$tag" == v* ]] || return 1
+    REPLY="${tag#v}"
+    _tuidev_is_version "$REPLY"
+}
+
+# _tuidev_update_available — is a release newer than the installed one known?
+# Sets INSTALLED, and LATEST (through _tuidev_cache_read), either way.
+_tuidev_update_available() {
+    _tuidev_installed; INSTALLED="$REPLY"
+    _tuidev_cache_read
+    [[ -n "$INSTALLED" && "$LATEST" != "-" ]] && _tuidev_newer "$LATEST" "$INSTALLED"
+}
+
+# One notification per release: a Herdr toast, a tmux message or a banner,
+# whichever notify.sh finds, and the menu bar hears of it. Recorded in
+# `notified` under a claim (mkdir), and read again once claimed, so checks
+# that finish together notify once; where it can't be recorded, nothing is
+# shown (never once per run).
+_tuidev_notify_once() {
+    local seen="" claim
+    _tuidev_update_available || return 0
+    claim="$_TUIDEV_CACHE/notified.$LATEST"
+    [[ -r "$_TUIDEV_CACHE/notified" ]] && read -r seen < "$_TUIDEV_CACHE/notified"
+    [[ "$seen" != "$LATEST" ]] || return 0
+    mkdir "$claim" 2>/dev/null || return 0
+    seen=""
+    [[ -r "$_TUIDEV_CACHE/notified" ]] && read -r seen < "$_TUIDEV_CACHE/notified"
+    if [[ "$seen" == "$LATEST" ]] || ! printf '%s\n' "$LATEST" > "$_TUIDEV_CACHE/notified" 2>/dev/null; then
+        rmdir "$claim" 2>/dev/null
+        return 0
+    fi
+    rmdir "$claim" 2>/dev/null
+    [[ ! -x "$HOME/.local/bin/notify.sh" ]] \
+        || "$HOME/.local/bin/notify.sh" "tuidev" "$LATEST is out (you have $INSTALLED). Update: tuidev update" "Update" </dev/null >/dev/null 2>&1 || true
+    [[ ! -x "$HOME/.local/bin/agents" ]] || "$HOME/.local/bin/agents" bar poke >/dev/null 2>&1 || true
+}
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+cmd_latest() {
+    local refresh="" notify=false newer=false a now
+    for a in "$@"; do
+        case "$a" in
+            --refresh) refresh=force ;;
+            --if-due)  refresh=due ;;
+            --notify)  notify=true ;;
+            --newer)   newer=true ;;
+            on)  rm -f "$_TUIDEV_STATE/update-check"; echo "tuidev: the daily update check is on"; return 0 ;;
+            off) mkdir -p "$_TUIDEV_STATE" && echo off > "$_TUIDEV_STATE/update-check"
+                 echo "tuidev: the update check is off (tuidev latest on turns it back on; tuidev update --check still asks)"; return 0 ;;
+            *) _tuidev_die "usage: tuidev latest [--refresh | --if-due] [--notify | --newer] [on|off]" 2 ;;
+        esac
+    done
+    # --if-due is what the menu, `agents` and Herdr start: it says nothing.
+    if [[ -n "$refresh" ]]; then
+        _tuidev_refresh "$refresh" || [[ "$refresh" == due ]] || _tuidev_err "could not reach $_TUIDEV_RELEASES/latest"
+    fi
+    [[ "$notify" == false ]] || { _tuidev_notify_once; return 0; }
+    # --newer: no output; 0 a newer release is known, 1 this is the latest
+    # one, 2 no release is known (update.sh asks this before it downloads).
+    if [[ "$newer" == true ]]; then
+        _tuidev_update_available && return 0
+        [[ "$LATEST" != "-" && -n "$INSTALLED" ]] && return 1
+        return 2
+    fi
+    [[ "$refresh" != due ]] || return 0
+    _tuidev_now now
+    if _tuidev_update_available; then
+        echo "tuidev $LATEST is out; you have $INSTALLED. Update: tuidev update"
+    elif [[ "$LATEST" == "-" ]]; then
+        echo "tuidev ${INSTALLED:-(version unknown)}; no release checked yet (tuidev latest --refresh)"
+    else
+        echo "tuidev ${INSTALLED:-(version unknown)} is up to date (latest release: $LATEST, checked $(( (now - CHECKED) / 3600 ))h ago)"
+    fi
+    ! _tuidev_check_off || echo "the daily update check is off (tuidev latest on)"
+}
+
+cmd_version() {
+    _tuidev_installed
+    echo "tuidev ${REPLY:-unknown}"
+}
+
+# cmd_whatsnew [FROM] — the newest release's changelog section, or every
+# section newer than FROM. The awk's newer() is _tuidev_newer's twin.
+cmd_whatsnew() {
+    local from="${1:-}" repo
+    [[ -z "$from" ]] || _tuidev_is_version "${from#v}" || _tuidev_die "usage: tuidev whatsnew [FROM_VERSION]" 2
+    _tuidev_repo || return 1; repo="$REPLY"
+    [[ -r "$repo/CHANGELOG.md" ]] || _tuidev_die "no CHANGELOG.md in $repo"
+    awk -v from="${from#v}" '
+        function newer(a, b,   x, y, i) {
+            split(a, x, "."); split(b, y, ".")
+            for (i = 1; i <= 3; i++) { if (x[i] + 0 > y[i] + 0) return 1; if (x[i] + 0 < y[i] + 0) return 0 }
+            return 0
+        }
+        /^## \[/ {
+            v = $2; sub(/^\[/, "", v); sub(/\].*$/, "", v)   # no [\[\]] class: BusyBox awk reads it differently
+            if (v == "Unreleased") { on = 0; next }
+            if (from == "") { on = !seen; seen = 1 } else on = newer(v, from)
+            if (!on && seen && from == "") exit
+        }
+        on' "$repo/CHANGELOG.md"
+}
+
+# _tuidev_rollback REPO — current back to the release in `previous`, which
+# becomes the one this was; then that release re-applies its configs.
+_tuidev_rollback() {
+    local repo="$1" home="$_TUIDEV_HOME" prev="" have=""
+    _tuidev_managed "$repo" || _tuidev_die "--rollback is for an install made with get.sh; in a clone, check out the tag you want and run ./install.sh"
+    # The home this install lives in, whatever TUIDEV_HOME says today.
+    ! _tuidev_release_home "$repo" || home="$REPLY"
+    [[ ! -r "$home/previous" ]] || read -r prev < "$home/previous" || true
+    { _tuidev_is_version "$prev" && [[ -x "$home/versions/$prev/install.sh" ]]; } \
+        || _tuidev_die "no earlier release is kept on this machine"
+    [[ ! -r "$repo/VERSION" ]] || read -r have < "$repo/VERSION" || true
+    _tuidev_flip "$home" "$prev" || _tuidev_die "could not point $home/current at versions/$prev"
+    if _tuidev_is_version "$have" && [[ "$have" != "$prev" ]]; then printf '%s\n' "$have" > "$home/previous"; fi
+    echo "tuidev: back on $prev; re-applying its configs (migrations a newer release ran are not undone)"
+    exec "$home/current/scripts/update.sh" --configs --yes
+}
+
+cmd_update() {
+    local repo reply
+    _tuidev_repo || return 1; repo="$REPLY"
+    case "${1:-}" in
+        "")         exec "$repo/scripts/update.sh" --self ;;
+        --rollback) _tuidev_rollback "$repo" ;;
+        --ask)
+            _tuidev_refresh force || _tuidev_err "could not reach $_TUIDEV_RELEASES/latest; showing what was known"
+            if ! _tuidev_update_available; then
+                echo "tuidev ${INSTALLED:-(version unknown)} is the latest release."
+                return 0
+            fi
+            echo "tuidev $LATEST is out; you have $INSTALLED."
+            echo "What changed: $_TUIDEV_RELEASES/tag/v$LATEST"
+            echo ""
+            echo "Updating fetches the release, runs its migrations and re-applies tuidev's"
+            echo "configs. Your own lines and edited files are kept. Packages are not touched"
+            echo "(tuidev update --packages)."
+            printf 'Update now? [y/N] '
+            read -r reply || reply=""
+            case "$reply" in y|Y) exec "$repo/scripts/update.sh" --self ;; esac
+            echo "Not updated. Later: tuidev update" ;;
+        *)          exec "$repo/scripts/update.sh" "$@" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# The palette. A row is TITLE<TAB>WHAT<TAB>PAUSE<TAB>COMMAND; PAUSE=1 for a
+# command that prints and exits, so a popup waits for a key after it.
+# _tuidev_palette_rows is the table, cmd_palette runs a row of it.
+# ---------------------------------------------------------------------------
+
+_tuidev_has() { command -v "$1" >/dev/null 2>&1; }
+_tuidev_row() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
+
+# Every row this machine can run, in the order shown.
+_tuidev_palette_rows() {
+    local repo="" name cmd
+    ! _tuidev_repo 2>/dev/null || repo="$REPLY"
+    if _tuidev_update_available; then
+        _tuidev_row "Update tuidev to $LATEST" "you have $INSTALLED; shows what changes and asks" 1 "tuidev update --ask"
+    fi
+    if _tuidev_has agents; then
+        _tuidev_row "Board: every session" "by who needs you, on every machine; enter goes there" 0 "agents board"
+        _tuidev_row "Who needs me" "blocked sessions, ones to review, what runs" 1 "agents"
+        _tuidev_row "Watch agents" "the same, live; q quits" 0 "agents watch"
+        _tuidev_row "Map: what runs where" "every machine; enter opens, ctrl-k stops" 0 "agents map"
+        _tuidev_row "Ports: what listens where" "here and on your machines" 0 "agents ports --pick"
+        _tuidev_row "Browse processes" "fzf over sessions and what they run; enter jumps" 0 "agents pick"
+        _tuidev_row "Stop stuck loops" "polling loops whose wait already ended; asks first" 1 "agents reap --stuck"
+        _tuidev_row "Report: where the day went" "CPU by job, project and session; insights" 1 "agents report"
+        _tuidev_row "Report: tokens" "by model, CLI, subagent and project; cache hits" 1 "agents report --view tokens"
+        _tuidev_row "Report: unused context" "MCP servers, skills and plugins loaded but never used" 1 "agents report --view context"
+        _tuidev_row "Usage limits" "every CLI's windows on a gauge" 1 "agents limits"
+        _tuidev_row "Memory" "who holds it, and what the guard did" 1 "agents mem"
+        _tuidev_row "MCP servers" "what is configured, and how many copies run" 1 "agents mcp"
+        _tuidev_row "Keep awake while agents run" "time-boxed" 1 "agents awake"
+        if [[ "$(uname -s)" == Darwin ]]; then
+            _tuidev_row "Fans: cool" "raise the fans from 55 °C (--pack cooling)" 1 "agents cool cool"
+            _tuidev_row "Fans: balanced" "from 60 °C" 1 "agents cool auto"
+            _tuidev_row "Fans: quiet" "from 70 °C" 1 "agents cool quiet"
+        fi
+    fi
+    if _tuidev_has herdr && [[ -z "${HERDR_ENV:-}" ]]; then
+        _tuidev_row "Herdr" "every agent on this machine and saved ones" 0 "herdr"
+    fi
+    if _tuidev_has secret; then
+        _tuidev_row "Secrets: scan startup files" "tokens exported in dotfiles, by name and line" 1 "secret scan"
+        _tuidev_row "Secrets: list" "names in the OS store, never values" 1 "secret ls"
+    fi
+    [[ -n "$repo" ]] || return 0
+    _tuidev_row "Health check" "is everything the profile installed still working" 1 "tuidev check"
+    _tuidev_row "Performance audit" "what the OS does behind your agents; changes nothing" 1 "tuidev perf"
+    _tuidev_row "Disk audit" "what tools and agents left on disk; deletes nothing" 1 "tuidev disk"
+    # A theme row only for a name a theme can have: it ends up in a command.
+    for name in "$repo"/configs/themes/*/; do
+        name="${name%/}"; name="${name##*/}"
+        [[ ! "$name" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || _tuidev_row "Theme: $name" "Ghostty, tmux and Starship" 1 "tuidev theme $name"
+    done
+    _tuidev_row "Check for updates" "packages, migrations, config drift; changes nothing" 1 "tuidev update --check"
+    _tuidev_row "What's new" "this release's changelog" 1 "tuidev whatsnew | ${PAGER:-less}"
+    _tuidev_row "Add a pack" "preview what a pack would install" 1 "tuidev install --help"
+    printf -v cmd '%s %q' "${PAGER:-less}" "$repo/docs/CHEATSHEET.md"
+    _tuidev_row "Cheatsheet" "every key and command" 0 "$cmd"
+}
+
+cmd_palette() {
+    local rows pick="" cmd pause reply list=()
+    # A Herdr server started by launchd or systemd may not have it on PATH.
+    case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac
+    rows="$(_tuidev_palette_rows)"
+    [[ -n "$rows" ]] || _tuidev_die "nothing to show"
+    if [[ "${1:-}" == --list ]]; then printf '%s\n' "$rows"; return 0; fi
+    if _tuidev_has fzf; then
+        pick="$(printf '%s\n' "$rows" | fzf --delimiter=$'\t' --with-nth=1,2 --tabstop=30 \
+            --prompt='tuidev > ' --height=100% --reverse --no-multi \
+            --header='enter runs it · esc closes' \
+            --preview='printf "%s\n\n$ %s\n" {2} {4}' --preview-window=down,4,wrap)" || return 0
+    else
+        while IFS= read -r reply; do
+            list+=("$reply")
+            printf '%3d  %s\n' "${#list[@]}" "${reply%%$'\t'*}"
+        done <<< "$rows"
+        printf 'Number (enter quits): '
+        read -r reply || return 0
+        { [[ "$reply" =~ ^[0-9]+$ ]] && (( 10#$reply >= 1 && 10#$reply <= ${#list[@]} )); } || return 0
+        pick="${list[10#$reply - 1]}"
+    fi
+    [[ -n "$pick" ]] || return 0
+    cmd="${pick##*$'\t'}"
+    pause="${pick%$'\t'*}"; pause="${pause##*$'\t'}"
+    bash -c "$cmd"
+    # A popup closes with its command: leave the output up until a key.
+    if [[ "$pause" == 1 && -n "${TUIDEV_PALETTE_POPUP:-}" ]]; then
+        printf '\n[any key closes]'
+        read -r -n 1 -s reply || true
+    fi
+    return 0
+}
+
+main() {
+    local cmd="${1:-}" repo
+    [[ $# -gt 0 ]] && shift
+    case "$cmd" in
+        "")        if [[ -t 0 && -t 1 ]]; then cmd_palette; else usage; fi ;;
+        palette)   cmd_palette "$@" ;;
+        install)   _tuidev_repo || return 1; exec "$REPLY/install.sh" "$@" ;;
+        update)    cmd_update "$@" ;;
+        latest)    cmd_latest "$@" ;;
+        whatsnew)  cmd_whatsnew "$@" ;;
+        check)     _tuidev_repo || return 1; exec "$REPLY/scripts/health_check.sh" "$@" ;;
+        perf)      _tuidev_repo || return 1; exec "$REPLY/scripts/perf.sh" "$@" ;;
+        disk)      _tuidev_repo || return 1; exec "$REPLY/scripts/disk.sh" "$@" ;;
+        theme)     _tuidev_repo || return 1; repo="$REPLY"
+                   case "${1:-}" in
+                       ""|list) exec "$repo/scripts/theme.sh" list ;;
+                       show|apply) exec "$repo/scripts/theme.sh" "$@" ;;
+                       *) exec "$repo/scripts/theme.sh" apply "$@" ;;
+                   esac ;;
+        uninstall) _tuidev_repo || return 1; exec "$REPLY/uninstall.sh" "$@" ;;
+        version|--version|-V) cmd_version ;;
+        home)      _tuidev_repo || return 1; printf '%s\n' "$REPLY" ;;
+        help|-h|--help) usage ;;
+        *)         _tuidev_err "unknown command '$cmd'"; usage >&2; return 2 ;;
+    esac
+}
+
+main "$@"

@@ -421,9 +421,14 @@ pass "toolchains migration: jenv + Android get exactly those two sections; a rer
 if $zsh_ok; then
     printf '#!/bin/sh\n' > "$tc_home/.jenv/bin/jenv"; chmod +x "$tc_home/.jenv/bin/jenv"
     cp "$SCRIPT_DIR/../../configs/zsh/.zshrc" "$tc_home/.zshrc"
+    # A machine's own /etc/zshenv can export ANDROID_HOME or JAVA_HOME (a CI
+    # runner does), which env -i does not clear and which would stand in for the
+    # SDK the migration carries. -d skips the other global files; this .zshenv
+    # is read after /etc/zshenv and before .zshrc.
+    printf 'unset ANDROID_HOME JAVA_HOME\n' > "$tc_home/.zshenv"
     # shellcheck disable=SC2016  # expanded by zsh
     zout="$(env -i HOME="$tc_home" ZDOTDIR="$tc_home" PATH=/usr/bin:/bin TERM=dumb \
-        zsh -i -c 'print -l -- $path; print -- "ANDROID_HOME=$ANDROID_HOME"; env | grep -E "^(LDFLAGS|CPPFLAGS)="' \
+        zsh -d -i -c 'print -l -- $path; print -- "ANDROID_HOME=$ANDROID_HOME"; env | grep -E "^(LDFLAGS|CPPFLAGS)="' \
         </dev/null 2>/dev/null)" || true
     tc_at() { printf '%s\n' "$zout" | grep -nxF -- "$1" | head -1 | cut -d: -f1; }
     shims="$(tc_at "$tc_home/.jenv/shims")"; usr="$(tc_at /usr/bin)"; adb="$(tc_at "$tc_home/Library/Android/sdk/platform-tools")"

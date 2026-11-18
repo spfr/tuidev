@@ -46,13 +46,19 @@ stub defaults '[[ "$3" == "FXICloudDriveDocuments" ]] && cat "'"$tmp"'/state/icl
 stub df      'case "$2" in *pnpm*) dev="$(cat "'"$tmp"'/state/pnpm.dev" 2>/dev/null || echo /dev/disk1)";; *) dev=/dev/disk1;; esac; printf "Filesystem 1024-blocks Used Available Capacity Mounted\n%s %s /\n" "$dev" "$(cat "'"$tmp"'/state/df" 2>/dev/null || echo "1000000000 500000000 500000000 50%")"'
 # The measured checks: ps's TIME and COMM, sysctl's boot time, memory and
 # swap. The defaults are a healthy machine, 10 hours after boot.
-stub ps      'cat "'"$tmp"'/state/ps" 2>/dev/null || printf "     TIME COMM\n  6:00.00 /System/Library/Metadata.framework/Support/mds_stores\n  0:36.00 /System/Library/FSEvents.framework/Support/fseventsd\n"'
+ps_default='cat "'"$tmp"'/state/ps" 2>/dev/null || printf "     TIME COMM\n  6:00.00 /System/Library/Metadata.framework/Support/mds_stores\n  0:36.00 /System/Library/FSEvents.framework/Support/fseventsd\n"'
+stub ps      "$ps_default"
 stub sysctl  'case "$2" in
   kern.boottime) echo "{ sec = $(( $(date +%s) - $(cat "'"$tmp"'/state/uptime" 2>/dev/null || echo 36000) )), usec = 0 } Thu Nov 12 09:30:51 2026" ;;
   hw.memsize) echo 17179869184 ;;
   vm.swapusage) echo "total = 2048.00M  used = $(cat "'"$tmp"'/state/swap" 2>/dev/null || echo 512.00M)  free = 1536.00M  (encrypted)" ;;
   kern.memorystatus_vm_pressure_level) cat "'"$tmp"'/state/pressure" 2>/dev/null || echo 1 ;;
 esac'
+# The clock: the audit's uptime is now minus a boot time the sysctl stub also
+# derives from now, so two reads a second apart (a harness under load) turn
+# "1800 s" into 1801 and 400.0% into 399.8%. Seconds since the epoch are fixed;
+# every other use of date is the real one.
+stub date    'if [[ "$*" == "+%s" ]]; then echo 1800000000; else exec "'"$(command -v date)"'" "$@"; fi'
 }
 export PATH="$tmp/bin:$PATH"
 
@@ -170,7 +176,7 @@ audit
 [[ "$out" == *"✓ Memory: pressure normal, 512 MB of swap in use, 16 GB RAM"* ]] || fail "memory not reported: $out"
 [[ "$out" == *"✓ Disk: 50% free on the volume your home is on (477 GB of 954 GB)"* ]] || fail "free disk not reported: $out"
 [[ "$out" != *"Endpoint security"* ]] || fail "an endpoint agent reported where none runs: $out"
-[[ "$out" == *"'make disk' lists what dev tools and agents left on disk"* ]] || fail "no pointer to make disk: $out"
+[[ "$out" == *"'tuidev disk' lists what dev tools and agents left on disk"* ]] || fail "no pointer to tuidev disk: $out"
 pass "measured: daemons, memory and disk report their numbers when fine"
 
 # 6e. A daemon past 15% of a core is a warning with its fix, but not within
@@ -188,7 +194,7 @@ echo 1800 > "$tmp/state/uptime"; audit
 rm "$tmp/state/uptime" "$tmp/state/ps"
 stub ps 'exit 1'; audit
 [[ "$out" != *"Background daemons"* && "$out" != *"Endpoint"* ]] || fail "a denied ps produced a line: $out"
-rm "$tmp/bin/ps"
+stub ps "$ps_default"   # not the real ps: its numbers are this machine's
 mv "$tmp/bin/sysctl" "$tmp/sysctl.keep"; stub sysctl 'exit 1'
 mv "$tmp/bin/df" "$tmp/df.keep"; stub df 'echo "df: denied" >&2; exit 1'
 ( set -euo pipefail; audit ) || fail "a denied sysctl or df aborted the audit"
@@ -198,7 +204,7 @@ mv "$tmp/sysctl.keep" "$tmp/bin/sysctl"; mv "$tmp/df.keep" "$tmp/bin/df"
 pass "measured: a busy daemon warns after the first hour; an endpoint agent is a note; a denied ps, sysctl or df is silent"
 
 # 6f. Memory pressure and swap past a quarter of RAM; a nearly full disk with
-#     local snapshots points at make disk.
+#     local snapshots points at tuidev disk.
 echo 4 > "$tmp/state/pressure"; audit
 [[ "$out" == *"⚠ Memory: pressure is critical now"* && "$out" == *"agents mem"* ]] || fail "critical pressure not flagged: $out"
 echo 1 > "$tmp/state/pressure"; echo 5120.00M > "$tmp/state/swap"; audit
@@ -207,7 +213,7 @@ rm "$tmp/state/pressure" "$tmp/state/swap"
 echo "1000000000 950000000 50000000 95%" > "$tmp/state/df"
 printf 'com.apple.TimeMachine.2026-11-12-101010.local\ncom.apple.TimeMachine.2026-11-12-111010.local\n' > "$tmp/state/snapshots"
 audit
-[[ "$out" == *"⚠ Disk: 5% free"*"2 local Time Machine snapshot(s)"*"Below 10% free"* && "$out" == *"fix: make disk"* ]] \
+[[ "$out" == *"⚠ Disk: 5% free"*"2 local Time Machine snapshot(s)"*"Below 10% free"* && "$out" == *"fix: tuidev disk"* ]] \
     || fail "a full disk not flagged: $out"
 rm "$tmp/state/df" "$tmp/state/snapshots"
 pass "measured: memory pressure, large swap and a full disk are flagged with the command"
@@ -259,7 +265,7 @@ pass "a store on another volume is flagged"
 # 11. --brief leaves out what is fine and says so when nothing is left.
 git config --global core.untrackedCache true; audit --brief
 [[ "$out" != *"✓ git"* && "$out" == *"Performance: nothing to change"* ]] || fail "--brief: $out"
-[[ "$out" != *"Background daemons"* && "$out" != *"✓ Memory"* && "$out" != *"✓ Disk"* && "$out" != *"make disk"* ]] \
+[[ "$out" != *"Background daemons"* && "$out" != *"✓ Memory"* && "$out" != *"✓ Disk"* && "$out" != *"tuidev disk"* ]] \
     || fail "--brief printed a measured line that is fine: $out"
 pass "--brief prints only what to change"
 

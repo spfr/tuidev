@@ -244,7 +244,7 @@ _perf_check_nofile() {
         fi
     done
     _perf_add warn "Open files: your shell starts at the system's soft limit (256 on macOS, 1024 on Linux)" \
-        "./scripts/update.sh --configs   (the shipped .zshrc raises it to 65536), or add 'ulimit -n 65536' to your shell profile" \
+        "tuidev update --configs   (the shipped .zshrc raises it to 65536), or add 'ulimit -n 65536' to your shell profile" \
         "" "" "delete the ulimit line"
 }
 
@@ -296,7 +296,7 @@ _perf_check_disk_free() {
     fi
     if (( pct < 10 )); then
         _perf_add warn "$text. Below 10% free, writes and builds slow down" \
-            "make disk   (what dev tools and agents left on disk, with the command to reclaim each)"
+            "tuidev disk   (what dev tools and agents left on disk, with the command to reclaim each)"
     else
         _perf_add ok "$text"
     fi
@@ -739,11 +739,11 @@ perf_report() {
     if (( PERF_WARN_TOTAL == 0 )); then
         $brief && print_success "Performance: nothing to change"
     else
-        print_info "$PERF_WARN_TOTAL to change, $PERF_AUTO_TOTAL of them by './scripts/perf.sh --fix'. Why: docs/performance.md"
+        print_info "$PERF_WARN_TOTAL to change, $PERF_AUTO_TOTAL of them by 'tuidev perf --fix'. Why: docs/performance.md"
     fi
     # Sizing the caches takes du over each, too slow for every update, so the
     # report only names the command.
-    $brief || print_info "Disk: 'make disk' lists what dev tools and agents left on disk, with the command to reclaim each"
+    $brief || print_info "Disk: 'tuidev disk' lists what dev tools and agents left on disk, with the command to reclaim each"
     return 0
 }
 

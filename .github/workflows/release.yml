@@ -1,0 +1,86 @@
+# Release: a pushed tag vX.Y.Z becomes the GitHub release that get.sh and
+# `tuidev update` download from releases/latest/download/: the three assets
+# scripts/dist.sh builds, a signed build provenance for each, and the notes
+# from CHANGELOG.md. The steps are scripts/release.sh, tested by
+# scripts/lib/test_release.sh.
+#
+# Gate: the whole of ci.yml runs on the tagged commit first, and nothing is
+# built unless it passes. Calling it, rather than asking the API whether
+# main's run went green, tests the exact commit that ships, and does not race
+# a run that is still going when the tag is pushed right after main.
+#
+# Re-run: from the tag, never from a branch, so the provenance names the
+# commit it built: gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z.
+# A release that exists is never changed; with attach_missing, only the
+# assets it lacks are uploaded, once the ones it has match this build byte
+# for byte, and a draft a cut-short run left is published.
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag to release (vX.Y.Z). Run the workflow from that same tag.'
+        required: true
+        type: string
+      attach_missing:
+        description: 'The release exists: upload only the assets it lacks'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: ci
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read       # CI only reads the checkout
+
+  release:
+    name: release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write      # create the release and upload its assets
+      id-token: write      # sign the provenance (Sigstore, with GitHub's OIDC token)
+      attestations: write  # store the provenance with the repository
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0             # every branch: release.sh checks the tag is on main
+          persist-credentials: false
+      # The tag is vX.Y.Z, names this commit, which is on main, and matches
+      # VERSION; CHANGELOG.md's newest section is that version, with notes.
+      - name: check the tag
+        run: scripts/release.sh check "$TAG" --ref "$GITHUB_REF" --on origin/main
+      # git archive of the commit, gzip -n: the same bytes for the same commit.
+      - name: build
+        run: scripts/dist.sh --release
+      - name: notes
+        run: scripts/release.sh notes "$TAG" > "$RUNNER_TEMP/notes.md"
+      # One attestation for the three: gh attestation verify FILE --repo spfr/tuidev
+      - name: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/tuidev.tar.gz
+            dist/tuidev.tar.gz.sha256
+            dist/get.sh
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ATTACH_MISSING: ${{ inputs.attach_missing && '--attach-missing' || '' }}
+        run: scripts/release.sh publish "$TAG" dist "$RUNNER_TEMP/notes.md" ${ATTACH_MISSING:+"$ATTACH_MISSING"}

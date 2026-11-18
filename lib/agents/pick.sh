@@ -25,7 +25,7 @@ agents_pick() {
         *)      echo "usage: agents pick [--list]" >&2; return 2 ;;
     esac
     if ! command -v "$(_agents_fzf)" >/dev/null 2>&1; then
-        echo "agents: pick needs fzf (the ui pack installs it: ./install.sh --pack ui, or brew install fzf); here is agents ls" >&2
+        echo "agents: pick needs fzf (the ui pack installs it: tuidev install --pack ui, or brew install fzf); here is agents ls" >&2
         agents_main ls
         return
     fi

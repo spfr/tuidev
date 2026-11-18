@@ -22,15 +22,25 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
 
 # Every path the fixtures name starts with $tmp, and the views shorten paths
-# longer than a menu line, so the outputs match the goldens only below that:
-# $tmp is /tmp/agolden.XXXXXX, or the same under $TMPDIR where /tmp is not
-# writable (a sandbox) and $TMPDIR is short, never macOS's long /var/folders.
-tmp="$(mktemp -d /tmp/agolden.XXXXXX 2>/dev/null)" || tmp="$(mktemp -d "${TMPDIR:-/tmp}/agolden.XXXXXX")"
-trap 'rm -rf "$tmp"' EXIT
-[[ ${#tmp} -le 40 ]] || fail "$tmp: /tmp is not writable and TMPDIR is long; point TMPDIR at a short directory"
+# longer than a menu line, so the outputs match the goldens only while $tmp is
+# at most 40 characters. The first short, writable root wins: /tmp, then (where
+# /tmp is read-only, as on a sandboxed runner, and $TMPDIR is long) $TMPDIR, a
+# dot directory in $HOME, one in the checkout (a runner lets a job write
+# there), /dev/shm; never macOS's long /var/folders.
+tmp=; own1="${HOME:-/nonexistent}/.ag"; own2="$REPO_DIR/.ag"
+for root in /tmp "${TMPDIR:-}" "$own1" "$own2" /dev/shm; do
+    [[ -n "$root" ]] || continue
+    [[ "$root" == "$own1" || "$root" == "$own2" ]] && { mkdir -p "$root" 2>/dev/null || continue; }
+    cand="$(mktemp -d "${root%/}/agolden.XXXXXX" 2>/dev/null)" || continue
+    if [[ ${#cand} -le 40 ]]; then tmp="$cand"; break; fi
+    rmdir "$cand" 2>/dev/null
+done
+# The $HOME fallback root is ours: remove it too, once nothing is left in it.
+trap 'rm -rf "$tmp"; rmdir "$own1" "$own2" 2>/dev/null || true' EXIT
+[[ -n "$tmp" ]] || fail "no writable directory with a path of 40 characters or less (tried /tmp, \$TMPDIR, \$HOME/.ag, the checkout/.ag, /dev/shm)"
 
 # A clean, fixed environment: no setting of yours leaks in, C locale, UTC.
-for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME TUIDEV_STATE_DIR HERDR_SOCKET_PATH COLUMNS; do
+for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME TUIDEV_STATE_DIR HERDR_SOCKET_PATH COLUMNS; do
     unset "$v"
 done
 export HOME="$tmp/home" TMPDIR="$tmp/t" LC_ALL=C TZ=UTC NO_COLOR=1

@@ -146,7 +146,7 @@ agents_mcp_launch() {
         echo "usage: agents mcp $mode NAME...|--all" >&2; return 2
     fi
     if [[ "$mode" == lazy ]]; then
-        [[ -x "$lz" ]] || { echo "agents: no mcp-lazy beside agents ($lz): ./install.sh --pack monitoring installs it" >&2; return 1; }
+        [[ -x "$lz" ]] || { echo "agents: no mcp-lazy beside agents ($lz): tuidev install --pack monitoring installs it" >&2; return 1; }
         /usr/bin/perl -MJSON::PP -MDigest::SHA -e 1 2>/dev/null \
             || { echo "agents: mcp-lazy needs /usr/bin/perl with JSON::PP and Digest::SHA" >&2; return 1; }
     fi

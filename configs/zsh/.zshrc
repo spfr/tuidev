@@ -373,6 +373,10 @@ fi
 # ============================================================================
 
 tui-update() {
+  if (( $+commands[tuidev] )); then
+    tuidev update "$@"
+    return
+  fi
   local repo_dir="${TUIDEV_REPO:-$HOME/tuidev}"
   if [[ -d "$repo_dir" ]]; then
     "$repo_dir/scripts/update.sh" "$@"

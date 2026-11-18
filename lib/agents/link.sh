@@ -485,7 +485,7 @@ _agents_link_session() {
         if [[ "$first" == true ]]; then
             first=false
             if [[ "$line" == "tuidev-link none" ]]; then
-                _agents_link_state "$label" "needs tuidev there (./install.sh --pack monitoring)"
+                _agents_link_state "$label" "needs tuidev there (tuidev install --pack monitoring)"
                 return 1
             elif [[ "$line" != "$_AGENTS_LINK_PROTO" ]]; then
                 _agents_link_state "$label" "no agents there"
@@ -583,7 +583,7 @@ agents_link() {
         restart)
             [[ "$OSTYPE" == darwin* ]] || { echo "agents: restart is for the macOS LaunchAgent; run 'agents link watch' in a tmux pane" >&2; return 2; }
             [[ -f "$HOME/Library/LaunchAgents/$_AGENTS_LINK_LABEL.plist" ]] \
-                || { echo "agents: no LaunchAgent ($_AGENTS_LINK_LABEL): ./install.sh --pack monitoring" >&2; return 1; }
+                || { echo "agents: no LaunchAgent ($_AGENTS_LINK_LABEL): tuidev install --pack monitoring" >&2; return 1; }
             launchctl bootstrap "gui/$UID" "$HOME/Library/LaunchAgents/$_AGENTS_LINK_LABEL.plist" 2>/dev/null || true
             launchctl kickstart -k "gui/$UID/$_AGENTS_LINK_LABEL" ;;
         *) echo "usage: agents link [status|watch|restart|click URL]" >&2; return 2 ;;

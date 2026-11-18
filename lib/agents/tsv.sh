@@ -85,6 +85,8 @@ agents_tsv() {
     # title came with the records ("herdr PID PANE TITLE", agents_enrich), and
     # so did each agent row's join key ("ident PID PANE SESSION").
     _agents_herdr_health
+    # "release INSTALLED LATEST" while a newer tuidev is out (release.sh).
+    _agents_release_row
     # The machines board, as the menu last loaded it (map.sh).
     _agents_map_tsv
     for key in AGENTS_BAR_TITLE AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH AGENTS_LID AGENTS_CONF AGENTS_AUTO_REAP AGENTS_MEM_GUARD AGENTS_SERVICE_PATH; do

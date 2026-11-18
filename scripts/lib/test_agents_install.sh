@@ -22,7 +22,7 @@ trap 'rm -rf "$tmp"' EXIT
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
 
-for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME; do unset "$v"; done
+for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME; do unset "$v"; done
 export HOME="$tmp/my home" TUIDEV_NO_COLOR=1 NO_COLOR=1 DRY_RUN=false AGENTS_NO_HERDR=1
 export TUIDEV_STATE_DIR="$HOME/.config/tuidev" TUIDEV_MANIFEST_ENABLED=1   # recording on, as install.sh has it
 mkdir -p "$HOME" "$tmp/stub" "$tmp/elsewhere"
@@ -117,15 +117,15 @@ pass "_AGENTS_AWK_FILES lists every awk program, and the modules run only those"
 # 4. A missing module, or no modules at all: a clear error, nothing half loaded.
 mv "$lib/tsv.sh" "$tmp/tsv.sh"
 out="$("$bin" --help 2>&1)" && fail "agents ran without tsv.sh"
-[[ "$out" == "agents: missing $lib/tsv.sh (reinstall: ./install.sh --pack monitoring)" ]] || fail "missing module message: $out"
+[[ "$out" == "agents: missing $lib/tsv.sh (reinstall: tuidev install --pack monitoring)" ]] || fail "missing module message: $out"
 mv "$tmp/tsv.sh" "$lib/tsv.sh"
 mv "$lib/awk/report_runs.awk" "$tmp/report_runs.awk"
 out="$("$bin" tsv 2>&1)" && fail "agents ran without awk/report_runs.awk"
-[[ "$out" == "agents: missing $lib/awk/report_runs.awk (reinstall: ./install.sh --pack monitoring)" ]] || fail "missing awk program message: $out"
+[[ "$out" == "agents: missing $lib/awk/report_runs.awk (reinstall: tuidev install --pack monitoring)" ]] || fail "missing awk program message: $out"
 mv "$tmp/report_runs.awk" "$lib/awk/report_runs.awk"
 mv "$lib" "$tmp/lib-away"
 out="$("$bin" --help 2>&1)" && fail "agents ran without its modules"
-[[ "$out" == "agents: missing $HOME/.local/lib/tuidev/agents/ (reinstall: ./install.sh --pack monitoring)" ]] || fail "missing modules message: $out"
+[[ "$out" == "agents: missing $HOME/.local/lib/tuidev/agents/ (reinstall: tuidev install --pack monitoring)" ]] || fail "missing modules message: $out"
 # shellcheck source=/dev/null
 ( . "$bin" ) 2>/dev/null && fail "sourcing agents without its modules succeeded"
 mv "$tmp/lib-away" "$lib"

@@ -18,9 +18,17 @@
 npm-debug.log*
 firebase-debug.log
 
-# Environment
+# Environment and keys
 .env
 .env.local
+.env.*
+!.env.example
+.envrc
+.npmrc
+*.pem
+*.key
+id_rsa*
+id_ed25519*
 *.local
 
 # Machine-local notes, scripts and agent instructions (never public)
@@ -46,3 +54,9 @@ dhcp/
 
 # Screencast renders (docs/assets/tapes/remote.tape); the GIF cut from them is tracked
 docs/assets/*.mp4
+
+# Release assets built by scripts/dist.sh
+dist/
+
+# Job logs of a build runner, when one is used
+.fleet/

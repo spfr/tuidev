@@ -352,6 +352,9 @@ agents_herdr_sync() {
         fi
         agents_bar_poke
     fi
+    # A Herdr server that runs for weeks on a headless box is what keeps the
+    # daily release check going: builtins only until it is due.
+    _agents_release || true
     [[ "${AGENTS_HERDR_NAMES:-1}" == 1 ]] || { [[ "$quiet" == true ]] || echo "agents: AGENTS_HERDR_NAMES=0: Herdr's labels are left alone"; return 0; }
     _agents_hl_ready || return 0
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 1

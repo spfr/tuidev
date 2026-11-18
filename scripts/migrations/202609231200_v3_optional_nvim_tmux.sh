@@ -64,5 +64,5 @@ if [[ -z "$carried" ]]; then
     exit 0
 fi
 
-print_info "Carried over: $carried. They keep updating with ./scripts/update.sh --configs."
+print_info "Carried over: $carried. They keep updating with tuidev update --configs."
 print_info "Don't want one? Remove it from extra_packs in $profile (the tool stays installed)."

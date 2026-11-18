@@ -1,4 +1,4 @@
-# tuidev's Herdr plugin, linked by ./install.sh --pack herdr.
+# tuidev's Herdr plugin, linked by `tuidev install --pack herdr`.
 #
 # A plugin runs on the machine that owns the pane. On a machine you are
 # attached to from another one, a Ctrl-click on a localhost URL (or on a file
@@ -6,20 +6,41 @@
 # URL through an ssh tunnel, the file fetched (`agents link`, docs/remote.md).
 # With nobody attached, the click opens here, as it would without the plugin.
 #
+# The board (prefix+space) is every session on every machine in one list, by
+# what you would do about it, over the pane you work in: enter goes to one,
+# esc puts you back (`agents board`, docs/agent-workflows.md). prefix+shift+space
+# opens it as a tab, to leave open, or goes back to the one that is open.
+#
+# The palette (prefix+a) lists what tuidev can do here, searchable, and runs
+# the one you pick (`tuidev palette`); Updates (prefix+u) says which release
+# is installed and which is out, and asks before it updates (`tuidev update
+# --ask`). Both need only the tuidev command, which every install has.
+#
 # Its event hooks keep Herdr's labels saying what runs where (`agents herdr
-# sync`: tab names, the sidebar's $tuidev_agents roll-up, agent rows' marks). Herdr
+# sync`: tab names, the sidebar's $tuidev_agents roll-up, agent rows' marks), and
+# reload an open board (`agents board --poke`). Herdr
 # runs each hook on its own server, so every machine names its own tabs.
 id = "tuidev.link"
 name = "tuidev link"
-version = "0.4.0"
+version = "0.6.0"
 min_herdr_version = "0.9.0"
-description = "What runs where and one key to stop it; tabs named after what runs in them; open localhost and file links from another machine's panes on the machine you sit at."
+description = "A board of every session on every machine, by who needs you; a palette of everything tuidev can do; what runs where and one key to stop it; tabs named after what runs in them; links from another machine's panes opened on the machine you sit at; tuidev's own updates."
 platforms = ["linux", "macos"]
 
 [[actions]]
 id = "open"
 title = "Open link on my machine"
 command = ["sh", "run.sh", "click"]
+
+[[actions]]
+id = "board"
+title = "Board: every session, by who needs you"
+command = ["sh", "run.sh", "board"]
+
+[[actions]]
+id = "board-tab"
+title = "Board, as a tab to leave open"
+command = ["sh", "run.sh", "board-tab"]
 
 [[actions]]
 id = "map"
@@ -30,6 +51,46 @@ command = ["sh", "run.sh", "map"]
 id = "ports"
 title = "Ports: what listens where"
 command = ["sh", "run.sh", "ports"]
+
+[[actions]]
+id = "palette"
+title = "Palette: everything tuidev can do"
+command = ["sh", "run.sh", "palette"]
+
+[[actions]]
+id = "update"
+title = "Updates: the installed release and the latest"
+command = ["sh", "run.sh", "update"]
+
+[[panes]]
+id = "board"
+title = "Board"
+placement = "popup"
+width = "94%"
+height = "92%"
+command = ["sh", "run.sh", "board-pane"]
+
+[[panes]]
+id = "board-tab"
+title = "Board"
+placement = "tab"
+command = ["sh", "run.sh", "board-tab-pane"]
+
+[[panes]]
+id = "palette"
+title = "tuidev"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["sh", "run.sh", "palette-pane"]
+
+[[panes]]
+id = "update"
+title = "tuidev update"
+placement = "popup"
+width = "80%"
+height = "70%"
+command = ["sh", "run.sh", "update-pane"]
 
 [[panes]]
 id = "map"
@@ -68,7 +129,7 @@ action = "open"
 # (sync-poke): that is how it hears of codex, grok and agy sessions here,
 # which have no hooks of their own.
 [[startup]]
-command = ["sh", "run.sh", "sync"]
+command = ["sh", "run.sh", "startup"]
 
 [[events]]
 on = "tab.created"

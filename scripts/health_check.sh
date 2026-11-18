@@ -210,6 +210,8 @@ check_core() {
     # API tokens belong in the secret store, not in shell startup files
     # (docs/secrets.md). `secret scan` prints FILE:LINE: NAME, never a value.
     check_optional "secret on PATH" "have_cmd secret"
+    # Every hint the scripts print runs through it.
+    check_optional "tuidev on PATH (missing: re-run the installer)" "have_cmd tuidev"
     if have_cmd secret; then
         local hits hit
         hits="$(secret scan 2>/dev/null)" || true
@@ -458,7 +460,7 @@ check_herdr_upgrade() {
     fi
     kind="$(herdr_install_kind)"
     if [[ "$kind" == brew ]]; then
-        print_warning "herdr is Homebrew's, which can't hand a running server over to a new binary (run: ./install.sh --pack herdr or ./scripts/update.sh --packages, which install the release binary)"
+        print_warning "herdr is Homebrew's, which can't hand a running server over to a new binary (run: tuidev install --pack herdr or tuidev update --packages, which install the release binary)"
         OPT_WARN=$((OPT_WARN + 1))
     fi
     status="$(herdr_bounded status 2>/dev/null)" || status=""

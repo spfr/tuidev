@@ -68,7 +68,7 @@ cooling_install() {
         return 0
     fi
     if ! _cooling_have_swiftc; then
-        print_warning "cooling: swiftc not found; install the Command Line Tools (xcode-select --install), then run ./install.sh --pack cooling again"
+        print_warning "cooling: swiftc not found; install the Command Line Tools (xcode-select --install), then run tuidev install --pack cooling again"
         return 0
     fi
 

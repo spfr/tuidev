@@ -46,6 +46,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/scripts/lib/packs.sh"
 # shellcheck source=scripts/lib/herdr.sh disable=SC1091
 . "$SCRIPT_DIR/scripts/lib/herdr.sh"
+# shellcheck source=scripts/lib/version.sh disable=SC1091
+. "$SCRIPT_DIR/scripts/lib/version.sh"
 
 ALL=false
 PURGE_HISTORY=false
@@ -241,7 +243,7 @@ if $MANIFEST_MODE; then
     each_line "$M_FILES" _remove_helper
 else
     # Without a record, remove a helper only if it is still exactly ours.
-    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents" "mcp-lazy:bin/mcp-lazy" "secret:bin/secret"; do
+    for pair in "sbx:bin/sbx" "notify.sh:scripts/notify.sh" "agents:bin/agents" "mcp-lazy:bin/mcp-lazy" "secret:bin/secret" "tuidev:bin/tuidev"; do
         _remove_if_ours "$HOME/.local/bin/${pair%%:*}" "$SCRIPT_DIR/${pair#*:}"
     done
     while IFS= read -r src; do
@@ -441,6 +443,27 @@ if [[ -d "$TUIDEV_STATE_DIR" ]]; then
     [[ "$DRY_RUN" == true ]] || rmdir "$TUIDEV_STATE_DIR" 2>/dev/null || true
 fi
 
+# The update check's cache, and the releases get.sh unpacked: both are
+# tuidev's alone. A git clone is yours and stays. This script may be running
+# from one of those releases; bash has it open, so it finishes all the same.
+# The cache's files are the ones bin/tuidev writes (test_contract.sh keeps
+# the names in step).
+_tuidev_cache="${XDG_CACHE_HOME:-$HOME/.cache}/tuidev"
+for entry in "$_tuidev_cache"/latest "$_tuidev_cache"/latest.[0-9]* "$_tuidev_cache"/notified; do
+    [[ ! -f "$entry" ]] || run_cmd rm -f "$entry"
+done
+[[ ! -d "$_tuidev_cache/lock" ]] || run_cmd rm -rf "$_tuidev_cache/lock"
+[[ "$DRY_RUN" == true ]] || rmdir "$_tuidev_cache" 2>/dev/null || true
+_tuidev_home="${TUIDEV_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/tuidev}"
+# Run from a release: the home that release lives in, whatever TUIDEV_HOME says today.
+! tuidev_release_home "$SCRIPT_DIR" || _tuidev_home="$REPLY"
+if [[ -L "$_tuidev_home/current" && -d "$_tuidev_home/versions" ]]; then
+    run_cmd rm -rf "$_tuidev_home/versions"
+    run_cmd rm -f "$_tuidev_home/current" "$_tuidev_home/previous"
+    [[ "$DRY_RUN" == true ]] || rmdir "$_tuidev_home" 2>/dev/null || true
+    done_msg "removed the tuidev releases in $_tuidev_home"
+fi
+
 # ---------------------------------------------------------------------------
 # 7. Optional: the agents history (data, so kept unless you say otherwise).
 # ---------------------------------------------------------------------------
@@ -481,6 +504,8 @@ printf '%b\n' "${GREEN}What was removed:${NC}
   - tuidev managed blocks and the global git keys tuidev set (if unchanged)
   - tuidev helpers under ~/.local/bin, and the agents modules in ~/.local/lib/tuidev
   - $TUIDEV_STATE_DIR (profile, manifest, env, theme state)
+  - the releases get.sh downloaded (a git clone is yours and stays) and the
+    update check's cache
   - (optional) config files tuidev created, the brew packages it installed,
     and the tools it downloaded (Herdr's binary, unless a server runs from it)
 

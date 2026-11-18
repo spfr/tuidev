@@ -1,5 +1,5 @@
 # Squash-merges Dependabot patch and minor updates once every other check on
-# the PR head passes; majors wait for a human. The logic lives in spfr/spfr-trust.
+# the PR head passes; majors wait for a human. The logic lives in the org's shared workflow.
 # The permissions block is required: Dependabot-triggered runs get a read-only
 # GITHUB_TOKEN unless the workflow asks for more.
 name: dependabot-automerge

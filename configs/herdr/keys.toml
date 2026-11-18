@@ -1,6 +1,30 @@
 # tuidev's keys for its Herdr plugin (tuidev.link). Change or remove them
 # outside this block: a binding of your own for the same key wins a reload.
 [[keys.command]]
+key = "prefix+space"
+type = "plugin_action"
+command = "tuidev.link.board"
+description = "board: every session, by who needs you"
+
+[[keys.command]]
+key = "prefix+shift+space"
+type = "plugin_action"
+command = "tuidev.link.board-tab"
+description = "board, as a tab to leave open"
+
+[[keys.command]]
+key = "prefix+a"
+type = "plugin_action"
+command = "tuidev.link.palette"
+description = "palette: everything tuidev can do"
+
+[[keys.command]]
+key = "prefix+u"
+type = "plugin_action"
+command = "tuidev.link.update"
+description = "tuidev updates: installed and latest"
+
+[[keys.command]]
 key = "prefix+m"
 type = "plugin_action"
 command = "tuidev.link.map"

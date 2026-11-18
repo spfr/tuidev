@@ -101,7 +101,8 @@ done < <(collect_compaudit_paths)
 if [[ ${#REMAINING_PATHS[@]} -gt 0 ]]; then
     print_warning "some completion paths are still insecure:"
     printf '  %s\n' "${REMAINING_PATHS[@]}"
-    print_info "fix these manually, then rerun: make fix-completions"
+    # shellcheck disable=SC2016  # printed for the reader to run, not expanded here
+    print_info 'fix these manually, then rerun: "$(tuidev home)/scripts/fix_completions.sh"'
 else
     print_success "compaudit clean"
     print_step "regenerating completions"

@@ -14,6 +14,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
+unset XDG_CACHE_HOME XDG_CONFIG_HOME TUIDEV_STATE_DIR
 export HOME="$tmp/home" NO_COLOR=1
 export TUIDEV_TERMINAL_NOTIFIER=""   # never this machine's: notifications go to the osascript stubs
 mkdir -p "$HOME"

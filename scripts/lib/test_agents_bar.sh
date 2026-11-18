@@ -22,7 +22,7 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 bgpids=""
 cleanup() { local p; for p in $bgpids; do kill "$p" 2>/dev/null || true; done; rm -rf "$tmp"; }
 trap cleanup EXIT
-for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME TUIDEV_STATE_DIR SWIFTBAR SWIFTBAR_PLUGIN_REFRESH_REASON; do unset "$v"; done
+for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME TUIDEV_STATE_DIR SWIFTBAR SWIFTBAR_PLUGIN_REFRESH_REASON; do unset "$v"; done
 export HOME="$tmp/home" NO_COLOR=1 AGENTS_CONF="$tmp/none.conf" AGENTS_RUN_DIR="$tmp/run" AGENTS_DATA_DIR="$tmp/data"
 mkdir -p "$HOME" "$AGENTS_RUN_DIR" "$AGENTS_DATA_DIR" "$tmp/bin"
 # The stub `open`: what a poke would have asked SwiftBar.

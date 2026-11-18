@@ -38,8 +38,8 @@ if [[ -f "$settings" ]] && grep -q '"sandbox"' "$settings"; then
     print_info "Run claude directly: $settings turns on its native sandbox."
 elif tuidev_is_shipped "$settings" "$claude_src/settings.json" "$claude_src/shipped.sha256"; then
     print_warning "$settings is an unmodified 2.x copy without the sandbox settings."
-    print_info "Run ./scripts/update.sh --configs to upgrade it (backup first); until then claude runs unsandboxed."
+    print_info "Run tuidev update --configs to upgrade it (backup first); until then claude runs unsandboxed."
 elif [[ -f "$settings" ]]; then
     print_warning "$settings (yours, kept as it is) has no sandbox settings: claude runs unsandboxed."
-    print_info "Run ./scripts/update.sh --configs: it merges the sandbox block into your file (backup first)."
+    print_info "Run tuidev update --configs: it merges the sandbox block into your file (backup first)."
 fi

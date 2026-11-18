@@ -29,7 +29,7 @@
 # A process id as a list carries it: PID or PID@START.
 _AGENTS_MAP_ID_RE='^[0-9]{1,10}(@[A-Za-z0-9_:+.-]{1,48})?$'
 # shellcheck disable=SC2016  # the remote shell expands $HOME
-_AGENTS_MAP_REMOTE='a="$HOME/.local/bin/agents"; [ -x "$a" ] && "$a" map --rows 2>/dev/null || printf "sys\tneeds tuidev there (./install.sh --pack monitoring)\n"'
+_AGENTS_MAP_REMOTE='a="$HOME/.local/bin/agents"; [ -x "$a" ] && "$a" map --rows 2>/dev/null || printf "sys\tneeds tuidev there (tuidev install --pack monitoring)\n"'
 
 # A file a row may name: absolute, of plain characters (remote.sh's fetch
 # takes the same), as an ERE both bash and awk read.

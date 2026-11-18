@@ -377,7 +377,7 @@ grep -q 'reload herdr.service' "$log" && fail "reloaded without NotifyAccess=all
 unit_set herdr.service NotifyAccess all; herdr_bin 0.9.5
 : > "$log"; out="$(HERDR_ENV=1 sysd herdr_self_update 2>&1)"
 grep -q 'reload\|^herdr\|^curl' "$log" && fail "acted inside a Herdr pane: $(cat "$log")"
-[[ "$out" == *"update.sh --packages from a plain shell"* ]] || fail "pane message: $out"
+[[ "$out" == *"tuidev update --packages from a plain shell"* ]] || fail "pane message: $out"
 : > "$log"; out="$(DRY_RUN=true sysd herdr_self_update 2>&1)"
 [[ "$out" == *"[DRY RUN] systemctl --user reload herdr.service"* && "$out" != *"$DEST update"* ]] || fail "dry run: $out"
 grep -q 'reload\|^herdr update\|^curl' "$log" && fail "dry run changed something: $(cat "$log")"

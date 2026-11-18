@@ -80,6 +80,13 @@ LOOK
                                it, informational; --copy puts it on the clipboard
 
 OTHER MACHINES (over ssh: Herdr's saved machines, and AGENTS_REMOTE_HOSTS)
+  agents board [MACHINE|local] every session on every machine in one list, by what
+                               you would do about it: Needs you, To review, Working,
+                               the parked folded away; the right side follows the
+                               cursor (why it waits, what runs under it, the end of
+                               its pane). enter goes there, tab changes the lens
+                               (Attention, Tree, Machines), ctrl-p lists everything
+                               you can do, ? the keys. In Herdr: prefix+space
   agents map [MACHINE|local]   what runs where, in fzf, on every machine: previews
                                and dev servers first (port, project, where each
                                opens), then what was left behind, the sessions (one
@@ -192,7 +199,8 @@ ACT
                                on the clipboard, reveal shows it in Finder)
   agents open-term [-n] [--hold] CMD...
                                run 'agents CMD' in a new window of your terminal
-                               (AGENTS_TERMINAL); -n prints the command
+                               (AGENTS_TERMINAL); -n prints the command. The one
+                               exception: 'tuidev update --ask' runs tuidev
 
 KEEP AWAKE
   agents awake [status]        keep-awake state, and who else holds the Mac awake

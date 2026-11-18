@@ -1399,7 +1399,7 @@ disk_report() {
         print_info "$hidden smaller item(s) not shown ('--min 0' lists them; 'yours' shows from 1 GB unless --min is given)"
     fi
     if (( offered > 0 )); then
-        print_info "'./scripts/disk.sh --fix' shows the plan for the $offered 'run (--fix offers this)' line(s), then asks for each. '--explain ID' says more about one; '--json' lists the IDs."
+        print_info "'tuidev disk --fix' shows the plan for the $offered 'run (--fix offers this)' line(s), then asks for each. '--explain ID' says more about one; '--json' lists the IDs."
     fi
     return 0
 }
@@ -1518,13 +1518,13 @@ disk_summary() {
     echo ""
     echo -e "${BOLD}Next${NC}"
     if (( ready > 0 )); then
-        echo "  ./scripts/disk.sh --fix          clear what is ready: the plan first, then one question each"
+        echo "  tuidev disk --fix          clear what is ready: the plan first, then one question each"
     else
         echo "  Nothing is ready for --fix right now; the commands for the rest are in --explain ID."
     fi
-    echo "  ./scripts/disk.sh --explain ID   one item: what it is, what clearing it costs, its command (ID: third column)"
-    echo "  ./scripts/disk.sh --details      every item in full"
-    echo "  ./scripts/disk.sh --agent        ask Claude Code or Codex to look and write you a cleanup plan (read-only)"
+    echo "  tuidev disk --explain ID   one item: what it is, what clearing it costs, its command (ID: third column)"
+    echo "  tuidev disk --details      every item in full"
+    echo "  tuidev disk --agent        ask Claude Code or Codex to look and write you a cleanup plan (read-only)"
     return 0
 }
 

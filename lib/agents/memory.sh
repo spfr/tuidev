@@ -575,7 +575,7 @@ agents_mem() {
         restart)
                 [[ "$OSTYPE" == darwin* ]] || { echo "agents: restart is for the macOS LaunchAgent; run 'agents mem guard' in a tmux pane" >&2; return 2; }
                 [[ -f "$HOME/Library/LaunchAgents/$AGENTS_MEM_LABEL.plist" ]] \
-                    || { echo "agents: no LaunchAgent ($AGENTS_MEM_LABEL): ./install.sh --pack monitoring" >&2; return 1; }
+                    || { echo "agents: no LaunchAgent ($AGENTS_MEM_LABEL): tuidev install --pack monitoring" >&2; return 1; }
                 launchctl bootstrap "gui/$UID" "$HOME/Library/LaunchAgents/$AGENTS_MEM_LABEL.plist" 2>/dev/null || true
                 launchctl kickstart -k "gui/$UID/$AGENTS_MEM_LABEL" ;;
         *)      echo "usage: agents mem [show|check [-n]|guard|log [N]|restart]" >&2; return 2 ;;

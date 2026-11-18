@@ -22,7 +22,7 @@ case "$rc" in
     0)
         print_success "dropped mosh from extra_packs in $profile"
         if ! grep -qx 'remote=true' "$profile"; then
-            print_info "mosh stays installed; ./install.sh --remote now owns it"
+            print_info "mosh stays installed; tuidev install --remote now owns it"
         fi
         ;;
     1) ;;

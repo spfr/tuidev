@@ -66,12 +66,32 @@ _herdr_install_sidebar() {
 _herdr_install_plugin() {
     local src="$REPO_ROOT/configs/herdr/plugins/tuidev-link" dest="$TUIDEV_LIB_DIR/herdr-plugins/tuidev-link" f
     [[ -f "$src/herdr-plugin.toml" ]] || return 0
+    # Did the plugin change? Asked before the copy: an unchanged plugin that
+    # is linked is left linked, so an update costs Herdr nothing.
+    local changed=false
+    for f in "$src"/*; do
+        cmp -s "$f" "$dest/${f##*/}" || changed=true
+    done
     print_step "installing the tuidev.link Herdr plugin -> $dest"
     for f in "$src"/*; do
         install_config "$dest/${f##*/}" "$f" --overwrite
     done
     # The binary this pack just placed: ~/.local/bin may not be on PATH yet.
     local herdr; herdr="$(herdr_direct_path)"; [[ -x "$herdr" ]] || herdr="herdr"
+    if [[ "$changed" == false && "$DRY_RUN" != true ]] && "$herdr" plugin list 2>/dev/null | grep -q 'tuidev\.link'; then
+        install_config "$HOME/.config/herdr/config.toml" "$REPO_ROOT/configs/herdr/keys.toml" --managed-block tuidev-keys
+        return 0
+    fi
+    # Linking closes the plugin's own popups: an update started from one
+    # (prefix+u, the palette) leaves that to a run outside it.
+    if [[ -n "${TUIDEV_PLUGIN_PANE:-}" && "$DRY_RUN" != true ]]; then
+        if [[ "$changed" == true ]]; then
+            print_warning "the tuidev.link plugin changed: run 'tuidev update --configs' from a shell outside this popup to load it"
+        else
+            print_warning "the tuidev.link plugin is not linked: run 'tuidev update --configs' from a shell outside this popup to link it"
+        fi
+        return 0
+    fi
     if [[ "$DRY_RUN" == true ]]; then
         run_cmd "$herdr" plugin link "$dest"
         return 0
@@ -91,7 +111,9 @@ _herdr_install_plugin() {
     # for an action Herdr does not know would be an error).
     install_config "$HOME/.config/herdr/config.toml" "$REPO_ROOT/configs/herdr/keys.toml" --managed-block tuidev-keys
     "$herdr" server reload-config >/dev/null 2>&1 || true
-    print_info "tuidev.link: prefix+m is the map (what runs where, and stop it); prefix+shift+o the ports."
+    print_info "tuidev.link: prefix+a is the palette (everything tuidev can do), prefix+u its updates,"
+    print_info "  prefix+space the board (every session, by who needs you; ? lists its keys),"
+    print_info "  prefix+m the map (what runs where, and stop it), prefix+shift+o the ports."
     print_info "  Ctrl-click a localhost link in a pane of another machine to open it here (needs --pack monitoring on both; docs/remote.md)."
 }
 
@@ -118,11 +140,11 @@ herdr_install() {
     print_info "Run 'herdr' to attach."
     [[ "$HERDR_INSTALLED_NOW" == true ]] && _herdr_first_run_hints
     if [[ -n "$(herdr_systemd_units)" ]]; then
-        print_info "Upgrade: ./scripts/update.sh --packages (it reloads the systemd units that hand over; never herdr update --handoff here)."
+        print_info "Upgrade: tuidev update --packages (it reloads the systemd units that hand over; never herdr update --handoff here)."
     else
-        print_info "Upgrade: herdr update --handoff from a shell outside Herdr (or ./scripts/update.sh --packages)."
+        print_info "Upgrade: herdr update --handoff from a shell outside Herdr (or tuidev update --packages)."
     fi
-    print_info "After an upgrade: make check names outdated integrations and a stale server."
+    print_info "After an upgrade: tuidev check names outdated integrations and a stale server."
     herdr_path_note
     herdr_cutover_hint
     print_success "herdr pack complete"

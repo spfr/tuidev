@@ -66,7 +66,13 @@ _agents_ghostty_ok() {
 _agents_term_argv() {
     local term="$1" hold="" inner run cmdline shline="" w; shift
     [[ "${1:-}" == --hold ]] && { hold=1; shift; }
-    inner="$(printf '%q ' "$AGENTS_PATH" "$@")"
+    if [[ "${1:-}" == tuidev ]]; then
+        # The one command that is not `agents ...`: the update the menu offers.
+        [[ "$*" == "tuidev update --ask" ]] || { echo "agents: open-term runs tuidev only as: tuidev update --ask" >&2; return 2; }
+        inner="$(printf '%q ' "${AGENTS_PATH%/*}/tuidev" update --ask)"
+    else
+        inner="$(printf '%q ' "$AGENTS_PATH" "$@")"
+    fi
     [[ -z "$hold" || "$term" == ghostty-window ]] || inner+="; printf '\\n[press any key to close] '; read -r -s -n 1"
     run=(/usr/bin/env "PATH=$PATH" /bin/bash -c "$inner")
     cmdline="$(printf '%q ' "${run[@]}")"

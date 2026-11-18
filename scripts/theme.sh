@@ -379,7 +379,7 @@ _write_tmux_theme() {
 
     if [[ -f "$TMUX_CONF" ]] && ! _tmux_sources_theme; then
         print_warning "$TMUX_CONF does not source $TMUX_THEME_FILE yet"
-        print_info "run 'make update-configs' to refresh the shipped tmux config; until then tmux keeps its old colors"
+        print_info "run 'tuidev update --configs' to refresh the shipped tmux config; until then tmux keeps its old colors"
     fi
 }
 
@@ -421,7 +421,7 @@ _starship_writable() {
     local file="$1"
     if ! _has_block "$file" "tuidev-starship"; then
         print_warning "skipping starship: $file has no tuidev-starship block yet"
-        print_info "run ./install.sh (or make install) first, then re-apply the theme —"
+        print_info "run tuidev install first, then re-apply the theme —"
         print_info "appending a [palettes.tuidev] table now would swallow the config installed later"
         return 1
     fi
@@ -462,7 +462,7 @@ _herdr_own_theme() {
 _herdr_writable() {
     local file="$1"
     if [[ ! -f "$file" ]]; then
-        print_info "skipping herdr: no $file yet (./install.sh --pack herdr places it; then re-apply)"
+        print_info "skipping herdr: no $file yet (tuidev install --pack herdr places it; then re-apply)"
         return 1
     fi
     if _herdr_own_theme "$file"; then

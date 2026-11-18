@@ -54,6 +54,8 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/uv.sh"
 # shellcheck source=lib/perf.sh disable=SC1091
 . "$SCRIPT_DIR/lib/perf.sh"
+# shellcheck source=lib/version.sh disable=SC1091
+. "$SCRIPT_DIR/lib/version.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -62,7 +64,7 @@ print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
 # Argument parsing
 # ----------------------------------------------------------------------------
 
-MODE=""              # check|packages|configs|migrations|repo|security|perf|all|menu
+MODE=""              # check|packages|configs|migrations|repo|self|security|perf|all|menu
 NON_INTERACTIVE=false
 
 set_mode() {
@@ -84,7 +86,10 @@ Modes (pick one; default is an interactive menu):
   --configs           Re-apply repo managed blocks and pack-owned configs
                       (runs pending migrations first)
   --migrations        Run pending one-shot migrations only
-  --repo              git pull the tuidev repo and show git-clean dry-run
+  --repo              Bring tuidev's own files up to date: git pull in a clone,
+                      the latest release in an install made with get.sh
+  --self              tuidev itself: --repo, then migrations and configs
+                      (what \`tuidev update\` runs; packages are left alone)
   --security          Audit tailscale/ssh perms/seatbelt profiles
   --perf              Performance audit (Spotlight, Time Machine, limits, git),
                       then offer the fixes that need no root
@@ -106,6 +111,7 @@ while [[ $# -gt 0 ]]; do
         --configs|-C)       set_mode configs; shift ;;
         --migrations|-m)    set_mode migrations; shift ;;
         --repo|-r)          set_mode repo; shift ;;
+        --self)             set_mode self; NON_INTERACTIVE=true; shift ;;
         --security)         set_mode security; shift ;;
         --perf)             set_mode perf; shift ;;
         --all|-a)           set_mode all; NON_INTERACTIVE=true; shift ;;
@@ -606,12 +612,12 @@ report_herdr_update() {
             confirm "Switch herdr to its release binary?" || return 0
             tuidev_manifest_enable
             herdr_switch_to_direct \
-                || print_warning "herdr: the release binary is not installed yet; ./scripts/update.sh --packages (or ./install.sh --pack herdr) tries again"
+                || print_warning "herdr: the release binary is not installed yet; tuidev update --packages (or tuidev install --pack herdr) tries again"
             tuidev_manifest_disable ;;
         other)
             echo -e "  ${BOLD}herdr${NC} ($(command -v herdr), installed another way): update it the way it was installed" ;;
         none)
-            echo -e "  ${BOLD}herdr${NC}: not installed (./install.sh --pack herdr)" ;;
+            echo -e "  ${BOLD}herdr${NC}: not installed (tuidev install --pack herdr)" ;;
     esac
 }
 
@@ -884,6 +890,8 @@ run_configs_mode() {
     tuidev_git_defaults
     # So is the hooks' notify.sh (install.sh writes it outside any pack).
     tuidev_install_notify "$REPO_DIR"
+    # And the tuidev command, with the version these files are.
+    tuidev_install_cli "$REPO_DIR"
     tuidev_manifest_disable
     print_success "Pack configs re-applied"
 }
@@ -930,15 +938,69 @@ _report_repo_status() {
     fi
 }
 
+# _release_latest DIR ARGS... — DIR's own `tuidev latest ARGS`, about DIR.
+_release_latest() { local dir="$1"; shift; TUIDEV_REPO="$dir" "$dir/bin/tuidev" latest "$@"; }
+
+# _release_is_latest DIR VERSION — true when one request says VERSION is the
+# latest release and it is also the one last applied here. Without an answer
+# it is false, and the download decides.
+_release_is_latest() {
+    local known=0
+    _release_latest "$1" --refresh --newer >/dev/null 2>&1 || known=$?
+    [[ "$known" == 1 && "$(cat "$TUIDEV_STATE_DIR/version" 2>/dev/null)" == "$2" ]]
+}
+
+# _run_release_mode DIR — run_repo_mode for an install without git. --check
+# and --dry-run only say which release is the latest. Otherwise DIR's own
+# get.sh fetches it, checks it and moves `current` to it, and --all or --self
+# hand over to the new release's update.sh, as after a pull. The release this
+# process runs from stays on disk (get.sh keeps the one before it), so its
+# files stay readable until it exits.
+_run_release_mode() {
+    local dir="$1" before after latest home="${TUIDEV_HOME:-}"
+    before="$(cat "$dir/VERSION" 2>/dev/null)" || before=""
+    echo -e "  ${BLUE}Release:${NC} ${before:-unknown} in $dir"
+    # The release that handed over to this process fetched it already.
+    [[ -z "${TUIDEV_UPDATE_REEXEC:-}" ]] || return 0
+    if [[ "$MODE" == check || "$DRY_RUN" == true ]]; then
+        latest="$(_release_latest "$dir" --refresh 2>/dev/null)" || latest=""
+        print_info "${latest:-could not ask for the latest release}"
+        return 0
+    fi
+    if _release_is_latest "$dir" "$before"; then
+        print_success "tuidev ${before:-?} is the latest release"
+        return 0
+    fi
+    # Into the home this install lives in, whatever TUIDEV_HOME says today.
+    ! tuidev_release_home "$dir" || home="$REPLY"
+    if ! TUIDEV_HOME="$home" bash "$dir/get.sh" --fetch >/dev/null; then
+        print_warning "could not fetch the latest release; tuidev stays on ${before:-this version}"
+        return 0
+    fi
+    after="$(cat "$dir/VERSION" 2>/dev/null)" || after=""
+    if [[ -z "$after" || "$before" == "$after" ]]; then
+        print_success "tuidev ${before:-?} is the latest release"
+        return 0
+    fi
+    print_success "tuidev $before → $after (tuidev whatsnew $before lists what changed; tuidev update --rollback goes back)"
+    [[ ( "$MODE" == all || "$MODE" == self ) && -x "$dir/scripts/update.sh" ]] || return 0
+    TUIDEV_UPDATE_REEXEC=1 exec "$dir/scripts/update.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+}
+
 run_repo_mode() {
     print_section "Repository sync"
 
     local target="${TUIDEV_REPO:-$REPO_DIR}"
     # .git can be a directory (normal clone) or a file (worktree/submodule).
     # A recorded path can go stale when the checkout moves; this one is real.
-    if [[ ! -e "$target/.git" && "$target" != "$REPO_DIR" && -e "$REPO_DIR/.git" ]]; then
+    if [[ ! -e "$target/.git" && "$target" != "$REPO_DIR" ]] && ! tuidev_is_release "$target" \
+       && { [[ -e "$REPO_DIR/.git" ]] || tuidev_is_release "$REPO_DIR"; }; then
         print_warning "Recorded repo $target is not a git checkout; using $REPO_DIR (re-run ./install.sh to update the record)"
         target="$REPO_DIR"
+    fi
+    if tuidev_is_release "$target"; then
+        _run_release_mode "$target"
+        return 0
     fi
     if [[ ! -e "$target/.git" ]]; then
         print_warning "No git checkout at $target — skipping"
@@ -957,7 +1019,7 @@ run_repo_mode() {
         # --all pulls first, and a pull that brought new code hands over to it:
         # the migrations and configs applied next must be the ones just pulled,
         # not the ones this (older) process loaded. Once only.
-        if [[ "$MODE" == all && -n "$after" && "$before" != "$after" && -z "${TUIDEV_UPDATE_REEXEC:-}" \
+        if [[ ( "$MODE" == all || "$MODE" == self ) && -n "$after" && "$before" != "$after" && -z "${TUIDEV_UPDATE_REEXEC:-}" \
               && -x "$target/scripts/update.sh" ]]; then
             print_info "tuidev updated (${before:0:7} → ${after:0:7}): continuing with the new version"
             TUIDEV_UPDATE_REEXEC=1 exec "$target/scripts/update.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
@@ -1071,7 +1133,7 @@ run_menu() {
     1) Check for updates (preview only)
     2) Update packages (active packs only)
     3) Re-apply configs (managed blocks + pack configs)
-    4) Update repo (git pull)
+    4) Update tuidev's own files (git pull, or the latest release)
     5) Security audit
     6) Update all (packages + configs + repo)
     7) Run pending migrations
@@ -1113,6 +1175,11 @@ run_mode() {
         migrations)    run_migrations_mode ;;
         configs)       run_migrations_mode; run_configs_mode ;;
         repo)          run_repo_mode ;;
+        self)
+            run_repo_mode          # first, as in --all
+            run_migrations_mode
+            run_configs_mode
+            ;;
         security)      run_security_mode ;;
         perf)          run_perf_mode ;;
         all)
@@ -1157,7 +1224,7 @@ esac
 
 print_header "Update Complete"
 if [[ "$MODE" == "check" ]]; then
-    echo -e "  Run ${CYAN}./scripts/update.sh${NC} without --check to apply updates."
+    echo -e "  Run ${CYAN}tuidev update --all${NC} to apply updates."
 else
     echo -e "  ${GREEN}Done.${NC}"
 fi

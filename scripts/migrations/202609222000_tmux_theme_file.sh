@@ -67,7 +67,7 @@ _source_theme_file() {
 if grep -qE '^[[:space:]]*source-file.*tmux/theme\.conf' "$conf"; then
     :
 elif read_managed_block "$conf" tuidev-tmux >/dev/null; then
-    print_info "tmux shows its default colors until the shipped tmux.conf is refreshed (make update-configs)"
+    print_info "tmux shows its default colors until the shipped tmux.conf is refreshed (tuidev update --configs)"
 else
     _source_theme_file
     print_success "added 'source-file -q ~/.config/tmux/theme.conf' to $conf"

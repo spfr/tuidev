@@ -10,6 +10,10 @@
 #                [--no-overwrite] [--adopt-existing]
 #                [--dry-run]
 #
+# With no flags on a terminal it asks what this machine should get (four
+# choices, below). With no flags and no terminal it installs the default:
+# desktop on macOS, minimal on Linux.
+#
 # Profiles (select a pack set):
 #   minimal   → core
 #   desktop   → core + ui + sandbox          (macOS laptop/desktop default)
@@ -31,7 +35,8 @@
 #                (Neovim + LazyVim), vim (plain Vim, zero-plugin vimrc), tmux
 #                (durable sessions + TPM), herdr, sandbox-container,
 #                fnm, hunk, ci (actionlint, zizmor, betterleaks), monitoring, cooling
-#                (Apple Silicon fan control)
+#                (Apple Silicon fan control), release-age (npm, bun and uv
+#                wait 3 days before installing a new version)
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files
@@ -91,25 +96,80 @@ PACKS_UI=false
 PACKS_EXTRAS=false
 EXTRA_PACKS=()
 WRITE_MODE="managed-block"   # or "adopt-existing"
+CHOOSE_ONLY=false            # --choose: ask, print the flags, install nothing
 
-usage() { sed -n '2,40p' "$0"; }
+usage() { sed -n '2,49p' "$0"; }
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --profile)         PROFILE="$2"; shift 2 ;;
-        --core)            PACKS_CORE=true; shift ;;
-        --remote)          PACKS_REMOTE=true; shift ;;
-        --sandbox)         PACKS_SANDBOX=true; shift ;;
-        --ui)              PACKS_UI=true; shift ;;
-        --extras)          PACKS_EXTRAS=true; shift ;;
-        --pack)            EXTRA_PACKS+=("$2"); shift 2 ;;
-        --no-overwrite|--adopt-existing)
-                           WRITE_MODE="adopt-existing"; shift ;;
-        --dry-run|-d)      DRY_RUN=true; shift ;;
-        -h|--help)         usage; exit 0 ;;
-        *)                 die "unknown flag: $1  (try --help)" ;;
+# _parse_flags FLAGS... — the command line, and the flags a first-run answer
+# stands for, which so take the same path as typed ones.
+_parse_flags() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --profile)         PROFILE="$2"; shift 2 ;;
+            --core)            PACKS_CORE=true; shift ;;
+            --remote)          PACKS_REMOTE=true; shift ;;
+            --sandbox)         PACKS_SANDBOX=true; shift ;;
+            --ui)              PACKS_UI=true; shift ;;
+            --extras)          PACKS_EXTRAS=true; shift ;;
+            --pack)            EXTRA_PACKS+=("$2"); shift 2 ;;
+            --no-overwrite|--adopt-existing)
+                               WRITE_MODE="adopt-existing"; shift ;;
+            --dry-run|-d)      DRY_RUN=true; shift ;;
+            --choose)          CHOOSE_ONLY=true; shift ;;
+            -h|--help)         usage; exit 0 ;;
+            *)                 die "unknown flag: $1  (try --help)" ;;
+        esac
+    done
+}
+_parse_flags "$@"
+
+# _choose_install — ask what this machine should get: the menu on stderr, the
+# answer from stdin, the flags it stands for in REPLY. False for "q" or no
+# answer. Enter takes the first choice that fits the OS.
+_choose_install() {
+    local def=1 answer=""
+    is_macos || def=3
+    {
+        echo ""
+        echo "What should this machine get?"
+        echo ""
+        echo "  1) Everything for agent work    Claude Code and Codex sandboxed, who needs you (agents, the"
+        echo "                                  menu bar, Herdr), cheaper subagents, quiet fans, the shell"
+        echo "  2) Shell and sandboxed agents   the shell and Ghostty, Claude Code and Codex sandboxed"
+        echo "  3) A headless box that stays on the shell, tmux, Tailscale and mosh, sandboxed agents"
+        echo "  4) Just the shell               zsh, the prompt and the CLI tools"
+        echo ""
+        echo "  Every choice can be previewed (--dry-run) and undone (tuidev uninstall),"
+        echo "  and packs can be added later: tuidev install --pack NAME."
+        echo ""
+        printf '  Choice [%s], or q to quit: ' "$def"
+    } >&2
+    read -r answer || [[ -n "$answer" ]] || return 1   # an answer cut off by EOF still counts
+    case "${answer:-$def}" in
+        1) REPLY="--profile full" ;;
+        2) REPLY="--profile desktop --pack ai-clis" ;;
+        3) REPLY="--profile remote --pack ai-clis" ;;
+        4) REPLY="--profile minimal" ;;
+        *) return 1 ;;
     esac
-done
+}
+
+# --choose (get.sh uses it): the question alone. Otherwise the question is
+# asked when no flag says what to install and someone is there to answer.
+_no_packs_named() {
+    [[ -z "$PROFILE" ]] && ! $PACKS_CORE && ! $PACKS_REMOTE && ! $PACKS_SANDBOX \
+        && ! $PACKS_UI && ! $PACKS_EXTRAS && [[ ${#EXTRA_PACKS[@]} -eq 0 ]]
+}
+if $CHOOSE_ONLY; then
+    _choose_install || exit 1
+    printf '%s\n' "$REPLY"
+    exit 0
+fi
+if _no_packs_named && [[ -t 0 ]]; then
+    _choose_install || { print_info "nothing installed"; exit 0; }
+    # shellcheck disable=SC2086  # a few fixed words, split on spaces
+    _parse_flags $REPLY
+fi
 
 # Profile → pack-flag resolution. Profile is a convenience, not a wall.
 case "$PROFILE" in
@@ -267,6 +327,7 @@ tuidev_git_defaults
 
 # --- Local bin helpers ---
 tuidev_install_notify "$TUIDEV_REPO"
+tuidev_install_cli "$TUIDEV_REPO"
 
 # --- Default shell ---
 # chsh authenticates through PAM. Run where it cannot succeed — no TTY, or a
@@ -312,7 +373,7 @@ fi
 # already-chosen theme; only seed the default on machines with no theme state.
 if [[ "$DRY_RUN" != true && ! -f "$TUIDEV_STATE_DIR/theme" ]]; then
     if ! "$TUIDEV_REPO/scripts/theme.sh" apply tokyo-night; then
-        print_warning "could not apply the default theme; run: make theme NAME=tokyo-night"
+        print_warning "could not apply the default theme; run: tuidev theme tokyo-night"
     fi
 fi
 
@@ -367,7 +428,7 @@ fi
 # Performance: what the OS does behind your agents (read-only; never fatal).
 # ----------------------------------------------------------------------------
 
-print_step "Performance check (changes nothing; 'make perf-fix' offers the fixes)"
+print_step "Performance check (changes nothing; 'tuidev perf --fix' offers the fixes)"
 { perf_collect && perf_report --brief; } || print_info "performance check skipped"
 
 # ----------------------------------------------------------------------------
@@ -377,9 +438,10 @@ print_step "Performance check (changes nothing; 'make perf-fix' offers the fixes
 print_header "Installation Complete"
 printf '%b\n' "${GREEN}Next steps:${NC}
   1. Restart your shell:  ${YELLOW}exec zsh -l${NC}
-  2. Agent CLI configs:   ${YELLOW}./install.sh --pack ai-clis${NC}  (Claude Code + Codex, native sandboxes on)
+  2. Agent CLI configs:   ${YELLOW}tuidev install --pack ai-clis${NC}  (Claude Code + Codex, native sandboxes on)
   3. Run an agent:        ${YELLOW}claude${NC}  or  ${YELLOW}codex${NC}  in a project, next to your editor
-  4. Verify health:       ${YELLOW}make check${NC}   and   ${YELLOW}make perf${NC}  (Spotlight, backups, limits)
+  4. Verify health:       ${YELLOW}tuidev check${NC}   and   ${YELLOW}tuidev perf${NC}  (Spotlight, backups, limits)
+  5. Everything else:     ${YELLOW}tuidev${NC}  lists what you can do; ${YELLOW}tuidev update${NC} gets the next release
 
 ${CYAN}Docs:${NC}
   docs/profiles.md         what each profile and pack installs
@@ -389,4 +451,4 @@ ${CYAN}Docs:${NC}
   docs/performance.md      what the OS does behind your agents, and what to change
 
 ${CYAN}Your profile manifest:${NC} $TUIDEV_PROFILE_FILE_DEFAULT
-${CYAN}What was installed:${NC}    $TUIDEV_MANIFEST_FILE  (read by ./uninstall.sh)"
+${CYAN}What was installed:${NC}    $TUIDEV_MANIFEST_FILE  (read by tuidev uninstall)"

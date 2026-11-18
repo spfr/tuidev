@@ -181,7 +181,7 @@ STARSHIP_CONF="$HOME/.config/starship.toml"
 
 out="$("$THEME" apply tokyo-night 2>&1)"
 grep -q "skipping starship" <<< "$out" || fail "apply did not skip an uninstalled starship.toml"
-grep -q "install.sh" <<< "$out"        || fail "skip message does not say how to fix it"
+grep -q "tuidev install" <<< "$out"        || fail "skip message does not say how to fix it"
 if [[ -f "$STARSHIP_CONF" ]]; then
     grep -qF "palettes.tuidev" "$STARSHIP_CONF" && fail "wrote a palette table pre-install"
 fi

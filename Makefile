@@ -17,7 +17,7 @@
         container-runtime container-build container-test container-clean \
         docker-build docker-test docker-clean \
         brew-upgrade ci-test \
-        theme theme-list screenshots
+        theme theme-list screenshots dist
 
 .DEFAULT_GOAL := help
 # Recipes use bash (echo -e, [[ ]]); /bin/sh is dash on Debian.
@@ -102,6 +102,9 @@ disk-fix: ## Disk audit, then offer each regenerable cache and stale runtime, on
 disk-agent: ## Disk audit handed to Claude Code or Codex for a cleanup plan (read-only; sends them the audit)
 	@./scripts/disk.sh --agent
 
+dist: ## Build a release's assets in dist/ from the last commit (clean tree, CHANGELOG section for VERSION)
+	@./scripts/dist.sh --release
+
 brew-upgrade: ## Raw `brew update && brew upgrade` (bypasses profile)
 	@brew update && brew upgrade
 
@@ -143,7 +146,7 @@ check-remote: ## Health check against the remote profile
 # One file list for `make lint` and CI.
 SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
                scripts/install/*.sh scripts/install/packs/*.sh \
-               scripts/migrations/*.sh bin/sbx bin/secret bin/agents lib/agents/*.sh configs/swiftbar/*.sh \
+               scripts/migrations/*.sh get.sh bin/tuidev bin/sbx bin/secret bin/agents lib/agents/*.sh configs/swiftbar/*.sh \
                configs/herdr/plugins/*/*.sh \
                docs/assets/tapes/*.sh docs/assets/tapes/herdr/*.sh docs/assets/tapes/bin/agents
 

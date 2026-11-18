@@ -39,5 +39,5 @@ fi
 
 tuidev_manifest_enable
 herdr_switch_to_direct \
-    || print_warning "herdr: the release binary is not installed yet; ./install.sh --pack herdr (or ./scripts/update.sh --packages) tries again"
+    || print_warning "herdr: the release binary is not installed yet; tuidev install --pack herdr (or tuidev update --packages) tries again"
 exit 0

@@ -14,6 +14,9 @@
 #                                                   over a new THEIRS value
 #   tuidev_block_begin / tuidev_block_end BLOCK_ID [FILE]   the marker lines themselves
 #   tuidev_backup      PATH [PREFIX]
+#   tuidev_install_notify REPO / tuidev_install_cli REPO
+#                      the helpers in ~/.local/bin that install.sh and
+#                      `update.sh --configs` both put in place
 #
 # The managed-block strategy wraps repo-owned content in paired markers:
 #   # >>> tuidev managed (BLOCK_ID) >>>
@@ -44,6 +47,9 @@ _TUIDEV_CFGW_LOADED=1
 # remove exactly what this machine got.
 # shellcheck source=./manifest.sh disable=SC1091
 . "$(dirname "${BASH_SOURCE[0]}")/manifest.sh"
+# version_valid, for tuidev_install_cli.
+# shellcheck source=./version.sh disable=SC1091
+. "$(dirname "${BASH_SOURCE[0]}")/version.sh"
 
 # Where --overwrite and the install.sh nvim path park their backups, and how
 # many to keep. 10 covers a few months of active use without unbounded growth.
@@ -800,4 +806,19 @@ tuidev_install_notify() {
     [[ -f "$1/scripts/notify.sh" ]] || return 0
     install_config "$HOME/.local/bin/notify.sh" "$1/scripts/notify.sh" --overwrite
     [[ "${DRY_RUN:-false}" == true ]] || chmod +x "$HOME/.local/bin/notify.sh"
+}
+
+# tuidev_install_cli REPO — ~/.local/bin/tuidev from REPO's bin/tuidev (tuidev
+# owns the file), and the installed version in $TUIDEV_STATE_DIR/version,
+# which `tuidev` and `agents` read without the repo. Called by install.sh
+# and by `update.sh --configs`, like tuidev_install_notify.
+tuidev_install_cli() {
+    local v=""
+    [[ -f "$1/bin/tuidev" ]] || return 0
+    install_config "$HOME/.local/bin/tuidev" "$1/bin/tuidev" --overwrite
+    [[ "${DRY_RUN:-false}" != true ]] || return 0
+    chmod +x "$HOME/.local/bin/tuidev"
+    [[ -r "$1/VERSION" ]] && read -r v < "$1/VERSION"
+    version_valid "$v" || return 0
+    mkdir -p "$TUIDEV_STATE_DIR" && printf '%s\n' "$v" > "$TUIDEV_STATE_DIR/version"
 }

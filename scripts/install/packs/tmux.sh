@@ -46,7 +46,7 @@ _tmux_install_conf() {
             install_config "$dest" "$src" --managed-block tuidev-tmux ;;
         *)
             if [[ -e "$dest" ]] && ! grep -qxF "$(tuidev_block_begin tuidev-tmux)" "$dest" 2>/dev/null; then
-                print_info "keeping your own $dest (no tuidev-tmux block; ./install.sh --pack tmux adds one)"
+                print_info "keeping your own $dest (no tuidev-tmux block; tuidev install --pack tmux adds one)"
             else
                 install_config "$dest" "$src" --managed-block tuidev-tmux
             fi
