@@ -27,7 +27,7 @@ _agents_data_dir() {
     return 0
 }
 
-# _agents_events_lock — take events.lock (a directory: mkdir is atomic),
+# _agents_events_lock — take events.lock (_agents_lock),
 # waiting up to a second; a lock whose holder is gone is taken over
 # (_agents_lock). agents_event appends and _agents_history_prune rewrites
 # events.tsv only under it, so a prune never drops a line. False when it

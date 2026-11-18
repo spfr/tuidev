@@ -36,8 +36,8 @@ setup() {
     rm -rf "$HOME"; mkdir -p "$HOME/.cache/tuidev" "$HOME/.local/bin" "$TUIDEV_HOME/versions"
     cp -R "$tree" "$TUIDEV_HOME/versions/9.9.9"; cp -R "$tree" "$TUIDEV_HOME/versions/9.9.8"
     ln -s versions/9.9.9 "$TUIDEV_HOME/current"; echo 9.9.8 > "$TUIDEV_HOME/previous"
-    echo "9.9.9 1 1" > "$HOME/.cache/tuidev/latest"; echo 9.9.9 > "$HOME/.cache/tuidev/notified"; mkdir "$HOME/.cache/tuidev/notified.9.9.9"; echo keep > "$HOME/.cache/tuidev/other"
-    echo "9.9.9 1 1" > "$HOME/.cache/tuidev/latest.12345"; mkdir -p "$HOME/.cache/tuidev/lock"; echo 1 > "$HOME/.cache/tuidev/lock/at"
+    echo "9.9.9 1 1" > "$HOME/.cache/tuidev/latest"; echo 9.9.9 > "$HOME/.cache/tuidev/notified"; : > "$HOME/.cache/tuidev/notified.9.9.9"; mkdir "$HOME/.cache/tuidev/notified.9.9.8"; echo keep > "$HOME/.cache/tuidev/other"
+    echo "9.9.9 1 1" > "$HOME/.cache/tuidev/latest.12345"; echo 1 > "$HOME/.cache/tuidev/lock"; echo 1 > "$HOME/.cache/tuidev/lock.claim"
     cp "$tree/bin/tuidev" "$HOME/.local/bin/tuidev"; chmod +x "$HOME/.local/bin/tuidev"
 }
 

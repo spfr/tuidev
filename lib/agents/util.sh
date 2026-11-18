@@ -151,27 +151,40 @@ _agents_detach() {
     disown $! 2>/dev/null
 }
 
-# _agents_lock DIR [TRIES [PAUSE]] — take the lock DIR (mkdir is atomic),
-# trying TRIES times (default 1), PAUSE seconds apart (default 0.1), and
-# record the holder in DIR/holder: "PID START", this shell and its start time
-# (_agents_start; "-" when ps can't tell). The first failed try takes a held
+# _agents_lock_hold DIR — make DIR/holder, "PID START" of this shell (its
+# start time from _agents_start; "-" when ps can't tell), only if there is
+# none: true for the one run that made it, with that text in REPLY. bash
+# makes it itself under noclobber (O_EXCL).
+_agents_lock_hold() {
+    local me start rc=0
+    _agents_mypid me
+    start="$(_agents_start "$me")"
+    REPLY="$me ${start:--}"
+    set -C
+    { printf '%s\n' "$REPLY" > "$1/holder"; } 2>/dev/null || rc=1
+    set +C
+    return "$rc"
+}
+
+# _agents_lock DIR [TRIES [PAUSE]] — take the lock DIR, trying TRIES times
+# (default 1), PAUSE seconds apart (default 0.1). A run holds it once it has
+# made the directory and its DIR/holder (_agents_lock_hold): mkdir alone does
+# not decide, because the mkdir of uutils coreutils (Ubuntu from 25.10) can
+# succeed for two runs at once. The first failed try takes a held
 # lock over only when its holder is gone (_agents_holder_check: the pid ended,
 # or names another process now), however long it has held it; only a lock
 # whose holder can't be told (no holder file, no start time to check) is
 # taken over by age, once older than a minute. False when it could not be
 # had; _agents_unlock DIR releases it.
 _agents_lock() {
-    local lock="$1" tries="${2:-1}" pause="${3:-0.1}" i=0 me start
-    until mkdir "$lock" 2>/dev/null; do
+    local lock="$1" tries="${2:-1}" pause="${3:-0.1}" i=0 me
+    until mkdir "$lock" 2>/dev/null && _agents_lock_hold "$lock"; do
         if [[ $i -eq 0 ]] && _agents_lock_takeover "$lock"; then i=1; continue; fi
         i=$((i + 1))
         [[ $i -lt $tries ]] || return 1
         sleep "$pause" 2>/dev/null || sleep 1
     done
-    _agents_mypid me
-    start="$(_agents_start "$me")"
-    me="$me ${start:--}"
-    _agents_replace "$lock/holder" "$me" || true
+    me="$REPLY"
     _AGENTS_LOCKS="${_AGENTS_LOCKS:-}$lock"$'\t'"$me"$'\n'
 }
 

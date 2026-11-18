@@ -452,9 +452,10 @@ _tuidev_cache="${XDG_CACHE_HOME:-$HOME/.cache}/tuidev"
 for entry in "$_tuidev_cache"/latest "$_tuidev_cache"/latest.[0-9]* "$_tuidev_cache"/notified; do
     [[ ! -f "$entry" ]] || run_cmd rm -f "$entry"
 done
-[[ ! -d "$_tuidev_cache/lock" ]] || run_cmd rm -rf "$_tuidev_cache/lock"
-for entry in "$_tuidev_cache"/notified.[0-9]*; do
-    [[ ! -d "$entry" ]] || run_cmd rmdir "$entry"
+# The check's lock and its claim, and a record per release notified
+# (directories up to 3.24.0, files since).
+for entry in "$_tuidev_cache"/lock "$_tuidev_cache"/lock.claim "$_tuidev_cache"/notified.[0-9]*; do
+    [[ ! -e "$entry" ]] || run_cmd rm -rf "$entry"
 done
 [[ "$DRY_RUN" == true ]] || rmdir "$_tuidev_cache" 2>/dev/null || true
 _tuidev_home="${TUIDEV_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/tuidev}"

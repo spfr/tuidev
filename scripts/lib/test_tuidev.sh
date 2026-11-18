@@ -164,57 +164,61 @@ else
     pass "an unwritable cache dir: --if-due makes no request, a forced --refresh does"
 fi
 
-# One check at a time: a lock dir, stale after 120 s.
+# One check at a time: a lock file holding when it was taken, stale after 120 s.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
-for _ in 1 2 3; do CURL_SLEEP=1 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1 & done; wait
+for _ in 1 2 3 4 5 6; do CURL_SLEEP=1 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1 & done; wait
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && "$(cache)" == "3.30.0 1086400 1000000" && ! -e "$CACHE/lock" ]] \
-    || fail "three concurrent --if-due: $(calls) / $(cache) / lock: $(ls "$CACHE")"
+    || fail "six concurrent --if-due: $(calls) / $(cache) / lock: $(ls "$CACHE")"
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
-mkdir -p "$CACHE/lock"; echo "$TUIDEV_NOW" > "$CACHE/lock/at"
+mkdir -p "$CACHE"; echo "$TUIDEV_NOW" > "$CACHE/lock"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ -z "$(calls)" && -d "$CACHE/lock" ]] || fail "a fresh lock held by someone else: asked ($(calls)) or removed it"
-echo "$(( TUIDEV_NOW - 100 ))" > "$CACHE/lock/at"
+[[ -z "$(calls)" && -f "$CACHE/lock" ]] || fail "a fresh lock held by someone else: asked ($(calls)) or removed it"
+echo "$(( TUIDEV_NOW - 100 ))" > "$CACHE/lock"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
 [[ -z "$(calls)" ]] || fail "a lock 100 s old is not stale: $(calls)"
-echo "$(( TUIDEV_NOW - 121 ))" > "$CACHE/lock/at"
+echo "$(( TUIDEV_NOW - 121 ))" > "$CACHE/lock"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" && "$(cache)" == "3.30.0 1086400 1000000" ]] || fail "a stale lock was not taken over: $(calls) / $(cache)"
-pass "the check lock: three concurrent --if-due make one request; a fresh lock means none; a stale one is taken over"
+pass "the check lock: six concurrent --if-due make one request; a fresh lock means none; a stale one is taken over"
 
-# Taking over a stale lock: claimed in place (a `claim` directory inside it),
-# never moved, so it is free for nobody else meanwhile. A claim another check
-# holds means this one takes nothing and leaves the lock as it is.
+# Taking over a stale lock: claimed in place (lock.claim beside it), never
+# removed first, so it is free for nobody else meanwhile. A claim another
+# check holds means this one takes nothing and leaves the lock as it is.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
-mkdir -p "$CACHE/lock/claim"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock/at"
+mkdir -p "$CACHE"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock"; echo "$TUIDEV_NOW" > "$CACHE/lock.claim"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ -z "$(calls)" && -d "$CACHE/lock/claim" && "$(cat "$CACHE/lock/at")" == "$(( TUIDEV_NOW - 500 ))" ]] \
-    || fail "a stale lock another check is claiming was taken or changed: $(calls) / $(ls -A "$CACHE/lock" 2>&1)"
+[[ -z "$(calls)" && -f "$CACHE/lock.claim" && "$(cat "$CACHE/lock")" == "$(( TUIDEV_NOW - 500 ))" ]] \
+    || fail "a stale lock another check is claiming was taken or changed: $(calls) / $(ls -A "$CACHE" 2>&1)"
 # A claim whose owner died as well: cleared with its lock once ten times as
 # old, and the check after that asks.
-echo "$(( TUIDEV_NOW - 1300 ))" > "$CACHE/lock/at"
+echo "$(( TUIDEV_NOW - 1300 ))" > "$CACHE/lock"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ -z "$(calls)" && ! -e "$CACHE/lock" ]] || fail "a dead claim's lock was not cleared: $(calls) / $(ls -A "$CACHE")"
+[[ -z "$(calls)" && ! -e "$CACHE/lock" && ! -e "$CACHE/lock.claim" ]] || fail "a dead claim's lock was not cleared: $(calls) / $(ls -A "$CACHE")"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" ]] || fail "the check after a cleared lock did not ask once: $(calls)"
 # Eight checks that find the same stale lock: one request.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
-mkdir -p "$CACHE/lock"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock/at"
+mkdir -p "$CACHE"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock"
 for _ in 1 2 3 4 5 6 7 8; do CURL_SLEEP=1 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1 & done; wait
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" && -z "$(find "$CACHE" -name 'lock.*')" ]] \
     || fail "eight checks taking over one stale lock: $(calls) / $(ls -A "$CACHE")"
-# A lock with no time in it belongs to a check between its mkdir and its
-# echo: never taken over, however long that takes. One left like that for
-# two minutes (the directory's own time) is removed, and the next check asks.
-reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
-mkdir -p "$CACHE/lock"
-CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ -z "$(calls)" && -d "$CACHE/lock" ]] || fail "a fresh lock with no time was taken or removed: $(calls) / $(ls -A "$CACHE")"
-touch -t 202001010000 "$CACHE/lock"
-CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ -z "$(calls)" && ! -e "$CACHE/lock" ]] || fail "an old lock with no time was not removed: $(calls) / $(ls -A "$CACHE")"
-CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" ]] || fail "the check after it did not ask once: $(calls)"
-pass "a stale lock: one of several takes it over, in place; another's claim is left alone and a dead one cleared; one with no time is left to its holder, and removed once it is old"
+# A lock with no time in it belongs to a check between making it and writing
+# it: never taken over, however long that takes. One left like that for two
+# minutes (the file's own time) is removed, and the next check asks. The
+# directory 3.23 and 3.24.0 kept there is treated the same way.
+for old in file dir; do
+    reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
+    mkdir -p "$CACHE"
+    if [[ "$old" == file ]]; then : > "$CACHE/lock"; else mkdir "$CACHE/lock"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock/at"; fi
+    CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+    [[ -z "$(calls)" && -e "$CACHE/lock" ]] || fail "a fresh lock ($old) with no time was taken or removed: $(calls) / $(ls -A "$CACHE")"
+    touch -t 202001010000 "$CACHE/lock"
+    CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+    [[ -z "$(calls)" && ! -e "$CACHE/lock" ]] || fail "an old lock ($old) with no time was not removed: $(calls) / $(ls -A "$CACHE")"
+    CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+    [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" ]] || fail "the check after it ($old) did not ask once: $(calls)"
+done
+pass "a stale lock: one of several takes it over, in place; another's claim is left alone and a dead one cleared; one with no time, or 3.24.0's directory, is left to its holder and removed once it is old"
 
 # --newer: silent, 0 newer known, 1 the latest is installed, 2 unknown.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
@@ -255,18 +259,23 @@ setcache "3.9.0 99999999 1"; tuidev latest --notify
 [[ -z "$(calls)" ]] || fail "notified with nothing new: $(calls)"
 setcache "3.10.0 99999999 1"; tuidev latest --notify; tuidev latest --notify; tuidev latest --notify
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && "$(calls)" == *"notify.sh tuidev 3.10.0 is out (you have 3.9.0)"* ]] || fail "one notify for 3.10.0: $(calls)"
-[[ -d "$CACHE/notified.3.10.0" ]] || fail "notified marker"
+[[ -f "$CACHE/notified.3.10.0" ]] || fail "notified marker"
 setcache "3.11.0 99999999 1"; tuidev latest --notify
 [[ "$(calls | wc -l | tr -d ' ')" == 2 ]] || fail "a newer release notifies again: $(calls)"
-[[ -d "$CACHE/notified.3.11.0" && ! -e "$CACHE/notified.3.10.0" ]] || fail "the older record stays, or the new one is missing: $(ls "$CACHE")"
+[[ -f "$CACHE/notified.3.11.0" && ! -e "$CACHE/notified.3.10.0" ]] || fail "the older record stays, or the new one is missing: $(ls "$CACHE")"
 # A check that still held the older answer does not undo the newer record.
 setcache "3.10.0 99999999 1"; tuidev latest --notify; setcache "3.11.0 99999999 1"; tuidev latest --notify
-[[ "$(calls | wc -l | tr -d ' ')" == 3 && -d "$CACHE/notified.3.11.0" ]] || fail "an older answer removed the newer record: $(calls) / $(ls "$CACHE")"
+[[ "$(calls | wc -l | tr -d ' ')" == 3 && -f "$CACHE/notified.3.11.0" ]] || fail "an older answer removed the newer record: $(calls) / $(ls "$CACHE")"
 # 3.23.0 recorded it in a file: what it told you is not told again, and the file goes.
 rm -rf "$CACHE"/notified.*; : > "$CALLS"; echo 3.11.0 > "$CACHE/notified"; tuidev latest --notify
-[[ -z "$(calls)" && -d "$CACHE/notified.3.11.0" && ! -e "$CACHE/notified" ]] || fail "3.23.0's record: $(calls) / $(ls "$CACHE")"
+[[ -z "$(calls)" && -f "$CACHE/notified.3.11.0" && ! -e "$CACHE/notified" ]] || fail "3.23.0's record: $(calls) / $(ls "$CACHE")"
+# 3.24.0 recorded it as a directory: not told again, and a newer release's record replaces it.
+rm -rf "$CACHE"/notified.*; mkdir "$CACHE/notified.3.11.0"; tuidev latest --notify
+[[ -z "$(calls)" ]] || fail "3.24.0's record was told again: $(calls)"
+setcache "3.11.1 99999999 1"; tuidev latest --notify
+[[ "$(calls | wc -l | tr -d ' ')" == 1 && -f "$CACHE/notified.3.11.1" && ! -e "$CACHE/notified.3.11.0" ]] || fail "3.24.0's record was not replaced: $(calls) / $(ls "$CACHE")"
 rm "$HOME/.local/bin/notify.sh"; setcache "3.12.0 99999999 1"; tuidev latest --notify
-[[ -d "$CACHE/notified.3.12.0" ]] || fail "no notify.sh: still marked"
+[[ -f "$CACHE/notified.3.12.0" ]] || fail "no notify.sh: still marked"
 pass "--notify: once per release version, never for what is installed, quiet without notify.sh"
 
 # Concurrent notifies call notify.sh once; a cache that cannot record it shows nothing.
@@ -274,10 +283,10 @@ reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
 printf '#!/bin/bash\nsleep 1\necho "notify.sh $*" >> "$CALLS"\n' > "$HOME/.local/bin/notify.sh"; chmod +x "$HOME/.local/bin/notify.sh"
 setcache "3.10.0 99999999 1"
 for _ in 1 2 3 4 5 6; do tuidev latest --notify >/dev/null 2>&1 & done; wait
-[[ "$(calls | wc -l | tr -d ' ')" == 1 && -d "$CACHE/notified.3.10.0" && "$(find "$CACHE" -name 'notified*' | wc -l | tr -d ' ')" == 1 ]] \
+[[ "$(calls | wc -l | tr -d ' ')" == 1 && -f "$CACHE/notified.3.10.0" && "$(find "$CACHE" -name 'notified*' | wc -l | tr -d ' ')" == 1 ]] \
     || fail "three concurrent --notify: $(calls) / $(ls "$CACHE")"
 if [[ "$(id -u)" != 0 ]]; then
-    : > "$CALLS"; rmdir "$CACHE/notified.3.10.0"; chmod 500 "$CACHE"
+    : > "$CALLS"; rm -f "$CACHE/notified.3.10.0"; chmod 500 "$CACHE"
     tuidev latest --notify >/dev/null 2>&1
     chmod 700 "$CACHE"
     [[ -z "$(calls)" ]] || fail "--notify with a cache that cannot record it showed something: $(calls)"

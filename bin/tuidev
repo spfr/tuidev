@@ -180,55 +180,73 @@ _tuidev_cache_write() {
         && mv -f "$_TUIDEV_CACHE/latest.$$" "$_TUIDEV_CACHE/latest"
 }
 
-# _tuidev_lock_at DIR — REPLY: when the lock DIR was taken (its `at`), 0 when
-# it says nothing.
+# _tuidev_excl FILE TEXT — make FILE holding TEXT, only if it is not there:
+# true for the one process that made it. bash's own noclobber opens it with
+# O_EXCL. mkdir is not used to decide anything here: the mkdir of uutils
+# coreutils (Ubuntu from 25.10) can succeed for two processes at once.
+_tuidev_excl() {
+    local rc=0
+    set -C
+    { printf '%s\n' "$2" > "$1"; } 2>/dev/null || rc=1
+    set +C
+    return "$rc"
+}
+
+# _tuidev_old FILE — has FILE sat untouched for _TUIDEV_LOCK_STALE, by its
+# own time (not TUIDEV_NOW)?
+_tuidev_old() {
+    [[ -n "$(find "$1" -maxdepth 0 -mmin "+$(( _TUIDEV_LOCK_STALE / 60 ))" 2>/dev/null)" ]]
+}
+
+# _tuidev_lock_at FILE — REPLY: when the lock FILE was taken, 0 when it says
+# nothing.
 _tuidev_lock_at() {
     REPLY=0
-    { read -r REPLY < "$1/at"; } 2>/dev/null
+    { read -r REPLY < "$1"; } 2>/dev/null
     [[ "$REPLY" =~ ^[0-9]+$ ]] || REPLY=0
 }
 
-# _tuidev_lock / _tuidev_unlock — the check's lock, a directory: mkdir alone
-# decides who holds it. One older than _TUIDEV_LOCK_STALE was left by a check
-# that died and is taken over in place, never moved or removed first, so it
-# is at no moment free for a third to take: of several that find it stale,
-# the one whose mkdir of `claim` inside it succeeds has it, once it has seen
-# that the time in it is still the stale one (else another took it over
-# between this one's reading and its claim). A claim whose owner died too
-# is cleared with its lock once that is ten times as old.
+# _tuidev_lock / _tuidev_unlock — the check's lock, a file holding the time it
+# was taken: making it (_tuidev_excl) decides who holds it. One older than
+# _TUIDEV_LOCK_STALE was left by a check that died and is taken over in
+# place, never removed first, so it is at no moment free for a third to take:
+# of several that find it stale, the one that makes `lock.claim` has it, once
+# it has seen that the time in it is still the stale one (else another took
+# it over between this one's reading and its claim). A claim whose owner died
+# too is cleared with its lock once that is ten times as old. A lock with no
+# time in it is its holder's, between making it and writing it, however long
+# a busy machine makes that: never taken over, and removed only once it has
+# sat like that for _TUIDEV_LOCK_STALE. 3.23 and 3.24.0 kept a directory
+# there: one left behind is treated the same way.
 _tuidev_lock() {
     local l="$_TUIDEV_CACHE/lock" now seen
     mkdir -p "$_TUIDEV_CACHE" 2>/dev/null || return 1
     _tuidev_now now
-    if mkdir "$l" 2>/dev/null; then
-        # This fails when the lock went from under this process: it holds none.
-        echo "$now" > "$l/at" 2>/dev/null
-        return
+    ! _tuidev_excl "$l" "$now" || return 0
+    if [[ -d "$l" ]]; then
+        ! _tuidev_old "$l" || rm -rf "$l" "$l.claim"
+        return 1
     fi
     _tuidev_lock_at "$l"
-    # No time in it: its holder is between its mkdir and its echo, however
-    # long a busy machine makes that, so it is never taken over. One that has
-    # sat like that for _TUIDEV_LOCK_STALE by the directory's own clock was
-    # left by a check that died there: it is removed, for the next to take.
     if [[ "$REPLY" == 0 ]]; then
-        [[ -z "$(find "$l" -maxdepth 0 -mmin "+$(( _TUIDEV_LOCK_STALE / 60 ))" 2>/dev/null)" ]] || rm -rf "$l"
+        ! _tuidev_old "$l" || rm -f "$l" "$l.claim"
         return 1
     fi
     seen="$REPLY"
     (( now - seen > _TUIDEV_LOCK_STALE )) || return 1
-    if ! mkdir "$l/claim" 2>/dev/null; then
-        (( now - seen > 10 * _TUIDEV_LOCK_STALE )) && rm -rf "$l"
+    if ! _tuidev_excl "$l.claim" "$now"; then
+        (( now - seen > 10 * _TUIDEV_LOCK_STALE )) && rm -f "$l" "$l.claim"
         return 1
     fi
     _tuidev_lock_at "$l"
-    if [[ "$REPLY" != "$seen" ]] || ! echo "$now" > "$l/at" 2>/dev/null; then
-        rmdir "$l/claim" 2>/dev/null
+    if [[ "$REPLY" != "$seen" ]] || ! echo "$now" > "$l" 2>/dev/null; then
+        rm -f "$l.claim"
         return 1
     fi
-    rmdir "$l/claim" 2>/dev/null
+    rm -f "$l.claim"
     return 0
 }
-_tuidev_unlock() { rm -rf "$_TUIDEV_CACHE/lock"; }
+_tuidev_unlock() { rm -f "$_TUIDEV_CACHE/lock"; }
 
 # _tuidev_refresh force|due — the check above; false when it asked and had
 # no answer (or, forced, could not write it down).
@@ -281,21 +299,21 @@ _tuidev_update_available() {
 
 # One notification per release: a Herdr toast, a tmux message or a banner,
 # whichever notify.sh finds, and the menu bar hears of it. The record is a
-# directory, notified.X.Y.Z, and making it is the whole decision: mkdir
-# succeeds for one process only, so checks that finish together notify once,
-# and where it can't be made nothing is shown (never once per run). It stays
-# until a newer release's replaces it. `notified`, a file, is 3.23.0's record.
+# file, notified.X.Y.Z, and making it is the whole decision (_tuidev_excl):
+# one process only can, so checks that finish together notify once, and where
+# it can't be made nothing is shown (never once per run). It stays until a
+# newer release's replaces it. `notified`, a file, is 3.23.0's record, and
+# 3.24.0 made notified.X.Y.Z a directory.
 _tuidev_notify_once() {
     local seen="" mark f
     _tuidev_update_available || return 0
     mark="$_TUIDEV_CACHE/notified.$LATEST"
-    [[ ! -d "$mark" ]] || return 0
+    [[ ! -e "$mark" ]] || return 0
     [[ -f "$_TUIDEV_CACHE/notified" ]] && read -r seen < "$_TUIDEV_CACHE/notified"
-    mkdir "$mark" 2>/dev/null || return 0
-    for f in "$_TUIDEV_CACHE"/notified "$_TUIDEV_CACHE"/notified.*; do
-        if [[ -f "$f" ]]; then rm -f "$f"
-        elif _tuidev_newer "$LATEST" "${f##*/notified.}"; then rmdir "$f" 2>/dev/null
-        fi
+    _tuidev_excl "$mark" "" || return 0
+    rm -f "$_TUIDEV_CACHE/notified"
+    for f in "$_TUIDEV_CACHE"/notified.*; do
+        ! _tuidev_newer "$LATEST" "${f##*/notified.}" || { rm -f "$f" || rmdir "$f"; } 2>/dev/null
     done
     [[ "$seen" != "$LATEST" ]] || return 0
     [[ ! -x "$HOME/.local/bin/notify.sh" ]] \
