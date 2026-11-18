@@ -96,10 +96,14 @@ BODY=""
 with_timeout() {
     local secs="$1"; shift
     (
+        # The subshell's own stderr is closed and CMD gets the caller's back
+        # (fd 9): under load bash writes "child setpgid ...: Operation not
+        # permitted" there, which would pass for something CMD said.
+        exec 9>&2 2>/dev/null
         set +e -m
-        "$@" </dev/null &
+        "$@" </dev/null 2>&9 9>&- &
         pid=$!
-        ( sleep "$secs"; kill -TERM -- "-$pid" ) >/dev/null 2>&1 &
+        ( sleep "$secs"; kill -TERM -- "-$pid" ) >/dev/null 2>&1 9>&- &
         watcher=$!
         wait "$pid" 2>/dev/null; rc=$?
         kill -TERM -- "-$watcher" 2>/dev/null || [[ $rc -lt 128 ]] || rc=124

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A notification never carries bash's own note.** Under load bash writes "child setpgid ...: Operation not permitted" when it starts a timed command; `notify.sh`'s time limit let that line through as if the command had said it (3.24.3 fixed the same in `agents`).
 - **An update that changes Ghostty's config says to reload it.** Ghostty reads its config at start, so an open one kept its old keys (Cmd+P typed a `p` instead of opening the palette). When the `ui` pack changes the file while Ghostty runs, it now names the key: Cmd+Shift+, in Ghostty.
 
 ## [3.24.3] - 2026-11-18
