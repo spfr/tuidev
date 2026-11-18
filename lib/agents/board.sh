@@ -44,7 +44,8 @@
 #   system.sh, limits.sh (_agents_limits_lines), remote.sh (machines, ssh),
 #   map.sh (_agents_map_act, _agents_map_remote, _agents_map_plain,
 #   _AGENTS_MAP_ID_RE), pick.sh (_agents_fzf), where.sh and kill.sh through
-#   agents_main; awk/board_rows.awk, awk/board_view.awk, awk/board_trace.awk;
+#   agents_main; awk/board_rows.awk, awk/board_view.awk, awk/board_trace.awk,
+#   awk/board_pane.awk;
 #   curl (a poke), nc (back to a pane no agent holds).
 # Public: agents_board.
 
@@ -58,6 +59,11 @@ _AGENTS_BOARD_SUB_MIN=30      # minutes a finished sub-agent stays listed
 _AGENTS_BOARD_SUB_MAX=12      # sub-agents listed for one session, newest first
 _AGENTS_BOARD_TRACE_TAIL=4194304   # bytes of a transcript the trace reads, from its end
 _AGENTS_BOARD_TRACE_MAX=40    # events the trace shows at most
+_AGENTS_BOARD_SIDE=55         # the right-hand side's share of the window, in percent
+
+# _agents_board_colors — the colors, also where fzf reads what a board prints
+# (its list, header and right-hand side: a pipe, never a terminal).
+_agents_board_colors() { if [[ -n "${AGENTS_BOARD_UI:-}" ]]; then _agents_colors --always; else _agents_colors; fi; }
 
 _agents_board_dir() { REPLY="$AGENTS_RUN_DIR/board"; [[ -d "$REPLY" ]] || mkdir -p "$REPLY" 2>/dev/null; }
 
@@ -183,12 +189,13 @@ _agents_board_view() {
 _agents_board_list() {
     local dir cols="${FZF_COLUMNS:-${COLUMNS:-}}" w rows hf=""
     _agents_board_dir; dir="$REPLY"
-    _agents_colors
+    _agents_board_colors
     [[ "$cols" =~ ^[0-9]+$ ]] || cols="${AGENTS_WIDTH:-120}"
     # The list's share of the window: all of it with the right-hand side
-    # hidden or under it (or no right-hand side), a little over half beside it.
+    # hidden or under it (or no right-hand side), what that leaves beside it.
     w="$cols"
-    [[ -z "${AGENTS_BOARD_UI:-}" || "$(_agents_board_get side 1)" != 1 || $cols -lt 100 ]] || w=$((cols * 54 / 100))
+    [[ -z "${AGENTS_BOARD_UI:-}" || "$(_agents_board_get side 1)" != 1 || $((cols * _AGENTS_BOARD_SIDE / 100)) -lt 50 ]] \
+        || w=$((cols - cols * _AGENTS_BOARD_SIDE / 100 - 1))
     if [[ -n "${AGENTS_BOARD_UI:-}" ]]; then rows="$AGENTS_BOARD_UI.rows" hf="$AGENTS_BOARD_UI.header.$$"
     else rows="$dir/rows.$$"; fi
     _agents_board_all "${1:-${AGENTS_BOARD_ONLY:-}}" > "$rows.$$" 2>/dev/null
@@ -196,7 +203,11 @@ _agents_board_list() {
     LIMITS="$(_agents_board_limits)" _agents_board_view list -v lens="$(_agents_board_get lens attention)" \
         -v all="$(_agents_board_get all 0)" -v W="$w" -v hf="$hf" < "$rows"
     if [[ -z "${AGENTS_BOARD_UI:-}" ]]; then rm -f "$rows"
-    elif [[ -f "$hf" ]]; then mv -f "$hf" "$AGENTS_BOARD_UI.header"; fi
+    elif [[ -f "$hf" ]]; then
+        # The lens tabs lead the header, level with the right-hand side's.
+        { _agents_board_lens_label; printf '\n\n'; cat "$hf"; } > "$hf.t" 2>/dev/null
+        rm -f "$hf"; mv -f "$hf.t" "$AGENTS_BOARD_UI.header"
+    fi
 }
 
 _agents_board_header() { [[ -z "${AGENTS_BOARD_UI:-}" ]] || cat "$AGENTS_BOARD_UI.header" 2>/dev/null; }
@@ -213,26 +224,27 @@ _agents_board_idok() {
     esac
 }
 
-# _agents_board_tabs CURRENT NAME... — " Card  Pane  Details ", CURRENT lit.
+# _agents_board_tabs CURRENT NAME... — " Card  Trace  Pane  Details ", CURRENT
+# a filled chip in the accent color; in brackets where there is no color.
 _agents_board_tabs() {
-    local cur="$1" t out=""; shift
+    local cur="$1" t out=" "; shift
     for t in "$@"; do
-        if [[ "$t" == "$cur" ]]; then out+=" $C_ACC$C_B$t$C_0 "; else out+=" $C_DIM$t$C_0 "; fi
+        if [[ "$t" != "$cur" ]]; then out+="$C_DIM $t $C_0"
+        elif [[ -n "$C_0" ]]; then out+="$C_ACC$C_B"$'\033[7m'" $t $C_0"
+        else out+="[$t]"; fi
     done
     printf '%s' "$out"
 }
 
-# _agents_board_pane MACHINE ID LINES — the end of a session's pane, as plain
-# text with its empty lines squeezed; a line saying so when it can't be read.
+# _agents_board_pane MACHINE ID LINES [COLUMNS] — the end of a session's
+# output, as plain text with its empty lines squeezed and the agent's own
+# input box and status lines left out (awk/board_pane.awk); a line saying so
+# when its pane can't be read.
 _agents_board_pane() {
     local out
     if [[ "$1" == local ]]; then out="$(agents_main peek "$2" "$3" 2>/dev/null | _agents_map_plain)"
     else out="$(_agents_map_remote "$1" peek "$2" "$3" 2>/dev/null | _agents_map_plain)"; fi
-    out="$(printf '%s\n' "$out" | awk -v n="$3" '
-        { sub(/[ \t]+$/, "") }
-        $0 == "" { blank++; next }
-        { if (m && blank) l[++m] = ""; blank = 0; l[++m] = $0 }
-        END { for (i = (m > n ? m - n + 1 : 1); i <= m; i++) print "  " l[i] }')"
+    out="$(printf '%s\n' "$out" | _agents_awk "lib_fmt board_pane" -v n="$3" -v W="${4:-0}")"
     if [[ -n "$out" ]]; then printf '%s\n' "$out"
     else printf '  %s(its pane is not one that can be read from here)%s\n' "$C_DIM" "$C_0"; fi
 }
@@ -377,9 +389,9 @@ _agents_board_section() { printf '\n %s%s%s\n' "$C_DIM" "$1" "$C_0"; }
 
 # _agents_board_peek MACHINE KIND ID OWNER — the right-hand side for one row.
 _agents_board_peek() {
-    local m="$1" kind="$2" id="$3" owner="$4" rows view facts said
+    local m="$1" kind="$2" id="$3" owner="$4" rows view facts said n
     _agents_board_rowsf; rows="$REPLY"
-    _agents_colors
+    _agents_board_colors
     if [[ "$(_agents_board_get help 0)" == 1 ]]; then _agents_board_help; return; fi
     [[ -r "$rows" ]] || return 0
     case "$kind" in
@@ -406,14 +418,16 @@ _agents_board_peek() {
         trace)   _agents_board_tabs Trace Card Trace Pane Details; printf '\n\n'
                  _agents_board_trace "$m" "$id" "${FZF_PREVIEW_LINES:-}" ;;
         pane)    _agents_board_tabs Pane Card Trace Pane Details; printf '\n\n'
-                 _agents_board_pane "$m" "$id" 120 ;;
+                 _agents_board_pane "$m" "$id" 120 "${FZF_PREVIEW_COLUMNS:-0}" ;;
         details) _agents_board_tabs Details Card Trace Pane Details; printf '\n\n'
                  if [[ "$m" == local ]]; then agents_main show "$id" 2>/dev/null | sed 's/^/ /'
                  else _agents_map_remote "$m" show "$id" 2>/dev/null | _agents_map_plain | sed 's/^/ /'; fi ;;
         *)       _agents_board_tabs Card Card Trace Pane Details; printf '\n'
                  _agents_board_view card -v cm="$m" -v cid="$id" < "$rows"
                  _agents_board_section 'ITS PANE, LAST LINES'
-                 _agents_board_pane "$m" "$id" 14
+                 # As much of its pane as the side has room for, 14 lines at least.
+                 n=14; [[ ! "${FZF_PREVIEW_LINES:-}" =~ ^[0-9]{1,4}$ || $((FZF_PREVIEW_LINES - 18)) -le $n ]] || n=$((FZF_PREVIEW_LINES - 18))
+                 _agents_board_pane "$m" "$id" "$n" "${FZF_PREVIEW_COLUMNS:-0}"
                  facts="$(_agents_board_facts "$m" "$id")"
                  [[ -z "$facts" ]] || printf '\n %s%s%s\n' "$C_DIM" "$facts" "$C_0" ;;
     esac
@@ -530,8 +544,7 @@ _agents_board_key() {
                 *)                                               cur=machines ;;
             esac
             _agents_board_put lens "$cur"
-            _agents_colors
-            printf 'change-list-label(%s)+reload-sync(%s board --list)' "$(_agents_board_lens_label)" "$a" ;;
+            printf 'reload-sync(%s board --list)' "$a" ;;
         view-next|view-prev)
             local v; v="$(_agents_board_get view card)"
             case "$key:$v" in
@@ -602,7 +615,7 @@ _agents_board_lens_label() {
 # first, then what else there is; the one you pick runs.
 _agents_board_palette() {
     local m="$1" kind="$2" id="$3" owner="${4:--}" t=$'\t' pick what
-    _agents_colors
+    _agents_board_colors
     pick="$({
         case "$kind" in
             ses) printf '%s\n' "go${t}Go to this session${t}enter" "pane${t}Read its pane, full screen${t}" \
@@ -645,6 +658,13 @@ _agents_board_palette() {
 _agents_board_fzf_ok() {
     "$(_agents_fzf)" --no-input --footer x --footer-border top --list-border top --list-label x --gutter ' ' \
         --bind 'click-footer:transform(true),load:transform-header(true),esc:hide-input+disable-search' --filter x </dev/null >/dev/null 2>&1
+    [[ $? -ne 2 ]]
+}
+
+# _agents_board_wraps — true when this fzf breaks the right-hand side's long
+# lines between words and takes a mark of ours for what follows a break.
+_agents_board_wraps() {
+    "$(_agents_fzf)" --preview-window wrap-word --preview-wrap-sign '    ' --filter x </dev/null >/dev/null 2>&1
     [[ $? -ne 2 ]]
 }
 
@@ -758,7 +778,7 @@ _agents_board_sweep() {
 #   --header                    the header of this board's last list
 #   --poke                      every board open here reloads now
 agents_board() {
-    local a list name="" popup="" dir every keys args=() go listen=""
+    local a list name="" popup="" dir every keys args=() go listen="" wrap=wrap
     case "${1:-}" in
         --rows)    _agents_board_rows; return ;;
         --poke)    _agents_board_poke; return ;;
@@ -804,13 +824,16 @@ agents_board() {
     # its timer is then only the fallback.
     if _agents_board_listen listen; then args+=("$listen"); every="$(_agents_board_every 1)"
     else every="$(_agents_board_every 0)"; fi
+    # Long lines break between words, the rest under a small indent, where
+    # this fzf can; else between any two characters.
+    if _agents_board_wraps; then wrap="wrap-word"; args+=(--preview-wrap-sign '    '); fi
     args+=(--ansi --delimiter "$(printf '\t')" --with-nth '5..' --no-sort --disabled --no-input
         --layout reverse --height 100% --border none --margin 0 --padding 0 --info hidden --no-scrollbar
         --gutter ' ' --highlight-line --cycle
         --header "$(_agents_board_header)" --header-border none
         --footer "$keys" --footer-border top
-        --list-label "$(_agents_board_lens_label)" --list-border top
-        --preview "$a board --peek {1} {2} {3} {4}" --preview-window 'right,46%,border-left,wrap,<50(down,50%,border-top,wrap)'
+        --preview "$a board --peek {1} {2} {3} {4}"
+        --preview-window "right,$_AGENTS_BOARD_SIDE%,border-left,noinfo,$wrap,<50(down,55%,border-top,noinfo,$wrap)"
         --bind "j:down,k:up,g:first,G:last,q:abort,ctrl-d:preview-half-page-down,ctrl-u:preview-half-page-up"
         --bind "tab:transform($go lens-next),btab:transform($go lens-prev)"
         --bind "1:transform($go lens-1),2:transform($go lens-2),3:transform($go lens-3)"

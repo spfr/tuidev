@@ -10,7 +10,8 @@
 # -v mode=
 #   list   the list, one line a thing:  MACHINE<TAB>KIND<TAB>ID<TAB>OWNER<TAB>TEXT
 #          KIND head (ID a group: need review run unknown parked), mach (a
-#          machine's heading), ses, kid (OWNER its session; "-" otherwise).
+#          machine's heading), ses, kid (OWNER its session; "-" otherwise),
+#          gap (an empty line between two groups).
 #          -v lens=attention|tree|machines, -v all=1 lists the parked,
 #          -v W= the columns the list has, -v hf= a file for the header (the
 #          counts, ENVIRON LIMITS, the first warning).
@@ -65,7 +66,7 @@ function srow(i,   s, nc, dc, o) {
     nc = s == "need" ? B : (s == "parked" ? DIM : "")
     dc = s == "need" ? NEED : (s == "review" ? DONE : DIM)
     o = " " scolor(s) gl(s) N "  " (gon ? DIM lc(kmark(skind[i]), gwid) N " " : "") nc lc(dcut(sname(i), NW), NW) N \
-        " " dc lc(dcut(doing(i), DW), DW) N " " DIM rc(since(i), 5)
+        "  " dc lc(dcut(doing(i), DW), DW) N "  " DIM rc(since(i), 5)
     if (multi && lens != "machines") o = o "  " lc(dcut(sm[i], MW), MW)
     if (EW) o = o "  " counts(i)
     return sm[i] "\tses\t" sid[i] "\t-\t" o N
@@ -76,9 +77,17 @@ function krow(i, k, last,   m, c, right) {
     return sm[i] "\tkid\t" kid[i, k] "\t" sid[i] "\t" "     " DIM mk(last ? "end" : "tee") N " " m "  " \
         lc(dcut(ktext[i, k], KW), KW) " " DIM lc(dcut(right, 9), 9) " " rc(kage[i, k] == "-" ? "" : age(kage[i, k] + 0), 5) N
 }
-function head(id, title, note) { return "-\thead\t" id "\t-\t" DIM title N (note == "" ? "" : "  " DIM note N) }
+# A heading: in its group's color, on the rows' left edge.
+function head(id, title, note,   c) {
+    c = id == "need" ? NEED B : id == "review" ? DONE B : id == "run" ? RUN B : DIM
+    return "-\thead\t" id "\t-\t" " " c title N (note == "" ? "" : "  " DIM note N)
+}
+# An empty line between two groups (a row of its own: fzf has no other gap).
+function gap() { if (shown++) print "-\tgap\t" shown "\t-\t" }
+function folded() { gap(); print head("parked", "PARKED", cnt["parked"] "  " gl("dot") "  press . to show") }
 function group(s, title,   i, any) {
     if (!cnt[s]) return
+    gap()
     print head(s, title, cnt[s])
     for (i = 1; i <= ord[s, 0]; i++) print srow(ord[s, i])
 }
@@ -120,9 +129,9 @@ function header(   o, w, more) {
     if (ENVIRON["LIMITS"] != "") printf "\n %s%s%s", DIM, txt(ENVIRON["LIMITS"], 160), N > hf
     if (nw) {
         more = nw > 1 ? "  (+" (nw - 1) " more)" : ""
-        printf "\n %s%s %s%s%s%s", WARN, mk("warn"), (multi ? wm[1] ": " : ""), wt[1], more, N > hf
+        printf "\n\n %s%s %s%s%s%s", WARN, mk("warn"), (multi ? wm[1] ": " : ""), wt[1], more, N > hf
     }
-    printf "\n" > hf
+    printf "\n\n" > hf
     close(hf)
 }
 function find(m, id,   i) { for (i = 1; i <= ns; i++) if (sm[i] == m && sid[i] == id) return i; return 0 }
@@ -225,13 +234,22 @@ END {
 
     # The list. Widths: the name takes what the rest leaves.
     if (W + 0 < 40) W = 80
-    DW = 16; MW = 0; KW = 30
-    for (i = 1; i <= nm; i++) if (multi && length(mo[i]) > MW) MW = length(mo[i])
+    # What a session does and its name are as wide as the widest listed, so
+    # no column stands apart from the next.
+    DW = 4; MW = 0; KW = 30; NM = 8; EW = 0
+    for (i = 1; i <= ns; i++) if (all || sst[i] != "parked") {
+        if (dw(doing(i)) > DW) DW = dw(doing(i))
+        if (dw(sname(i)) > NM) NM = dw(sname(i))
+        if (multi && length(sm[i]) > MW) MW = length(sm[i])
+        if (length(counts(i)) > EW) EW = length(counts(i))
+    }
+    if (DW > 16) DW = 16
     if (MW > 12) MW = 12
-    EW = (W >= 76) ? 14 : 0
-    NW = W - (4 + (gon ? gwid + 1 : 0) + 1 + DW + 1 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + (EW ? EW + 2 : 0)) - 2
-    if (NW > 44) NW = 44
-    if (NW < 14) NW = 14
+    if (W < 76) EW = 0
+    NW = W - (4 + (gon ? gwid + 1 : 0) + 2 + DW + 2 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + (EW ? EW + 2 : 0)) - 2
+    if (NW > 60) NW = 60
+    if (NW > NM) NW = NM
+    if (NW < 8) NW = 8
     sort("need"); sort("review"); sort("run"); sort("unknown"); sort("parked")
     if (hf != "") header()
     if (!ns) { print head("-", "NO SESSIONS", "start an agent in any pane and it shows here"); exit }
@@ -242,13 +260,15 @@ END {
             print srow(i)
             for (k = 1; k <= nkids[i]; k++) print krow(i, k, k == nkids[i])
         }
-        if (cnt["parked"] && !all) print head("parked", "PARKED", cnt["parked"] "  " gl("dot") "  . shows them")
+        shown = 1
+        if (cnt["parked"] && !all) folded()
         for (m = 1; m <= nm; m++) if (dropped[mo[m]]) print unshown(mo[m])
         exit
     }
     if (lens == "machines") {
         for (m = 1; m <= nm; m++) {
-            print mo[m] "\tmach\t-\t-\t" B mo[m] N "  " DIM rollup(mo[m]) N
+            if (m > 1 && (nses[mo[m]] || nses[mo[m - 1]])) { shown = 1; gap() }
+            print mo[m] "\tmach\t-\t-\t" " " B mo[m] N "  " DIM rollup(mo[m]) N
             ng = split(all ? "need review run unknown parked" : "need review run unknown", go, " ")
             for (g = 1; g <= ng; g++) for (j = 1; j <= ord[go[g], 0]; j++) if (sm[ord[go[g], j]] == mo[m]) print srow(ord[go[g], j])
             if (dropped[mo[m]]) print unshown(mo[m])
@@ -258,7 +278,7 @@ END {
     group("need", "NEEDS YOU"); group("review", "TO REVIEW"); group("run", "WORKING"); group("unknown", "NO SIGNAL")
     if (cnt["parked"]) {
         if (all) group("parked", "PARKED")
-        else print head("parked", "PARKED", cnt["parked"] "  " gl("dot") "  . shows them")
+        else folded()
     }
     for (m = 1; m <= nm; m++) if (dropped[mo[m]]) print unshown(mo[m])
 }

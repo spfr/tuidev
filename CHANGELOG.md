@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The agents you already run show up on the phone by themselves.** While herdr-core is up, every agent pane of this machine's Herdr is mirrored into it (`agents hc mirror`): the phone lists it, typing there reaches the agent in the pane, and the inbox has its state. Herdr's events start and end the mirrors; `AGENTS_HC_MIRROR=0` turns it off.
 - **`agents hc` and `agents hc up` keep herdr-core in your desktop login.** On macOS a core the phone starts over SSH runs outside it, and Claude Code there says "Not logged in" because it cannot reach the Keychain. `agents hc` says so, `agents hc up --restart` fixes it at the Mac, and `--pack herdr-core` starts the core at login (LaunchAgent `dev.tuidev.hc`) so the phone finds a good one. herdr-core itself comes from its own installer or Herdr's desktop app.
 
+### Fixed
+
+- **The board has its colors, and reads cleanly.** What fzf shows of `agents board` was printed without color (its list, header and right-hand side reach fzf through a pipe), so no tab looked active and a warning looked like any other line. Now the active lens and view are filled chips, a group's heading has its group's color, and the warning stands apart in the warning color. The lens tabs moved into the header, level with the right-hand side's, so there is no rule across half the window.
+- **The board's pane preview is the session's output.** The end of a pane no longer shows the agent's own input box, prompt and status lines, the rules around them or the line naming the pane; a long line breaks between words where fzf can, and a rule is cut to the width instead of wrapping.
+- **The board's list is laid out tighter.** Headings and rows share one left edge with an empty line between groups, the name and "what it does" columns are as wide as their widest entry, the folded parked line says `press . to show`, and the right-hand side takes 55% of the window (it was 46%), with as much of the pane as fits.
+
 ## [3.23.0] - 2026-11-18
 
 ### Added

@@ -88,22 +88,27 @@ keys="$(printf '%s\n' "$list" | cut -f1-4)"
 want="-${T}head${T}need${T}-
 devbox${T}ses${T}$D${T}-
 local${T}ses${T}$A${T}-
+-${T}gap${T}2${T}-
 -${T}head${T}review${T}-
 devbox${T}ses${T}$E${T}-
+-${T}gap${T}3${T}-
 -${T}head${T}run${T}-
 local${T}ses${T}$B${T}-
+-${T}gap${T}4${T}-
 -${T}head${T}parked${T}-"
 [[ "$keys" == "$want" ]] || fail "the list's rows: $keys"
 { has "$list" "Review auth diff" && has "$list" "waiting on you" && has "$list" "wants permission"; } || fail "what a blocked session says: $list"
 has "$(printf '%s\n' "$list" | sed -n 3p)" "+1 sub, 1 cmd" || fail "a session counts what runs under it, a finished sub-agent left out: $list"
-has "$(printf '%s\n' "$list" | sed -n 7p)" "api" || fail "a session with no title goes by its project: $list"
+has "$(printf '%s\n' "$list" | sed -n 9p)" "api" || fail "a session with no title goes by its project: $list"
 has "$list" "devbox" || fail "with two machines a row names its own: $list"
-pass "list: groups by what to do, the longest wait first, parked folded into a line"
+has "$(printf '%s\n' "$list" | tail -n 1)" "press . to show" || fail "the folded parked line says which key shows them: $list"
+[[ -z "$(printf '%s\n' "$list" | awk -F '\t' '$2 != "gap" && $5 !~ /^ [^ ]/')" ]] || fail "headings and rows share one left edge: $list"
+pass "list: groups by what to do with an empty line between them, the longest wait first, parked folded into a line"
 
 hdr="$(cat "$tmp/header")"
 { has "$hdr" "2 need you" && has "$hdr" "1 to review" && has "$hdr" "1 working" && has "$hdr" "1 parked"; } || fail "the header's counts: $hdr"
 has "$hdr" "local: node holds 9.0G" || fail "the header's warning: $hdr"
-[[ "$(printf '%s\n' "$hdr" | wc -l | tr -d ' ')" == 2 ]] || fail "the header has a line for limits only when some are known: $hdr"
+[[ "$(printf '%s\n' "$hdr" | wc -l | tr -d ' ')" == 3 ]] || fail "the header has a line for limits only when some are known, and its warning stands apart: $hdr"
 hdr="$(LIMITS='Claude 62% of 5h' view list -v lens=attention -v W=110 -v hf="$tmp/header" >/dev/null; cat "$tmp/header")"
 has "$hdr" "Claude 62% of 5h" || fail "the header's limits: $hdr"
 pass "header: the counts, the limits when known, the first warning"
@@ -124,11 +129,13 @@ local${T}kid${T}def456${T}$A
 local${T}kid${T}50@Mon_Jan_01_00:10:00_2026${T}$A
 devbox${T}ses${T}$E${T}-
 local${T}ses${T}$B${T}-
+-${T}gap${T}2${T}-
 -${T}head${T}parked${T}-"
 [[ "$(printf '%s\n' "$tree" | cut -f1-4)" == "$want" ]] || fail "the tree's rows: $(printf '%s\n' "$tree" | cut -f1-4)"
 { has "$tree" "Explore" && has "$tree" "running" && has "$tree" "pnpm test"; } || fail "the tree's lines: $tree"
 mach="$(view list -v lens=machines -v W=110)"
-[[ "$(printf '%s\n' "$mach" | cut -f1,2 | sed -n '1p;4p')" == "local${T}mach
+[[ "$(printf '%s\n' "$mach" | cut -f1,2 | sed -n '1p;4p;5p')" == "local${T}mach
+-${T}gap
 devbox${T}mach" ]] || fail "the machines' headings: $mach"
 has "$mach" "1 codex, 1 claude; 1 needs you, 1 to review" || fail "a machine's roll-up: $mach"
 pass "lenses: Tree lists what runs under each session, Machines groups by machine with a roll-up"
@@ -166,6 +173,35 @@ has "$(view kid -v cm=local -v cid='50@Mon_Jan_01_00:10:00_2026' -v cowner="$A")
 has "$(view group -v cid=parked)" "Old notes" || fail "the parked group's card lists them"
 has "$(view mach -v cm=devbox)" "memory 20% free" || fail "a machine's card: its summary"
 pass "card: why it waits and what runs under it; one for a kid, a group and a machine"
+
+# The end of a pane is its output: the agent's input box and status lines,
+# the rules and the line peek leads with are left out; a rule never wraps.
+rule="$(printf '\342\224\200%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40)"
+pane_of() { _agents_awk "lib_fmt board_pane" -v n="${1:-14}" -v W="${2:-0}"; }
+out="$(printf '%s\n' "$rule Herdr w1:p1 $rule" '  first line' '' '' '  the last line of output' '' "$rule" \
+    "$(printf '\342\235\257') " "$rule" '  Model  ctx 15%' '  auto mode on' | sed "1s/.*/$(printf '\342\224\200\342\224\200') Herdr w1:p1 $(printf '\342\224\200\342\224\200')/" | pane_of)"
+[[ "$out" == "  first line
+  
+  the last line of output" ]] || fail "a Claude Code pane ends at its output, its indent gone: $out"
+out="$(printf '%s\n' 'output' "$rule my session $(printf '\342\224\200')" "$(printf '\342\235\257') typed" "$rule" 'status' | pane_of)"
+[[ "$out" == "  output" ]] || fail "a rule that names the session is still the input box's: $out"
+out="$(printf '%s\n' 'did a thing' '' "$(printf '\342\200\272') ask Codex anything" '  gpt-5 100% left' | pane_of)"
+[[ "$out" == "  did a thing" ]] || fail "a Codex pane ends before its prompt: $out"
+out="$(printf '%s\n' 'a table' "$rule" 'its rows' | pane_of 14 30)"
+{ has "$out" "its rows" && [[ "$(printf '%s\n' "$out" | sed -n 2p | LC_ALL=C awk '{ print length($0) }')" -lt 90 ]]; } || fail "a rule in the output stays, cut to the width: $out"
+out="$(printf '%s\n' "$rule" "$(printf '\342\235\257') " "$rule" | pane_of)"
+has "$out" "$(printf '\342\235\257')" || fail "a pane that is only the input box is shown as it is: $out"
+[[ "$(printf '%s\n' 1 2 3 4 5 | pane_of 2)" == "  4
+  5" ]] || fail "the last n lines"
+unset -f pane_of
+pass "pane: the last lines of output, without the agent's input box, status lines and wrapping rules"
+
+# The tabs: the active one stands out with color and without.
+[[ "$(_agents_board_tabs Pane Card Trace Pane Details)" == "  Card  Trace [Pane] Details " ]] || fail "no color: the active tab in brackets: $(_agents_board_tabs Pane Card Trace Pane Details)"
+out="$(NO_COLOR='' AGENTS_THEME=ansi TERM=xterm-256color; _agents_colors --always; _agents_board_tabs Pane Card Pane)"
+has "$out" $'\033[7m Pane ' || fail "color: the active tab is a filled chip: $out"
+_agents_colors
+pass "tabs: the active one is a filled chip, or in brackets where there is no color"
 
 # ---------------------------------------------------------------------------
 # 5. The keys, as the fzf actions they print.
@@ -286,6 +322,23 @@ if has "$out" "$T"; then fail "no terminal: only the text, no id columns"; fi
 out="$(agents_board --bogus 2>&1)" && fail "an unknown option"
 has "$out" "usage: agents board" || fail "usage: $out"
 pass "no terminal: the list as plain text; the limits line; usage"
+
+# A board's header leads with the lens tabs, and what fzf reads from a board
+# is in color though it is a pipe.
+( export AGENTS_BOARD_UI="$tmp/uih"
+  _agents_board_put lens tree; _agents_board_put side 1
+  FZF_COLUMNS=200 _agents_board_list >/dev/null
+  hdr="$(_agents_board_header)"
+  [[ "$(printf '%s\n' "$hdr" | sed -n 1p)" == "  Attention [Tree] Machines " ]] || fail "the header's first line is the lens tabs: $hdr"
+  [[ -z "$(printf '%s\n' "$hdr" | sed -n 2p)" ]] && has "$(printf '%s\n' "$hdr" | sed -n 3p)" "2 need you" || fail "then an empty line and the counts: $hdr"
+  [[ "$(_agents_board_key lens-next)" != *change-list-label* ]] || fail "a lens change reloads the list; the header carries the tabs"
+  NO_COLOR='' AGENTS_THEME=ansi TERM=xterm-256color
+  has "$(_agents_board_list | head -n 1)" $'\033[' || fail "a board's list is in color through a pipe"
+  unset AGENTS_BOARD_UI
+  if has "$(_agents_board_list | head -n 1)" $'\033['; then fail "the plain list through a pipe has no color"; fi
+) || exit 1
+rm -f "$tmp"/uih.*
+pass "header: the lens tabs lead it; a board's own output is in color"
 
 # ---------------------------------------------------------------------------
 # 8. The plugin opens it, and hands over the pane you were in.
