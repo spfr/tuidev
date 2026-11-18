@@ -7,14 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.22.2] - 2026-11-17
+
+### Added
+
+- **A forward has three states: active, nothing answers, dead.** `agents forward ls` and `agents map` show them. "Nothing answers" means the ssh is up but no server holds the port on the other machine. The check is a bare TCP connect through the tunnel, so nothing appears in the dev server's log. [Remote feels local](docs/remote.md#remote-feels-local-ports-links-and-files)
+
 ### Changed
 
+- **Forwards a click made close themselves.** The link watcher checks each forward every 60 s and closes a click-made one after two checks in a row, at least 50 s apart, found nothing behind it, so about one to two minutes after the server stopped; a restart does not break the tab. One whose ssh died is cleared too. Forwards you opened yourself with `agents forward open` stay, marked "nothing answers".
+- **Stopping a server from the map closes its forward at once.** `ctrl-k` on a port row of another machine stops the process and closes any forward to that port. After a sweep (`ctrl-s`) or a stop, click-made forwards to that machine with nothing behind them are closed right away. A cancelled or failed stop leaves every forward alone.
+- **`agents forward close --dead` now also closes forwards of your own where nothing answers,** not only the dead ones. At the cap of eight click-made forwards a machine, stale ones are cleared before a click is refused.
+- **The cap of eight forwards a machine counts click-made ones only.** Forwards you opened yourself with `agents forward open` to that machine no longer count against it.
+- **A click on a port you already forwarded yourself reuses your forward,** and it stays yours. A click-made forward you then open yourself with `agents forward open` becomes yours, so it is no longer closed automatically.
+- **The menu bar marks a forward "nothing answers".** A click still opens it, and a `Close localhost:PORT` item under it closes it; a dead one closes on a click. It never probes: it shows that only from a watcher check under 150 s old, so with no watcher running live forwards show as active.
+- **Restart the link watcher after upgrading.** One that is already running keeps the old code until `agents link restart` (macOS; elsewhere, restart `agents link watch`).
+- **README captions say what you are looking at,** not how the picture was made.
 - **The README tells the 3.22 story in the order you meet the problems.** It opens with the outcome ("Run many AI coding agents, on more than one machine, and stay in control"), and every section title says what you get: "Know which agent needs you" (Herdr's tab names and sidebar rows), "Keep your tokens to yourself", "No background tax" (what changed in the background, as a table). Remote, cleanup, the menu bar and the fans are a screen each, with their detail in the owning docs. The social card says the same.
 - **New pictures.** The Herdr GIF runs tuidev on all three demo machines, so it shows named tabs, each workspace's branch and roll-up, a red `blocked` and since when an agent waits; the menu picture is the glance menu.
 - **Docs.** [performance.md](docs/performance.md#what-tuidev-runs-in-the-background) lists everything tuidev runs in the background, with its trigger, how often and its off switch; [remote.md](docs/remote.md#remote-feels-local-ports-links-and-files) adds "Use just this", "What leaves my machine" and "When another tool is better", and every key of the map; [secrets.md](docs/secrets.md#when-to-use-something-else) says when another tool is the better choice; one table of the marks by kind of session; three FAQ entries; `SECURITY.md` describes `secret` and the link watcher's trust model.
 
 ### Fixed
 
+- **A forward whose server had stopped still said active and was never closed.**
 - **`SECURITY.md` still told you to keep tokens in `~/.zshrc.local`.** It points at `secret` now.
 - **The README counted 25 credential paths.** The list has 33.
 

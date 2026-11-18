@@ -10,9 +10,9 @@ tuidev sets up your terminal for Claude Code and Codex so that you always know w
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-![A short terminal tour in three scenes. First, the Starship prompt in a repo, ll listing files with a git status column, and git diff through delta. Second, the agents command: a blocked Claude Code session first, a finished Codex session to review, a working one, a polling loop flagged stuck, and a line each for stale processes and hogs. Third, cat reading a demo SSH key without a sandbox, then sbx refusing the same read and a write to ~/.zshrc with "Operation not permitted" while make test still runs and passes.](docs/assets/tour.gif)
+![A short terminal tour in three scenes. First, the Starship prompt in a repo, ll listing files with a git status column, and git diff through delta. Second, the agents command: a blocked Claude Code session first, a finished Codex session to review, a working one, a polling loop flagged stuck, and a line each for stale processes and hogs. Third, cat reading an SSH key without a sandbox, then sbx refusing the same read and a write to ~/.zshrc with "Operation not permitted" while make test still runs and passes.](docs/assets/tour.gif)
 
-<sub>The shell, `agents` and `sbx` in a demo home with made-up data, rendered with `make screenshots`.</sub>
+<sub>One install: a shell that shows you the repo, `agents` telling you who needs you, and `sbx` keeping an agent's commands away from your keys.</sub>
 
 ## The problem
 
@@ -41,17 +41,17 @@ With `--pack monitoring` beside it, the labels say what runs where. A tab bar of
 
 <img src="docs/assets/herdr.gif" width="800" alt="Herdr in a terminal. The tab bar reads ✳ Fix flaky cache test, ✳ Review diff and ❯ myapp instead of 1, 2, 3. The sidebar lists three machines, Local, devbox and workbox, and under each its workspaces on two lines: the name, then the branch and what runs there, such as fix-cache · ✳2 ❯1 for myapp and canary · ⬡1 for infra; api on devbox adds a red blocked after its name. Below, seven agents sorted by who needs you: first Fix 404 routes on devbox, blocked since 22:43, in red; then Review diff and API docs, done, in blue, each with the time it finished; then Rate limit and Canary 1.5 working on workbox, Fix flaky cache test working, and Sign-up form idle. The view jumps to devbox's api, tab ✳ Fix 404 routes, where the agent asks to allow git push origin fix-404; after a y it pushes and opens a draft PR, its red mark turns green and blocked leaves the workspace row. Then the view opens workbox's infra, tab ⬡ Canary 1.5, where an agent waits for a canary.">
 
-<sub>Herdr with this Mac and two Linux containers saved as SSH machines, `devbox` and `workbox`, and tuidev on all three. The agents are scripted stand-ins that set a task title and report their state through Herdr's hook API, not live Claude Code or Codex sessions; the names, roll-ups and times are what `agents herdr sync` wrote. Rendered with `make screenshots`.</sub>
+<sub>Seven agents on three machines in one sidebar, sorted by who needs you. The blocked one on `devbox` is first, in red: jump to it, answer, and it goes back to work.</sub>
 
 ## Remote feels local
 
 The dev server an agent started on another machine prints `http://localhost:5173`, and that is the other machine's localhost. With tuidev on both, **Ctrl-click the URL** in its Herdr pane and it opens in your own browser, through an ssh tunnel made on the spot.
 
-Press **prefix+m** for the map: one list of what runs where, on every machine, with previews and dev servers first, then the files sessions just wrote and what was left behind. Enter opens it here, and **ctrl-k stops what is under the cursor on the machine that runs it**, asked first. **Drag a file onto a session on another machine** and it gets there: your Mac asks you once, and nothing leaves without that click. It is plain ssh underneath: nothing listens anywhere, and what another machine may ask for is decided on yours. [Remote feels local](docs/remote.md#remote-feels-local-ports-links-and-files)
+Press **prefix+m** for the map: one list of what runs where, on every machine, with previews and dev servers first, then the files sessions just wrote and what was left behind. Enter opens it here, and **ctrl-k stops what is under the cursor on the machine that runs it**, asked first. **Drag a file onto a session on another machine** and it gets there: your Mac asks you once, and nothing leaves without that click. It is plain ssh underneath: nothing listens anywhere, what another machine may ask for is decided on yours, and a tunnel closes itself when the server behind it stops. [Remote feels local](docs/remote.md#remote-feels-local-ports-links-and-files)
 
 <img src="docs/assets/remote.gif" width="800" alt="Herdr in a terminal with three machines in its sidebar: Local, atlas and kepler. The storefront session on atlas shows a preview server at http://localhost:5173 and a review it wrote. Back on Local, prefix+m opens the map: under Previews and dev servers, atlas port 5173 by the storefront session and kepler port 8080, left behind; under Files sessions just wrote, review.md on atlas; then sessions and machines. Enter on the atlas row forwards the port, and the checkout page served from atlas appears in a browser. Ctrl-x on the kepler row asks to send SIGTERM to one process; after y the row is gone and Left behind says nothing. Enter on review.md fetches it, and the review is read in the terminal on this Mac.">
 
-<sub>This Mac and two Linux containers saved as SSH machines, `atlas` and `kepler`. The sessions are scripted stand-ins; the tunnel, the browser page, the stop and the fetched file are real. Recorded with `docs/assets/tapes/remote.tape` on the fleet `remote-demo.sh` starts ([how](docs/assets/tapes/README.md#the-remote-screencasts-fleet)).</sub>
+<sub>A preview running on `atlas` opens in the browser on this Mac, a server left behind on `kepler` is stopped from the same list, and a review written on `atlas` is read here.</sub>
 
 ## Stop what agents left behind
 
@@ -59,7 +59,7 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
 
 <img src="docs/assets/cleanup.gif" width="800" alt="Three commands in a terminal. agents says who needs you; under the Claude Code session in api, a polling loop has waited 5h10m and is flagged stuck, safe to stop. agents why 2120 explains it: verdict, safe to stop, because what it waits for already finished ([exited with code 0], 5h0m ago), with high confidence; the evidence is its owner, its age, the file it watches, that file's last line and how long it has been quiet, then how to look and how to stop it. agents report opens with its top insights (Explore subagents left 3 polling loops running for 7.7 hours; api's CPU is up 147 percent on the day before, mostly its build; myapp's tests ran 4 duplicates), then shows the CPU-hours of agent work in the last 24 hours by job, with tests first, by project and session, the busiest hours, the tokens (17.6M, 94% cache hits, 2% polling), one denial, and the cleanups by reason.">
 
-<sub>The demo fixtures and a made-up week of history, rendered with `make screenshots`.</sub>
+<sub>Who needs you, why a five-hour polling loop is safe to stop, and where a day of agent work went.</sub>
 
 - **Verdicts, not guesses.** `agents why PID` prints the evidence and a verdict for every stale process and every command flagged stuck, long or duplicated: "safe to stop: what it waits for already finished", "check first: dev server on :5173, its session is still active". `agents reap --stuck` stops the stuck loops. Kills go descendants first and re-check each process's start time before every signal.
 - **Fixed at the source.** Claude Code hooks stop the background commands a subagent left running once it hands back its report, and a rule in the orchestration pack tells agents not to poll in sleep loops and to stop what they start. Opt-in `AGENTS_AUTO_REAP=1` cleans up only the high-trust cases.
@@ -81,7 +81,7 @@ The Machines row asks your other machines what runs there only when you open the
   <img src="docs/assets/menu-light.webp" width="800" alt="The agents menu open under its menu-bar item, which shows a red alert with 1 and a blue check with 1 for what needs you, and a cup for keep-awake. Needs you (1): a Claude Code session in api, permission, 6 minutes. To review (1): a Codex session in web, done 12 minutes. Running (3): myapp with its tests at 3m12s, 2.2 cores and 1.8G; a polling loop in api stuck for 5h10m, safe to stop; pnpm dev in web running 45 minutes, check first. Then one row each: Claude&apos;s weekly limit as a gauge at 83% with a marker for the time gone and +2 more windows; Today, 3.4 h blocked, 17.4 CPU-hours, tests 46%; Stale (2), server-memory and vite; Hogs (1); Awake, while agents run; CPU 27%, memory 59%, thermal nominal; Open agents watch; Refresh. The stuck loop&apos;s submenu is open: its command, Jump to session, then safe to stop, what it waits for already finished ([exited with code 0], 5h0m ago), its owner, how long it has waited, the file it watches and that file&apos;s last line, then Stop command…, Copy details, Show session, Peek and Details.">
 </picture>
 
-<sub>The plugin's actual output over the demo fixtures, drawn as a macOS menu by `scripts/render_menu.sh`; it is not a screenshot of a real menu bar. [More submenus, animated](docs/assets/menu.gif).</sub>
+<sub>Everything that needs you, one click from the menu bar. [More submenus, animated](docs/assets/menu.gif).</sub>
 
 ## Keep your tokens to yourself
 
@@ -104,7 +104,7 @@ The stores are on the sandbox's credential list, so a command under `sbx` can't 
 
 <img src="docs/assets/sbx.png" width="800" alt="sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with &quot;Operation not permitted&quot;, so does appending to ~/.zshrc, and make test in the project still runs and passes.">
 
-<sub>Without a sandbox, any command an agent runs can read your keys. Under `sbx` (strict profile), the same read is refused, so are the other credentials and writes outside the project, and the project's own work still runs. Demo home with made-up files.</sub>
+<sub>Without a sandbox, any command an agent runs can read your keys. Under `sbx` (strict profile), the same read is refused, so are the other credentials and writes outside the project, and the project's own work still runs.</sub>
 
 ## No background tax
 
@@ -127,7 +127,7 @@ Agents keep a MacBook's chip at 75–85 °C for hours while macOS keeps the fans
 
 `./install.sh` sets up Ghostty, zsh with autosuggestions, syntax highlighting and completions, a Starship prompt, and the tools below, wired in for you at the terminal: `cat` runs `bat`, `ls` and `ll` run `eza`, `cd` runs `zoxide`, `lg` runs `lazygit` and `top` runs `btm` once those are installed. An agent's `cat`, `ls` and `top` stay the real commands, so the flags it already knows keep working. Ctrl-T finds a file with fzf and a preview, and with the extras, Ctrl-R searches your history with atuin. One `palette.toml` colors Ghostty, tmux and Starship, and `make theme NAME=catppuccin-mocha` switches all three. [Toolbox](docs/toolbox.md) · [Profiles](docs/profiles.md) · [Cheatsheet](docs/CHEATSHEET.md) · [Theming](docs/theming.md)
 
-<img src="docs/assets/cli.gif" width="800" alt="The shipped zsh in a demo repo under the Starship prompt. z ap jumps to ~/api; lt draws the repo as a tree with file icons; cat src/routes.py shows the file through bat with syntax highlighting and git change marks; Ctrl-T opens fzf, and typing cach narrows the files to src/cache.py with a highlighted preview; Ctrl-R opens atuin's history search filtered to test commands; tokei counts the repo's lines by language.">
+<img src="docs/assets/cli.gif" width="800" alt="The shipped zsh in a repo under the Starship prompt. z ap jumps to ~/api; lt draws the repo as a tree with file icons; cat src/routes.py shows the file through bat with syntax highlighting and git change marks; Ctrl-T opens fzf, and typing cach narrows the files to src/cache.py with a highlighted preview; Ctrl-R opens atuin's history search filtered to test commands; tokei counts the repo's lines by language.">
 
 | Instead of | You get | Why |
 |------------|---------|-----|

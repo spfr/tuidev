@@ -61,8 +61,8 @@ agents map                         # what runs where, on every machine; in Herdr
 agents ports                       # what listens where: this machine and your others
 agents ports --pick                # the same in fzf; enter opens the port in your browser
 agents forward open workbox 5173   # bring that port here and open it
-agents forward                     # the forwards, and whether each still answers
-agents forward close --all
+agents forward                     # the forwards: active, nothing answers, or dead
+agents forward close --all         # or --dead: only the dead and the unanswered ones
 agents push -m workbox shot.png    # into workbox's ~/.cache/tuidev/drop; prints (and copies) the path
 agents open workbox /srv/app/report.html   # fetch one file and open it here
 ```
@@ -97,7 +97,7 @@ The other machines answer over one shared ssh connection each, so the list comes
 | `ctrl-e` | | | list what each session runs | |
 | `ctrl-r` | reload the list | | | |
 
-On a forward, `enter` opens it and `ctrl-k` closes it. `esc` quits.
+On a forward, `enter` opens it and `ctrl-k` closes it. On a port row of another machine, `ctrl-k` stops the process and closes any forward to that port at once. A sweep (`ctrl-s`) or a stop there also closes click-made forwards to that machine that have nothing behind them. A cancelled or failed stop or sweep leaves every forward alone. `esc` quits.
 
 A stop is `agents kill` on the machine that runs the thing, with its refusals and its y/N question. A dev server here is a listener started in a project directory: not an agent's own port, not an app or system service, not a daemon in your home directory (`agents ports` lists every listener).
 
@@ -122,6 +122,8 @@ So nothing needs `pkill`, and nothing needs you to remember which machine a dev 
 
 **What a forward is.** One `ssh -N -L` of its own, from this machine's `127.0.0.1` to the other machine's `localhost`: nothing is bound to a public address at either end. One you open yourself takes the same port number when that is free here, so the URL a program printed works as it stands; otherwise the next free one. ssh runs with `BatchMode`, so a machine that needs a password is reported, never prompted for: load the key (`ssh-add`) or reconnect it (`herdr machine reconnect workbox`) first. These connections carry nothing your ssh config would add for the host: no agent or X11 forwarding, and none of its `LocalForward` lines.
 
+A forward is **active** (the server answers), **nothing answers** (the ssh is up but no server holds the port over there) or **dead** (its ssh is gone); `agents forward` and `agents map` show which. The check is a bare TCP connect through the tunnel, so nothing shows in the dev server's log. A forward you opened yourself with `agents forward open` stays for when the server comes up; it is only marked. A forward a click made closes itself: the link watcher (`agents link watch`, which wakes every 60 s) closes it after two checks in a row, at least 50 s apart, found nothing behind it, so about one to two minutes after the server stopped (a watcher restart cannot shorten that). The wait is deliberate, because dev servers restart all the time and a restart should not break your tab. A click-made forward whose ssh died is cleared too, and at the cap (eight click-made ones a machine) stale ones are cleared before a click is refused. A click on a port you already forwarded yourself reuses your forward, and it stays yours; a click-made forward you then open with `agents forward open` becomes yours, so it is no longer closed on its own. A click never closes a forward you opened yourself, even when nothing answers on it: it gets the banner and the forward stays. `agents forward close --dead` closes the dead ones and those where nothing answers. The menu bar lists a forward with nothing behind it as `localhost:PORT → MACHINE:PORT · nothing answers`: a click still opens it, and a `Close localhost:PORT` item under it closes it (a dead one closes on a click). It never probes, so it shows that only from a watcher check under 150 s old; with no watcher running, live forwards show as active. After an upgrade, a watcher that is already running keeps the old code until `agents link restart`. Limits: if the server comes back after its forward was closed, the old tab stays broken until you click the URL again (the new forward usually gets the same local port, so a reload then works); and without the watcher running nothing closes on its own, though the map's stop and `close --dead` still work.
+
 **What leaves my machine.** Nothing goes to a service of tuidev's: there is none, and no telemetry. Between your own machines, over your own ssh:
 
 | Feature | What crosses the wire | Who sends it |
@@ -136,7 +138,7 @@ The map shows other machines' command lines, so a secret passed as an argument s
 **What another machine may ask for.** The watcher treats each line as a request and decides itself:
 
 - a URL must be `http(s)` on `localhost`, `127.0.0.1`, `0.0.0.0` or `[::1]`; it becomes a tunnel to that machine's `localhost` and a tab on your `127.0.0.1`. Nothing else is opened;
-- the local port is the watcher's choice, from 47000 up, never the port asked for: no request can put another machine behind a port your own tools use (`localhost:5432` while your database is down). At most eight forwards a machine;
+- the local port is the watcher's choice, from 47000 up, never the port asked for: no request can put another machine behind a port your own tools use (`localhost:5432` while your database is down). At most eight click-made forwards a machine (the ones you open yourself with `agents forward open` do not count);
 - a file must be an absolute path with a viewer's extension (Markdown, text, JSON, CSV, HTML, PDF, images), at most 50 MB, a cap applied on your machine; it lands in `~/.local/state/tuidev/agents/remote/MACHINE/`, where a requested file is kept a day and the folder at most 500 MB. Scripts and apps are never opened;
 - at most five requests a machine in ten seconds.
 
@@ -148,7 +150,7 @@ Any process on the other machine can send a request, not only your click, so tre
 
 - **VS Code Remote-SSH** forwards the ports it sees in its terminal. If an editor is attached to the remote machine, use that. tuidev is for agents in a terminal or Herdr, where no editor is.
 - **Tailscale Serve** publishes a service to your tailnet under a name, so a phone or a teammate can open it too. A tuidev forward is the opposite: loopback to loopback, on the machine you sit at, open while you need it, with nothing new reachable on the network.
-- **Plain `ssh -L`** does the tunnel. `agents forward` adds a free local port (the same number when it is free), a list of what is open and whether each still answers, no password prompt, no agent forwarding, and `agents forward close --all`.
+- **Plain `ssh -L`** does the tunnel. `agents forward` adds a free local port (the same number when it is free), a list of what is open and whether each is active, unanswered or dead, forwards a click made that close themselves when the server stops, no password prompt, no agent forwarding, and `agents forward close --all`.
 
 <details>
 <summary>Limits worth knowing</summary>
