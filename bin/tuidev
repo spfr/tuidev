@@ -190,32 +190,37 @@ _tuidev_lock_at() {
 
 # _tuidev_lock / _tuidev_unlock — the check's lock, a directory: mkdir alone
 # decides who holds it. One older than _TUIDEV_LOCK_STALE was left by a check
-# that died and is taken over: renamed aside first, so of several that find
-# it stale only one moves it, then removed only while it is still the lock
-# that was found stale (a lock taken meanwhile goes back), then made anew.
+# that died and is taken over in place, never moved or removed first, so it
+# is at no moment free for a third to take: of several that find it stale,
+# the one whose mkdir of `claim` inside it succeeds has it, once it has seen
+# that the time in it is still the stale one (else another took it over
+# between this one's reading and its claim). A claim whose owner died too
+# is cleared with its lock once that is ten times as old.
 _tuidev_lock() {
     local l="$_TUIDEV_CACHE/lock" now seen
     mkdir -p "$_TUIDEV_CACHE" 2>/dev/null || return 1
     _tuidev_now now
-    if ! mkdir "$l" 2>/dev/null; then
-        _tuidev_lock_at "$l"
-        # No time in it yet: its holder may be between its mkdir and its echo.
-        if [[ "$REPLY" == 0 ]]; then sleep 1; _tuidev_lock_at "$l"; fi
-        seen="$REPLY"
-        (( now - seen > _TUIDEV_LOCK_STALE )) || return 1
-        rm -rf "$l.$$"
-        mv "$l" "$l.$$" 2>/dev/null || return 1
-        _tuidev_lock_at "$l.$$"
-        if [[ "$REPLY" != "$seen" ]]; then
-            [[ -e "$l" ]] || mv "$l.$$" "$l" 2>/dev/null
-            rm -rf "$l.$$"
-            return 1
-        fi
-        rm -rf "$l.$$"
-        mkdir "$l" 2>/dev/null || return 1
+    if mkdir "$l" 2>/dev/null; then
+        # This fails when the lock went from under this process: it holds none.
+        echo "$now" > "$l/at" 2>/dev/null
+        return
     fi
-    # This fails when the lock was taken from under this process: it holds none.
-    echo "$now" > "$l/at" 2>/dev/null
+    _tuidev_lock_at "$l"
+    # No time in it yet: its holder may be between its mkdir and its echo.
+    if [[ "$REPLY" == 0 ]]; then sleep 1; _tuidev_lock_at "$l"; fi
+    seen="$REPLY"
+    (( now - seen > _TUIDEV_LOCK_STALE )) || return 1
+    if ! mkdir "$l/claim" 2>/dev/null; then
+        (( now - seen > 10 * _TUIDEV_LOCK_STALE )) && rm -rf "$l"
+        return 1
+    fi
+    _tuidev_lock_at "$l"
+    if [[ "$REPLY" != "$seen" ]] || ! echo "$now" > "$l/at" 2>/dev/null; then
+        rmdir "$l/claim" 2>/dev/null
+        return 1
+    fi
+    rmdir "$l/claim" 2>/dev/null
+    return 0
 }
 _tuidev_unlock() { rm -rf "$_TUIDEV_CACHE/lock"; }
 

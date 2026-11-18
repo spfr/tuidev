@@ -181,38 +181,34 @@ CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" && "$(cache)" == "3.30.0 1086400 1000000" ]] || fail "a stale lock was not taken over: $(calls) / $(cache)"
 pass "the check lock: three concurrent --if-due make one request; a fresh lock means none; a stale one is taken over"
 
-# Taking over a stale lock: renamed aside first, and removed only if it is
-# still the stale one. Here another check takes the lock over (a fresh one in
-# its place) between this one reading it and renaming it: it goes back.
-REAL_MV="$(command -v mv)"
-cat > "$BIN/mv" <<EOF
-#!/bin/bash
-if [[ -n "\${MV_RACE:-}" && "\$1" == "$CACHE/lock" ]]; then
-    rm -rf "$CACHE/lock"; mkdir "$CACHE/lock"; echo "\$MV_RACE" > "$CACHE/lock/at"
-fi
-exec "$REAL_MV" "\$@"
-EOF
-chmod +x "$BIN/mv"
+# Taking over a stale lock: claimed in place (a `claim` directory inside it),
+# never moved, so it is free for nobody else meanwhile. A claim another check
+# holds means this one takes nothing and leaves the lock as it is.
+reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
+mkdir -p "$CACHE/lock/claim"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock/at"
+CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+[[ -z "$(calls)" && -d "$CACHE/lock/claim" && "$(cat "$CACHE/lock/at")" == "$(( TUIDEV_NOW - 500 ))" ]] \
+    || fail "a stale lock another check is claiming was taken or changed: $(calls) / $(ls -A "$CACHE/lock" 2>&1)"
+# A claim whose owner died as well: cleared with its lock once ten times as
+# old, and the check after that asks.
+echo "$(( TUIDEV_NOW - 1300 ))" > "$CACHE/lock/at"
+CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+[[ -z "$(calls)" && ! -e "$CACHE/lock" ]] || fail "a dead claim's lock was not cleared: $(calls) / $(ls -A "$CACHE")"
+CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
+[[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" ]] || fail "the check after a cleared lock did not ask once: $(calls)"
+# Eight checks that find the same stale lock: one request.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
 mkdir -p "$CACHE/lock"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock/at"
-MV_RACE="$TUIDEV_NOW" CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
-[[ -z "$(calls)" ]] || fail "a lock taken over by another meanwhile was taken again: $(calls)"
-[[ "$(cat "$CACHE/lock/at" 2>/dev/null)" == "$TUIDEV_NOW" && -z "$(find "$CACHE" -name 'lock.*')" ]] \
-    || fail "the other's fresh lock was not put back: $(ls -A "$CACHE") at=$(cat "$CACHE/lock/at" 2>&1)"
-rm -f "$BIN/mv"
-# Two checks that find the same stale lock: one request.
-reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
-mkdir -p "$CACHE/lock"; echo "$(( TUIDEV_NOW - 500 ))" > "$CACHE/lock/at"
-for _ in 1 2 3; do CURL_SLEEP=1 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1 & done; wait
+for _ in 1 2 3 4 5 6 7 8; do CURL_SLEEP=1 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1 & done; wait
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" && -z "$(find "$CACHE" -name 'lock.*')" ]] \
-    || fail "three checks taking over one stale lock: $(calls) / $(ls -A "$CACHE")"
+    || fail "eight checks taking over one stale lock: $(calls) / $(ls -A "$CACHE")"
 # A lock with no time in it is given a second (its holder may be about to
 # write one), then taken over: its holder died before it wrote one.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
 mkdir -p "$CACHE/lock"
 CURL_OUT="$TAG/v3.30.0" tuidev latest --if-due >/dev/null 2>&1
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && ! -e "$CACHE/lock" ]] || fail "a lock with no time was not taken over: $(calls) / $(ls -A "$CACHE")"
-pass "a stale lock: one of several takes it over, a lock taken meanwhile goes back, one with no time is taken after a second"
+pass "a stale lock: one of several takes it over, in place; another's claim is left alone and a dead one cleared; one with no time is taken after a second"
 
 # --newer: silent, 0 newer known, 1 the latest is installed, 2 unknown.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
