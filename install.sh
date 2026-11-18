@@ -36,7 +36,8 @@
 #                (durable sessions + TPM), herdr, sandbox-container,
 #                fnm, hunk, ci (actionlint, zizmor, betterleaks), monitoring, cooling
 #                (Apple Silicon fan control), release-age (npm, bun and uv
-#                wait 3 days before installing a new version)
+#                wait 3 days before installing a new version), herdr-core
+#                (your agents in Herdr's phone app; herdr-core at login)
 #
 # Config write policy:
 #   By default, tuidev writes managed blocks into your shell config files

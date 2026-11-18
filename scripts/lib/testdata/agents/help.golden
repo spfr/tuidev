@@ -150,6 +150,32 @@ HERDR'S LABELS (this machine's Herdr; AGENTS_HERDR_NAMES=0 leaves them alone)
                                too (agents herdr lists their ids): named now as a
                                sync would, else their number; nothing else changes
 
+FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herdr-core)
+  agents hc [status]           is herdr-core running, and in your desktop login (on
+                               macOS a core the phone started over SSH is not: its
+                               agents cannot reach the Keychain)
+  agents hc up [--restart] [-q]
+                               start it in the desktop login; a core that runs is left
+                               alone, and one started over SSH is restarted only with
+                               --restart (that ends its terminals). At the Mac, not
+                               over SSH
+  agents hc run [--name NAME] [--] CMD [ARG...]
+                               start CMD (claude, codex --no-daemon) in herdr-core, in
+                               this directory, and put this terminal on it: the phone
+                               lists it, and it outlives the pane. In a Herdr pane the
+                               sidebar shows its state. ctrl+\ detaches. It gets the
+                               core's environment, not this shell's
+  agents hc attach TERMINAL    back onto one (herdr-core ls names them)
+  agents hc mirror [status]    each agent pane of this machine's Herdr and its mirror in
+                               herdr-core: a core terminal attached to the pane, so
+                               the phone lists the agents you already run, typing
+                               there reaches them and the inbox has their state
+  agents hc mirror sync [-n] [-q]
+                               start a mirror for each agent pane without one and end
+                               those whose pane has no agent left. Herdr's events run
+                               it (with agents herdr sync) while herdr-core is up;
+                               AGENTS_HC_MIRROR=0 turns it off
+
 HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
   agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]
                                where the CPU went: CPU-hours by job (test, build,

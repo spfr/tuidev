@@ -61,7 +61,7 @@ TUIDEV_VALID_PROFILES=(minimal desktop remote full)
 TUIDEV_FULL_PACKS="ai-clis orchestration monitoring cooling herdr tmux release-age ci"
 
 # Valid pack names (non-profile packs exposed via --pack NAME).
-TUIDEV_VALID_PACKS=(ai-clis orchestration nvim vim tmux herdr sandbox-container fnm hunk monitoring cooling release-age ci)
+TUIDEV_VALID_PACKS=(ai-clis orchestration nvim vim tmux herdr herdr-core sandbox-container fnm hunk monitoring cooling release-age ci)
 
 load_tuidev_profile() {
     local file="${1:-$TUIDEV_PROFILE_FILE_DEFAULT}"

@@ -209,6 +209,7 @@ Add optional packs with `--pack NAME`, at install or later with `tuidev install 
 | `ci` | `actionlint` and `zizmor` for GitHub Actions workflows, `betterleaks` for secrets |
 | `cooling` | Fans that follow the chip's temperature on Apple Silicon MacBooks |
 | `release-age` | npm, bun and uv wait 3 days before installing a new version |
+| `herdr-core` | Your agents in Herdr's phone app: `agents hc`, and herdr-core started in your desktop login |
 
 What each one installs is in [docs/profiles.md](docs/profiles.md). On Linux, `minimal` and `remote` also install without Homebrew, through `apt-get`, `dnf` or `pacman`. `sbx` and the `ui` pack are macOS only.
 

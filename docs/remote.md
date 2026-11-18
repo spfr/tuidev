@@ -170,6 +170,36 @@ Any process on the other machine can send a request, not only your click, so tre
 
 `devbox` and `workbox` are placeholders. Real hostnames, Tailscale IPs and usernames go in `~/.ssh/config.local`. The shipped SSH block starts with `Match all` and then `Include ~/.ssh/config.local*`, so the include applies even when the block lands after your own `Host` stanzas, and a missing file is ignored. You can also put hosts outside the tuidev markers in `~/.ssh/config`. The shipped block keeps connections alive (`ServerAliveInterval 60`) and adds `IgnoreUnknown UseKeychain`, so the same file works with Linux OpenSSH.
 
+## Herdr's phone app: `agents hc`
+
+Herdr has a free phone app (iPhone, iPad, Android) with an inbox of the agents that need you, a key bar, dictation, and a compose box that pastes text, screenshots and photos. It talks over SSH to **herdr-core** (`hc`), the runtime under Herdr's desktop app, with no account and no server in between. It lists what runs in herdr-core. It does not see a program that a Herdr TUI pane owns, which is where your agents are when you type `claude` in a pane.
+
+`agents hc run` closes that gap: it starts the agent in herdr-core and puts the pane on it.
+
+```bash
+tuidev install --pack monitoring --pack herdr-core   # agents hc, and herdr-core started at login
+agents hc                      # is herdr-core running, and in your desktop login?
+agents hc run claude           # in a Herdr pane: the agent, hosted in herdr-core
+agents hc run --name api codex --no-daemon
+```
+
+The same agent is now in three places: the pane, Herdr's sidebar (each status the agent reports to herdr-core is passed on for that pane), and the phone's inbox. `ctrl+\` detaches and leaves it running; closing the pane does too. `agents hc attach NAME` comes back to it, `herdr-core ls` lists what runs, and `herdr-core kill NAME` ends one.
+
+**The agents you already run are there too.** While herdr-core is up, every agent pane of this machine's Herdr gets a mirror in it: a core terminal attached to the pane. The phone lists it, typing there reaches the agent in the pane, and the inbox has its state. Herdr's own events start and end the mirrors, so there is nothing to run; `agents hc mirror` shows each pane and its mirror, and `AGENTS_HC_MIRROR=0` in `agents.conf` turns it off (mirrors that already run stay until you end them: `herdr-core kill NAME`). A mirror is a view: ending one on the phone leaves the agent in its pane, and an event a minute or more after the mirror started brings it back (one that ends at once is not restarted on every event).
+
+On the phone: install Tailscale and Herdr's app, then add the machine by its Tailscale name. Tailscale SSH needs no key; plain SSH needs Remote Login on and the phone's key in `authorized_keys`, as [below](#iphone-and-ipad).
+
+Things to know:
+
+- **macOS: the core must run in your desktop login.** A core that the phone starts over SSH runs outside it, and Claude Code there says "Not logged in", because it cannot reach the Keychain. The pack's LaunchAgent (`dev.tuidev.hc`) starts the core at login so the phone finds that one. `agents hc` says when the running core is the wrong kind, and `agents hc run` refuses to start a program in it. tuidev never stops a core by itself: `agents hc up --restart`, at the Mac and not over SSH, replaces it, which ends the terminals it holds.
+- **The agent gets herdr-core's environment, not the pane's.** It starts in the pane's directory, but a variable you exported in that shell is not there. `herdr-core server restart --fresh`, from a terminal outside Herdr, gives the core that shell's environment for new terminals.
+- **Typing from the phone takes the terminal's size.** The last viewer that types sets it, so the pane redraws at phone width until you type at the desk again, which gives it the desk's size back. Watching from the phone changes nothing.
+- **Each machine has its own herdr-core.** The phone app adds machines one by one over SSH (it suggests your SSH hosts and Tailscale devices), and each machine mirrors its own Herdr.
+- **A machine with no desktop** (a Linux node) has no Keychain to miss: log Claude Code in there with `claude setup-token`.
+- herdr-core is a 0.1 preview and is not installed by tuidev: [herdr.dev/core](https://herdr.dev/core/) has its installer, and Herdr's desktop app brings it too.
+
+The rest of this section is the terminal-app path, which needs none of the above and shows the whole TUI.
+
 ## iPhone and iPad
 
 | Client | Why pick it |

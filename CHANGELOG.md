@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Pick up an agent from your phone: `agents hc run claude`.** Herdr's phone app lists what runs in herdr-core (`hc`), not what a Herdr TUI pane owns. `agents hc run CMD` starts the agent in herdr-core and puts the pane on it, so the same agent is in the pane, in the phone's inbox, and still running after the pane closes (`agents hc attach NAME` comes back to it). While a Herdr pane is on it, each status the agent reports to herdr-core reaches Herdr too, so the sidebar and tab names still say working, blocked and done.
+- **The agents you already run show up on the phone by themselves.** While herdr-core is up, every agent pane of this machine's Herdr is mirrored into it (`agents hc mirror`): the phone lists it, typing there reaches the agent in the pane, and the inbox has its state. Herdr's events start and end the mirrors; `AGENTS_HC_MIRROR=0` turns it off.
+- **`agents hc` and `agents hc up` keep herdr-core in your desktop login.** On macOS a core the phone starts over SSH runs outside it, and Claude Code there says "Not logged in" because it cannot reach the Keychain. `agents hc` says so, `agents hc up --restart` fixes it at the Mac, and `--pack herdr-core` starts the core at login (LaunchAgent `dev.tuidev.hc`) so the phone finds a good one. herdr-core itself comes from its own installer or Herdr's desktop app.
+
 ## [3.23.0] - 2026-11-18
 
 ### Added

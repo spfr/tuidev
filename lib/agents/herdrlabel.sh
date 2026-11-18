@@ -454,7 +454,18 @@ agents_herdr() {
     [[ $# -gt 0 ]] && shift
     case "$sub" in
         status) agents_herdr_status ;;
-        sync)   agents_herdr_sync "$@" ;;
+        sync)   # The same events that rename a tab bring or end an agent's
+                # mirror in herdr-core (hcmirror.sh; nothing without a core),
+                # and --throttle holds for both: decided before the label
+                # sync writes its stamp. -n leaves the core alone.
+                local due=true now age
+                if [[ " $* " == *" --throttle "* ]]; then
+                    _agents_now now
+                    _agents_stamp_age age "$AGENTS_RUN_DIR/herdr-labels.stamp" "$now"
+                    [[ $age -ge $_AGENTS_HL_THROTTLE ]] || due=false
+                fi
+                agents_herdr_sync "$@" || return
+                [[ "$due" == false || "${AGENTS_DRY_RUN:-false}" == true ]] || agents_hc_mirror_sync -q ;;
         reset)  agents_herdr_reset "$@" ;;
         *)      echo "usage: agents herdr [status | sync [--throttle] [--poke] [-n] [-q] | reset [-n] [TAB_ID...]]" >&2; return 2 ;;
     esac

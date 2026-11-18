@@ -274,10 +274,10 @@ else
         [[ -f "$f" ]] && cmp -s "$f" "$SCRIPT_DIR/configs/swiftbar/agents.10s.sh" && _remove_swiftbar_plugin "$f"
     done
 fi
-# The memory guard's and the link watcher's LaunchAgents only run `agents`
+# The memory guard's, the link watcher's and herdr-core's LaunchAgents only run `agents`
 # too: unloaded and removed with it, or launchd would retry a missing command
 # at every login.
-for agent_label in dev.tuidev.memguard dev.tuidev.link; do
+for agent_label in dev.tuidev.memguard dev.tuidev.link dev.tuidev.hc; do
     agent_plist="$HOME/Library/LaunchAgents/$agent_label.plist"
     if [[ ! -f "$agent_plist" ]] || ! grep -q 'agents' "$agent_plist" 2>/dev/null; then continue; fi
     run_cmd launchctl bootout "gui/$(id -u)/$agent_label" 2>/dev/null || true
