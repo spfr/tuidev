@@ -31,7 +31,7 @@ tmp=; own1="${HOME:-/nonexistent}/.ag"; own2="$REPO_DIR/.ag"
 for root in /tmp "${TMPDIR:-}" "$own1" "$own2" /dev/shm; do
     [[ -n "$root" ]] || continue
     [[ "$root" == "$own1" || "$root" == "$own2" ]] && { mkdir -p "$root" 2>/dev/null || continue; }
-    cand="$(mktemp -d "${root%/}/agolden.XXXXXX" 2>/dev/null)" || continue
+    cand="$(mktemp -d "${root%/}/ag.XXXXXX" 2>/dev/null)" || continue
     if [[ ${#cand} -le 40 ]]; then tmp="$cand"; break; fi
     rmdir "$cand" 2>/dev/null
 done
