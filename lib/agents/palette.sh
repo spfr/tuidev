@@ -154,7 +154,7 @@ _agents_utf8() {
     esac
 }
 
-# _agents_awk_colored "FILE..." [AWK_OPTION...] — _agents_awk with the tokens in
+# _agents_awk_colored "FILE..." [AWK_OPTION...] — as _agents_awk, with the tokens in
 # its environment, and whether gauge() (lib_fmt) may draw blocks.
 _agents_awk_colored() {
     local ascii=1
