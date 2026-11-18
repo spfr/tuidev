@@ -285,13 +285,15 @@ for agent_label in dev.tuidev.memguard dev.tuidev.link dev.tuidev.hc; do
     done_msg "removed $agent_plist"
 done
 # herdr-core's systemd user timer and service (Linux) run `agents` the same
-# way. Only the timer is stopped: the core runs in a scope of its own and
+# way. Only the timer is stopped: the core runs in a unit of its own and
 # stays up, as on macOS.
 hc_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 if [[ -f "$hc_unit_dir/tuidev-hc.timer" || -f "$hc_unit_dir/tuidev-hc.service" ]]; then
     if command -v systemctl >/dev/null 2>&1; then
         run_cmd systemctl --user disable --now tuidev-hc.timer 2>/dev/null || true
     fi
+    # Without a user bus (a root shell) the disable did nothing: its link goes too.
+    [[ ! -L "$hc_unit_dir/timers.target.wants/tuidev-hc.timer" ]] || run_cmd rm -f "$hc_unit_dir/timers.target.wants/tuidev-hc.timer"
     for hc_unit in tuidev-hc.timer tuidev-hc.service; do
         grep -q 'tuidev' "$hc_unit_dir/$hc_unit" 2>/dev/null || continue
         run_cmd rm -f "$hc_unit_dir/$hc_unit"

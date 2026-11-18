@@ -14,11 +14,9 @@ Description=herdr-core kept running (agents hc up)
 Type=oneshot
 ExecStart=/bin/bash %h/.local/bin/agents hc up -q
 Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin
-# The core gets a scope of its own (systemd-run --user --scope): this job
-# ends when `agents hc up` does, and the core and its agents are not part of
-# it. Should that scope fail, the core starts in this job, and KillMode=process
-# keeps it running when the job ends.
-Environment=AGENTS_HC_SCOPE=1
+# herdr-core puts its server in a unit of its own (hc-serve-*.service), so
+# the core and its agents are no part of this job. Should a herdr-core not
+# do that, KillMode=process keeps the core running when the job ends.
 KillMode=process
 # `agents hc up -q` exits 1 while a problem lasts and says it once; the job
 # does not fail every 5 minutes for it.

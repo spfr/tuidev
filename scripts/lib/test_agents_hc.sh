@@ -42,7 +42,7 @@ cat > "$tmp/herdr-core" <<'EOF'
 #!/bin/bash
 { echo "--"; printf '%s\n' "$@"; } >> "$FAKE/hc.calls"
 # The Herdr identity the core, and what it runs, would get.
-[[ "$1" != server && "$1" != run ]] || env | grep '^HERDR_' > "$FAKE/$1.env" || true
+[[ "$1" != server && "$1" != run ]] || env | grep -E '^(HERDR|AGENTS)_' > "$FAKE/$1.env" || true
 case "$1" in
     --version) echo "hc 0.1.21" ;;
     connect)   cat >/dev/null
@@ -248,30 +248,13 @@ out="$(AGENTS_HC_UP=0 agents_main hc up 2>&1)" || fail "up, AGENTS_HC_UP=0: $out
 RUNNING=true
 pass "AGENTS_HC_UP=0 turns the job off, not agents hc up"
 
-# Under the systemd unit (AGENTS_HC_SCOPE=1) the core gets a scope of its
-# own, and does not inherit the switch; a scope that fails falls back.
-mkdir -p "$tmp/sd"
-cat > "$tmp/sd/systemd-run" <<'EOF'
-#!/bin/bash
-{ echo "--"; printf '%s\n' "$@"; env | grep '^AGENTS_HC_SCOPE=' || true; } >> "$FAKE/sdrun.calls"
-[[ ! -e "$FAKE/sdrun.fail" ]] || exit 1
-while [[ $# -gt 0 && "$1" != -- ]]; do shift; done
-shift; exec "$@"
-EOF
-chmod +x "$tmp/sd/systemd-run"
-reset; rm -f "$FAKE/sdrun.calls" "$FAKE/sdrun.fail"; RUNNING=false; hello true
-out="$(PATH="$tmp/sd:$PATH" AGENTS_HC_SCOPE=1 agents_main hc up -q 2>&1)" || fail "up -q in a scope: $out"
-[[ "$(calls sdrun)" == *"-- --user --scope "*"-- $AGENTS_HC_BIN server start"* ]] || fail "no scope: $(calls sdrun)"
-[[ "$(calls sdrun)" != *"AGENTS_HC_SCOPE="* ]] || fail "the core inherits AGENTS_HC_SCOPE: $(calls sdrun)"
+# A core gets neither the pane's identity nor what loading agents exported.
+reset; RUNNING=false; hello true
+out="$(HERDR_ENV=1 HERDR_PANE_ID=w1-1 agents_main hc up -q 2>&1)" || fail "up -q: $out"
 [[ "$(grep -c '^start$' "$FAKE/hc.calls")" == 1 ]] || fail "started more than once: $(calls hc)"
-reset; rm -f "$FAKE/sdrun.calls"; touch "$FAKE/sdrun.fail"
-out="$(PATH="$tmp/sd:$PATH" AGENTS_HC_SCOPE=1 agents_main hc up -q 2>&1)" || fail "up -q, scope failed: $out"
-[[ -s "$FAKE/sdrun.calls" && "$(calls hc)" == *"server start"* ]] || fail "no plain start after a failed scope: $(calls hc)"
-reset; rm -f "$FAKE/sdrun.calls" "$FAKE/sdrun.fail"
-out="$(PATH="$tmp/sd:$PATH" agents_main hc up -q 2>&1)" || fail "up -q, no scope: $out"
-[[ ! -e "$FAKE/sdrun.calls" && "$(calls hc)" == *"server start"* ]] || fail "systemd-run without AGENTS_HC_SCOPE: $(calls sdrun)"
+[[ -e "$FAKE/server.env" && ! -s "$FAKE/server.env" ]] || fail "the core inherits: $(cut -d= -f1 "$FAKE/server.env" 2>/dev/null | tr '\n' ' ')"
 RUNNING=true
-pass "under the systemd unit the core starts in a scope of its own (plainly when that fails), and only there"
+pass "a core is started once, without the pane's identity or agents' own exports"
 
 # --- a pane's mark ---
 # kill -0 says EPERM for someone else's live process in a sandbox: still alive.
@@ -386,7 +369,10 @@ reset; RUNNING=true; hello true; echo '{"state":"live"}' > "$FAKE/get.json"
 out="$(cd "$tmp" && agents_main hc run -- claude --resume 2>&1)" || fail "run failed: $out"
 grep -qx -- '--bg' "$FAKE/hc.calls" || fail "run did not start it in the background: $(calls hc)"
 grep -qx -- '--no-parent' "$FAKE/hc.calls" || fail "run did not start it without a parent: $(calls hc)"
-[[ "$(calls hc)" == *" -- claude --resume "* ]] || fail "the command did not reach herdr-core whole: $(calls hc)"
+# Through env(1), with this shell's PATH over the core's (a core the pack's
+# job started has launchd's or systemd's), and never a token of the shell's.
+[[ "$(calls hc)" == *" -- /usr/bin/env PATH=$PATH "*" claude --resume -- attach"* ]] || fail "the command did not reach herdr-core whole: $(calls hc)"
+[[ "$(calls hc)" != *"HERDR_"* ]] || fail "run handed the pane's identity on: $(calls hc)"
 [[ "$(calls hc)" == *"-- attach "* ]] || fail "run did not attach: $(calls hc)"
 [[ "$out" == *"still runs in herdr-core"*"agents hc attach"*"herdr-core kill"* ]] || fail "leaving a live agent: $out"
 [[ ! -e "$FAKE/herdr.calls" ]] || fail "outside a Herdr pane, Herdr was told something: $(calls herdr)"
@@ -400,7 +386,7 @@ out="$(agents_main hc run --name web bun dev 2>&1)" || fail "named run failed: $
 [[ "$out" == "web still runs"*"agents hc attach t3"* ]] || fail "shown name: $out"
 reset; echo '{"state":"finished"}' > "$FAKE/get.json"
 out="$(agents_main hc run --name web bun dev 2>&1)" || fail "named run failed: $out"
-[[ "$(calls hc)" == *"--name web -- bun dev "*"-- attach t3 "* ]] || fail "named run: $(calls hc)"
+[[ "$(calls hc)" == *"--name web -- /usr/bin/env PATH="*" bun dev -- attach t3 "* ]] || fail "named run: $(calls hc)"
 [[ -z "$out" ]] || fail "an agent that ended left a note: $out"
 reset
 out="$(agents_main hc run --name 'Bad Name' x 2>&1)" && fail "a bad name passed"

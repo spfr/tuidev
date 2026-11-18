@@ -174,7 +174,8 @@ FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herd
                                this directory, and put this terminal on it: the phone
                                lists it, and it outlives the pane. In a Herdr pane the
                                sidebar shows its state. ctrl+\\ detaches. It gets the
-                               core's environment, not this shell's
+                               core's environment with this shell's PATH, not
+                               the shell's other variables
   agents hc auto CMD [ARG...]  off unless AGENTS_HC_AUTO=1: what claude and codex typed
                                in a Herdr pane run (the herdr-core pack's shell
                                fragment). Hosts an interactive start in herdr-core

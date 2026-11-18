@@ -111,7 +111,7 @@ herdr_core_install() {
         print_info "  Off: AGENTS_HC_UP=0 in $MONITORING_CONF (a core you stop stays down)"
     else
         _herdr_core_systemd
-        print_info "No Keychain here: log Claude Code in with a token on this machine (claude setup-token)."
+        print_info "No Keychain here: log Claude Code in once with claude and /login (kept in ~/.claude); a token exported in your shell does not reach a hosted agent."
     fi
     _herdr_core_fragment
     print_info "Start an agent the phone can see: agents hc run claude   (ctrl+\\ detaches; it keeps running)"

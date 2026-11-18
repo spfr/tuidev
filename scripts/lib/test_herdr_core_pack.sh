@@ -164,15 +164,15 @@ e="$(grep -nx -- "--user enable --now tuidev-hc.timer" "$SCTL_LOG" | head -1 | c
 { [[ -n "$r" && -n "$e" ]] && [[ "$r" -lt "$e" ]]; } || fail "no daemon-reload, then enable --now: $(cat "$SCTL_LOG")"
 if grep -q "tuidev-hc.service" "$SCTL_LOG"; then fail "the service itself was touched: $(cat "$SCTL_LOG")"; fi
 grep -qF "sudo loginctl enable-linger $USER" <<< "$out" || fail "no linger command: $out"
-grep -q "claude setup-token" <<< "$out" || fail "no setup-token line: $out"
+grep -q "claude and /login" <<< "$out" || fail "no login line: $out"
 grep -q "systemctl --user disable --now tuidev-hc.timer" <<< "$out" || fail "no off switch: $out"
 grep -q "herdr-core pack complete" <<< "$out" || fail "Linux: did not complete"
 [[ -f "$TUIDEV_STATE_DIR/shell.d/hc-auto.zsh" ]] || fail "Linux: no hc-auto fragment"
 pass "Linux: timer and service installed as shipped, recorded, enabled; linger off prints the sudo command"
 
 # The units: a one-shot run of agents hc up -q every 5 minutes, the core in a
-# scope of its own, nothing that restarts or stops it.
-for want in "Type=oneshot" "ExecStart=/bin/bash %h/.local/bin/agents hc up -q" "Environment=AGENTS_HC_SCOPE=1" \
+# unit of its own (herdr-core's doing), nothing that restarts or stops it.
+for want in "Type=oneshot" "ExecStart=/bin/bash %h/.local/bin/agents hc up -q" \
             "KillMode=process" "SuccessExitStatus=1"; do
     grep -qxF "$want" "$SVC" || fail "service lacks $want"
 done

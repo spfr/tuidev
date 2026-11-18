@@ -134,25 +134,21 @@ _agents_hc_ask_hello() {
 
 # _agents_hc_start — start a core. Without the Herdr pane's identity when we
 # are in one: every terminal the core starts later gets the core's
-# environment, and an agent there must not report into this pane.
+# environment, and an agent there must not report into this pane. Without
+# what loading agents exported either (config.sh's AGENTS_* patterns): an
+# agent in the core that runs `agents` reads its own.
 #
-# Under the herdr-core pack's systemd unit (AGENTS_HC_SCOPE=1) the core gets
-# a scope of its own: the unit's job ends when `agents hc up` does, and the
-# core, with every agent in it, must not be part of that job (on macOS the
-# LaunchAgent abandons its process group for the same reason). Where that
-# scope cannot be made, the core is started the plain way.
-_agents_hc_start() {
-    local scope=""
-    [[ "${AGENTS_HC_SCOPE:-}" != 1 ]] || scope="$(command -v systemd-run 2>/dev/null)" || scope=""
-    if [[ -n "$scope" ]]; then
-        _agents_hc_start_env "$scope" --user --scope --quiet --collect --description="herdr-core (tuidev-hc)" -- \
-            "$_AGENTS_HC_BIN" server start && return 0
-    fi
-    _agents_hc_start_env "$_AGENTS_HC_BIN" server start
-}
+# Under the herdr-core pack's systemd unit nothing more is needed: on Linux
+# herdr-core puts its server in a unit of its own (hc-serve-*.service), so
+# it is no part of the job that started it (on macOS the LaunchAgent
+# abandons its process group for the same reason).
+_agents_hc_start() { _agents_hc_start_env "$_AGENTS_HC_BIN" server start; }
 _agents_hc_start_env() {
-    env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID -u HERDR_SOCKET_PATH -u HERDR_BIN_PATH \
-        -u AGENTS_HC_SCOPE "$@" >/dev/null 2>&1
+    local n drop=()
+    for n in $(compgen -e); do
+        case "$n" in HERDR_*|AGENTS_*) drop+=(-u "$n") ;; esac
+    done
+    env ${drop[@]+"${drop[@]}"} "$@" >/dev/null 2>&1
 }
 
 # _agents_hc_gui HELLO — true, false, or nothing where the core does not say
@@ -256,7 +252,12 @@ agents_hc_up() {
         _agents_hc_up "$restart" false
         return
     fi
-    [[ "$AGENTS_HC_UP" != 0 ]] || return 0
+    # Off: nothing runs, and what was said before is forgotten, so a problem
+    # still there when the job is turned on again is said then.
+    if [[ "$AGENTS_HC_UP" == 0 ]]; then
+        [[ ! -e "$mark" ]] || rm -f "$mark"
+        return 0
+    fi
     err="$(_agents_hc_up "$restart" true 2>&1 >/dev/null)" || rc=$?
     if [[ -z "$err" ]]; then
         [[ ! -e "$mark" ]] || rm -f "$mark"
@@ -479,9 +480,11 @@ _agents_hc_attach_end() {
 
 # agents_hc_run [--name NAME] [--] CMD [ARG...] — start CMD in herdr-core,
 # in this directory, and put this terminal on it. It gets the core's
-# environment, not this shell's (herdr-core's rule).
+# environment (herdr-core's rule) with this shell's PATH and the few
+# variables of _AGENTS_HC_AUTO_ENV over it: a core started by the pack's job
+# has launchd's or systemd's PATH, where node or the agent itself may not be.
 agents_hc_run() {
-    local name="" t out gui shown
+    local name="" t out gui shown k envs=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --name)  name="${2:-}"; shift; [[ $# -gt 0 ]] && shift
@@ -504,7 +507,10 @@ agents_hc_run() {
     [[ -n "$name" ]] || name="$(_agents_hc_name "$PWD")"
     # No parent: started from inside a core terminal, it would end with that
     # terminal's program, and herdr-core would type notes about it there.
-    out="$("$_AGENTS_HC_BIN" run --bg --json --no-parent ${name:+--name "$name"} -- "$@")" || {
+    for k in $_AGENTS_HC_AUTO_ENV; do
+        [[ -z "${!k+set}" ]] || envs+=("$k=${!k}")
+    done
+    out="$("$_AGENTS_HC_BIN" run --bg --json --no-parent ${name:+--name "$name"} -- /usr/bin/env ${envs[@]+"${envs[@]}"} "$@")" || {
         [[ -z "$out" ]] || printf '%s\n' "$out" >&2
         return 1
     }
