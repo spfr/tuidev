@@ -274,24 +274,24 @@ _tuidev_update_available() {
 }
 
 # One notification per release: a Herdr toast, a tmux message or a banner,
-# whichever notify.sh finds, and the menu bar hears of it. Recorded in
-# `notified` under a claim (mkdir), and read again once claimed, so checks
-# that finish together notify once; where it can't be recorded, nothing is
-# shown (never once per run).
+# whichever notify.sh finds, and the menu bar hears of it. The record is a
+# directory, notified.X.Y.Z, and making it is the whole decision: mkdir
+# succeeds for one process only, so checks that finish together notify once,
+# and where it can't be made nothing is shown (never once per run). It stays
+# until a newer release's replaces it. `notified`, a file, is 3.23.0's record.
 _tuidev_notify_once() {
-    local seen="" claim
+    local seen="" mark f
     _tuidev_update_available || return 0
-    claim="$_TUIDEV_CACHE/notified.$LATEST"
-    [[ -r "$_TUIDEV_CACHE/notified" ]] && read -r seen < "$_TUIDEV_CACHE/notified"
+    mark="$_TUIDEV_CACHE/notified.$LATEST"
+    [[ ! -d "$mark" ]] || return 0
+    [[ -f "$_TUIDEV_CACHE/notified" ]] && read -r seen < "$_TUIDEV_CACHE/notified"
+    mkdir "$mark" 2>/dev/null || return 0
+    for f in "$_TUIDEV_CACHE"/notified "$_TUIDEV_CACHE"/notified.*; do
+        if [[ -f "$f" ]]; then rm -f "$f"
+        elif _tuidev_newer "$LATEST" "${f##*/notified.}"; then rmdir "$f" 2>/dev/null
+        fi
+    done
     [[ "$seen" != "$LATEST" ]] || return 0
-    mkdir "$claim" 2>/dev/null || return 0
-    seen=""
-    [[ -r "$_TUIDEV_CACHE/notified" ]] && read -r seen < "$_TUIDEV_CACHE/notified"
-    if [[ "$seen" == "$LATEST" ]] || ! printf '%s\n' "$LATEST" > "$_TUIDEV_CACHE/notified" 2>/dev/null; then
-        rmdir "$claim" 2>/dev/null
-        return 0
-    fi
-    rmdir "$claim" 2>/dev/null
     [[ ! -x "$HOME/.local/bin/notify.sh" ]] \
         || "$HOME/.local/bin/notify.sh" "tuidev" "$LATEST is out (you have $INSTALLED). Update: tuidev update" "Update" </dev/null >/dev/null 2>&1 || true
     [[ ! -x "$HOME/.local/bin/agents" ]] || "$HOME/.local/bin/agents" bar poke >/dev/null 2>&1 || true

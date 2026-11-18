@@ -249,22 +249,29 @@ setcache "3.9.0 99999999 1"; tuidev latest --notify
 [[ -z "$(calls)" ]] || fail "notified with nothing new: $(calls)"
 setcache "3.10.0 99999999 1"; tuidev latest --notify; tuidev latest --notify; tuidev latest --notify
 [[ "$(calls | wc -l | tr -d ' ')" == 1 && "$(calls)" == *"notify.sh tuidev 3.10.0 is out (you have 3.9.0)"* ]] || fail "one notify for 3.10.0: $(calls)"
-[[ "$(cat "$CACHE/notified")" == 3.10.0 ]] || fail "notified marker"
+[[ -d "$CACHE/notified.3.10.0" ]] || fail "notified marker"
 setcache "3.11.0 99999999 1"; tuidev latest --notify
 [[ "$(calls | wc -l | tr -d ' ')" == 2 ]] || fail "a newer release notifies again: $(calls)"
+[[ -d "$CACHE/notified.3.11.0" && ! -e "$CACHE/notified.3.10.0" ]] || fail "the older record stays, or the new one is missing: $(ls "$CACHE")"
+# A check that still held the older answer does not undo the newer record.
+setcache "3.10.0 99999999 1"; tuidev latest --notify; setcache "3.11.0 99999999 1"; tuidev latest --notify
+[[ "$(calls | wc -l | tr -d ' ')" == 3 && -d "$CACHE/notified.3.11.0" ]] || fail "an older answer removed the newer record: $(calls) / $(ls "$CACHE")"
+# 3.23.0 recorded it in a file: what it told you is not told again, and the file goes.
+rm -rf "$CACHE"/notified.*; : > "$CALLS"; echo 3.11.0 > "$CACHE/notified"; tuidev latest --notify
+[[ -z "$(calls)" && -d "$CACHE/notified.3.11.0" && ! -e "$CACHE/notified" ]] || fail "3.23.0's record: $(calls) / $(ls "$CACHE")"
 rm "$HOME/.local/bin/notify.sh"; setcache "3.12.0 99999999 1"; tuidev latest --notify
-[[ "$(cat "$CACHE/notified")" == 3.12.0 ]] || fail "no notify.sh: still marked"
+[[ -d "$CACHE/notified.3.12.0" ]] || fail "no notify.sh: still marked"
 pass "--notify: once per release version, never for what is installed, quiet without notify.sh"
 
 # Concurrent notifies call notify.sh once; a cache that cannot record it shows nothing.
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
 printf '#!/bin/bash\nsleep 1\necho "notify.sh $*" >> "$CALLS"\n' > "$HOME/.local/bin/notify.sh"; chmod +x "$HOME/.local/bin/notify.sh"
 setcache "3.10.0 99999999 1"
-for _ in 1 2 3; do tuidev latest --notify >/dev/null 2>&1 & done; wait
-[[ "$(calls | wc -l | tr -d ' ')" == 1 && "$(cat "$CACHE/notified")" == 3.10.0 && -z "$(find "$CACHE" -name 'notified.*')" ]] \
+for _ in 1 2 3 4 5 6; do tuidev latest --notify >/dev/null 2>&1 & done; wait
+[[ "$(calls | wc -l | tr -d ' ')" == 1 && -d "$CACHE/notified.3.10.0" && "$(find "$CACHE" -name 'notified*' | wc -l | tr -d ' ')" == 1 ]] \
     || fail "three concurrent --notify: $(calls) / $(ls "$CACHE")"
 if [[ "$(id -u)" != 0 ]]; then
-    : > "$CALLS"; rm -f "$CACHE/notified"; chmod 500 "$CACHE"
+    : > "$CALLS"; rmdir "$CACHE/notified.3.10.0"; chmod 500 "$CACHE"
     tuidev latest --notify >/dev/null 2>&1
     chmod 700 "$CACHE"
     [[ -z "$(calls)" ]] || fail "--notify with a cache that cannot record it showed something: $(calls)"

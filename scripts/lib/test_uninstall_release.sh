@@ -36,7 +36,7 @@ setup() {
     rm -rf "$HOME"; mkdir -p "$HOME/.cache/tuidev" "$HOME/.local/bin" "$TUIDEV_HOME/versions"
     cp -R "$tree" "$TUIDEV_HOME/versions/9.9.9"; cp -R "$tree" "$TUIDEV_HOME/versions/9.9.8"
     ln -s versions/9.9.9 "$TUIDEV_HOME/current"; echo 9.9.8 > "$TUIDEV_HOME/previous"
-    echo "9.9.9 1 1" > "$HOME/.cache/tuidev/latest"; echo 9.9.9 > "$HOME/.cache/tuidev/notified"; echo keep > "$HOME/.cache/tuidev/other"
+    echo "9.9.9 1 1" > "$HOME/.cache/tuidev/latest"; echo 9.9.9 > "$HOME/.cache/tuidev/notified"; mkdir "$HOME/.cache/tuidev/notified.9.9.9"; echo keep > "$HOME/.cache/tuidev/other"
     echo "9.9.9 1 1" > "$HOME/.cache/tuidev/latest.12345"; mkdir -p "$HOME/.cache/tuidev/lock"; echo 1 > "$HOME/.cache/tuidev/lock/at"
     cp "$tree/bin/tuidev" "$HOME/.local/bin/tuidev"; chmod +x "$HOME/.local/bin/tuidev"
 }
@@ -50,7 +50,7 @@ pass "--dry-run removes nothing"
 # 2. From inside the release being removed.
 setup
 bash "$TUIDEV_HOME/current/uninstall.sh" --all </dev/null > "$tmp/log" 2>&1 || fail "uninstall: $(tail -8 "$tmp/log")"
-[[ ! -e "$HOME/.cache/tuidev/latest" && ! -e "$HOME/.cache/tuidev/notified" ]] || fail "the update-check cache stayed"
+[[ ! -e "$HOME/.cache/tuidev/latest" && ! -e "$HOME/.cache/tuidev/notified" && ! -e "$HOME/.cache/tuidev/notified.9.9.9" ]] || fail "the update-check cache stayed"
 [[ "$(cat "$HOME/.cache/tuidev/other")" == keep ]] || fail "a file that is not tuidev's was removed"
 [[ ! -e "$HOME/.cache/tuidev/latest.12345" && ! -e "$HOME/.cache/tuidev/lock" ]] || fail "a half-written latest.N or the check lock stayed: $(ls -A "$HOME/.cache/tuidev")"
 [[ ! -e "$TUIDEV_HOME" ]] || fail "the unpacked releases stayed: $(ls -A "$TUIDEV_HOME")"
