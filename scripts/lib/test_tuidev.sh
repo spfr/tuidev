@@ -374,9 +374,17 @@ weird="$tmp/it's a repo"; fixture "$weird" 3.9.0; mkdir -p "$weird/docs"; : > "$
 printf '#!/bin/bash\nprintf "%%s" "$1" > "%s/pager.arg"\n' "$tmp" > "$BIN/rec"; chmod +x "$BIN/rec"
 rows="$(PAGER=rec TUIDEV_REPO="$weird" tuidev palette --list)"
 row="$(printf '%s\n' "$rows" | grep '^Cheatsheet')"; cmd="${row##*$'\t'}"
+printf '#!/bin/bash\nexec "%s" "%s" "$@"\n' "$SH" "$TUIDEV" > "$BIN/tuidev"; chmod +x "$BIN/tuidev"
 PAGER=rec bash -c "$cmd" || fail "the Cheatsheet command does not run: $cmd"
 [[ "$(cat "$tmp/pager.arg")" == "$weird/docs/CHEATSHEET.md" ]] || fail "the pager got '$(cat "$tmp/pager.arg")'"
-rm -rf "$weird" "$BIN/rec"
+# tuidev md: a file or stdin to the pager, options in $PAGER kept; glow only at a terminal.
+printf '#!/bin/bash\necho GLOW\n' > "$BIN/glow"; chmod +x "$BIN/glow"
+printf '# t\n' > "$tmp/t.md"
+[[ "$(PAGER='head -n 1' tuidev md "$tmp/t.md")" == "# t" ]] || fail "md FILE: $(PAGER='head -n 1' tuidev md "$tmp/t.md")"
+[[ "$(printf 'a\nb\n' | PAGER='head -n 1' tuidev md)" == "a" ]] || fail "md from stdin"
+if tuidev md "$tmp/none.md" 2>/dev/null; then fail "md read a missing file"; fi
+rm -f "$BIN/glow" "$tmp/t.md"
+rm -rf "$weird" "$BIN/rec" "$BIN/tuidev"
 # ~/.local/bin is searched even when PATH lacks it (a Herdr server started by launchd).
 printf '#!/bin/bash\n' > "$HOME/.local/bin/agents"; chmod +x "$HOME/.local/bin/agents"
 rows="$(tuidev palette --list)"; [[ "$rows" == *"Who needs me"* ]] || fail "palette did not look in ~/.local/bin"

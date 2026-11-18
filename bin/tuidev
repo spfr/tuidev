@@ -13,6 +13,7 @@
 #                              the newest release this machine has heard of (--refresh
 #                              asks now); the daily check on or off
 #   tuidev whatsnew [FROM]     the changelog of this release (or of all since FROM)
+#   tuidev md [FILE]           read Markdown in the pager, rendered where glow is installed
 #   tuidev check | perf | disk | theme [NAME] | uninstall
 #                              health check, the audits, themes, removal
 #   tuidev version | home      the installed version; where its files are
@@ -445,6 +446,30 @@ cmd_update() {
 # ---------------------------------------------------------------------------
 
 _tuidev_has() { command -v "$1" >/dev/null 2>&1; }
+
+# cmd_md [FILE] — Markdown to read, in the pager: rendered by glow where it is
+# installed (--extras) and the output is a terminal, as written otherwise.
+# No FILE (or -) reads stdin. $PAGER may carry options.
+cmd_md() {
+    local file="${1:--}" cols pager="${PAGER:-less}"
+    [[ "$file" == - || -r "$file" ]] || _tuidev_die "md: cannot read $file"
+    if [[ -t 1 ]] && _tuidev_has glow; then
+        # The width of the terminal on stdout: tput in $( ) has only a pipe there.
+        { cols="$(stty size <&3 2>/dev/null)"; } 3>&1; cols="${cols##* }"
+        [[ "$cols" =~ ^[1-9][0-9]*$ ]] || cols=80
+        (( cols > 24 )) && cols=$(( cols - 4 ))   # glow's own margin comes on top
+        # A pipe has no colours of its own: ask for them, and let less pass them.
+        # glow with a terminal on stderr asks it for its colours and waits for
+        # the answer, seconds where none comes: it gets no terminal to ask.
+        [[ "$file" == - ]] || exec < "$file"
+        CLICOLOR_FORCE=1 glow -s "${GLAMOUR_STYLE:-dark}" -w "$cols" - 2>/dev/null \
+            | LESS="${LESS:-} -R" bash -c "$pager"
+    elif [[ "$file" == - ]]; then
+        bash -c "$pager"
+    else
+        bash -c "$pager \"\$1\"" _ "$file"
+    fi
+}
 _tuidev_row() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
 
 # Is herdr-core here, and does this `agents` know `hc`? File tests only: the
@@ -508,9 +533,9 @@ _tuidev_palette_rows() {
         [[ ! "$name" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || _tuidev_row "Theme: $name" "Ghostty, tmux and Starship" 1 "tuidev theme $name"
     done
     _tuidev_row "Check for updates" "packages, migrations, config drift; changes nothing" 1 "tuidev update --check"
-    _tuidev_row "What's new" "this release's changelog" 1 "tuidev whatsnew | ${PAGER:-less}"
+    _tuidev_row "What's new" "this release's changelog" 1 "tuidev whatsnew | tuidev md"
     _tuidev_row "Add a pack" "preview what a pack would install" 1 "tuidev install --help"
-    printf -v cmd '%s %q' "${PAGER:-less}" "$repo/docs/CHEATSHEET.md"
+    printf -v cmd 'tuidev md %q' "$repo/docs/CHEATSHEET.md"
     _tuidev_row "Cheatsheet" "every key and command" 0 "$cmd"
 }
 
@@ -558,6 +583,7 @@ main() {
         update)    cmd_update "$@" ;;
         latest)    cmd_latest "$@" ;;
         whatsnew)  cmd_whatsnew "$@" ;;
+        md)        cmd_md "$@" ;;
         check)     _tuidev_repo || return 1; exec "$REPLY/scripts/health_check.sh" "$@" ;;
         perf)      _tuidev_repo || return 1; exec "$REPLY/scripts/perf.sh" "$@" ;;
         disk)      _tuidev_repo || return 1; exec "$REPLY/scripts/disk.sh" "$@" ;;

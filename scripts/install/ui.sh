@@ -40,7 +40,14 @@ ui_install() {
     local ghostty_src="$REPO_ROOT/configs/ghostty/config"
     if [[ -f "$ghostty_src" ]]; then
         print_step "installing Ghostty config (managed block)"
-        install_config "$HOME/.config/ghostty/config" "$ghostty_src" --managed-block tuidev-ghostty
+        local ghostty_dest="$HOME/.config/ghostty/config" ghostty_was=""
+        [[ ! -f "$ghostty_dest" ]] || ghostty_was="$(cksum < "$ghostty_dest")"
+        install_config "$ghostty_dest" "$ghostty_src" --managed-block tuidev-ghostty
+        # Ghostty reads its config at start: an open one keeps the old keys.
+        if [[ -f "$ghostty_dest" && "$(cksum < "$ghostty_dest")" != "$ghostty_was" ]] \
+            && pgrep -xq ghostty 2>/dev/null; then
+            print_info "Ghostty's config changed: press Cmd+Shift+, in Ghostty to reload it"
+        fi
     else
         print_warning "Ghostty config missing in repo: $ghostty_src"
     fi

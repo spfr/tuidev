@@ -14,6 +14,7 @@ tuidev update --packages   # the packages of your active packs
 tuidev update --all        # all of it, non-interactive
 tuidev update --rollback   # back to the release before this one
 tuidev whatsnew [FROM]     # this release's changelog, or everything since FROM
+tuidev md [FILE]           # read Markdown in the pager, rendered where glow is installed
 ```
 
 `tuidev` is installed into `~/.local/bin` by every install and finds tuidev's files through the path the installer recorded (`repo=` in `~/.config/tuidev/profile`). On its own it opens the palette, a searchable list of everything it and `agents` can do. In a clone the Makefile has the same actions as targets (`make update-check`, `make check`, `make perf`, `make disk`; `make help` lists them), and `./install.sh`, `./uninstall.sh` and `./scripts/update.sh` are what `tuidev install`, `uninstall` and `update` run.

@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Herdr's phone app shows in the palette and the menu bar.** With herdr-core installed, `tuidev` lists `Phone: status`, `Phone: mirrors` and `Phone: start an agent here`, and the menu has one line: that herdr-core is up or, with mirrors on, how many agents are mirrored or that herdr-core is not running (a click opens `agents hc up`). A core that runs outside your desktop login on a Mac is a warning that names `agents hc up --restart`, which the menu never runs. Neither starts a core to look: the menu asks a running one one local question in the background, at most every 30 s.
 
+### Changed
+
+- **The palette renders its Markdown.** Cheatsheet and What's new open through the new `tuidev md [FILE]`: with `glow` installed (`--extras`) the page is rendered at the pane's width, tables and all, inside your pager; without it you get the file as written, as before.
+
+### Fixed
+
+- **An update that changes Ghostty's config says to reload it.** Ghostty reads its config at start, so an open one kept its old keys (Cmd+P typed a `p` instead of opening the palette). When the `ui` pack changes the file while Ghostty runs, it now names the key: Cmd+Shift+, in Ghostty.
+
 ## [3.24.3] - 2026-11-18
 
 ### Fixed

@@ -228,6 +228,7 @@ tuidev update                      # the latest release, its migrations and conf
 tuidev update --check | --packages | --all | --rollback
 tuidev latest [on|off]             # the latest release known; the daily check on or off
 tuidev whatsnew [FROM]             # this release's changelog, or all since FROM
+tuidev md [FILE]                   # read Markdown in the pager (rendered with glow from --extras)
 tuidev check | perf | disk         # health check and the two audits
 tuidev theme [NAME]                # list themes, or apply one
 tuidev uninstall                   # remove what the manifest records
