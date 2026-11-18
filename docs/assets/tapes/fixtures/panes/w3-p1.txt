@@ -1,0 +1,16 @@
+› Add a dark mode toggle to the settings page.
+
+• The toggle is in. What changed:
+
+  - src/settings/Appearance.tsx: a switch that sets data-theme on <html>
+    and remembers the choice in localStorage
+  - src/styles/tokens.css: the dark values for the 12 color tokens
+  - src/settings/Appearance.test.tsx: 4 tests, all passing
+
+  pnpm dev is still running on :5173, so you can try it at /settings.
+
+  Not done: the charts on /reports keep their light palette. They read
+  colors from a separate file; say if you want that in this change.
+
+› 
+  demo model · 100% context left

@@ -1,0 +1,23 @@
+❯ Write the release notes for 2.4 from the merged pull requests
+  and publish them.
+
+⏺ I read the 14 pull requests merged since 2.3 and grouped
+  them: 5 features, 7 fixes, 2 that change behaviour and need
+  a note for people who upgrade.
+
+⏺ Write(docs/releases/2.4.md)
+  ⎿  Wrote 48 lines to docs/releases/2.4.md
+
+⏺ The notes are written. Publishing them means pushing to
+  main, which I don't do without your say.
+
+────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   git push origin main
+   Push the release notes for 2.4
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for git push in this project
+   3. No

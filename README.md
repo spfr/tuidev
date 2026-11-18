@@ -89,6 +89,12 @@ With `--pack monitoring` beside it, a tab bar of `1 2 3` reads `✳ API docs`, `
 
 <sub>Seven agents on three machines in one sidebar, sorted by who needs you. The blocked one on `devbox` is first, in red: jump to it, answer, and it goes back to work.</sub>
 
+The same answer on one screen is `agents board`: **prefix+space** in Herdr opens it as a popup over the pane you are in. Every session on every machine is one line, grouped as Needs you, To review and Working. The right-hand side follows the cursor with the last lines of that session's output, so you read what it asks before you go there. Enter goes to the session's pane, tab changes the grouping, and esc closes the popup. [The board](docs/agent-workflows.md#the-board-every-session-one-screen)
+
+<img src="docs/assets/board.gif" width="800" alt="agents board in a terminal, in two columns. On the left, tabs Attention, Tree and Machines with Attention filled in, a line counting 1 needs you, 1 to review and 1 working, each CLI's usage limit, and a yellow warning line. Under them three groups: NEEDS YOU in red with the session Release notes for 2.4, wants permission, 6m; TO REVIEW in blue with Dark mode toggle, finished, 12m; WORKING in green with Fix flaky cache test, tests 3m12s. On the right, tabs Card, Trace, Pane and Details, then the selected session's name, project and state, the command running under it, and the last lines of its pane: for the first session, the git push it asks permission for. The cursor moves down to the finished session and its summary of what changed, then to the working one and its test run. Tab switches the left side to Tree, where each session has the commands it started listed under it.">
+
+<sub>`agents board` over three made-up sessions, in a plain terminal. In Herdr it is a popup over your pane.</sub>
+
 ## Remote feels local
 
 The dev server an agent started on another machine prints `http://localhost:5173`, and that is the other machine's localhost. With tuidev on both, **Ctrl-click the URL** in its Herdr pane and it opens in your own browser, through an ssh tunnel made on the spot.

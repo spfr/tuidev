@@ -372,9 +372,11 @@ agents board workbox      # one machine's
 agents board | cat        # the list as text, with no fzf
 ```
 
-The list is one line a session, in groups: **Needs you** (the longest wait first), **To review**, **Working**, and the parked ones folded into a line. A line is a name that stays (the session's own task title, else its project), a word or two for what it does now, since when, its machine when there is more than one, and a count of what runs under it (`+2 sub, 1 cmd`). The header is the counts, each CLI's fullest [usage limit](#history-and-agents-report), and one line for what is wrong (a process past the memory warning, a hog, something left behind), there only while something is.
+The list is one line a session, in groups: **Needs you** (the longest wait first), **To review**, **Working**, and the parked ones folded into a line (`PARKED 2 · press . to show`). Each group's heading has its group's color, and an empty line stands between groups. A line is a name that stays (the session's own task title, else its project), a word or two for what it does now, since when, its machine when there is more than one, and a count of what runs under it (`+2 sub, 1 cmd`). The header is the lens tabs (the active one filled in), the counts, each CLI's fullest [usage limit](#history-and-agents-report), and one line for what is wrong (a process past the memory warning, a hog, something left behind), there only while something is.
 
-The right-hand side follows the cursor: why the session waits, the sub-agents and commands under it, the last lines of its pane, then its branch, model, tokens and cost. Everything else waits for a key.
+The right-hand side takes 55% of the window and follows the cursor: why the session waits, the sub-agents and commands under it, the last lines of its pane (as many as fit), then its branch, model, tokens and cost. Those last lines are the session's output: the agent's own input box, prompt and status lines are left out, a long line breaks between words, and a rule is cut to the width. Its tabs (Card, Trace, Pane, Details) show which view is on. Everything else waits for a key.
+
+<img src="assets/board.gif" width="800" alt="agents board in a terminal: on the left the lens tabs, the counts, a warning line and three groups, Needs you, To review and Working, one session each; on the right the selected session's card with the last lines of its pane. The cursor moves through the three sessions, then tab switches the list to the Tree lens, with each session's commands under it.">
 
 `→` turns it to the **Trace**: what a Claude Code session did, in order, the newest at the bottom, one line an event, as many as fit (40 at most):
 

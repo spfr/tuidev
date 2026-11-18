@@ -245,7 +245,9 @@ END {
     }
     if (DW > 16) DW = 16
     if (MW > 12) MW = 12
-    if (W < 76) EW = 0
+    # The count of what runs under a session goes first when the list is
+    # narrow: a name is never cut for it.
+    if (EW && W - (4 + (gon ? gwid + 1 : 0) + 2 + DW + 2 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + EW + 2) - 2 < (NM < 20 ? NM : 20)) EW = 0
     NW = W - (4 + (gon ? gwid + 1 : 0) + 2 + DW + 2 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + (EW ? EW + 2 : 0)) - 2
     if (NW > 60) NW = 60
     if (NW > NM) NW = NM

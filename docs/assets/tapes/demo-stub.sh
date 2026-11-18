@@ -11,7 +11,7 @@ FIX="${DEMO_FIXTURES:?DEMO_FIXTURES is not set: run the demo through docs/assets
 fixture() { sed "s|@HOME@|$HOME|g" "$FIX/$1"; }
 
 # ps axww -o ...: the whole table. ps -o FIELDS -p PIDS: those columns
-# (pid and lstart are the only ones bin/agents asks for by pid).
+# (pid, stat, etime and lstart are the ones bin/agents asks for by pid).
 stub_ps() {
     local fields="" pids="" a
     while [[ $# -gt 0 ]]; do
@@ -28,6 +28,8 @@ stub_ps() {
             out = ""; n = split(fields, f, ",")
             for (i = 1; i <= n; i++) {
                 if (f[i] == "pid=") out = out (out == "" ? "" : " ") $1
+                else if (f[i] == "stat=") out = out (out == "" ? "" : " ") "S"
+                else if (f[i] == "etime=") out = out (out == "" ? "" : " ") $8
                 else if (f[i] == "lstart=") out = out (out == "" ? "" : " ") $9 " " $10 " " $11 " " $12 " " $13
             }
             print out; found = 1
@@ -42,13 +44,37 @@ stub_lsof() {
     fixture listeners.txt | awk 'NF == 2 { print "p" $1; print "n*:" $2 }'
 }
 
-# herdr agent list: Herdr's JSON answer, from herdr.tsv.
+# herdr agent list: Herdr's JSON answer, from herdr.tsv. With DEMO_PANES=1
+# (board.tape) each agent also has a pane and a task title (panes.tsv, a line
+# an agent, in herdr.tsv's order: PANE, PID, TITLE), `herdr pane process-info`
+# says which pane holds a pid, and `herdr pane read` prints that pane's
+# made-up screen (panes/PANE.txt, ":" as "-").
 stub_herdr() {
-    [[ "${1:-} ${2:-}" == "agent list" ]] || return 1
-    fixture herdr.tsv | awk -F '\t' '
-        BEGIN { printf "{\"result\":{\"agents\":[" }
-        NF == 3 { printf "%s{\"agent\":\"%s\",\"agent_status\":\"%s\",\"cwd\":\"%s\"}", (n++ ? "," : ""), $1, $2, $3 }
-        END { print "]}}" }'
+    local pane
+    case "${1:-} ${2:-}" in
+        "agent list")
+            fixture herdr.tsv | awk -F '\t' -v panes="${DEMO_PANES:+$FIX/panes.tsv}" '
+                BEGIN {
+                    while (panes != "" && (getline l < panes) > 0) { split(l, f, "\t"); id[++k] = f[1]; title[k] = f[3] }
+                    printf "{\"result\":{\"agents\":["
+                }
+                NF == 3 {
+                    n++
+                    printf "%s{\"agent\":\"%s\",\"agent_status\":\"%s\",\"cwd\":\"%s\"", (n > 1 ? "," : ""), $1, $2, $3
+                    if (n in id) printf ",\"pane_id\":\"%s\",\"terminal_title_stripped\":\"%s\"", id[n], title[n]
+                    printf "}"
+                }
+                END { print "]}}" }' ;;
+        "pane process-info")
+            [[ -n "${DEMO_PANES:-}" && "${3:-}" == --pane ]] || return 1
+            awk -F '\t' -v p="${4:-}" '$1 == p { printf "{\"result\":{\"process_info\":{\"shell_pid\":%d,\"foreground_processes\":[{\"pid\":%d}]}}}\n", $2, $2; found = 1 }
+                END { exit !found }' "$FIX/panes.tsv" ;;
+        "pane read")
+            pane="${3:-}"
+            [[ -n "${DEMO_PANES:-}" && "$pane" =~ ^[A-Za-z0-9:_-]+$ && -r "$FIX/panes/${pane//:/-}.txt" ]] || return 1
+            cat "$FIX/panes/${pane//:/-}.txt" ;;
+        *) return 1 ;;
+    esac
 }
 
 stub_pmset() {

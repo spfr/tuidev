@@ -15,6 +15,7 @@ make screenshots TAPES="agents menu"     # some, by name (menu = scripts/render_
 | `cli.tape` | `cli.gif` | The shipped zsh in the `~/api` demo repo: autosuggestions, `z`, `lt` (eza tree), `cat` (bat), Ctrl-T (fzf with a bat preview), Ctrl-R (atuin), `tokei` |
 | `shell.tape` | `shell.png` | The real Starship prompt, `ll src` (eza with icons and a git column), `rg` and `git diff` through delta, in the `~/api` demo repo |
 | `agents.tape` | `agents.png` | `agents` over the fixture process table |
+| `board.tape` | `board.gif`, `board.png` | `agents board` over the same three sessions, in a plain terminal (VHS records one terminal, not Herdr's popup): it opens on the one that needs you with its question on the right, moves to the finished one and the working one, then switches to the Tree lens |
 | `sbx.tape` | `sbx.png` | a key read without and under `sbx`, then refused credentials and a `~/.zshrc` write, while `make test` runs |
 | `social-preview.tape` | `social-preview.png` | The 1280×640 Open Graph card; its text is in `social-card.sh` |
 | `theme.tape` | | Shared settings: the Tokyo Night palette and the Ghostty font, sourced by the others |
@@ -48,8 +49,9 @@ The `cli` tape then runs `demo-zsh-setup.sh`, which copies the shipped `configs/
 | `ps`, `lsof` (listeners) | `fixtures/ps.txt`, `fixtures/listeners.txt` |
 | working directories (`lsof`, or `/proc` on Linux) | `fixtures/cwds.tsv`, read by the wrapper's own `_agents_cwds` |
 | `herdr agent list` | `fixtures/herdr.tsv` (session status: blocked, working, done) |
+| `herdr pane read`, `herdr pane process-info` (only with `DEMO_PANES=1`, which `board.tape` sets) | `fixtures/panes.tsv` (each session's pane id and task title) and `fixtures/panes/*.txt` (a made-up screen each, input box and status lines included, so the board trims them as it does a real one) |
 | `sysctl`, `memory_pressure`, `pmset`, `notifyutil`, `launchctl` | fixed answers in `demo-stub.sh` |
-| `kill` | a no-op: the demo never signals anything |
+| `kill` | a no-op: the demo never signals anything, but for the process group of a job its own shell started (the watcher of a timed-out probe) |
 | `AGENTS_UID`, `AGENTS_SELF` | the fixture's uid 501, and a pid that isn't in the table (`AGENTS_TESTING=1`, the test harness's hook) |
 | `~/.local/state/tuidev/agents` | the same path in the demo home (`AGENTS_DATA_DIR`), filled by `demo-history.sh` |
 

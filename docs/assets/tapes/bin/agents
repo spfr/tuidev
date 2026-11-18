@@ -26,6 +26,11 @@ export AGENTS_TESTING=1 AGENTS_UID=501 AGENTS_SELF=99999 AGENTS_EUID=501
 # shellcheck source=../../../../bin/agents disable=SC1091
 . "$repo/bin/agents"
 
+# What a view starts again from inside itself (the board's fzf: its list, its
+# right-hand side) is this wrapper too, never the real bin/agents.
+# shellcheck disable=SC2034  # read by the sourced modules
+AGENTS_PATH="$tapes/bin/agents"
+
 # Working directories come from the fixture only: on Linux, bin/agents would
 # read /proc/PID/cwd for the fixture's pids before asking lsof.
 _agents_cwds() {
@@ -35,9 +40,16 @@ _agents_cwds() {
         | awk -F '\t' -v want=",$*," 'index(want, "," $1 ",") { print $1 "\t" $2 }'
 }
 
-# kill -0 (is the keep-awake holder alive?) says yes; anything else is a no-op.
+# kill -0 (is the keep-awake holder alive?) says yes; anything else is a no-op,
+# but for one case: the process group of a job this very shell started
+# (_agents_timeout ending its own watcher, which would otherwise hold a
+# view's pipe open until its sleep ends). No pid from the fixture is ever one.
 kill() {
     [[ "${1:-}" == -0 ]] && return 0
+    if [[ $# -eq 3 && "$1" == -TERM && "$2" == -- && "$3" =~ ^-([0-9]+)$ ]] \
+        && jobs -p | grep -qx "${BASH_REMATCH[1]}"; then
+        command kill "$@"; return
+    fi
     echo "agents demo: not signalling $*" >&2
     return 0
 }
