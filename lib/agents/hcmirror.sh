@@ -46,7 +46,8 @@ _AGENTS_HM_PANE_RE='^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$'
 _AGENTS_HM_AGAIN=60              # seconds before a pane's mirror is started again
 
 # The agent panes of one `herdr api snapshot`, a line each:
-# PANE, COLS, ROWS, AGENT, STATE and CWD, unit separators between them. The size is the pane's
+# PANE, COLS, ROWS, AGENT, STATE, CWD and TITLE (the session's task title,
+# "" for none), unit separators between them. The size is the pane's
 # in its tab's layout (160x50 for one the snapshot has no layout for). An
 # error (jq exits 5) when the answer has no list of panes.
 # shellcheck disable=SC2016  # jq's $names, not the shell's
@@ -56,7 +57,7 @@ _AGENTS_HM_PANES_JQ='
 | ([$s.layouts[]? | .panes[]? | {key: .pane_id, value: .rect}] | from_entries) as $rect
 | $s.panes[] | select((.agent // "") != "")
 | [.pane_id, ($rect[.pane_id].width // 160), ($rect[.pane_id].height // 50), .agent, (.agent_status // ""),
-   (.foreground_cwd // .cwd // "")]
+   (.foreground_cwd // .cwd // ""), (.terminal_title_stripped // "" | tostring | .[0:120])]
 | map(tostring | gsub("[\u0000-\u001f\u007f]"; " ")) | join("\u001f")'
 
 # _agents_hm_want — the agent panes, as above; false when Herdr did not
@@ -140,14 +141,39 @@ _agents_hm_pane_size() {
     printf '%s %s\n' "$w" "$h"
 }
 
-# _agents_hm_start PANE W H CWD — a mirror of PANE in herdr-core, at the size
-# the pane's terminal has (W by H is its place in the layout). It runs this
-# same agents, by its path, with the Herdr it was asked from: the core's own
-# environment may know neither. 124 when the core did not answer.
+# _agents_hm_name TITLE CWD — a mirror's name in herdr-core: the session's
+# task title when it has one ("Fix login redirect" is fix-login-redirect),
+# so the phone tells two sessions of one project apart; else its directory's
+# name. hc.sh's _agents_hc_name makes either free (NAME-2 …) and legal. The
+# name is given once, when the mirror starts: herdr-core renames nothing. A
+# title that comes or changes later is the terminal's own (_agents_hm_title).
+_agents_hm_name() {
+    local slug
+    slug="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -c 'a-z0-9' '-' | tr -s '-' | cut -c1-30)"
+    slug="${slug#-}"; slug="${slug%-}"
+    if [[ -n "$slug" ]]; then _agents_hc_name "/$slug"; else _agents_hc_name "$2"; fi
+}
+
+# _agents_hm_title TITLE — the mirror's terminal takes the session's task
+# title (OSC 2, which herdr-core keeps as the terminal's title), in one
+# write. Nothing for none: the last one stands. No control character goes out.
+_agents_hm_title() {
+    local t
+    t="$(printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177' | cut -c1-80)"
+    [[ -n "$t" ]] || return 0
+    # shellcheck disable=SC1003  # ESC \ ends the sequence
+    printf '\033]2;%s\033\\' "$t"
+}
+
+# _agents_hm_start PANE W H CWD [TITLE] — a mirror of PANE in herdr-core, named
+# after TITLE or its directory, at the size the pane's terminal has (W by H
+# is its place in the layout). It runs this same agents, by its path, with
+# the Herdr it was asked from: the core's own environment may know neither.
+# 124 when the core did not answer.
 _agents_hm_start() {
-    local pane="$1" w="$2" h="$3" cwd="$4" name herdr cols rows
+    local pane="$1" w="$2" h="$3" cwd="$4" title="${5:-}" name herdr cols rows
     read -r cols rows <<<"$(_agents_hm_pane_size "$pane" "$w" "$h")"
-    name="$(_agents_hc_name "$cwd")"
+    name="$(_agents_hm_name "$title" "$cwd")"
     herdr="${HERDR_BIN_PATH:-}"
     [[ -n "$herdr" && -x "$herdr" ]] || herdr="$(command -v herdr 2>/dev/null)" || return 1
     # Absolute, so it cannot read as an option either.
@@ -166,7 +192,7 @@ _agents_hm_start() {
 # the core has not answered one call, it is not asked again this time.
 agents_hc_mirror_sync() {
     local quiet=false dry=false a lock="$AGENTS_RUN_DIR/hc-mirror.lock" want have started=0 ended=0 waiting=0
-    local pane cols rows agent state cwd addr name seen="" panes dir f now age rc hung=false
+    local pane cols rows agent state cwd title addr name seen="" panes dir f now age rc hung=false
     for a in "$@"; do
         case "$a" in
             -q|--quiet)   quiet=true ;;
@@ -212,7 +238,7 @@ agents_hc_mirror_sync() {
     done <<<"$have"
     dir="$(_agents_hm_started_dir)"
     _agents_now now
-    while IFS=$'\x1f' read -r pane cols rows agent state cwd; do
+    while IFS=$'\x1f' read -r pane cols rows agent state cwd title; do
         [[ "$hung" == false ]] || break
         [[ "$pane" =~ $_AGENTS_HM_PANE_RE && "$cols" =~ ^[0-9]+$ && "$rows" =~ ^[0-9]+$ ]] || continue
         ! printf '%s\n' "$have" | cut -d$'\x1f' -f2 | grep -qxF -- "$pane" || continue
@@ -228,7 +254,7 @@ agents_hc_mirror_sync() {
         [[ "$quiet" == true ]] || echo "mirror $pane ($agent, ${cwd##*/})"
         [[ "$dry" == false ]] || continue
         mkdir -p "$dir" 2>/dev/null && _agents_replace "$f" "$now" || true
-        rc=0; _agents_hm_start "$pane" "$cols" "$rows" "$cwd" || rc=$?
+        rc=0; _agents_hm_start "$pane" "$cols" "$rows" "$cwd" "$title" || rc=$?
         [[ $rc -eq 0 ]] || { [[ "$quiet" == true ]] || echo "  could not start it" >&2; }
         [[ $rc -ne 124 ]] || hung=true
     done <<<"$want"
@@ -245,12 +271,12 @@ agents_hc_mirror_sync() {
 }
 
 agents_hc_mirror_status() {
-    local want have pane cols rows agent state cwd m
+    local want have pane cols rows agent state cwd title m
     if ! _agents_hm_ready; then echo "agents hc mirror: $(_agents_hm_why_not)"; return 0; fi
     want="$(_agents_hm_want)" || { echo "agents hc mirror: Herdr did not answer" >&2; return 1; }
     have="$(_agents_hm_have)" || { echo "agents hc mirror: herdr-core did not answer" >&2; return 1; }
     [[ -n "$want" ]] || { echo "no agent panes in this machine's Herdr"; return 0; }
-    while IFS=$'\x1f' read -r pane cols rows agent state cwd; do
+    while IFS=$'\x1f' read -r pane cols rows agent state cwd title; do
         [[ -n "$pane" ]] || continue
         m="$(printf '%s\n' "$have" | awk -F$'\x1f' -v p="$pane" '$2 == p { print ($3 != "" ? $3 : $1); exit }')"
         if _agents_hc_pane_marked "$pane"; then m="in herdr-core itself (agents hc run)"
@@ -293,6 +319,7 @@ _agents_hm_follow() {
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
     _AGENTS_HM_OUT="$(mktemp "$AGENTS_RUN_DIR/hc-mirror-wait.XXXXXX" 2>/dev/null)" || return 0
     _agents_hm_report "$cur" "$agent"
+    _agents_hm_title "$(printf '%s' "$out" | jq -r '.result.pane.terminal_title_stripped // empty' 2>/dev/null)"
     while :; do
         args=()
         for s in idle working blocked "done" unknown; do [[ "$s" == "$cur" ]] || args+=(--until "$s"); done
@@ -305,6 +332,7 @@ _agents_hm_follow() {
         [[ -n "$s" && "$s" != "$cur" ]] || { sleep 1; continue; }
         cur="$s"
         _agents_hm_report "$cur" "$agent"
+        _agents_hm_title "$(jq -r '.result.agent.terminal_title_stripped // empty' "$_AGENTS_HM_OUT" 2>/dev/null)"
     done
     rm -f "$_AGENTS_HM_OUT"
 }

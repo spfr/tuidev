@@ -94,13 +94,13 @@ reset() {
     echo '{"terminals":[]}' > "$FAKE/ls.json"
 }
 calls() { [[ ! -f "$FAKE/$1.calls" ]] || tr '\n' ' ' < "$FAKE/$1.calls"; }
-# snap 'PANE|AGENT|STATUS|CWD' …  (layout rects from RECT="PANE:W:H …")
+# snap 'PANE|AGENT|STATUS|CWD[|TITLE]' …  (layout rects from RECT="PANE:W:H …")
 snap() {
-    local p arr="" lay="" r id ag st cw w h
+    local p arr="" lay="" r id ag st cw ti w h
     for p in "$@"; do
-        IFS='|' read -r id ag st cw <<<"$p"
-        arr="$arr${arr:+,}$(jq -nc --arg id "$id" --arg ag "$ag" --arg st "$st" --arg cw "$cw" \
-            '{pane_id:$id,agent:$ag,agent_status:$st,cwd:$cw,foreground_cwd:$cw}')"
+        IFS='|' read -r id ag st cw ti <<<"$p"
+        arr="$arr${arr:+,}$(jq -nc --arg id "$id" --arg ag "$ag" --arg st "$st" --arg cw "$cw" --arg ti "$ti" \
+            '{pane_id:$id,agent:$ag,agent_status:$st,cwd:$cw,foreground_cwd:$cw} + (if $ti == "" then {} else {terminal_title_stripped:$ti} end)')"
     done
     for r in ${RECT:-}; do
         IFS=: read -r id w h <<<"$r"
@@ -133,6 +133,21 @@ r="$(runs)"
     || fail "mirror command: $r"
 [[ "$out" == *"mirror p1 (claude, proj-a)"* ]] || fail "output: $out"
 [[ -f "$AGENTS_RUN_DIR/hc-mirror.started/p1" ]] || fail "no start time kept for p1"
+
+# A mirror is named after its session's task title, so the phone tells two
+# sessions of one project apart; a title with nothing to name it by, or none,
+# leaves the directory's name.
+reset; snap "p1|claude|working|$tmp/proj-a|Fix Login redirect!" "p2|claude|idle|$tmp/proj-a|API docs" "p3|claude|idle|$tmp/proj-a|***" "p4|codex|idle|$tmp/proj-a"
+agents_hc_mirror_sync >/dev/null 2>&1 || fail "sync with titles failed"
+r="$(runs)"
+[[ "$r" == *"--name fix-login-redirect --label tuidev_mirror=p1 "* ]] || fail "a mirror named after its title: $r"
+[[ "$r" == *"--name api-docs --label tuidev_mirror=p2 "* ]] || fail "a second session of the project, by its own title: $r"
+[[ "$r" == *"--name proj-a --label tuidev_mirror=p3 "* && "$r" == *"--name proj-a --label tuidev_mirror=p4 "* ]] || fail "no usable title: the directory's name: $r"
+[[ "$(_agents_hm_name "A title far longer than any name herdr-core takes for one terminal" "$tmp/proj-a")" =~ ^[a-z0-9-]{1,30}$ ]] || fail "a long title is cut to a legal name"
+[[ "$(_agents_hm_title $'Fix \033]0;x\007login' | od -An -c | tr -s ' \n' ' ')" == " 033 ] 2 ; F i x ] 0 ; x l o g i n 033 \\ " ]] \
+    || fail "the terminal title: one OSC 2, no control character from the title: $(_agents_hm_title $'Fix \033]0;x\007login' | od -An -c)"
+[[ -z "$(_agents_hm_title "")" ]] || fail "no title: nothing written"
+pass "a mirror is named after its session's task title, and its terminal takes that title"
 pass "an agent pane with no mirror gets one (--rm): name, label, cwd, size from its layout, Herdr's paths"
 
 reset; RECT=""; snap "p2|codex|idle|$tmp/proj-b"
@@ -295,6 +310,13 @@ h="$(calls herdr)"
 [[ "$h" == *"agent wait p1 --until idle --until blocked --until done --until unknown "* ]] || fail "wait after working: $h"
 [[ "$h" == *"agent wait p1 --until idle --until working --until done --until unknown "* ]] || fail "wait after blocked: $h"
 pass "follow reports the state now, then each change; waits for every state but the current; ends when wait fails"
+# The mirror's terminal takes the session's title, at once and when a change brings a new one.
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle","terminal_title_stripped":"Fix login"}}}' > "$FAKE/pane.json"
+printf '{"result":{"agent":{"agent_status":"working","terminal_title_stripped":"Fix login redirect"}}}\n' > "$FAKE/wait.1"
+got="$(_agents_hm_follow p1 | od -An -tx1 | tr -d ' \n')"
+want="$({ printf '\033]7501;state=idle:app=claude\033\\\033]2;Fix login\033\\'; printf '\033]7501;state=working:app=claude\033\\\033]2;Fix login redirect\033\\'; } | od -An -tx1 | tr -d ' \n')"
+[[ "$got" == "$want" ]] || fail "follow sets the title: $got"
+pass "follow sets the terminal's title to the session's, then again when a change carries a new one"
 
 reset; echo '{"result":{"pane":{"agent":"","agent_status":"idle"}}}' > "$FAKE/pane.json"
 out="$(_agents_hm_follow p1)"; [[ -z "$out" && "$(calls herdr)" != *"agent wait"* ]] || fail "follow of a pane with no agent: $out"
