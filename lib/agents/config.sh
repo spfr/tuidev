@@ -255,11 +255,13 @@ AGENTS_GLYPHS="${AGENTS_GLYPHS:-}"
 # back what it set).
 AGENTS_HERDR_NAMES="${AGENTS_HERDR_NAMES:-1}"
 _agents_env_check AGENTS_HERDR_NAMES 1
-# herdr-core mirrors (hcmirror.sh): 1 (the default) mirrors every agent pane
+# herdr-core mirrors (hcmirror.sh), experimental: 1 mirrors every agent pane
 # of this machine's Herdr into herdr-core while one runs, so Herdr's phone
-# app lists them; 0 mirrors nothing (`agents hc run` still works).
-AGENTS_HC_MIRROR="${AGENTS_HC_MIRROR:-1}"
-_agents_env_check AGENTS_HC_MIRROR 1
+# app lists them; 0 (the default) mirrors nothing and ends the mirrors an
+# earlier sync started (`agents hc run` still works). Off by default because
+# a pane takes its mirror's size, and the phone app sets that.
+AGENTS_HC_MIRROR="${AGENTS_HC_MIRROR:-0}"
+_agents_env_check AGENTS_HC_MIRROR 0
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 # The menu bar's backstop timer: it refreshes when something changes

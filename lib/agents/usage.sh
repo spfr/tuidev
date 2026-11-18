@@ -174,15 +174,16 @@ FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herd
                                sidebar shows its state. ctrl+\\ detaches. It gets the
                                core's environment, not this shell's
   agents hc attach TERMINAL    back onto one (herdr-core ls names them)
-  agents hc mirror [status]    each agent pane of this machine's Herdr and its mirror in
-                               herdr-core: a core terminal attached to the pane, so
-                               the phone lists the agents you already run, typing
-                               there reaches them and the inbox has their state
+  agents hc mirror [status]    experimental, off unless AGENTS_HC_MIRROR=1: each agent
+                               pane of this machine's Herdr and its mirror in
+                               herdr-core, a core terminal attached to the pane, so
+                               the phone lists the agents you already run. A pane
+                               takes its mirror's size, which the phone app sets
   agents hc mirror sync [-n] [-q]
                                start a mirror for each agent pane without one and end
                                those whose pane has no agent left. Herdr's events run
-                               it (with agents herdr sync) while herdr-core is up;
-                               AGENTS_HC_MIRROR=0 turns it off
+                               it (with agents herdr sync) while herdr-core is up
+  agents hc mirror end         end every mirror; the agents stay in their panes
 
 HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
   agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]

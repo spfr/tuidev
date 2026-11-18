@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Phone mirrors are off unless you turn them on.** 3.24.0 mirrored every agent pane of this machine's Herdr into herdr-core by default. A pane takes its mirror's size, and Herdr's phone app sets that size when it shows a terminal: after the phone looked at a session, the pane at the desk could stay at the phone's size (or herdr-core's 200x120), with the agent's input out of view. `AGENTS_HC_MIRROR` now defaults to `0` and the feature is marked experimental; the first sync after the update ends the mirrors the earlier default started, and the panes take their own size again. `agents hc mirror end` ends them by hand. `agents hc run` is not affected. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
+
 ## [3.24.1] - 2026-11-18
 
 ### Fixed

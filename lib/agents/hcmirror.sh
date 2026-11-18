@@ -39,7 +39,7 @@
 #   _AGENTS_HC_WAIT, _AGENTS_HC_HERDR_WAIT), herdrlabel.sh (_agents_hl_herdr,
 #   _agents_hl_ready), util.sh (_agents_lock, _agents_unlock, _agents_timeout,
 #   _agents_now, _agents_stamp_age, _agents_replace).
-# Public: agents_hc_mirror, agents_hc_mirror_sync.
+# Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_end.
 
 _AGENTS_HM_LABEL="tuidev_mirror"
 _AGENTS_HM_PANE_RE='^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$'
@@ -99,15 +99,16 @@ if (.result.terminals | type) != "array" then error("no list") else . end
 | .result.terminals[] | select(.state == "live") | select((.labels // {})[$l] != null)
 | [.address, .labels[$l], (.name // "")] | map(tostring | gsub("[\u0000-\u001f\u007f]"; " ")) | join("\u001f")'
 
+_agents_hm_on() { [[ "${AGENTS_HC_MIRROR:-0}" == 1 ]]; }
 _agents_hm_ready() {
-    [[ "${AGENTS_HC_MIRROR:-1}" != 0 ]] || return 1
+    _agents_hm_on || return 1
     _agents_hl_ready || return 1
     _agents_hc_bin || return 1
     _agents_hc_running
 }
 
 _agents_hm_why_not() {
-    if [[ "${AGENTS_HC_MIRROR:-1}" == 0 ]]; then echo "off (AGENTS_HC_MIRROR=0)"
+    if ! _agents_hm_on; then echo "off (AGENTS_HC_MIRROR=1 in agents.conf turns it on; experimental)"
     elif ! _agents_hl_ready; then echo "this machine's Herdr is not reachable"
     elif ! _agents_hc_bin; then echo "herdr-core is not installed"
     else echo "herdr-core is not running (agents hc up)"; fi
@@ -151,6 +152,10 @@ agents_hc_mirror_sync() {
         esac
     done
     if ! _agents_hm_ready; then
+        # Off, with mirrors an earlier sync started: they go, once.
+        if ! _agents_hm_on && [[ "$dry" == false && -d "$(_agents_hm_started_dir)" ]]; then
+            agents_hc_mirror_end -q || true
+        fi
         [[ "$quiet" == true ]] || echo "agents hc mirror: $(_agents_hm_why_not)"
         return 0
     fi
@@ -309,12 +314,46 @@ agents_hc_mirror_run() {
     return "$rc"
 }
 
+# agents_hc_mirror_end [-q] — end every mirror (the core terminals labelled
+# as one; nothing else), and forget when each started. The agents stay in
+# their panes. Asks only a core that runs; when it does not answer, nothing
+# is forgotten, so the next sync that finds mirrors off tries again.
+agents_hc_mirror_end() {
+    local quiet=false lock="$AGENTS_RUN_DIR/hc-mirror.lock" have addr pane name n=0 rc
+    [[ "${1:-}" != -q ]] || quiet=true
+    _agents_hc_bin || { [[ "$quiet" == true ]] || echo "agents hc mirror: herdr-core is not installed"; return 0; }
+    if ! _agents_hc_running; then
+        rm -rf "$(_agents_hm_started_dir)" 2>/dev/null
+        [[ "$quiet" == true ]] || echo "agents hc mirror: herdr-core is not running, so no mirror is"
+        return 0
+    fi
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
+    _agents_lock "$lock" 10 0.2 || return 0
+    if ! have="$(_agents_hm_have)"; then
+        _agents_unlock "$lock"
+        [[ "$quiet" == true ]] || echo "agents hc mirror: herdr-core did not answer; nothing changed" >&2
+        return 1
+    fi
+    while IFS=$'\x1f' read -r addr pane name; do
+        [[ -n "$addr" && "$addr" != -* ]] || continue
+        rc=0; _agents_timeout "$_AGENTS_HC_WAIT" _agents_hm_core kill "$addr" >/dev/null 2>&1 || rc=$?
+        if [[ $rc -eq 124 ]]; then _agents_unlock "$lock"; return 1; fi
+        n=$((n + 1))
+        [[ "$quiet" == true ]] || echo "ended the mirror of $pane (${name:-$addr})"
+    done <<<"$have"
+    rm -rf "$(_agents_hm_started_dir)" 2>/dev/null
+    _agents_unlock "$lock"
+    [[ "$quiet" == true || $n -gt 0 ]] || echo "agents hc mirror: no mirror runs"
+    return 0
+}
+
 agents_hc_mirror() {
     local sub="${1:-status}"
     [[ $# -gt 0 ]] && shift
     case "$sub" in
         status) agents_hc_mirror_status ;;
         sync)   agents_hc_mirror_sync "$@" ;;
-        *)      echo "usage: agents hc mirror [status | sync [-n] [-q]]" >&2; return 2 ;;
+        end)    agents_hc_mirror_end "$@" ;;
+        *)      echo "usage: agents hc mirror [status | sync [-n] [-q] | end]" >&2; return 2 ;;
     esac
 }

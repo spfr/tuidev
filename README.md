@@ -116,7 +116,7 @@ agents hc run claude                                 # in a Herdr pane: the agen
 ```
 
 - **An agent started with `agents hc run`** is in the pane, in Herdr's sidebar and in the phone's inbox, and keeps running when the pane closes.
-- **The agents you already run show up too.** While herdr-core is up, each agent pane of this machine's Herdr gets a mirror in it. Typing on the phone reaches the agent in the pane. `AGENTS_HC_MIRROR=0` turns the mirrors off.
+- **The agents you already run can show up too, as an experiment.** `AGENTS_HC_MIRROR=1` mirrors each agent pane of this machine's Herdr into herdr-core. It is off by default: a pane takes its mirror's size, and after the phone looked at a session the pane at your desk can stay at the phone's size.
 - **What it needs:** herdr-core on the machine (its own installer, or Herdr's desktop app; tuidev does not install it), Herdr's phone app, and SSH from the phone, which Tailscale gives you. Each machine runs its own herdr-core and is added in the app by itself.
 
 The pack is not part of any of the four install choices: add it with the first command above. Tested so far on one Mac with one phone; the login item across a logout, and Linux with a real herdr-core, are not yet tested. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)

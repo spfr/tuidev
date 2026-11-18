@@ -72,6 +72,8 @@ esac
 EOF2
 chmod +x "$tmp/herdr-core" "$tmp/herdr"
 export AGENTS_HC_BIN="$tmp/herdr-core" HERDR_BIN_PATH="$tmp/herdr"
+# Mirrors are off unless asked for; the tests below ask.
+export AGENTS_HC_MIRROR=1
 
 # shellcheck source=../../bin/agents disable=SC1091
 . "$REPO_DIR/bin/agents"
@@ -206,9 +208,14 @@ pass "-n says what it would do and does nothing; -q is silent; a settled sync sa
 
 quiet_calls() { [[ "$(calls hc)" != *connect* && "$(calls hc)" != *"run "* && "$(calls hc)" != *ls* && ! -s "$FAKE/herdr.calls" ]]; }
 reset; snap "p1|claude|idle|$tmp/proj-a"
-out="$(AGENTS_HC_MIRROR=0 agents_hc_mirror_sync 2>&1)"
-[[ "$out" == *"AGENTS_HC_MIRROR=0"* ]] || fail "off: $out / $(calls hc)"
-quiet_calls || fail "called the core or Herdr: $(calls hc) $(calls herdr)"
+for off in 0 ""; do
+    out="$(AGENTS_HC_MIRROR="$off" agents_hc_mirror_sync 2>&1)"
+    [[ "$out" == *"AGENTS_HC_MIRROR=1"* ]] || fail "off ('$off'): $out / $(calls hc)"
+    quiet_calls || fail "off ('$off') called the core or Herdr: $(calls hc) $(calls herdr)"
+done
+out="$(unset AGENTS_HC_MIRROR; agents_hc_mirror_sync 2>&1)"
+[[ "$out" == *"AGENTS_HC_MIRROR=1"* ]] || fail "unset is not off: $out"
+quiet_calls || fail "unset called the core or Herdr: $(calls hc)"
 out="$(AGENTS_NO_HERDR=1 agents_hc_mirror_sync 2>&1)"
 [[ "$out" == *"Herdr is not reachable"* ]] || fail "no herdr: $out"
 quiet_calls || fail "called the core or Herdr: $(calls hc) $(calls herdr)"
@@ -451,6 +458,30 @@ wpid="$(cat "$FAKE/wait.pid" 2>/dev/null)"
 ! kill -0 "$wpid" 2>/dev/null || { kill "$wpid" 2>/dev/null; fail "herdr agent wait outlived the mirror"; }
 ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "the follower left its file: $(ls "$AGENTS_RUN_DIR")"
 pass "when the attach ends, the follower ends and its herdr agent wait with it"
+
+# --- off ends what an earlier sync started; `mirror end` ends them by hand ---
+reset; snap "p1|claude|idle|$tmp/proj-a"; terms "t1|a|live|p1" "t2|b|live|p2" "t3|mine|live|"
+mkdir -p "$AGENTS_RUN_DIR/hc-mirror.started"; echo 1 > "$AGENTS_RUN_DIR/hc-mirror.started/p1"
+out="$(AGENTS_HC_MIRROR=0 agents_hc_mirror_sync -n 2>&1)"
+[[ -z "$(kills)" && -d "$AGENTS_RUN_DIR/hc-mirror.started" ]] || fail "-n ended mirrors: $(kills)"
+AGENTS_HC_MIRROR=0 agents_hc_mirror_sync -q
+[[ "$(kills)" == "t1 t2 " && -z "$(runs)" ]] || fail "off did not end the mirrors, or ended more: kills=$(kills) runs=$(runs)"
+[[ ! -d "$AGENTS_RUN_DIR/hc-mirror.started" && ! -e "$AGENTS_RUN_DIR/hc-mirror.lock" ]] || fail "off left its record or lock"
+rm -f "$FAKE"/*.calls
+AGENTS_HC_MIRROR=0 agents_hc_mirror_sync -q
+[[ ! -e "$FAKE/hc.calls" ]] || fail "off asked the core again with nothing to end: $(calls hc)"
+reset; terms "t1|a|live|p1"; mkdir -p "$AGENTS_RUN_DIR/hc-mirror.started"; printf 'garbage\n' > "$FAKE/list.json"
+AGENTS_HC_MIRROR=0 agents_hc_mirror_sync -q
+[[ -z "$(kills)" && -d "$AGENTS_RUN_DIR/hc-mirror.started" ]] || fail "a core that did not answer: the record went, so nothing tries again"
+reset; mkdir -p "$AGENTS_RUN_DIR/hc-mirror.started"
+(RUNNING=false; AGENTS_HC_MIRROR=0 agents_hc_mirror_sync -q; [[ ! -e "$FAKE/hc.calls" && ! -d "$AGENTS_RUN_DIR/hc-mirror.started" ]]) \
+    || fail "off with no core running asked one, or kept the record"
+reset; terms "t1|a|live|p1" "t2|b|finished|p2" "t3|mine|live|"
+out="$(AGENTS_HC_MIRROR=0 agents_main hc mirror end 2>&1)"
+[[ "$(kills)" == "t1 " && "$out" == *"ended the mirror of p1 (a)"* ]] || fail "mirror end: $out / $(kills)"
+reset; terms "t3|mine|live|"
+out="$(agents_main hc mirror end 2>&1)"; [[ -z "$(kills)" && "$out" == *"no mirror runs"* ]] || fail "mirror end with none: $out"
+pass "off: a sync ends the mirrors an earlier one started, once, and nothing else; mirror end ends them by hand"
 
 # --- the report's app name ---
 [[ "$(_agents_hm_report idle a+b | od -An -tx1)" == "$(printf '\033]7501;state=idle:app=a+b\033\\' | od -An -tx1)" ]] || fail "+ refused"
