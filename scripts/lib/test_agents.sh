@@ -2068,6 +2068,18 @@ pass "events: one sanitized line per cleanup; AGENTS_HISTORY=0 writes nothing"
 
 # The state-file helpers every lock and stamp goes through (util.sh).
 lk="$tmp/locks" age=""; mkdir -p "$lk"
+# _agents_timeout: what CMD writes and how it ends pass through; nothing of
+# the helper's own shell reaches the caller's stderr (bash's job-control
+# notes, such as "child setpgid: Operation not permitted" under load, would
+# pass for something CMD said), and CMD gets none of the helper's descriptors.
+to_out="$(_agents_timeout 5 sh -c 'echo out; echo err >&2; exit 3' 2>&1)" && fail "timeout: an exit status lost"
+[[ "$to_out" == "out"$'\n'"err" ]] || fail "timeout: CMD's stdout and stderr: $to_out"
+to_rc=0; _agents_timeout 1 sleep 5 || to_rc=$?
+[[ $to_rc -eq 124 ]] || fail "timeout: a command cut off is 124, not $to_rc"
+_agents_timeout 5 sh -c '( : >&9 ) 2>/dev/null && exit 1; exit 0' || fail "timeout: CMD inherited the helper's descriptor"
+[[ -z "$( { _agents_timeout 5 true; } 2>&1 )" ]] || fail "timeout: a quiet command was not quiet"
+pass "timeout: CMD's output and status pass through, 124 when cut off, nothing of the helper's own"
+
 _agents_lock "$lk/a" || fail "lock: a free lock not taken"
 ! _agents_lock "$lk/a" || fail "lock: a held lock taken twice"
 ! _agents_lock "$lk/a" 3 0.05 || fail "lock: a held lock taken on a retry"

@@ -103,10 +103,15 @@ _agents_window() {
 _agents_timeout() {
     local secs="$1"; shift
     (
+        # The subshell's own stderr is closed, and CMD gets the caller's back
+        # (fd 9): under load bash writes "child setpgid (N to N): Operation not
+        # permitted" when a job it starts wins the race for its process group,
+        # and that line would pass for something CMD said.
+        exec 9>&2 2>/dev/null
         set +e -m
-        "$@" </dev/null &
+        "$@" </dev/null 2>&9 9>&- &
         pid=$!
-        ( sleep "$secs"; kill -TERM -- "-$pid" ) >/dev/null 2>&1 &
+        ( sleep "$secs"; kill -TERM -- "-$pid" ) >/dev/null 2>&1 9>&- &
         watcher=$!
         wait "$pid" 2>/dev/null; rc=$?
         # The watcher gone means it fired: CMD was killed for taking too long.

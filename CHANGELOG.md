@@ -5,11 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.24.3] - 2026-11-18
 
 ### Fixed
 
 - **A mirrored pane gets its size back when the phone stops looking.** When the last viewer of a mirror left, herdr-core gave the mirror's terminal its default size (200x120), the pane took it, and the agent's input ended up out of view; that was the fault behind 3.24.2's switch to opt-in. The mirror now notices its terminal back at the core's size and sets the pane's size again, from the pane's place in the layout as it is then. A mirror also starts at the size the pane's own terminal has, which can be a column less than its place. Mirrors stay experimental and off by default (`AGENTS_HC_MIRROR=1`). [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
+- **A busy machine no longer makes `agents` say "child setpgid".** Under load bash can print `child setpgid (N to N): Operation not permitted` when it starts a job, and the helper that puts a time limit on a command let that line through as if the command had said it (a quiet `agents hc mirror sync -q` then printed, which failed its own test now and then). The helper's own stderr is closed; the command's is untouched.
 - **The phone tells your sessions apart.** A mirror in herdr-core was named after its directory, so three sessions in one project read as the same name three times in Herdr's phone app. A mirror is now named after its session's task title (`fix-login-redirect`), the directory only when there is none, and its terminal's title is set to the session's and follows it. The name is given when a mirror starts: one already running keeps its name until it is started again.
 
 ## [3.24.2] - 2026-11-18
