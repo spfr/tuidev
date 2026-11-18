@@ -1174,7 +1174,7 @@ check_actions() {   # MENU
                         [[ $# -lt 2 ]] || agents_parse_duration "$2" >/dev/null || fail "awake $1: bad duration '$2'" ;;
                     open-term)
                         [[ "${1:-}" != --hold ]] || shift
-                        [[ "$*" == watch || "$*" == mem || "$*" == ls || "$*" == limits || "$*" == "report --since today" || "$*" == "awake status" || "$*" =~ ^(show\ --watch|peek)\ [0-9]+@[A-Za-z0-9_:]+( 60)?$ ]] \
+                        [[ "$*" == watch || "$*" == mem || "$*" == ls || "$*" == hc || "$*" == "hc mirror" || "$*" == "hc up" || "$*" == limits || "$*" == "report --since today" || "$*" == "awake status" || "$*" =~ ^(show\ --watch|peek)\ [0-9]+@[A-Za-z0-9_:]+( 60)?$ ]] \
                             || fail "open-term: unexpected command '$*'" ;;
                     jump)
                         [[ $# -eq 2 && "$1" == --notify && "$2" =~ ^[0-9]+@[A-Za-z0-9_:]+$ ]] || fail "jump: expects --notify PID@START, got '$*'" ;;
@@ -1303,6 +1303,37 @@ menu="$(plugin "$done_only" $'awake\toff\t-\t0\nthermal\t0\tnominal\nhhealth\tse
 menu="$(plugin "" $'hhealth\tserver\tstale')"
 [[ "$menu" == *$'\n'"----No agents running: restart now (it also stops shells and servers in its panes) | "* ]] || fail "no Herdr session: $(printf '%s\n' "$menu" | grep 'restart now')"
 pass "SwiftBar: finished sessions are To review, calm in the title; Herdr's health is a gray Maintenance line at the bottom, the restart commands only while no Herdr session works; Herdr's title names a session"
+
+# Herdr's phone app (the hc row, from herdr-core): a quiet line at the bottom;
+# a warning when the core runs outside the desktop login, which names the fix
+# and never runs it; a click on the others only reports or starts the core.
+hc_menu() { plugin "$idle_calm" $'awake\toff\t-\t0\nthermal\t0\tnominal\n'"$1"; }
+menu="$(hc_menu $'hc\tup\tyes\t5')"
+[[ "$menu" == *$'\n'"Phone: 5 agents mirrored | size=12 sfimage=iphone $GRAY_DOT bash="*" param1=open-term terminal=false param2=--hold param3=hc param4=mirror symbolize=false"$'\n'* ]] \
+    || fail "phone, mirrors: $(printf '%s\n' "$menu" | grep Phone)"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal:" && "$menu" != *"Needs you"* ]] || fail "the phone line changed the title or Needs you"
+check_actions "$menu"
+menu="$(hc_menu $'hc\tup\tyes\t1')"; [[ "$menu" == *"Phone: 1 agent mirrored | "* ]] || fail "one mirror: $(printf '%s\n' "$menu" | grep Phone)"
+menu="$(hc_menu $'hc\tup\tunknown\t0')"; [[ "$menu" == *"Phone: herdr-core is up, no agent panes | "*"param4=mirror"* ]] || fail "no mirrors: $(printf '%s\n' "$menu" | grep Phone)"
+menu="$(hc_menu $'hc\tcore\tyes\t0')"
+[[ "$menu" == *$'\n'"Phone: herdr-core is up | size=12 sfimage=iphone $GRAY_DOT bash="*" param1=open-term terminal=false param2=--hold param3=hc symbolize=false"$'\n'* ]] \
+    || fail "a core with mirrors off: $(printf '%s\n' "$menu" | grep Phone)"
+check_actions "$menu"
+menu="$(hc_menu $'hc\tdown\t-\t0')"
+[[ "$menu" == *$'\n'"Phone: herdr-core is not running | size=12 sfimage=iphone $GRAY_DOT bash="*" param1=open-term terminal=false param2=--hold param3=hc param4=up symbolize=false"$'\n'* ]] \
+    || fail "phone, down: $(printf '%s\n' "$menu" | grep Phone)"
+check_actions "$menu"
+menu="$(hc_menu $'hc\theadless\tno\t0')"
+[[ "$menu" == *$'\n'"Phone: herdr-core runs outside your desktop login | size=12 sfimage=exclamationmark.triangle "*" refresh=true symbolize=false"$'\n'"--Its agents cannot reach the Keychain"* \
+   && "$menu" == *$'\n'"--agents hc up --restart | refresh=true "* ]] || fail "phone, headless: $(printf '%s\n' "$menu" | grep -A5 Phone)"
+[[ "$(printf '%s\n' "$menu" | grep -c 'restart')" == 1 && "$(printf '%s\n' "$menu" | grep 'up --restart')" != *"bash="* ]] || fail "the restart is run from the menu"
+[[ "$(printf '%s\n' "$menu" | head -1)" == ":terminal:" && "$menu" != *"Needs you"* ]] || fail "the phone warning changed the title or Needs you"
+check_actions "$menu"
+for odd in $'hc\tup\tyes\tx' $'hc\tbogus\tyes\t1' $'hc\tup\tyes\t1;x'; do
+    [[ "$(hc_menu "$odd")" != *"Phone:"* ]] || fail "a bad hc row reached the menu: $odd"
+done
+[[ "$(hc_menu "")" != *"Phone:"* ]] || fail "a phone row without an hc record"
+pass "SwiftBar: Herdr's phone app is a quiet line (mirror count, not running) or, outside the desktop login, a warning that names agents hc up --restart and never runs it; nothing without the record"
 
 # An MCP server in several sessions, every copy an mcp-lazy proxy whose
 # server never started: proxies, not copies.

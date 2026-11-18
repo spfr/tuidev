@@ -350,6 +350,20 @@ printf '#!/bin/bash\n' > "$BIN/agents"; chmod +x "$BIN/agents"
 rows="$(tuidev palette --list)"; bad="$(printf '%s\n' "$rows" | awk -F'\t' 'NF != 4 { print }')"
 [[ -z "$bad" && "$rows" == *"Who needs me"* ]] || fail "rows with agents: $bad"
 rm "$BIN/agents"
+# The phone rows: only with herdr-core installed and an agents that knows `hc`,
+# and listing them never runs herdr-core (a client command starts a core).
+printf '#!/bin/bash\n# _AGENTS_MODULES="config hc hcmirror"\n' > "$BIN/agents"; chmod +x "$BIN/agents"
+rows="$(tuidev palette --list)"; [[ "$rows" != *"Phone:"* ]] || fail "phone rows without herdr-core"
+printf '#!/bin/bash\necho ran >> "%s/core.ran"\n' "$tmp" > "$BIN/herdr-core"; chmod +x "$BIN/herdr-core"
+rows="$(tuidev palette --list)"
+bad="$(printf '%s\n' "$rows" | awk -F'\t' 'NF != 4 { print }')"
+[[ -z "$bad" && "$(printf '%s\n' "$rows" | grep -c '^Phone: ')" == 3 ]] || fail "phone rows: $(printf '%s\n' "$rows" | grep '^Phone:')"
+[[ "$rows" == *"Phone: status"$'\t'*$'\t'1$'\t'"agents hc"$'\n'* && "$rows" == *"Phone: mirrors"$'\t'*$'\t'1$'\t'"agents hc mirror"$'\n'* \
+   && "$rows" == *"Phone: start an agent here"$'\t'*$'\t'0$'\t'"agents hc run claude"$'\n'* ]] || fail "phone row commands: $(printf '%s\n' "$rows" | grep '^Phone:')"
+[[ ! -e "$tmp/core.ran" ]] || fail "listing the palette ran herdr-core"
+printf '#!/bin/bash\n' > "$BIN/agents"
+rows="$(tuidev palette --list)"; [[ "$rows" != *"Phone:"* ]] || fail "phone rows with an agents that has no hc"
+rm -f "$BIN/agents" "$BIN/herdr-core" "$tmp/core.ran"
 # Theme rows only for names like a theme's: a stray directory adds none.
 for odd in "Bad Name" "-x" ".hidden" 'a;b' 'Caps' "it's"; do mkdir -p "$tmp/clone/configs/themes/$odd"; done
 mkdir -p "$tmp/clone/configs/themes/dark-2_x"

@@ -447,6 +447,17 @@ cmd_update() {
 _tuidev_has() { command -v "$1" >/dev/null 2>&1; }
 _tuidev_row() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
 
+# Is herdr-core here, and does this `agents` know `hc`? File tests only: the
+# palette never asks a core anything (a herdr-core client command starts one).
+# The name `herdr-core`, as agents looks for it: PATH, then ~/.local/bin.
+_tuidev_phone() {
+    local a core="${AGENTS_HC_BIN:-}"
+    [[ -n "$core" ]] || core="$(command -v herdr-core 2>/dev/null)" || core="$HOME/.local/bin/herdr-core"
+    [[ -x "$core" ]] || return 1
+    a="$(command -v agents 2>/dev/null)" || return 1
+    grep -q '[ "]hc[ "]' "$a" 2>/dev/null
+}
+
 # Every row this machine can run, in the order shown.
 _tuidev_palette_rows() {
     local repo="" name cmd
@@ -477,6 +488,11 @@ _tuidev_palette_rows() {
     fi
     if _tuidev_has herdr && [[ -z "${HERDR_ENV:-}" ]]; then
         _tuidev_row "Herdr" "every agent on this machine and saved ones" 0 "herdr"
+    fi
+    if _tuidev_phone; then
+        _tuidev_row "Phone: status" "is herdr-core running, and in your desktop login" 1 "agents hc"
+        _tuidev_row "Phone: mirrors" "experimental (AGENTS_HC_MIRROR=1): each agent pane and its mirror" 1 "agents hc mirror"
+        _tuidev_row "Phone: start an agent here" "hosted in herdr-core, listed in Herdr's phone app" 0 "agents hc run claude"
     fi
     if _tuidev_has secret; then
         _tuidev_row "Secrets: scan startup files" "tokens exported in dotfiles, by name and line" 1 "secret scan"

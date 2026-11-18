@@ -558,4 +558,62 @@ n32="abcdefghijabcdefghijabcdefghij12"
 [[ "$(_agents_hm_report idle "${n32}3" | od -An -tx1)" == "$(printf '\033]7501;state=idle:app=agent\033\\' | od -An -tx1)" ]] || fail "33 passed"
 pass "the report's app is the spec's: [A-Za-z0-9_.+-], 32 at most"
 
+# --- the phone status line the menu shows ---
+reset; RUNNING=false
+[[ "$(_agents_hc_phone)" == $'down\t-\t0' ]] || fail "no core: $(_agents_hc_phone)"
+[[ ! -s "$FAKE/hc.calls" ]] || fail "a core that is down was asked: $(calls hc)"
+[[ -z "$(AGENTS_HC_MIRROR=0 _agents_hc_phone)" ]] || fail "AGENTS_HC_MIRROR=0 and no core still said something"
+[[ -z "$(AGENTS_HC_BIN="$tmp/nope" _agents_hc_phone)" ]] || fail "herdr-core not installed still said something"
+[[ ! -s "$FAKE/hc.calls" ]] || fail "a status with no core or no herdr-core asked one: $(calls hc)"
+reset
+[[ "$(_agents_hc_phone)" == $'up\tyes\t0' ]] || fail "no mirrors: $(_agents_hc_phone)"
+terms 't4|app|live|%1' 't5|api|live|%2' 't6|old|exited|%3' 't7|plain|live|' 't8|dup|live|%4'
+[[ "$(_agents_hc_phone)" == $'up\tyes\t3' ]] || fail "live mirrors only: $(_agents_hc_phone)"
+[[ "$(AGENTS_HC_MIRROR=0 _agents_hc_phone)" == $'core\tyes\t0' ]] || fail "a core that runs is shown with mirrors off too: $(AGENTS_HC_MIRROR=0 _agents_hc_phone)"
+printf 'garbage\n' > "$FAKE/list.new"; cp "$FAKE/list.json" "$FAKE/list.keep"; mv "$FAKE/list.new" "$FAKE/list.json"
+[[ "$(AGENTS_HC_MIRROR=0 _agents_hc_phone)" == $'core\tyes\t0' ]] || fail "mirrors off still needed the core's list of terminals"
+mv "$FAKE/list.keep" "$FAKE/list.json"
+( _agents_hc_hello() { echo '{"result":{"login_session":{"gui":false}}}'; }
+  [[ "$(_agents_hc_phone)" == $'headless\tno\t0' ]] || fail "headless: $(_agents_hc_phone)"
+  _agents_hc_is_mac() { return 1; }
+  [[ "$(_agents_hc_phone)" == $'up\tno\t3' ]] || fail "gui false off macOS: $(_agents_hc_phone)"
+  _agents_hc_hello() { echo '{"result":{}}'; }
+  [[ "$(_agents_hc_phone)" == $'up\tunknown\t3' ]] || fail "gui not said: $(_agents_hc_phone)"
+) || exit 1
+: > "$FAKE/hc.calls"
+( _agents_hc_hello() { :; }
+  [[ -z "$(_agents_hc_phone)" ]] || fail "a core that did not say hello was guessed at" )
+printf '{"jsonrpc":"2.0","id":1,"result":{"terminals":"x"}}\n' > "$FAKE/list.json"
+[[ -z "$(_agents_hc_phone)" ]] || fail "a list that is not one was counted: $(_agents_hc_phone)"
+: > "$FAKE/hang.connect"; t0=$SECONDS
+[[ -z "$(_agents_hc_phone)" && $((SECONDS - t0)) -le $((_AGENTS_HC_WAIT + 2)) ]] || fail "a core that hangs held the status ($((SECONDS - t0)) s)"
+pass "the phone status: down without asking the core, headless on macOS, live mirrors counted, nothing when not installed, off, or unanswered"
+
+# --- the menu's cached record: one background check, never waited on ---
+reset; terms 't4|app|live|%1'
+( unset AGENTS_TESTING
+  rm -f "$AGENTS_RUN_DIR/hc-phone.cache"
+  [[ -z "$(_agents_hc_phone_rows)" ]] || fail "the first call waited for the check"
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+      [[ -s "$AGENTS_RUN_DIR/hc-phone.cache" ]] && break; sleep 0.2
+  done
+  [[ "$(_agents_hc_phone_rows)" == $'hc\tup\tyes\t1' ]] || fail "the cached record: $(_agents_hc_phone_rows)"
+  sleep 0.3; : > "$FAKE/hc.calls"
+  _agents_hc_phone_rows >/dev/null; sleep 0.5
+  [[ ! -s "$FAKE/hc.calls" ]] || fail "asked the core again within the TTL: $(calls hc)"
+  # An old cache is served while it is checked again.
+  printf '%s\n%s\n' "$(( $(date +%s) - 100 ))" $'up\tno\t9' > "$AGENTS_RUN_DIR/hc-phone.cache"
+  [[ "$(_agents_hc_phone_rows)" == $'hc\tup\tno\t9' ]] || fail "an old record was not served: $(_agents_hc_phone_rows)"
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+      [[ "$(sed -n 2p "$AGENTS_RUN_DIR/hc-phone.cache")" == $'up\tyes\t1' ]] && break; sleep 0.2
+  done
+  [[ "$(sed -n 2p "$AGENTS_RUN_DIR/hc-phone.cache")" == $'up\tyes\t1' ]] || fail "an old record was not checked again"
+  # Without herdr-core: nothing, and no check starts.
+  rm -f "$AGENTS_RUN_DIR/hc-phone.cache"
+  [[ -z "$(AGENTS_HC_BIN="$tmp/nope" _agents_hc_phone_rows)" ]]; sleep 0.5
+  [[ ! -e "$AGENTS_RUN_DIR/hc-phone.cache" ]] || fail "a check started without herdr-core"
+) || exit 1
+[[ -z "$(_agents_hc_phone_rows)" ]] || fail "the menu's record was built under AGENTS_TESTING"
+pass "the menu's record comes from a cache a background check rewrites each 30 s; nothing and no check without herdr-core"
+
 echo "All hcmirror tests passed"

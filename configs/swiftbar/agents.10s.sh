@@ -478,6 +478,9 @@ BAR_TITLE="triage awake" BAR_SECTIONS="needs review running parked limits today 
 # Herdr's health (hhealth rows) is maintenance, at the bottom: never in Needs
 # you, the tint or the title.
 herdr_stale="" herdr_vers="" herdr_outdated=""
+# herdr-core's phone status (the hc row): its own line in the footer, a warning
+# when the core runs outside the desktop login. Never the title or Needs you.
+hc_state="" hc_n=0
 # A newer tuidev release (the release row): maintenance too, not activity, so
 # it never changes the title, Needs you or the idle fast path.
 rel_have="" rel_new=""
@@ -791,6 +794,8 @@ while IFS=$'\t' read -r type pid kind age_s pcpu avg rss kids start ports user h
                           fi ;;
                 outdated) herdr_outdated="$kind" ;;
             esac ;;
+        hc)        # hc down|headless|core|up GUI MIRRORS: herdr-core's phone status
+            case "$pid" in down|headless|core|up) ! num "$age_s" || { hc_state="$pid"; hc_n="$age_s"; } ;; esac ;;
         release)   # release INSTALLED LATEST: both X.Y.Z, else the row is ignored
             if [[ "$pid" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$kind" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then rel_have="$pid" rel_new="$kind"; fi ;;
         stale)
@@ -2046,6 +2051,25 @@ for section in $REPLY; do
     printf '%s\n' "$OUT"
 done
 echo "---"
+# Herdr's phone app, from the hc row (nothing without herdr-core). A click
+# opens a command that only reports or starts the core; the restart that fixes
+# a core outside the desktop login is never run from here.
+case "$hc_state" in
+    core)
+        echo "Phone: herdr-core is up | size=12 sfimage=iphone $TINT_IDLE $TERM_OPEN param2=--hold param3=hc symbolize=false" ;;
+    up)
+        if [[ $hc_n -gt 0 ]]; then v="Phone: $hc_n agent"; [[ $hc_n -eq 1 ]] || v+="s"; v+=" mirrored"
+        else v="Phone: herdr-core is up, no agent panes"; fi
+        echo "$v | size=12 sfimage=iphone $TINT_IDLE $TERM_OPEN param2=--hold param3=hc param4=mirror symbolize=false" ;;
+    headless)
+        echo "Phone: herdr-core runs outside your desktop login | size=12 sfimage=exclamationmark.triangle $TINT_WARN $ROW symbolize=false"
+        echo "--Its agents cannot reach the Keychain (Claude Code says \"Not logged in\") | size=11"
+        echo "--At the Mac's own terminal, not over SSH: | size=11"
+        echo "--agents hc up --restart | $ROW sfimage=terminal symbolize=false"
+        echo "--It ends the core's terminals, so it is not run from here | size=11" ;;
+    down)
+        echo "Phone: herdr-core is not running | size=12 sfimage=iphone $TINT_IDLE $TERM_OPEN param2=--hold param3=hc param4=up symbolize=false" ;;
+esac
 # Maintenance first in the footer: small and gray, everything in its submenu.
 if [[ $n_maint -gt 0 ]]; then
     echo "Maintenance ($n_maint) | size=12 sfimage=wrench.and.screwdriver $TINT_IDLE $ROW"

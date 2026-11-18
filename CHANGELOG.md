@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Herdr's phone app shows in the palette and the menu bar.** With herdr-core installed, `tuidev` lists `Phone: status`, `Phone: mirrors` and `Phone: start an agent here`, and the menu has one line: that herdr-core is up or, with mirrors on, how many agents are mirrored or that herdr-core is not running (a click opens `agents hc up`). A core that runs outside your desktop login on a Mac is a warning that names `agents hc up --restart`, which the menu never runs. Neither starts a core to look: the menu asks a running one one local question in the background, at most every 30 s.
+
 ## [3.24.3] - 2026-11-18
 
 ### Fixed

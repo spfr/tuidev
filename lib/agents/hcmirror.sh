@@ -36,10 +36,12 @@
 #   hc-mirror.started/ (when each pane's mirror last started).
 # Uses: config.sh (AGENTS_HC_MIRROR, AGENTS_RUN_DIR), hc.sh (_agents_hc_bin,
 #   _agents_hc_running, _agents_hc_name, _agents_hc_pane_marked,
+#   _agents_hc_hello, _agents_hc_gui, _agents_hc_is_mac,
 #   _AGENTS_HC_WAIT, _AGENTS_HC_HERDR_WAIT), herdrlabel.sh (_agents_hl_herdr,
 #   _agents_hl_ready), util.sh (_agents_lock, _agents_unlock, _agents_timeout,
 #   _agents_now, _agents_stamp_age, _agents_replace).
-# Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_end.
+# Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_end,
+#   _agents_hc_phone_rows (the menu's record, tsv.sh).
 
 _AGENTS_HM_LABEL="tuidev_mirror"
 _AGENTS_HM_PANE_RE='^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$'
@@ -101,6 +103,73 @@ if (.result.terminals | type) != "array" then error("no list") else . end
 | [.address, .labels[$l], (.name // "")] | map(tostring | gsub("[\u0000-\u001f\u007f]"; " ")) | join("\u001f")'
 
 _agents_hm_on() { [[ "${AGENTS_HC_MIRROR:-0}" == 1 ]]; }
+# _agents_hc_phone — herdr-core's phone status as one line for the menu
+# (STATE, GUI and MIRRORS, tab-separated), or nothing:
+#   down      TAB -    TAB 0   installed, no core runs
+#   headless  TAB no   TAB 0   running outside the desktop login (macOS)
+#   core      TAB GUI  TAB 0   running, mirrors off (the default); GUI as below
+#   up        TAB GUI  TAB N   running, mirrors on; N live mirrors, GUI yes,
+#                              no or unknown
+# Nothing when herdr-core is not installed, when mirrors are off and no core
+# runs, and when the core did not answer in time (never a guess). While no
+# core runs it is file tests only, no call; a running one is asked `hello`
+# and, with mirrors on, `terminal.list`, each under _AGENTS_HC_WAIT.
+_agents_hc_phone() {
+    local hello gui have n
+    command -v jq >/dev/null 2>&1 && _agents_hc_bin || return 0
+    if ! _agents_hc_running; then
+        ! _agents_hm_on || printf 'down\t-\t0\n'
+        return 0
+    fi
+    hello="$(_agents_hc_hello)"
+    [[ -n "$hello" ]] || return 0
+    gui="$(_agents_hc_gui "$hello")"
+    if [[ "$gui" == false ]] && _agents_hc_is_mac; then
+        printf 'headless\tno\t0\n'
+        return 0
+    fi
+    case "$gui" in true) gui=yes ;; false) gui=no ;; *) gui=unknown ;; esac
+    if ! _agents_hm_on; then printf 'core\t%s\t0\n' "$gui"; return 0; fi
+    have="$(_agents_hm_have)" || return 0
+    n="$(printf '%s\n' "$have" | grep -c .)"
+    printf 'up\t%s\t%s\n' "$gui" "$n"
+}
+
+# _agents_hc_phone_rows — the menu's `hc STATE GUI MIRRORS` record, from a
+# cache in the run dir that a background check rewrites at most every
+# _AGENTS_HC_PHONE_TTL seconds (never waited on: the first refresh after it
+# has nothing, like _agents_herdr_health). Nothing without herdr-core
+# installed, so a machine without it starts nothing, and not under the test
+# harness (AGENTS_TESTING; a test unsets it).
+_AGENTS_HC_PHONE_TTL=30
+_agents_hc_phone_rows() {
+    [[ -z "${AGENTS_TESTING:-}" ]] || return 0
+    local cache="$AGENTS_RUN_DIR/hc-phone.cache" now age line=""
+    _agents_hc_bin || return 0
+    _agents_now now
+    _agents_stamp_age age "$cache" "$now"
+    if [[ -r "$cache" ]]; then
+        { read -r _; read -r line; } < "$cache" || true
+    fi
+    if [[ $age -ge $_AGENTS_HC_PHONE_TTL ]]; then
+        _agents_detach _agents_hc_phone_refresh
+    fi
+    [[ -z "$line" ]] || printf 'hc\t%s\n' "$line"
+    return 0
+}
+
+# Rewrite the cache (one check at a time). Its stamp is written even when the
+# core did not answer, so one that hangs is asked once per TTL, not per refresh.
+_agents_hc_phone_refresh() {
+    local lock="$AGENTS_RUN_DIR/hc-phone.lock" out
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 0
+    _agents_lock "$lock" || return 0
+    out="$(_agents_hc_phone)"
+    _agents_replace "$AGENTS_RUN_DIR/hc-phone.cache" "$(date +%s)${out:+$'\n'$out}" || true
+    _agents_unlock "$lock"
+    return 0
+}
+
 _agents_hm_ready() {
     _agents_hm_on || return 1
     _agents_hl_ready || return 1

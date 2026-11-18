@@ -3,7 +3,7 @@
 # (configs/swiftbar/agents.10s.sh) reads every refresh.
 #
 # Uses: config.sh, util.sh (_agents_bg), snapshot.sh (agents_collect,
-#   _agents_herdr_health),
+#   _agents_herdr_health), hcmirror.sh (_agents_hc_phone_rows),
 #   assess.sh (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
 #   (_agents_hist_line), report.sh (_agents_insight_line,
 #   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv), cool.sh
@@ -25,6 +25,8 @@
 #   hist state today_cpu_s top_job top_job_cpu_s  (_agents_hist_line)
 #   insight view text  today's top insight, while current (_agents_insight_line)
 #   tokens total cache_pct  today's tokens and cache hit %, from tokens.today
+#   hc state gui mirrors  herdr-core's phone status: down, headless or up
+#     (_agents_hc_phone_rows; nothing without herdr-core)
 #   waitsum blocked_s fresh_s parked_s  today's waits by class (triage.sh)
 #   limit name window pct resets cli age  each CLI limit window not reset yet
 #     (limits.tsv: _agents_limits_lines), each followed by its
@@ -85,6 +87,9 @@ agents_tsv() {
     # title came with the records ("herdr PID PANE TITLE", agents_enrich), and
     # so did each agent row's join key ("ident PID PANE SESSION").
     _agents_herdr_health
+    # "hc STATE GUI MIRRORS": herdr-core's phone status (hcmirror.sh), from a
+    # cache a background check rewrites; nothing without herdr-core.
+    _agents_hc_phone_rows
     # "release INSTALLED LATEST" while a newer tuidev is out (release.sh).
     _agents_release_row
     # The machines board, as the menu last loaded it (map.sh).
