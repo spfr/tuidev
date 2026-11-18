@@ -172,11 +172,13 @@ _agents_hm_off_write() {
 
 # _agents_hm_off_prune SNAP — drop each opted-out pane that SNAP (Herdr's
 # answer, one that parsed) has no more. Nothing without the file, or when
-# the snapshot has no list of panes.
+# the snapshot has no list of panes or an empty one.
 _agents_hm_off_prune() {
     local ids keep=$'\n' p
     [[ -f "$AGENTS_RUN_DIR/hc-mirror.off" ]] || return 0
     ids="$(_agents_hm_ids_of "$1")" || return 0
+    # A Herdr that names no pane at all (starting, restoring) proves nothing.
+    [[ -n "$ids" ]] || return 0
     ids=$'\n'"$ids"$'\n'
     _agents_hm_off_read
     while IFS= read -r p; do

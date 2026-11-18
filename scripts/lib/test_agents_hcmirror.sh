@@ -735,6 +735,10 @@ agents_hc_mirror_sync -q
 reset; snap "p7|claude|idle|$tmp/proj-a"; printf 'p1\n' > "$OFF"
 agents_hc_mirror_sync -q
 [[ ! -e "$OFF" && "$(runs)" == *"_mirror p7 "* ]] || fail "the last stale entry: the file stays: $(cat "$OFF" 2>/dev/null)"
+# A Herdr that names no pane at all (starting up) drops nothing.
+reset; printf '{"result":{"snapshot":{"layouts":[],"panes":[]}}}\n' > "$FAKE/snap.json"; printf 'p1\np2\n' > "$OFF"
+agents_hc_mirror_sync -q
+[[ "$(cat "$OFF" 2>/dev/null)" == $'p1\np2' ]] || fail "a snapshot with no panes dropped the list: $(cat "$OFF" 2>/dev/null)"
 pass "a sync drops the opted-out panes Herdr no longer has (not with -n, not on a bad snapshot); a pane with no agent keeps its entry"
 
 # --- what the phone reaches: agents hc ls ---

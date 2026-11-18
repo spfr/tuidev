@@ -515,7 +515,7 @@ _tuidev_palette_rows() {
         _tuidev_row "Herdr" "every agent on this machine and saved ones" 0 "herdr"
     fi
     if _tuidev_phone; then
-        _tuidev_row "Phone: status" "is herdr-core running, and what the phone can reach here" 1 "agents hc && agents hc ls"
+        _tuidev_row "Phone: status" "is herdr-core running, and what the phone can reach here" 1 "agents hc; agents hc ls"
         _tuidev_row "Phone: mirrors" "experimental (AGENTS_HC_MIRROR=1): each agent pane and its mirror" 1 "agents hc mirror"
         _tuidev_row "Phone: start an agent here" "hosted in herdr-core, listed in Herdr's phone app" 0 "agents hc run claude"
     fi

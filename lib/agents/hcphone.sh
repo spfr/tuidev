@@ -231,7 +231,8 @@ agents_hc_ls() {
         [[ -n "$p" ]] || continue
         n_agents=$((n_agents + 1))
         [[ "$mirrored" != *$'\n'"$p"$'\n'* ]] || continue
-        [[ $'\n'"$hosted" != *$'\n'"$p"$'\x1f'* ]] || continue
+        # The mark itself: one the release before wrote names no terminal.
+        ! _agents_hc_pane_marked "$p" || continue
         if _agents_hm_is_off "$p" "$off"; then n_off=$((n_off + 1))
         elif ! _agents_hm_on; then n_disabled=$((n_disabled + 1))
         else n_yet=$((n_yet + 1)); fi

@@ -130,7 +130,10 @@ _agents_hc_unix_table() {
 # runs no stdin, so the request is written from inside the timed function.
 _agents_hc_hello() { _agents_timeout "$_AGENTS_HC_WAIT" _agents_hc_ask_hello; }
 _agents_hc_ask_hello() {
-    printf '%s\n' "$_AGENTS_HC_HELLO" | "$_AGENTS_HC_BIN" connect 2>/dev/null | head -n 1
+    # Without the pane's identity: a client starts a core when the one that
+    # ran is gone by now, and that core must not carry it (_agents_hc_start).
+    printf '%s\n' "$_AGENTS_HC_HELLO" | env -u HERDR_ENV -u HERDR_PANE_ID -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID \
+        -u HERDR_SOCKET_PATH -u HERDR_BIN_PATH "$_AGENTS_HC_BIN" connect 2>/dev/null | head -n 1
 }
 
 # _agents_hc_start — start a core. Without the Herdr pane's identity when we
