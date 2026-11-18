@@ -616,4 +616,75 @@ nosys="$({ printf 'local\tsys\tok\n'; printf 'quiet\tses\t%s\trun\t5\tx\tcodex\t
 has "$nosys" "quiet${T}mach" || fail "a machine with no sys line is listed: $nosys"
 pass "machines: one that sent a session but no summary still appears"
 
+# ---------------------------------------------------------------------------
+# 14. The phone: which sessions Herdr's phone app reaches (hcphone.sh's feed:
+#     "phonecore" while herdr-core is installed, the cache's phone lines, the
+#     opted-out panes), a mark in the list and a line on the card.
+# ---------------------------------------------------------------------------
+recs() {
+    printf 'triage\t1\tneed\t240\tpermission\n'
+    printf 'agent\t1\tclaude\t3000\t1.0\t1.0\t100\t2\tMon_Jan_01_00:00:01_2026\t-\tme\tblocked\t/w/myapp\tclaude\tmyapp\n'
+    printf 'agent\t2\tcodex\t900\t1.0\t1.0\t100\t1\tMon_Jan_01_00:00:02_2026\t-\tme\tworking\t/w/api\tcodex\tapi\n'
+    printf 'agent\t3\tclaude\t900\t1.0\t1.0\t100\t1\tMon_Jan_01_00:00:03_2026\t-\tme\tidle\t/w/notes\tclaude\tnotes\n'
+    printf 'herdr\t1\tw1:p1\tFix flaky cache test\n'
+    printf 'herdr\t2\tw1:p2\t-\n'
+}
+brows() { { printf '%s\n' "$@"; recs; } | _agents_awk "lib_fmt board_rows" -F '\t' -v sys=x -v warn_kib=0; }
+plain="$(brows)"
+[[ "$plain" != *phone* ]] || fail "no herdr-core: no phone rows: $plain"
+[[ "$(brows "phone${T}w1:p1${T}mirror${T}fix-flaky" "phoneoff${T}w1:p2")" == "$plain" ]] || fail "phone lines without phonecore changed the rows"
+out="$(brows phonecore "phone${T}w1:p1${T}mirror${T}fix-flaky")"
+[[ "$(printf '%s\n' "$out" | grep -A1 "^ses${T}$A")" == "ses${T}$A${T}"*$'\n'"phone${T}$A${T}mirror${T}fix-flaky${T}w1:p1" ]] \
+    || fail "a mirrored session's phone row, right after it: $out"
+has "$out" "phone${T}$B${T}none${T}-${T}w1:p2" || fail "a session in a pane the phone does not reach: $out"
+has "$out" "phone${T}$C" && fail "a session in no Herdr pane got a phone row: $out"
+[[ "$(printf '%s\n' "$out" | grep -v '^phone')" == "$plain" ]] || fail "the phone rows changed the other rows"
+out="$(brows phonecore "phone${T}w1:p1${T}mirror${T}fix-flaky" "phoneoff${T}w1:p1" "phone${T}w1:p2${T}hosted${T}api" "phoneoff${T}w1:p2")"
+{ has "$out" "phone${T}$A${T}off${T}-${T}w1:p1" && has "$out" "phone${T}$B${T}hosted${T}api${T}w1:p2"; } \
+    || fail "an opted-out pane's mirror is ending, a hosted agent is reached whatever the opt-out: $out"
+pass "rows: with herdr-core, each session in a Herdr pane has a phone row (hosted, mirror, off or none); without it, the rows are as they were"
+
+# pview MODE ROW… — the fixture with ROWs added, in MODE; pcard MACHINE ID ROW… — a card.
+pfix() { fixture; printf '%s\n' "$@"; }
+pview() { local mode="$1"; shift; pfix "$@" | _agents_board_view "$mode" -v lens=attention -v W=110; }
+pcard() { local m="$1" id="$2"; shift 2; pfix "$@" | _agents_board_view card -v cm="$m" -v cid="$id"; }
+base_list="$(view list -v lens=attention -v W=110)"
+[[ "$(pview list "local${T}phone${T}$A${T}none${T}-${T}w1:p1" "local${T}phone${T}$B${T}off${T}-${T}w1:p2")" == "$base_list" ]] \
+    || fail "nothing reachable: the list is as it was"
+list="$(pview list "local${T}phone${T}$A${T}mirror${T}fix-flaky${T}w1:p1" "local${T}phone${T}$B${T}none${T}-${T}w1:p2")"
+ra="$(printf '%s\n' "$list" | awk -F '\t' -v id="$A" '$3 == id { print $5 }')"
+rb="$(printf '%s\n' "$list" | awk -F '\t' -v id="$B" '$3 == id { print $5 }')"
+has "$ra" " @ Fix flaky cache test" || fail "a mirrored session's mark (ASCII here): $ra"
+has "$rb" "@" && fail "a session the phone does not reach has the mark: $rb"
+pa="${ra%%Fix flaky*}" pb="${rb%%api*}"
+[[ ${#pa} -eq ${#pb} ]] || fail "the mark's column keeps the names in line: '$pa' / '$pb'"
+[[ "$(printf '%s\n' "$list" | cut -f1-4)" == "$(printf '%s\n' "$base_list" | cut -f1-4)" ]] || fail "the mark changed which rows there are"
+ra="$(AGENTS_GLYPHS="phone=P" pview list "local${T}phone${T}$A${T}hosted${T}api${T}w1:p1" | awk -F '\t' -v id="$A" '$3 == id { print $5 }')"
+has "$ra" " P Fix flaky cache test" || fail "AGENTS_GLYPHS names the phone's mark: $ra"
+card="$(pcard local "$A" "local${T}phone${T}$A${T}mirror${T}fix-flaky${T}w1:p1")"
+has "$card" "on the phone: mirrored as fix-flaky" || fail "a mirrored session's card: $card"
+card="$(pcard local "$A" "local${T}phone${T}$A${T}hosted${T}api${T}w1:p1")"
+has "$card" "on the phone: hosted in herdr-core as api" || fail "a hosted session's card: $card"
+card="$(pcard local "$A" "local${T}phone${T}$A${T}off${T}-${T}w1:p1")"
+{ has "$card" "not on the phone: its pane is opted out of mirrors" && ! has "$card" "@"; } || fail "an opted-out session's card: $card"
+has "$(pcard local "$A" "local${T}phone${T}$A${T}none${T}-${T}w1:p1")" "phone" && fail "a card says nothing of a phone that does not reach it"
+# What another machine sends is checked: a kind of ours, a name of an id's
+# shape, a session it sent.
+card="$(pcard devbox "$D" "devbox${T}phone${T}$D${T}hosted${T}"$'\033]0;x\007'"${T}p1")"
+{ has "$card" "on the phone: hosted in herdr-core" && ! has "$card" " as " && ! has "$card" $'\033'; } || fail "a name that is no id: $card"
+list="$(pview list "devbox${T}phone${T}$D${T}evil${T}x${T}p1" "devbox${T}phone${T}9@x${T}mirror${T}x${T}p1" "local${T}phone${T}$A${T}hosted")"
+[[ "$list" == "$(pview list "local${T}phone${T}$A${T}hosted")" ]] || fail "rows that are not phone rows of ours were taken"
+has "$(printf '%s\n' "$list" | awk -F '\t' -v id="$D" '$3 == id { print $5 }')" "@" && fail "an unknown kind marked a session"
+pass "view: the mark in a column only while a listed session is reachable, a line on the card; a remote machine's phone rows are checked"
+
+AGENTS_BOARD_UI="$tmp/pui"
+pfix "local${T}phone${T}$A${T}mirror${T}fix-flaky${T}w1:p1" "local${T}phone${T}$B${T}off${T}-${T}w1:p2" \
+     "devbox${T}phone${T}$D${T}none${T}-${T}w9:p9" "local${T}phone${T}$C${T}none${T}-${T}bad;id" > "$tmp/pui.rows"
+_agents_board_phone "$A" && [[ "$REPLY" == "mirror w1:p1" ]] || fail "the palette's pane of a mirrored session: $REPLY"
+_agents_board_phone "$B" && [[ "$REPLY" == "off w1:p2" ]] || fail "the palette's pane of an opted-out session: $REPLY"
+_agents_board_phone "$D" && fail "another machine's pane was taken for this one's"
+_agents_board_phone "$C" && fail "a pane id that is none was taken"
+unset AGENTS_BOARD_UI
+pass "the palette finds a session's pane from its board's phone rows, only this machine's and only an id"
+
 echo "ALL PASS"

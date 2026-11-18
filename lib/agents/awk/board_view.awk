@@ -21,6 +21,9 @@
 #   mach   a machine's (-v cm=)
 # -v glyphs= the kinds' marks (glyph.sh). ENVIRON: the colors (B DIM NEED DONE
 # RUN WARN ACC N), AGENTS_ASCII. Needs lib_fmt and lib_maprows.
+# A session Herdr's phone app reaches (its phone row: hosted or mirror) has
+# the phone's mark in its line, in a column there only while one listed does,
+# and a line on its card; with none, the list is as it was without them.
 
 function okstate(s) { return s == "need" || s == "review" || s == "run" || s == "parked" || s == "unknown" }
 function oknum(s) { return s ~ /^[0-9]+$/ && length(s) <= 10 }
@@ -47,6 +50,15 @@ function doing(i,   l) {
     return l
 }
 function since(i) { return sage[i] == "-" ? "" : age(sage[i] + 0) }
+# Herdr's phone app reaches it: hosted in herdr-core, or a mirror of its pane.
+function reach(i) { return sph[i] == "hosted" || sph[i] == "mirror" }
+# What its card says about the phone; "" when there is nothing to say.
+function phone_line(i) {
+    if (sph[i] == "hosted") return ACC pmark N " on the phone: hosted in herdr-core" (sphn[i] == "-" ? "" : " as " sphn[i])
+    if (sph[i] == "mirror") return ACC pmark N " on the phone: mirrored" (sphn[i] == "-" ? "" : " as " sphn[i])
+    if (sph[i] == "off") return DIM "not on the phone: its pane is opted out of mirrors (agents hc mirror on)" N
+    return ""
+}
 function counts(i,   o) {
     o = ""
     if (nsubs[i]) o = "+" nsubs[i] " sub"
@@ -65,7 +77,8 @@ function srow(i,   s, nc, dc, o) {
     s = sst[i]
     nc = s == "need" ? B : (s == "parked" ? DIM : "")
     dc = s == "need" ? NEED : (s == "review" ? DONE : DIM)
-    o = " " scolor(s) gl(s) N "  " (gon ? DIM lc(kmark(skind[i]), gwid) N " " : "") nc lc(dcut(sname(i), NW), NW) N \
+    o = " " scolor(s) gl(s) N "  " (gon ? DIM lc(kmark(skind[i]), gwid) N " " : "") \
+        (PH ? (reach(i) ? ACC pmark N : lc("", pwid)) " " : "") nc lc(dcut(sname(i), NW), NW) N \
         "  " dc lc(dcut(doing(i), DW), DW) N "  " DIM rc(since(i), 5)
     if (multi && lens != "machines") o = o "  " lc(dcut(sm[i], MW), MW)
     if (EW) o = o "  " counts(i)
@@ -160,7 +173,10 @@ BEGIN {
     for (i = 1; i <= n; i++) if ((k = index(gw[i], "=")) > 1) { gmap[substr(gw[i], 1, k - 1)] = substr(gw[i], k + 1); gon = 1 }
     gwid = 1
     MAXSES = 200    # sessions one machine may have on the board
-    for (k in gmap) if (dw(gmap[k]) > gwid) gwid = dw(gmap[k])
+    for (k in gmap) if (k != "phone" && dw(gmap[k]) > gwid) gwid = dw(gmap[k])
+    # The phone's mark: AGENTS_GLYPHS can name one (phone=P), as for a kind.
+    pmark = ("phone" in gmap) ? gmap["phone"] : gl("phone")
+    pwid = dw(pmark)
 }
 { $1 = txt($1, 64) }
 $1 == "" { next }
@@ -190,6 +206,13 @@ $2 == "kid" {
     else if ($6 == "run") nsubs[i]++
     next
 }
+$2 == "phone" {
+    if (!(($1, $3) in idx) || ($4 != "hosted" && $4 != "mirror" && $4 != "off" && $4 != "none")) next
+    i = idx[$1, $3]
+    sph[i] = $4
+    sphn[i] = ($5 ~ /^[A-Za-z0-9][A-Za-z0-9:._\/-]*$/ && length($5) <= 64) ? $5 : "-"
+    next
+}
 $2 == "warn" { seen($1); if (nw < 20) { nw++; wm[nw] = $1; wt[nw] = txt($3, 120) } next }
 END {
     multi = (nm > 1)
@@ -197,6 +220,7 @@ END {
         i = find(cm, cid)
         if (!i) { printf "\n %sIt is gone: the session ended.%s\n", DIM, N; exit }
         printf "\n %s%s%s\n %s%s %s %s%s%s\n\n %s\n", B, sname(i), N, DIM, sproj[i], gl("dot"), skind[i], (multi ? " " gl("dot") " " sm[i] : ""), N, state_line(i)
+        if ((pl = phone_line(i)) != "") printf " %s\n", pl
         under(i)
         exit
     }
@@ -236,8 +260,9 @@ END {
     if (W + 0 < 40) W = 80
     # What a session does and its name are as wide as the widest listed, so
     # no column stands apart from the next.
-    DW = 4; MW = 0; KW = 30; NM = 8; EW = 0
+    DW = 4; MW = 0; KW = 30; NM = 8; EW = 0; PH = 0
     for (i = 1; i <= ns; i++) if (all || sst[i] != "parked") {
+        if (reach(i)) PH = 1
         if (dw(doing(i)) > DW) DW = dw(doing(i))
         if (dw(sname(i)) > NM) NM = dw(sname(i))
         if (multi && length(sm[i]) > MW) MW = length(sm[i])
@@ -247,8 +272,8 @@ END {
     if (MW > 12) MW = 12
     # The count of what runs under a session goes first when the list is
     # narrow: a name is never cut for it.
-    if (EW && W - (4 + (gon ? gwid + 1 : 0) + 2 + DW + 2 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + EW + 2) - 2 < (NM < 20 ? NM : 20)) EW = 0
-    NW = W - (4 + (gon ? gwid + 1 : 0) + 2 + DW + 2 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + (EW ? EW + 2 : 0)) - 2
+    if (EW && W - (4 + (gon ? gwid + 1 : 0) + (PH ? pwid + 1 : 0) + 2 + DW + 2 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + EW + 2) - 2 < (NM < 20 ? NM : 20)) EW = 0
+    NW = W - (4 + (gon ? gwid + 1 : 0) + (PH ? pwid + 1 : 0) + 2 + DW + 2 + 5 + (multi && lens != "machines" ? MW + 2 : 0) + (EW ? EW + 2 : 0)) - 2
     if (NW > 60) NW = 60
     if (NW > NM) NW = NM
     if (NW < 8) NW = 8

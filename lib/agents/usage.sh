@@ -183,6 +183,11 @@ FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herd
                                already runs (in the desktop login, on macOS); else
                                runs CMD as typed
   agents hc attach TERMINAL    back onto one (herdr-core ls names them)
+  agents hc ls                 what the phone lists from this machine: each core
+                               terminal (hosted or a mirror, its state, its
+                               directory), then how many agent panes of this
+                               machine's Herdr it cannot reach, and why. Never
+                               starts a core
   agents hc mirror [status]    experimental, off unless AGENTS_HC_MIRROR=1: each agent
                                pane of this machine's Herdr and its mirror in
                                herdr-core, a core terminal attached to the pane, so
@@ -193,6 +198,10 @@ FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herd
                                those whose pane has no agent left. Herdr's events run
                                it (with agents herdr sync) while herdr-core is up
   agents hc mirror end         end every mirror; the agents stay in their panes
+  agents hc mirror off [PANE]  no mirror for this pane (or PANE) from now on: its
+                               mirror ends, and syncs leave it out until on, or
+                               until the pane is gone
+  agents hc mirror on [PANE]   mirror it again
 
 HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
   agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]

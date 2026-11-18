@@ -24,24 +24,28 @@
 # it the desk's size back when you type there.
 #
 # Not mirrored: a pane that is itself on a core-hosted agent (`agents hc run`:
-# hc.sh marks it), and anything while no core runs. A sync asks a core only
-# after it found one running, but a core that stops between that look and
-# the question is started again by it (every herdr-core client command
-# starts one). Every call to the core or to Herdr has a time limit: the sync
-# holds a lock, and one that hangs must not hold every later one. An answer
-# that is not one (a list or a snapshot that did not come, or does not
-# parse) changes nothing: read as "no mirrors" it would start them all again.
+# hc.sh marks it), a pane you opted out (`agents hc mirror off [PANE]`, until
+# `on` or until the pane is gone), and anything while no core runs. A sync
+# asks a core only after it found one running, but a core that stops between
+# that look and the question is started again by it (every herdr-core client
+# command starts one). Every call to the core or to Herdr has a time limit:
+# the sync holds a lock, and one that hangs must not hold every later one. An
+# answer that is not one (a list or a snapshot that did not come, or does
+# not parse) changes nothing: read as "no mirrors" it would start them all
+# again.
 #
-# Owns: `agents hc mirror` (status, sync), `agents hc _mirror`, hc-mirror.lock,
-#   hc-mirror.started/ (when each pane's mirror last started).
+# Owns: `agents hc mirror` (status, sync, end, off, on), `agents hc _mirror`,
+#   hc-mirror.lock, hc-mirror.started/ (when each pane's mirror last
+#   started), hc-mirror.off (the opted-out panes).
 # Uses: config.sh (AGENTS_HC_MIRROR, AGENTS_RUN_DIR), hc.sh (_agents_hc_bin,
 #   _agents_hc_running, _agents_hc_name, _agents_hc_pane_marked,
-#   _agents_hc_hello, _agents_hc_gui, _agents_hc_is_mac,
 #   _AGENTS_HC_WAIT, _AGENTS_HC_HERDR_WAIT), herdrlabel.sh (_agents_hl_herdr,
 #   _agents_hl_ready), util.sh (_agents_lock, _agents_unlock, _agents_timeout,
 #   _agents_now, _agents_stamp_age, _agents_replace).
 # Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_end,
-#   _agents_hc_phone_rows (the menu's record, tsv.sh).
+#   agents_hc_mirror_off, agents_hc_mirror_on, and for hcphone.sh
+#   _agents_hm_on, _agents_hm_list, _agents_hm_have_of, _agents_hm_want,
+#   _agents_hm_off_read, _agents_hm_is_off.
 
 _AGENTS_HM_LABEL="tuidev_mirror"
 _AGENTS_HM_PANE_RE='^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$'
@@ -63,23 +67,42 @@ _AGENTS_HM_PANES_JQ='
 | map(tostring | gsub("[\u0000-\u001f\u007f]"; " ")) | join("\u001f")'
 
 # _agents_hm_want — the agent panes, as above; false when Herdr did not
-# answer in time or the answer has no panes.
+# answer in time or the answer has no panes. _agents_hm_snap is Herdr's
+# answer itself, and _agents_hm_want_of SNAP the panes in it.
 _agents_hm_want() {
     local snap
+    snap="$(_agents_hm_snap)" || return 1
+    _agents_hm_want_of "$snap"
+}
+_agents_hm_snap() {
+    local snap
     snap="$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr api snapshot 2>/dev/null)" && [[ -n "$snap" ]] || return 1
-    printf '%s' "$snap" | jq -r "$_AGENTS_HM_PANES_JQ" 2>/dev/null
+    printf '%s\n' "$snap"
+}
+_agents_hm_want_of() { printf '%s' "$1" | jq -r "$_AGENTS_HM_PANES_JQ" 2>/dev/null; }
+# _agents_hm_ids_of SNAP — every pane of the snapshot, an agent in it or not.
+_agents_hm_ids_of() {
+    printf '%s' "$1" | jq -r '.result.snapshot.panes | if type == "array" then .[] | objects | .pane_id // empty | tostring else error("no panes") end' 2>/dev/null
 }
 
 # _agents_hm_have — the live mirrors among the core's terminals: ADDRESS,
 # PANE and NAME. From the API's terminal.list: `herdr-core ls` leaves the
 # labels out. False unless the core gave the answer in time: the response
 # to our id (a notification may come first), with a list of terminals.
+# _agents_hm_list is that answer, one line of JSON (hcphone.sh reads it
+# too), and _agents_hm_have_of LIST the mirrors in it.
 _AGENTS_HM_LIST='{"jsonrpc":"2.0","id":1,"method":"terminal.list","params":{}}'
 _agents_hm_have() {
     local out
-    out="$(_agents_timeout "$_AGENTS_HC_WAIT" _agents_hm_ask_list)" && [[ -n "$out" ]] || return 1
-    printf '%s\n' "$out" | jq -r --arg l "$_AGENTS_HM_LABEL" "$_AGENTS_HM_HAVE_JQ" 2>/dev/null
+    out="$(_agents_hm_list)" || return 1
+    _agents_hm_have_of "$out"
 }
+_agents_hm_list() {
+    local out
+    out="$(_agents_timeout "$_AGENTS_HC_WAIT" _agents_hm_ask_list)" && [[ -n "$out" ]] || return 1
+    printf '%s\n' "$out"
+}
+_agents_hm_have_of() { printf '%s\n' "$1" | jq -r --arg l "$_AGENTS_HM_LABEL" "$_AGENTS_HM_HAVE_JQ" 2>/dev/null; }
 # _agents_hm_core ARGS — a herdr-core client call without the Herdr identity of
 # whoever runs the sync (a Herdr hook, a pane): a client call starts a core
 # when none runs, and that core must not hand a pane's identity to the
@@ -103,73 +126,6 @@ if (.result.terminals | type) != "array" then error("no list") else . end
 | [.address, .labels[$l], (.name // "")] | map(tostring | gsub("[\u0000-\u001f\u007f]"; " ")) | join("\u001f")'
 
 _agents_hm_on() { [[ "${AGENTS_HC_MIRROR:-0}" == 1 ]]; }
-# _agents_hc_phone — herdr-core's phone status as one line for the menu
-# (STATE, GUI and MIRRORS, tab-separated), or nothing:
-#   down      TAB -    TAB 0   installed, no core runs
-#   headless  TAB no   TAB 0   running outside the desktop login (macOS)
-#   core      TAB GUI  TAB 0   running, mirrors off (the default); GUI as below
-#   up        TAB GUI  TAB N   running, mirrors on; N live mirrors, GUI yes,
-#                              no or unknown
-# Nothing when herdr-core is not installed, when mirrors are off and no core
-# runs, and when the core did not answer in time (never a guess). While no
-# core runs it is file tests only, no call; a running one is asked `hello`
-# and, with mirrors on, `terminal.list`, each under _AGENTS_HC_WAIT.
-_agents_hc_phone() {
-    local hello gui have n
-    command -v jq >/dev/null 2>&1 && _agents_hc_bin || return 0
-    if ! _agents_hc_running; then
-        ! _agents_hm_on || printf 'down\t-\t0\n'
-        return 0
-    fi
-    hello="$(_agents_hc_hello)"
-    [[ -n "$hello" ]] || return 0
-    gui="$(_agents_hc_gui "$hello")"
-    if [[ "$gui" == false ]] && _agents_hc_is_mac; then
-        printf 'headless\tno\t0\n'
-        return 0
-    fi
-    case "$gui" in true) gui=yes ;; false) gui=no ;; *) gui=unknown ;; esac
-    if ! _agents_hm_on; then printf 'core\t%s\t0\n' "$gui"; return 0; fi
-    have="$(_agents_hm_have)" || return 0
-    n="$(printf '%s\n' "$have" | grep -c .)"
-    printf 'up\t%s\t%s\n' "$gui" "$n"
-}
-
-# _agents_hc_phone_rows — the menu's `hc STATE GUI MIRRORS` record, from a
-# cache in the run dir that a background check rewrites at most every
-# _AGENTS_HC_PHONE_TTL seconds (never waited on: the first refresh after it
-# has nothing, like _agents_herdr_health). Nothing without herdr-core
-# installed, so a machine without it starts nothing, and not under the test
-# harness (AGENTS_TESTING; a test unsets it).
-_AGENTS_HC_PHONE_TTL=30
-_agents_hc_phone_rows() {
-    [[ -z "${AGENTS_TESTING:-}" ]] || return 0
-    local cache="$AGENTS_RUN_DIR/hc-phone.cache" now age line=""
-    _agents_hc_bin || return 0
-    _agents_now now
-    _agents_stamp_age age "$cache" "$now"
-    if [[ -r "$cache" ]]; then
-        { read -r _; read -r line; } < "$cache" || true
-    fi
-    if [[ $age -ge $_AGENTS_HC_PHONE_TTL ]]; then
-        _agents_detach _agents_hc_phone_refresh
-    fi
-    [[ -z "$line" ]] || printf 'hc\t%s\n' "$line"
-    return 0
-}
-
-# Rewrite the cache (one check at a time). Its stamp is written even when the
-# core did not answer, so one that hangs is asked once per TTL, not per refresh.
-_agents_hc_phone_refresh() {
-    local lock="$AGENTS_RUN_DIR/hc-phone.lock" out
-    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null || return 0
-    _agents_lock "$lock" || return 0
-    out="$(_agents_hc_phone)"
-    _agents_replace "$AGENTS_RUN_DIR/hc-phone.cache" "$(date +%s)${out:+$'\n'$out}" || true
-    _agents_unlock "$lock"
-    return 0
-}
-
 _agents_hm_ready() {
     _agents_hm_on || return 1
     _agents_hl_ready || return 1
@@ -182,6 +138,52 @@ _agents_hm_why_not() {
     elif ! _agents_hl_ready; then echo "this machine's Herdr is not reachable"
     elif ! _agents_hc_bin; then echo "herdr-core is not installed"
     else echo "herdr-core is not running (agents hc up)"; fi
+}
+
+# The panes opted out of mirrors (`agents hc mirror off`): hc-mirror.off in
+# the run dir, a pane id a line. Not with the settings: a pane id names a
+# pane of the Herdr server that runs now, and the panes of a restarted Herdr
+# are new ones, so a sync drops the id of a pane its snapshot no longer has
+# (_agents_hm_off_prune). Changed only under the sync's lock.
+
+# _agents_hm_off_read — REPLY: the opted-out panes, each between newlines
+# ("\np1\np2\n", "\n" for none). Read by bash: no fork.
+_agents_hm_off_read() {
+    local f line out=$'\n'
+    f="$AGENTS_RUN_DIR/hc-mirror.off"
+    if [[ -r "$f" ]]; then
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ ! "$line" =~ $_AGENTS_HM_PANE_RE || "$out" == *$'\n'"$line"$'\n'* ]] || out+="$line"$'\n'
+        done < "$f"
+    fi
+    REPLY="$out"
+}
+
+# _agents_hm_is_off PANE LIST — PANE is in LIST (_agents_hm_off_read's).
+_agents_hm_is_off() { [[ "$2" == *$'\n'"$1"$'\n'* ]]; }
+
+# _agents_hm_off_write LIST — hc-mirror.off holds LIST; gone when it is empty.
+_agents_hm_off_write() {
+    local f l="${1#$'\n'}"
+    f="$AGENTS_RUN_DIR/hc-mirror.off"
+    if [[ -z "${l//$'\n'/}" ]]; then rm -f "$f"; return 0; fi
+    _agents_replace "$f" "${l%$'\n'}"
+}
+
+# _agents_hm_off_prune SNAP — drop each opted-out pane that SNAP (Herdr's
+# answer, one that parsed) has no more. Nothing without the file, or when
+# the snapshot has no list of panes.
+_agents_hm_off_prune() {
+    local ids keep=$'\n' p
+    [[ -f "$AGENTS_RUN_DIR/hc-mirror.off" ]] || return 0
+    ids="$(_agents_hm_ids_of "$1")" || return 0
+    ids=$'\n'"$ids"$'\n'
+    _agents_hm_off_read
+    while IFS= read -r p; do
+        [[ -n "$p" ]] || continue
+        [[ "$ids" != *$'\n'"$p"$'\n'* ]] || keep+="$p"$'\n'
+    done <<<"$REPLY"
+    [[ "$keep" == "$REPLY" ]] || _agents_hm_off_write "$keep"
 }
 
 # When each pane's mirror last started: a file per pane, its name the pane
@@ -260,8 +262,8 @@ _agents_hm_start() {
 # too, or the next one's), or when Herdr or the core did not answer. Once
 # the core has not answered one call, it is not asked again this time.
 agents_hc_mirror_sync() {
-    local quiet=false dry=false a lock="$AGENTS_RUN_DIR/hc-mirror.lock" want have started=0 ended=0 waiting=0
-    local pane cols rows agent state cwd title addr name seen="" panes dir f now age rc hung=false
+    local quiet=false dry=false a lock="$AGENTS_RUN_DIR/hc-mirror.lock" snap want have started=0 ended=0 waiting=0
+    local pane cols rows agent state cwd title addr name seen="" panes dir f now age rc hung=false off nooff=0
     for a in "$@"; do
         case "$a" in
             -q|--quiet)   quiet=true ;;
@@ -279,11 +281,13 @@ agents_hc_mirror_sync() {
     fi
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
     _agents_lock "$lock" 10 0.2 || return 0
-    if ! want="$(_agents_hm_want)"; then
+    if ! snap="$(_agents_hm_snap)" || ! want="$(_agents_hm_want_of "$snap")"; then
         _agents_unlock "$lock"
         [[ "$quiet" == true ]] || echo "agents hc mirror: Herdr did not answer; nothing changed" >&2
         return 0
     fi
+    [[ "$dry" == true ]] || _agents_hm_off_prune "$snap"
+    _agents_hm_off_read; off="$REPLY"
     if ! have="$(_agents_hm_have)"; then
         _agents_unlock "$lock"
         [[ "$quiet" == true ]] || echo "agents hc mirror: herdr-core did not answer; nothing changed" >&2
@@ -292,10 +296,11 @@ agents_hc_mirror_sync() {
     panes="$(printf '%s\n' "$want" | cut -d$'\x1f' -f1)"
     while IFS=$'\x1f' read -r addr pane name; do
         [[ -n "$addr" && "$hung" == false ]] || continue
-        # Still an agent pane, not one that went on to a core-hosted agent,
-        # and its first mirror: a second one (a sync that raced) goes.
+        # Still an agent pane, not one that went on to a core-hosted agent or
+        # was opted out, and its first mirror: a second one (a sync that
+        # raced) goes.
         if printf '%s\n' "$panes" | grep -qxF -- "$pane" && ! _agents_hc_pane_marked "$pane" \
-            && ! printf '%s\n' "$seen" | grep -qxF -- "$pane"; then
+            && ! _agents_hm_is_off "$pane" "$off" && ! printf '%s\n' "$seen" | grep -qxF -- "$pane"; then
             seen="$seen$pane"$'\n'
             continue
         fi
@@ -312,6 +317,7 @@ agents_hc_mirror_sync() {
         [[ "$pane" =~ $_AGENTS_HM_PANE_RE && "$cols" =~ ^[0-9]+$ && "$rows" =~ ^[0-9]+$ ]] || continue
         ! printf '%s\n' "$have" | cut -d$'\x1f' -f2 | grep -qxF -- "$pane" || continue
         ! _agents_hc_pane_marked "$pane" || continue
+        if _agents_hm_is_off "$pane" "$off"; then nooff=$((nooff + 1)); continue; fi
         f="$dir/$(_agents_hm_file_name "$pane")"
         _agents_stamp_age age "$f" "$now"
         if [[ $age -ge 0 && $age -lt $_AGENTS_HM_AGAIN ]]; then
@@ -335,24 +341,115 @@ agents_hc_mirror_sync() {
         done
     fi
     _agents_unlock "$lock"
-    [[ "$quiet" == true || $((started + ended + waiting)) -gt 0 ]] || echo "agents hc mirror: every agent pane has its mirror"
+    if [[ "$quiet" == false && $((started + ended + waiting)) -eq 0 ]]; then
+        if [[ $nooff -eq 0 ]]; then echo "agents hc mirror: every agent pane has its mirror"
+        else echo "agents hc mirror: every agent pane has its mirror, but the $nooff opted out (agents hc mirror status)"; fi
+    fi
     return 0
 }
 
 agents_hc_mirror_status() {
-    local want have pane cols rows agent state cwd title m
-    if ! _agents_hm_ready; then echo "agents hc mirror: $(_agents_hm_why_not)"; return 0; fi
+    local want have pane cols rows agent state cwd title m off
+    _agents_hm_off_read; off="$REPLY"
+    if ! _agents_hm_ready; then
+        echo "agents hc mirror: $(_agents_hm_why_not)"
+        _agents_hm_off_say "$off"
+        return 0
+    fi
     want="$(_agents_hm_want)" || { echo "agents hc mirror: Herdr did not answer" >&2; return 1; }
     have="$(_agents_hm_have)" || { echo "agents hc mirror: herdr-core did not answer" >&2; return 1; }
-    [[ -n "$want" ]] || { echo "no agent panes in this machine's Herdr"; return 0; }
+    if [[ -z "$want" ]]; then
+        echo "no agent panes in this machine's Herdr"
+    fi
     while IFS=$'\x1f' read -r pane cols rows agent state cwd title; do
         [[ -n "$pane" ]] || continue
         m="$(printf '%s\n' "$have" | awk -F$'\x1f' -v p="$pane" '$2 == p { print ($3 != "" ? $3 : $1); exit }')"
         if _agents_hc_pane_marked "$pane"; then m="in herdr-core itself (agents hc run)"
+        elif _agents_hm_is_off "$pane" "$off"; then
+            if [[ -n "$m" ]]; then m="opted out; its mirror $m ends at the next sync"
+            else m="opted out (agents hc mirror on $pane)"; fi
         elif [[ -n "$m" ]]; then m="mirrored as $m"
         else m="not mirrored yet (agents hc mirror sync)"; fi
         printf '%-10s %-8s %-8s %-24s %s\n' "$pane" "$agent" "$state" "${cwd##*/}" "$m"
     done <<<"$want"
+    _agents_hm_off_say "$off"
+}
+
+# _agents_hm_off_say LIST — one line naming the opted-out panes; nothing for none.
+_agents_hm_off_say() {
+    local l="${1#$'\n'}"
+    l="${l%$'\n'}"
+    [[ -n "$l" ]] || return 0
+    echo "opted out of mirrors: ${l//$'\n'/, } (agents hc mirror on PANE mirrors one again)"
+}
+
+# _agents_hm_pane_arg PANE WORD — REPLY: PANE, else this pane (HERDR_PANE_ID);
+# 2 with a line when there is none, or it is no pane id.
+_agents_hm_pane_arg() {
+    REPLY="${1:-${HERDR_PANE_ID:-}}"
+    if [[ -z "$REPLY" ]]; then
+        echo "usage: agents hc mirror $2 [PANE] (in a Herdr pane: that pane; else an id agents hc mirror lists)" >&2
+        return 2
+    fi
+    [[ "$REPLY" =~ $_AGENTS_HM_PANE_RE ]] || { echo "agents hc mirror: not a pane id: $REPLY" >&2; return 2; }
+}
+
+# agents_hc_mirror_off [PANE] — no mirror for PANE (default: this pane) from
+# now on: it is recorded (whether mirrors are on or not), and its mirror is
+# ended when one runs. The core is asked only when it runs; when it does not
+# answer, the next sync ends the mirror. The agent stays in its pane.
+agents_hc_mirror_off() {
+    local pane lock="$AGENTS_RUN_DIR/hc-mirror.lock" have addr p name rc said=""
+    [[ $# -le 1 ]] || { echo "usage: agents hc mirror off [PANE]" >&2; return 2; }
+    _agents_hm_pane_arg "${1:-}" off || return
+    pane="$REPLY"
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
+    _agents_lock "$lock" 10 0.2 || { echo "agents hc mirror: a sync holds the lock; nothing changed, try again" >&2; return 1; }
+    _agents_hm_off_read
+    if ! _agents_hm_is_off "$pane" "$REPLY" && ! _agents_hm_off_write "$REPLY$pane"$'\n'; then
+        _agents_unlock "$lock"
+        echo "agents hc mirror: could not write $AGENTS_RUN_DIR/hc-mirror.off; nothing changed" >&2
+        return 1
+    fi
+    if command -v jq >/dev/null 2>&1 && _agents_hc_bin && _agents_hc_running; then
+        if have="$(_agents_hm_have)"; then
+            while IFS=$'\x1f' read -r addr p name; do
+                [[ "$p" == "$pane" && -n "$addr" && "$addr" != -* ]] || continue
+                rc=0; _agents_timeout "$_AGENTS_HC_WAIT" _agents_hm_core kill "$addr" >/dev/null 2>&1 || rc=$?
+                if [[ $rc -eq 124 ]]; then said="herdr-core did not answer; the next sync ends its mirror"; break; fi
+                [[ $rc -ne 0 ]] || echo "ended the mirror of $pane (${name:-$addr})"
+            done <<<"$have"
+        else
+            said="herdr-core did not answer; the next sync ends its mirror"
+        fi
+    fi
+    _agents_unlock "$lock"
+    echo "$pane: no mirror from now on (agents hc mirror on $pane undoes it)${said:+; $said}"
+}
+
+# agents_hc_mirror_on [PANE] — PANE (default: this pane) is mirrored again:
+# taken off the list, then a sync when mirrors are on and a core runs.
+agents_hc_mirror_on() {
+    local pane lock="$AGENTS_RUN_DIR/hc-mirror.lock"
+    [[ $# -le 1 ]] || { echo "usage: agents hc mirror on [PANE]" >&2; return 2; }
+    _agents_hm_pane_arg "${1:-}" on || return
+    pane="$REPLY"
+    _agents_hm_off_read
+    if ! _agents_hm_is_off "$pane" "$REPLY"; then echo "$pane: not opted out; nothing changed"; return 0; fi
+    _agents_lock "$lock" 10 0.2 || { echo "agents hc mirror: a sync holds the lock; nothing changed, try again" >&2; return 1; }
+    _agents_hm_off_read
+    if ! _agents_hm_off_write "${REPLY//$'\n'"$pane"$'\n'/$'\n'}"; then
+        _agents_unlock "$lock"
+        echo "agents hc mirror: could not write $AGENTS_RUN_DIR/hc-mirror.off; nothing changed" >&2
+        return 1
+    fi
+    _agents_unlock "$lock"
+    if _agents_hm_ready; then
+        echo "$pane: mirrored again"
+        agents_hc_mirror_sync
+    else
+        echo "$pane: mirrored again once mirrors run (agents hc mirror: $(_agents_hm_why_not))"
+    fi
 }
 
 # Herdr's word for a state -> the OSC 7501 report herdr-core stores (printed
@@ -529,6 +626,8 @@ agents_hc_mirror() {
         status) agents_hc_mirror_status ;;
         sync)   agents_hc_mirror_sync "$@" ;;
         end)    agents_hc_mirror_end "$@" ;;
-        *)      echo "usage: agents hc mirror [status | sync [-n] [-q] | end]" >&2; return 2 ;;
+        off)    agents_hc_mirror_off "$@" ;;
+        on)     agents_hc_mirror_on "$@" ;;
+        *)      echo "usage: agents hc mirror [status | sync [-n] [-q] | end | off [PANE] | on [PANE]]" >&2; return 2 ;;
     esac
 }

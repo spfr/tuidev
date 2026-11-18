@@ -372,7 +372,7 @@ agents board workbox      # one machine's
 agents board | cat        # the list as text, with no fzf
 ```
 
-The list is one line a session, in groups: **Needs you** (the longest wait first), **To review**, **Working**, and the parked ones folded into a line (`PARKED 2 · press . to show`). Each group's heading has its group's color, and an empty line stands between groups. A line is a name that stays (the session's own task title, else its project), a word or two for what it does now, since when, its machine when there is more than one, and a count of what runs under it (`+2 sub, 1 cmd`). The header is the lens tabs (the active one filled in), the counts, each CLI's fullest [usage limit](#history-and-agents-report), and one line for what is wrong (a process past the memory warning, a hog, something left behind), there only while something is.
+The list is one line a session, in groups: **Needs you** (the longest wait first), **To review**, **Working**, and the parked ones folded into a line (`PARKED 2 · press . to show`). Each group's heading has its group's color, and an empty line stands between groups. A line is a name that stays (the session's own task title, else its project), a word or two for what it does now, since when, its machine when there is more than one, and a count of what runs under it (`+2 sub, 1 cmd`). With herdr-core installed, a session [Herdr's phone app](remote.md#herdrs-phone-app-agents-hc) reaches has a `☏` before its name (`@` without UTF-8), and its card says whether it is hosted in herdr-core or mirrored, and under which name; the column is there only while a listed session has the mark, from a cache rewritten in the background at most every 30 s. The header is the lens tabs (the active one filled in), the counts, each CLI's fullest [usage limit](#history-and-agents-report), and one line for what is wrong (a process past the memory warning, a hog, something left behind), there only while something is.
 
 The right-hand side takes 55% of the window and follows the cursor: why the session waits, the sub-agents and commands under it, the last lines of its pane (as many as fit), then its branch, model, tokens and cost. Those last lines are the session's output: the agent's own input box, prompt and status lines are left out, a long line breaks between words, and a rule is cut to the width. Its tabs (Card, Trace, Pane, Details) show which view is on. Everything else waits for a key.
 
@@ -396,7 +396,7 @@ A prompt shows its first line, a run of edits is one line of file names, a comma
 |-----|--------------|
 | `↑` `↓`, `j` `k` | move |
 | `enter` | go to that session's pane (`agents jump`); on another machine, a look at its pane. On a sub-agent or command: its last lines or details, full screen |
-| `ctrl-p` | everything you can do: the row's own actions first, then the map, ports, memory, limits, runs and reports |
+| `ctrl-p` | everything you can do: the row's own actions first (for a session of this machine in a Herdr pane, with mirrors on, also its pane's phone mirror off or on again: `agents hc mirror off` and `on`), then the map, ports, memory, limits, runs and reports |
 | `?` | the keys |
 | `tab`, `shift-tab`, `1` `2` `3` | the lens: Attention, Tree (each session with its sub-agents and commands under it), Machines (grouped by machine, with a roll-up each) |
 | `←` `→` | the right-hand side: Card, Trace (what the session did, in order), Pane (more of it), Details (`agents show`) |
@@ -978,7 +978,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_LINK` | `1` | `0` turns off the link watcher (`agents link watch`), which opens here what you Ctrl-click in a Herdr pane of another machine; `agents link restart` applies a change ([remote.md](remote.md#remote-feels-local-ports-links-and-files)) |
 | `AGENTS_GLYPHS` | (empty) | The mark in front of each kind of session wherever one is listed (Herdr's tabs and sidebar, `agents map`, the menu bar): the [table of marks](#marks-by-kind-of-session) below. `KIND=GLYPH` words replace single ones (`AGENTS_GLYPHS="codex=C shell=$"`); `off` shows none. |
 | `AGENTS_HERDR_NAMES` | `1` | Herdr's labels say what runs where (`agents herdr`): each tab named after what runs in it, each workspace row's `$tuidev_agents` roll-up, the mark on agent rows. A tab you renamed is never touched (until `agents herdr reset TAB_ID`). `0` leaves Herdr's labels alone; `agents herdr reset` puts back what a sync set ([Herdr's labels](#tabs-named-after-what-runs-in-them)) |
-| `AGENTS_HC_MIRROR` | `0` | Experimental. `1` mirrors every agent pane of this machine's Herdr into herdr-core while one runs, so Herdr's phone app lists the agents you already have (`agents hc mirror`, [remote.md](remote.md#herdrs-phone-app-agents-hc)). Off by default: a pane has the phone's size while the phone shows it. `0` mirrors nothing and ends the mirrors a sync started |
+| `AGENTS_HC_MIRROR` | `0` | Experimental. `1` mirrors every agent pane of this machine's Herdr into herdr-core while one runs, so Herdr's phone app lists the agents you already have (`agents hc mirror`, [remote.md](remote.md#herdrs-phone-app-agents-hc)). Off by default: a pane has the phone's size while the phone shows it. `0` mirrors nothing and ends the mirrors a sync started. One pane stays off the phone with `agents hc mirror off` |
 | `AGENTS_HC_UP` | `1` | The herdr-core pack's job (`agents hc up -q`, at login and every 5 minutes) starts herdr-core when it is not running. `0` starts nothing, so a core you stopped stays down; `agents hc up` still works by hand ([remote.md](remote.md#herdrs-phone-app-agents-hc)) |
 | `AGENTS_HC_AUTO` | `0` | `1` hosts a `claude` or `codex` typed in a Herdr pane in herdr-core by itself, as `agents hc run` would, so Herdr's phone app lists it; a start it cannot host (no core running, `claude -p`, a prompt, a subcommand) runs as typed. Needs the herdr-core pack's shell fragment; a new shell picks up a change ([remote.md](remote.md#herdrs-phone-app-agents-hc)) |
 | `AGENTS_REMOTE_HOSTS` | empty | ssh hosts that count as your machines for `agents ports`, `forward`, `push`, `open` and the watcher, besides the ones saved in Herdr; space-separated |
@@ -1015,7 +1015,7 @@ The one table. Herdr's tabs and sidebar, `agents map` and the menu bar show thes
 | `shell` | `❯` | A pane with no agent in it |
 | `agent` | `◆` | Any other agent CLI |
 
-`AGENTS_GLYPHS` replaces single marks or turns them all off, as in the table above.
+`AGENTS_GLYPHS` replaces single marks or turns them all off, as in the table above. The board's mark for a session the phone reaches, `☏`, is not a kind, but `phone=` in `AGENTS_GLYPHS` replaces it too, and `off` leaves it on.
 
 The stale patterns are not a setting: extend `AGENTS_ORPHAN_PATTERNS` in `lib/agents/config.sh` and send the change upstream if it's general.
 

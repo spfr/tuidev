@@ -358,7 +358,7 @@ printf '#!/bin/bash\necho ran >> "%s/core.ran"\n' "$tmp" > "$BIN/herdr-core"; ch
 rows="$(tuidev palette --list)"
 bad="$(printf '%s\n' "$rows" | awk -F'\t' 'NF != 4 { print }')"
 [[ -z "$bad" && "$(printf '%s\n' "$rows" | grep -c '^Phone: ')" == 3 ]] || fail "phone rows: $(printf '%s\n' "$rows" | grep '^Phone:')"
-[[ "$rows" == *"Phone: status"$'\t'*$'\t'1$'\t'"agents hc"$'\n'* && "$rows" == *"Phone: mirrors"$'\t'*$'\t'1$'\t'"agents hc mirror"$'\n'* \
+[[ "$rows" == *"Phone: status"$'\t'*$'\t'1$'\t'"agents hc && agents hc ls"$'\n'* && "$rows" == *"Phone: mirrors"$'\t'*$'\t'1$'\t'"agents hc mirror"$'\n'* \
    && "$rows" == *"Phone: start an agent here"$'\t'*$'\t'0$'\t'"agents hc run claude"$'\n'* ]] || fail "phone row commands: $(printf '%s\n' "$rows" | grep '^Phone:')"
 [[ ! -e "$tmp/core.ran" ]] || fail "listing the palette ran herdr-core"
 printf '#!/bin/bash\n' > "$BIN/agents"

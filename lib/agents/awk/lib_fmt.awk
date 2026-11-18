@@ -73,13 +73,15 @@ function dcut(s, n,   i, l, c, w) {
 }
 # gl NAME — a state's shape or a small mark. Under a locale with no such glyphs
 # (AGENTS_ASCII) the states keep a shape each, so they still read apart.
+# "phone" is the board's mark for a session Herdr's phone app reaches (☏, @).
 function gl(n) {
     if (ENVIRON["AGENTS_ASCII"] != "")
         return n == "need" ? "^" : n == "review" ? "*" : n == "run" ? "o" : n == "parked" ? "." : n == "unknown" ? "?" : \
-            n == "dot" ? "-" : n == "more" ? "~" : n == "mark" ? "|" : n == "full" ? "#" : n == "half" ? "+" : n == "light" ? "-" : n == "none" ? "." : n
+            n == "dot" ? "-" : n == "more" ? "~" : n == "mark" ? "|" : n == "full" ? "#" : n == "half" ? "+" : n == "light" ? "-" : n == "none" ? "." : \
+            n == "phone" ? "@" : n
     return n == "need" ? "\342\226\262" : n == "review" ? "\342\227\206" : n == "run" ? "\342\227\217" : n == "parked" ? "\342\227\213" : n == "unknown" ? "?" : \
         n == "dot" ? "\302\267" : n == "more" ? "\342\200\246" : n == "mark" ? "\342\224\202" : n == "full" ? "\342\226\210" : n == "half" ? "\342\226\222" : \
-        n == "light" ? "\342\226\221" : n == "none" ? "\302\267" : n
+        n == "light" ? "\342\226\221" : n == "none" ? "\302\267" : n == "phone" ? "\342\230\217" : n
 }
 # gauge P CELLS MARK CF CD CM — P percent of CELLS cells in block glyphs, to the
 # eighth of a cell, with a marker drawn between the cells at MARK percent (-1:

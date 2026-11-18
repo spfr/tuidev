@@ -6,6 +6,9 @@
 #
 # Plain Unicode on purpose: no icon font to install, and no vendor's logo.
 # AGENTS_GLYPHS changes one ("codex=C"), several, or turns them off ("off").
+# The board's mark for a session Herdr's phone app reaches is no kind (its
+# default, with an ASCII one, is awk/lib_fmt.awk's gl("phone")), but a
+# "phone=" word here replaces it too (awk/board_view.awk).
 #
 # Owns: the glyph table and its setting.
 # Uses: config.sh (AGENTS_GLYPHS).

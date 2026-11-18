@@ -54,7 +54,8 @@ case "$1" in
                if [[ -e "$FAKE/events.$n" ]]; then cat "$FAKE/events.$n"; exit 0; fi
                cat "$FAKE/events" 2>/dev/null
                [[ ! -e "$FAKE/events.live" ]] || { echo "$$" > "$FAKE/events.pid"; exec sleep 30; } ;;
-    attach)    [[ ! -e "$FAKE/attach.wait" ]] || sleep "$(cat "$FAKE/attach.wait")"
+    attach)    cat "$AGENTS_RUN_DIR"/hc-pane.* > "$FAKE/mark.seen" 2>/dev/null || true
+               [[ ! -e "$FAKE/attach.wait" ]] || sleep "$(cat "$FAKE/attach.wait")"
                [[ ! -e "$FAKE/attach.sig" ]] || { kill -"$(cat "$FAKE/attach.sig")" 0; sleep 5; }
                [[ ! -e "$FAKE/attach.rc" ]] || exit "$(cat "$FAKE/attach.rc")" ;;
     server)    [[ ! -e "$FAKE/server.fail" ]] || exit 1
@@ -269,6 +270,21 @@ _agents_hc_pane_marked w1:p1 || fail "a mark of a live process kill -0 may not s
 rm -f "$AGENTS_RUN_DIR"/hc-pane.*
 pass "a pane's mark counts while its process lives, even where kill -0 may not signal it"
 
+# The hosted panes, from their marks alone: the pane, the terminal it shows
+# and its name; not a mark an older agents wrote (the pid only), one whose
+# attach is gone, or one whose fields are not ids.
+printf '%s\nw1:p1\tt7\tapi\n' $$ > "$(_agents_hc_pane_mark w1:p1)"
+printf '%s\nw1:p2\tt8\t\n' $$ > "$(_agents_hc_pane_mark w1:p2)"
+echo $$ > "$(_agents_hc_pane_mark w1:p3)"
+printf '999999\nw1:p4\tt9\tgone\n' > "$(_agents_hc_pane_mark w1:p4)"
+printf '%s\nw1:p5\t-x\tbad\n' $$ > "$(_agents_hc_pane_mark w1:p5)"
+printf '%s\nw1 p6\tt6\tbad\n' $$ > "$(_agents_hc_pane_mark w1:p6)"
+out="$(_agents_hc_marks | tr '\037' '|' | LC_ALL=C sort)"
+[[ "$out" == $'w1:p1|t7|api\nw1:p2|t8|t8' ]] || fail "the hosted panes from their marks: $out"
+rm -f "$AGENTS_RUN_DIR"/hc-pane.*
+[[ -z "$(_agents_hc_marks)" ]] || fail "no marks: no hosted panes"
+pass "the hosted panes come from their marks: pane, terminal and name; old, dead or odd marks are left out"
+
 # --- names ---
 reset; _agents_hc_bin
 [[ "$(_agents_hc_name "/src/My App.v2")" == "my-app-v2" ]] || fail "name: $(_agents_hc_name "/src/My App.v2")"
@@ -437,6 +453,7 @@ out="$(HERDR_PANE_ID=w9:p1 agents_main hc attach t3 2>&1)" || fail "attach in a 
 # (The two stand-in calls log at the same time: look for the words, not their order.)
 { grep -qx 'events' "$FAKE/hc.calls" && grep -qx -- '--terminal' "$FAKE/hc.calls"; } || fail "no events stream: $(calls hc)"
 [[ "$(calls herdr)" == *"--agent codex --state working w9:p1"*"release-agent w9:p1"* ]] || fail "pane bridge: $(calls herdr)"
+[[ "$(sed -n 2p "$FAKE/mark.seen")" == "w9:p1"$'\t'"t3"$'\t'"t3" ]] || fail "the pane's mark while attached: $(cat "$FAKE/mark.seen")"
 for f in "$AGENTS_RUN_DIR"/hc-bridge.* "$AGENTS_RUN_DIR"/hc-pane.*; do [[ ! -e "$f" ]] || fail "left behind: $f"; done
 reset; echo 1 > "$FAKE/attach.wait"
 out="$(AGENTS_NO_HERDR=1 HERDR_PANE_ID=w9:p1 agents_main hc attach t3 2>&1)" || fail "attach with AGENTS_NO_HERDR failed"

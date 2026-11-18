@@ -87,7 +87,7 @@ _agents_hl_socket() { return 0; }
 
 reset() {
     rm -f "${FAKE:?}"/*.calls "${FAKE:?}"/wait.* "${FAKE:?}"/attach.rc "${FAKE:?}"/attach.pid "${FAKE:?}"/report.* "${FAKE:?}"/pane.json "${FAKE:?}"/hang.* "${AGENTS_RUN_DIR:?}"/hc-pane.*
-    rm -rf "${AGENTS_RUN_DIR:?}/hc-mirror.lock" "${AGENTS_RUN_DIR:?}/hc-mirror.started"
+    rm -rf "${AGENTS_RUN_DIR:?}/hc-mirror.lock" "${AGENTS_RUN_DIR:?}/hc-mirror.started" "${AGENTS_RUN_DIR:?}/hc-mirror.off"
     unset AGENTS_NOW
     RUNNING=true
     echo '{"jsonrpc":"2.0","id":1,"result":{"terminals":[]}}' > "$FAKE/list.json"
@@ -673,5 +673,152 @@ reset; terms 't4|app|live|%1'
 ) || exit 1
 [[ -z "$(_agents_hc_phone_rows)" ]] || fail "the menu's record was built under AGENTS_TESTING"
 pass "the menu's record comes from a cache a background check rewrites each 30 s; nothing and no check without herdr-core"
+
+# --- opting a pane out of mirrors ---
+OFF="$AGENTS_RUN_DIR/hc-mirror.off"
+reset; snap "p1|claude|idle|$tmp/proj-a" "p2|claude|working|$tmp/proj-b"; terms "t1|a|live|p1" "t2|b|live|p2" "t3|mine|live|"
+out="$(agents_main hc mirror off p2 2>&1)" || fail "off failed: $out"
+[[ "$(cat "$OFF")" == p2 && "$(kills)" == "t2 " ]] || fail "off: recorded $(cat "$OFF" 2>/dev/null), kills $(kills)"
+[[ "$out" == *"ended the mirror of p2 (b)"* && "$out" == *"p2: no mirror from now on"* ]] || fail "off output: $out"
+[[ ! -e "$AGENTS_RUN_DIR/hc-mirror.lock" ]] || fail "off left the lock"
+terms "t1|a|live|p1"; rm -f "$FAKE"/*.calls
+agents_hc_mirror_sync -q
+[[ -z "$(runs)" && -z "$(kills)" ]] || fail "a sync mirrored an opted-out pane: runs=$(runs) kills=$(kills)"
+out="$(agents_hc_mirror_sync 2>&1)"
+[[ "$out" == *"every agent pane has its mirror, but the 1 opted out"* ]] || fail "sync output with one opted out: $out"
+terms "t1|a|live|p1" "t4|late|live|p2"
+agents_hc_mirror_sync -q
+[[ "$(kills)" == "t4 " && -z "$(runs)" ]] || fail "a sync left a mirror of an opted-out pane running: kills=$(kills) runs=$(runs)"
+terms "t1|a|live|p1"
+out="$(agents_main hc mirror status 2>&1)"
+[[ "$out" == *"p2"*"opted out (agents hc mirror on p2)"* && "$out" == *"opted out of mirrors: p2 "* && "$out" == *"mirrored as a"* ]] \
+    || fail "status with an opted-out pane: $out"
+out="$(HERDR_PANE_ID=p1 agents_main hc mirror off 2>&1)"
+agents_main hc mirror off p2 >/dev/null 2>&1
+[[ "$(cat "$OFF")" == $'p2\np1' && "$out" == *"p1: no mirror from now on"* ]] || fail "off this pane, and twice: $(cat "$OFF")"
+pass "off: recorded, its mirror ended at once; a sync starts none for it and ends one that appears; status lists it"
+
+reset; snap "p1|claude|idle|$tmp/proj-a" "p2|claude|idle|$tmp/proj-b"; terms "t1|a|live|p1"; printf 'p2\np1\n' > "$OFF"
+out="$(agents_main hc mirror on p2 2>&1)" || fail "on failed: $out"
+[[ "$(cat "$OFF")" == p1 && "$out" == *"p2: mirrored again"* && "$(runs)" == *"_mirror p2 "* ]] || fail "on: $(cat "$OFF") / $out / $(runs)"
+out="$(agents_main hc mirror on p1 2>&1)"
+[[ ! -e "$OFF" ]] || fail "the last one on: the file stays: $(cat "$OFF")"
+out="$(agents_main hc mirror on p1 2>&1)"; [[ "$out" == *"p1: not opted out; nothing changed"* ]] || fail "on twice: $out"
+reset; printf 'p2\n' > "$OFF"
+out="$(AGENTS_HC_MIRROR=0 agents_main hc mirror on p2 2>&1)"
+[[ ! -e "$OFF" && "$out" == *"once mirrors run"* && ! -e "$FAKE/run.calls" ]] || fail "on with mirrors off: $out"
+pass "on: off the list, then a sync when mirrors run; the list goes with its last pane"
+
+reset
+rc=0; out="$(agents_main hc mirror off 2>&1)" || rc=$?
+[[ $rc -eq 2 && "$out" == *"usage: agents hc mirror off [PANE]"* && ! -e "$OFF" ]] || fail "off with no pane: $rc $out"
+rc=0; out="$(agents_main hc mirror off 'p1;rm' 2>&1)" || rc=$?
+[[ $rc -eq 2 && "$out" == *"not a pane id"* && ! -e "$OFF" ]] || fail "off with a bad id: $rc $out"
+rc=0; agents_main hc mirror off p1 p2 >/dev/null 2>&1 || rc=$?; [[ $rc -eq 2 ]] || fail "off with two panes: $rc"
+RUNNING=false
+out="$(agents_main hc mirror off p1 2>&1)"
+[[ "$(cat "$OFF")" == p1 && ! -e "$FAKE/hc.calls" ]] || fail "off with no core: recorded, nothing asked: $(calls hc)"
+RUNNING=true; reset; terms "t1|a|live|p1"; printf 'garbage\n' > "$FAKE/list.json"
+out="$(agents_main hc mirror off p1 2>&1)"
+[[ "$(cat "$OFF")" == p1 && -z "$(kills)" && "$out" == *"the next sync ends its mirror"* ]] || fail "off, a core that did not answer: $out"
+pass "off needs a pane id; with no core it only records, with no answer it says the next sync ends the mirror"
+
+# The ids of panes Herdr no longer has go at a sync; a pane with no agent now keeps its own.
+reset; snap "p1|claude|idle|$tmp/proj-a" "p5||idle|$tmp/proj-a"; terms "t1|a|live|p1"; printf 'p1\ngone9\np5\n' > "$OFF"
+agents_hc_mirror_sync -n >/dev/null
+[[ "$(cat "$OFF")" == $'p1\ngone9\np5' ]] || fail "-n dropped an entry: $(cat "$OFF")"
+agents_hc_mirror_sync -q
+[[ "$(cat "$OFF")" == $'p1\np5' ]] || fail "stale entries: $(cat "$OFF")"
+printf 'garbage\n' > "$FAKE/snap.json"; printf 'p1\ngone9\n' > "$OFF"
+agents_hc_mirror_sync -q
+[[ "$(cat "$OFF")" == $'p1\ngone9' ]] || fail "a snapshot that did not parse dropped entries: $(cat "$OFF")"
+reset; snap "p7|claude|idle|$tmp/proj-a"; printf 'p1\n' > "$OFF"
+agents_hc_mirror_sync -q
+[[ ! -e "$OFF" && "$(runs)" == *"_mirror p7 "* ]] || fail "the last stale entry: the file stays: $(cat "$OFF" 2>/dev/null)"
+pass "a sync drops the opted-out panes Herdr no longer has (not with -n, not on a bad snapshot); a pane with no agent keeps its entry"
+
+# --- what the phone reaches: agents hc ls ---
+# One line, as the core sends each message.
+lsfix() {
+    jq -c . > "$FAKE/list.json" <<EOF2
+{"jsonrpc":"2.0","id":1,"result":{"terminals":[
+ {"address":"t1","name":"fix-login","state":"live","labels":{"tuidev_mirror":"p1"},"status":{"state":"working","app":"claude"},"foreground":{"pid":1,"cwd":"$HOME/w/myapp"}},
+ {"address":"t2","name":"api","state":"live","labels":{},"status":{"state":"blocked","app":"claude"},"cwd":"/srv/api"},
+ {"address":"t3","name":null,"state":"finished","exit":{"code":3},"foreground":null},
+ {"address":"t4","name":"quiet","state":"live","status":null},
+ {"address":"t5","name":"old-mirror","state":"finished","labels":{"tuidev_mirror":"p2"}}
+]}}
+EOF2
+}
+reset; lsfix
+snap "p1|claude|working|$tmp/proj-a" "p2|codex|idle|$tmp/proj-a" "p3|claude|blocked|$tmp/proj-b" "p4|claude|idle|$tmp/proj-b" "p6||idle|$tmp/proj-b"
+printf '%s\np3\tt2\tapi\n' $$ > "$(_agents_hc_pane_mark p3)"
+printf 'p4\n' > "$OFF"
+out="$(agents_main hc ls 2>&1)" || fail "ls failed: $out"
+line() { printf '%s\n' "$out" | grep -E "^  $1 " || true; }
+[[ "$(line fix-login)" =~ mirror\ of\ p1\ \(claude\)\ +working\ +~/w/myapp$ ]] || fail "ls, a mirror: $(line fix-login)"
+[[ "$(line api)" =~ hosted,\ in\ pane\ p3\ +needs\ you\ +/srv/api$ ]] || fail "ls, a hosted one: $(line api)"
+[[ "$(line t3)" =~ hosted\ +exited\ 3\ +-$ ]] || fail "ls, a finished one: $(line t3)"
+[[ "$(line quiet)" =~ hosted\ +live\ +-$ ]] || fail "ls, no status: $(line quiet)"
+[[ "$(line old-mirror)" =~ mirror\ of\ p2\ \(codex\)\ +finished\ +-$ ]] || fail "ls, a finished mirror: $(line old-mirror)"
+[[ "$(printf '%s\n' "$out" | tail -n 1)" == "Not on the phone: 2 agent panes of this machine's Herdr: 1 opted out (agents hc mirror on PANE), 1 not mirrored yet (agents hc mirror sync)" ]] \
+    || fail "ls, the panes it cannot reach: $out"
+[[ "$(calls hc)" != *" run "* && -z "$(kills)" && -z "$(runs)" ]] || fail "ls changed something: $(calls hc)"
+out="$(AGENTS_HC_MIRROR=0 agents_main hc ls 2>&1)"
+[[ "$(printf '%s\n' "$out" | tail -n 1)" == *"1 opted out (agents hc mirror on PANE), 1 with mirrors off (AGENTS_HC_MIRROR=1 in agents.conf)" ]] \
+    || fail "ls, mirrors off: $out"
+terms "t1|a|live|p1" "t2|b|live|p2"; printf '%s\np3\tt9\tx\n' $$ > "$(_agents_hc_pane_mark p3)"; rm -f "$OFF"
+out="$(agents_main hc ls 2>&1)"
+[[ "$(printf '%s\n' "$out" | tail -n 1)" == *"Not on the phone: 1 agent pane of this machine's Herdr: 1 not mirrored yet"* ]] || fail "ls, one pane: $out"
+snap "p1|claude|idle|$tmp/proj-a" "p2|claude|idle|$tmp/proj-a"
+[[ "$(agents_main hc ls 2>&1 | tail -n 1)" == "Every agent pane of this machine's Herdr is on the phone" ]] || fail "ls, all reachable"
+snap "p6||idle|$tmp/proj-a"; terms
+out="$(agents_main hc ls 2>&1)"
+[[ "$out" == *"herdr-core has no terminals"* && "$out" == *"No agent panes in this machine's Herdr"* ]] || fail "ls, nothing: $out"
+printf 'garbage\n' > "$FAKE/snap.json"
+[[ "$(agents_main hc ls 2>&1 | tail -n 1)" == "Herdr did not answer within ${_AGENTS_HC_HERDR_WAIT} s: its agent panes are not counted" ]] || fail "ls, Herdr did not answer"
+rm -f "$AGENTS_RUN_DIR"/hc-pane.*
+pass "ls: each core terminal (hosted, in a pane, or a mirror of one; its state and directory), then the agent panes the phone cannot reach and why"
+
+reset; RUNNING=false
+rc=0; out="$(agents_main hc ls 2>&1)" || rc=$?
+[[ $rc -eq 1 && "$out" == *"herdr-core is not running here"* && ! -e "$FAKE/hc.calls" ]] || fail "ls, no core: $rc $out $(calls hc)"
+RUNNING=true
+for bad in 'garbage' '' '{"jsonrpc":"2.0","id":1,"result":{"terminals":"x"}}' '{"jsonrpc":"2.0","id":1,"error":{"message":"no"}}'; do
+    printf '%s\n' "$bad" > "$FAKE/list.json"
+    rc=0; out="$(agents_main hc ls 2>&1)" || rc=$?
+    [[ $rc -eq 1 && "$out" == "herdr-core did not answer within ${_AGENTS_HC_WAIT} s; nothing is listed" ]] || fail "ls, list '$bad': $rc $out"
+done
+saved_wait=$_AGENTS_HC_WAIT; _AGENTS_HC_WAIT=1; : > "$FAKE/hang.connect"; t0=$SECONDS
+rc=0; out="$(agents_main hc ls 2>&1)" || rc=$?
+[[ $rc -eq 1 && $((SECONDS - t0)) -le 3 && "$out" == *"did not answer"* ]] || fail "ls, a core that hangs: $rc after $((SECONDS - t0)) s: $out"
+_AGENTS_HC_WAIT=$saved_wait
+rc=0; out="$(AGENTS_HC_BIN="$tmp/nope" agents_main hc ls 2>&1)" || rc=$?
+[[ $rc -eq 1 && "$out" == *"not installed"* ]] || fail "ls, no herdr-core: $rc $out"
+[[ "$(agents_main hc ls extra 2>&1)" == "usage: agents hc ls" ]] || fail "ls takes no argument"
+pass "ls never starts a core, and a core that does not answer, answers no list or hangs is one line and exit 1"
+
+# --- what the phone reaches, for the board: the cache's check and its feed ---
+reset; lsfix; printf '%s\np3\tt2\tapi\n' $$ > "$(_agents_hc_pane_mark p3)"
+out="$(_agents_hc_phone --reach)"
+[[ "$out" == $'up\tyes\t1\nphone\tp1\tmirror\tfix-login\nphone\tp3\thosted\tapi' ]] || fail "--reach: $out"
+[[ "$(_agents_hc_phone)" == $'up\tyes\t1' ]] || fail "without --reach: one line: $(_agents_hc_phone)"
+out="$(AGENTS_HC_MIRROR=0 _agents_hc_phone --reach)"
+[[ "$out" == $'core\tyes\t0\nphone\tp1\tmirror\tfix-login\nphone\tp3\thosted\tapi' ]] || fail "--reach, mirrors off: $out"
+printf 'garbage\n' > "$FAKE/list.json"
+out="$(AGENTS_HC_MIRROR=0 _agents_hc_phone --reach)"
+[[ "$out" == $'core\tyes\t0\nphone\tp3\thosted\tapi' ]] || fail "--reach, no list: no mirror is guessed: $out"
+lsfix; _agents_hc_phone_refresh
+[[ "$(sed -n '2,$p' "$AGENTS_RUN_DIR/hc-phone.cache")" == $'up\tyes\t1\nphone\tp1\tmirror\tfix-login\nphone\tp3\thosted\tapi' ]] \
+    || fail "the cache: $(cat "$AGENTS_RUN_DIR/hc-phone.cache")"
+printf 'p4\n' > "$OFF"; rm -f "$FAKE"/*.calls
+[[ "$(_agents_hc_phone_feed)" == $'phonecore\nphone\tp1\tmirror\tfix-login\nphone\tp3\thosted\tapi\nphoneoff\tp4' ]] || fail "the feed: $(_agents_hc_phone_feed)"
+[[ ! -e "$FAKE/hc.calls" ]] || fail "the feed asked the core: $(calls hc)"
+[[ -z "$(AGENTS_HC_BIN="" _agents_hc_phone_feed)" ]] || fail "the feed under the test harness without a stand-in"
+[[ -z "$(AGENTS_HC_BIN="$tmp/nope" _agents_hc_phone_feed)" ]] || fail "the feed without herdr-core"
+printf '%s\n\n' "$(date +%s)" > "$AGENTS_RUN_DIR/hc-phone.cache"; rm -f "$OFF"
+[[ "$(_agents_hc_phone_feed)" == phonecore ]] || fail "the feed with nothing reachable: $(_agents_hc_phone_feed)"
+rm -f "$AGENTS_RUN_DIR"/hc-pane.* "$AGENTS_RUN_DIR/hc-phone.cache"
+pass "the phone's cache keeps the menu's line, then each mirror and hosted pane; the board's feed reads it and the opt-outs, asking no core"
 
 echo "All hcmirror tests passed"

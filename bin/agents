@@ -68,7 +68,7 @@ _agents_find_lib() {
 }
 
 # config first: it reads agents.conf. The others only define functions.
-_AGENTS_MODULES="config palette glyph util release snapshot classify mcp lazy where watched system awake lid cool remote forward link map board herdrlabel hc hcmirror kill notify events reap memory assess triage transcript history runs tokens grok limits statusline context report render json tsv terminal activity show pick bar hooks usage cli"
+_AGENTS_MODULES="config palette glyph util release snapshot classify mcp lazy where watched system awake lid cool remote forward link map board herdrlabel hc hcmirror hcphone kill notify events reap memory assess triage transcript history runs tokens grok limits statusline context report render json tsv terminal activity show pick bar hooks usage cli"
 # What `agents hc auto` loads (below; test_agents_hc.sh checks that they hold
 # every function hc.sh calls).
 _AGENTS_AUTO_MODULES="config util herdrlabel hc"

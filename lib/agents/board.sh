@@ -43,8 +43,10 @@
 #   transcript.sh (_agents_tx_agent_type), watched.sh (_agents_mtimes),
 #   system.sh, limits.sh (_agents_limits_lines), remote.sh (machines, ssh),
 #   map.sh (_agents_map_act, _agents_map_remote, _agents_map_plain,
-#   _AGENTS_MAP_ID_RE), pick.sh (_agents_fzf), where.sh and kill.sh through
-#   agents_main; awk/board_rows.awk, awk/board_view.awk, awk/board_trace.awk,
+#   _AGENTS_MAP_ID_RE), pick.sh (_agents_fzf), hcphone.sh
+#   (_agents_hc_phone_feed: which sessions the phone reaches), hcmirror.sh
+#   (_agents_hm_on, _AGENTS_HM_PANE_RE), where.sh, kill.sh and `agents hc
+#   mirror off|on` through agents_main; awk/board_rows.awk, awk/board_view.awk, awk/board_trace.awk,
 #   awk/board_pane.awk;
 #   curl (a poke), nc (back to a pane no agent holds).
 # Public: agents_board.
@@ -110,7 +112,8 @@ _agents_board_rows() {
     IFS=$'\t' read -r _load cores memfree _rest <<<"$(agents_system)"
     cpu="$(_agents_cpu_pct "$cores" "$r" 2>/dev/null)"
     [[ ! "${AGENTS_MEM_WARN:-}" =~ ^[0-9]+$ ]] || warn=$((AGENTS_MEM_WARN * 1048576))
-    { _agents_board_subs "$r"; _agents_with_needs "$r"; } \
+    # The phone's lines (hcphone.sh: a cache, read by bash) come first.
+    { _agents_hc_phone_feed; _agents_board_subs "$r"; _agents_with_needs "$r"; } \
         | _agents_awk "lib_fmt board_rows" -F '\t' -v warn_kib="$warn" \
             -v sys="cpu ${cpu:--}% · memory ${memfree:--}% free"
 }
@@ -611,15 +614,33 @@ _agents_board_lens_label() {
     esac
 }
 
+# _agents_board_phone ID — REPLY: "KIND PANE" of this machine's session ID
+# from the phone row of this board's last list (awk/board_rows.awk: hosted,
+# mirror, off or none, and its Herdr pane); false without one.
+_agents_board_phone() {
+    local rows k p
+    _agents_board_rowsf; rows="$REPLY"; REPLY=""
+    read -r k p <<<"$(awk -F '\t' -v id="$1" '$1 == "local" && $2 == "phone" && $3 == id { print $4 " " $6; exit }' "$rows" 2>/dev/null)"
+    [[ "$p" =~ $_AGENTS_HM_PANE_RE ]] || return 1
+    REPLY="$k $p"
+}
+
 # _agents_board_palette MACHINE KIND ID OWNER — ctrl-p: the row's own actions
-# first, then what else there is; the one you pick runs.
+# first, then what else there is; the one you pick runs. A session here in a
+# Herdr pane also gets its pane's mirror switch (agents hc mirror off|on):
+# off while mirrors are on and it is not hosted, on once it is opted out.
 _agents_board_palette() {
-    local m="$1" kind="$2" id="$3" owner="${4:--}" t=$'\t' pick what
+    local m="$1" kind="$2" id="$3" owner="${4:--}" t=$'\t' pick what ph="" pane=""
     _agents_board_colors
+    if [[ "$kind" == ses && "$m" == local ]] && _agents_board_phone "$id"; then ph="${REPLY%% *}" pane="${REPLY#* }"; fi
     pick="$({
         case "$kind" in
             ses) printf '%s\n' "go${t}Go to this session${t}enter" "pane${t}Read its pane, full screen${t}" \
-                     "details${t}Its details: memory, ports, files, children${t}" "stop${t}Stop it${t}ctrl-k, asks first" ;;
+                     "details${t}Its details: memory, ports, files, children${t}" "stop${t}Stop it${t}ctrl-k, asks first"
+                 case "$ph" in
+                     off)         printf '%s\n' "mirroron${t}Phone: mirror its pane again${t}agents hc mirror on" ;;
+                     mirror|none) ! _agents_hm_on || printf '%s\n' "mirroroff${t}Phone: no mirror for its pane${t}agents hc mirror off" ;;
+                 esac ;;
             kid) printf '%s\n' "go${t}Open it, full screen${t}enter"
                  ! _agents_board_idok cmd "$id" || printf '%s\n' "stop${t}Stop it${t}ctrl-k, asks first" ;;
         esac
@@ -647,6 +668,9 @@ _agents_board_palette() {
         report) agents_main report 2>&1 | _agents_board_pager ;;
         tokens) agents_main report --view tokens 2>&1 | _agents_board_pager ;;
         reap)   agents_main reap; printf '\n[press any key] '; read -r -s -n 1 ;;
+        mirroroff|mirroron)
+                [[ -n "$pane" ]] || return 0
+                agents_main hc mirror "${what#mirror}" "$pane" 2>&1; printf '\n[press any key] '; read -r -s -n 1 ;;
         tuidev) tuidev palette ;;
     esac
     return 0

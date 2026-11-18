@@ -163,6 +163,8 @@ agents hc attach NAME                   # come back to one; ctrl+\ detaches and 
 claude                                  # with AGENTS_HC_AUTO=1, in a Herdr pane: hosted in herdr-core by itself
 agents hc mirror                        # experimental (AGENTS_HC_MIRROR=1): each agent pane and its mirror in herdr-core
 agents hc mirror end                    # end every mirror; the agents stay in their panes
+agents hc mirror off                    # in a Herdr pane: no mirror for this one (on brings it back; PANE for another)
+agents hc ls                            # what the phone lists from here, and the agent panes it cannot reach
 agents hc up --restart                  # at the Mac, not over SSH: replace a core outside the desktop login (ends its terminals)
 ```
 

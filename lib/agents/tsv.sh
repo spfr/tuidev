@@ -3,7 +3,7 @@
 # (configs/swiftbar/agents.10s.sh) reads every refresh.
 #
 # Uses: config.sh, util.sh (_agents_bg), snapshot.sh (agents_collect,
-#   _agents_herdr_health), hcmirror.sh (_agents_hc_phone_rows),
+#   _agents_herdr_health), hcphone.sh (_agents_hc_phone_rows),
 #   assess.sh (_agents_with_needs), system.sh, awake.sh, lid.sh, history.sh
 #   (_agents_hist_line), report.sh (_agents_insight_line,
 #   _agents_tokens_line), mcp.sh (_agents_mcp_load, agents_mcp_tsv), cool.sh
@@ -87,7 +87,7 @@ agents_tsv() {
     # title came with the records ("herdr PID PANE TITLE", agents_enrich), and
     # so did each agent row's join key ("ident PID PANE SESSION").
     _agents_herdr_health
-    # "hc STATE GUI MIRRORS": herdr-core's phone status (hcmirror.sh), from a
+    # "hc STATE GUI MIRRORS": herdr-core's phone status (hcphone.sh), from a
     # cache a background check rewrites; nothing without herdr-core.
     _agents_hc_phone_rows
     # "release INSTALLED LATEST" while a newer tuidev is out (release.sh).

@@ -33,8 +33,9 @@
 #   hc-up.said.
 # Uses: config.sh (AGENTS_RUN_DIR, AGENTS_NO_HERDR, AGENTS_HC_AUTO),
 #   herdrlabel.sh (_agents_hl_herdr, _agents_hl_ready), util.sh
-#   (_agents_timeout, _agents_replace), bin/agents (_AGENTS_ENV_IN).
-# Public: agents_hc.
+#   (_agents_timeout, _agents_replace), bin/agents (_AGENTS_ENV_IN);
+#   hcmirror.sh and hcphone.sh for `mirror` and `ls`.
+# Public: agents_hc, _agents_hc_marks (the hosted panes, from their marks).
 
 _AGENTS_HC_SOURCE="tuidev-hc"    # our reports' source in Herdr: what leaving a pane releases
 _AGENTS_HC_NAME_RE='^[a-z0-9_][a-z0-9_-]{0,31}$'
@@ -392,19 +393,42 @@ _agents_hc_events() {
     done
 }
 
-# A Herdr pane that is on a core-hosted agent is marked while it is (the
-# attaching shell's pid, in the run dir), so a mirror sync (hcmirror.sh) does
-# not mirror into herdr-core what already lives there.
+# A Herdr pane that is on a core-hosted agent is marked while it is, so a
+# mirror sync (hcmirror.sh) does not mirror into herdr-core what already
+# lives there, and the phone's view (hcphone.sh) knows which terminal the
+# pane shows. The mark is a file in the run dir: the attaching shell's pid,
+# then "PANE<TAB>ADDRESS<TAB>NAME" (an older agents wrote the pid only).
 _agents_hc_pane_mark() { printf '%s\n' "$AGENTS_RUN_DIR/hc-pane.$(printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_')"; }
 _agents_hc_pane_marked() {
     local f pid
     f="$(_agents_hc_pane_mark "$1")"
     [[ -f "$f" ]] || return 1
     read -r pid < "$f" 2>/dev/null || return 1
-    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
-    # A sandbox answers kill -0 for someone else's live process with EPERM:
-    # alive still, so ps has the last word.
-    kill -0 "$pid" 2>/dev/null || [[ -n "$(ps -o pid= -p "$pid" 2>/dev/null)" ]]
+    _agents_hc_alive "$pid"
+}
+# _agents_hc_alive PID — a process that runs. A sandbox answers kill -0 for
+# someone else's live process with EPERM: alive still, so ps has the last word.
+_agents_hc_alive() {
+    [[ "$1" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "$1" 2>/dev/null || [[ -n "$(ps -o pid= -p "$1" 2>/dev/null)" ]]
+}
+
+# _agents_hc_marks — "PANE<US>ADDRESS<US>NAME" for each pane on a hosted agent
+# now (its mark's attach still runs), from the marks alone: no core call, one
+# read and one kill -0 a mark. A mark with no second line is left out.
+_AGENTS_HC_ID_RE='^[A-Za-z0-9][A-Za-z0-9:/._-]{0,63}$'
+_agents_hc_marks() {
+    local f pid line pane addr name
+    for f in "$AGENTS_RUN_DIR"/hc-pane.*; do
+        [[ -f "$f" ]] || continue
+        pid="" line=""
+        { read -r pid; IFS= read -r line; } < "$f" 2>/dev/null || true
+        if [[ -z "$line" ]] || ! _agents_hc_alive "$pid"; then continue; fi
+        IFS=$'\t' read -r pane addr name <<<"$line"
+        [[ "$pane" =~ $_AGENTS_HC_ID_RE && "$addr" =~ $_AGENTS_HC_ID_RE ]] || continue
+        [[ "$name" =~ $_AGENTS_HC_ID_RE ]] || name="$addr"
+        printf '%s\037%s\037%s\n' "$pane" "$addr" "$name"
+    done
 }
 
 # _agents_hc_attach ADDRESS [NAME] — put this terminal on the core terminal at
@@ -426,7 +450,7 @@ _agents_hc_attach() {
         trap '_agents_hc_attach_end; exit 130' INT
         trap '_agents_hc_attach_end; exit 143' TERM
         _AGENTS_HC_MARK="$(_agents_hc_pane_mark "$HERDR_PANE_ID")"
-        echo "$$" > "$_AGENTS_HC_MARK" 2>/dev/null || _AGENTS_HC_MARK=""
+        printf '%s\n%s\t%s\t%s\n' "$$" "$HERDR_PANE_ID" "$t" "$shown" > "$_AGENTS_HC_MARK" 2>/dev/null || _AGENTS_HC_MARK=""
         _AGENTS_HC_FIFO="$AGENTS_RUN_DIR/hc-bridge.$$"
         rm -f "$_AGENTS_HC_FIFO"
         if mkfifo -m 600 "$_AGENTS_HC_FIFO" 2>/dev/null; then
@@ -708,12 +732,14 @@ agents_hc() {
         up)     agents_hc_up "$@" ;;
         run)    agents_hc_run "$@" ;;
         auto)   agents_hc_auto "$@" ;;
+        ls)     [[ $# -eq 0 ]] || { echo "usage: agents hc ls" >&2; return 2; }
+                agents_hc_ls ;;
         mirror) agents_hc_mirror "$@" ;;
         _mirror) agents_hc_mirror_run "$@" ;;   # what a mirror's core terminal runs
         attach) [[ $# -eq 1 && "$1" != -* ]] || { echo "usage: agents hc attach TERMINAL" >&2; return 2; }
                 _agents_hc_need || return 1
                 _agents_hc_running || { echo "agents hc: no core runs (agents hc up)" >&2; return 1; }
                 _agents_hc_attach "$1" ;;
-        *)      echo "usage: agents hc [status] | up [--restart] [-q] | run [--name NAME] [--] CMD... | auto CMD... | attach TERMINAL | mirror [status|sync]" >&2; return 2 ;;
+        *)      echo "usage: agents hc [status] | up [--restart] [-q] | run [--name NAME] [--] CMD... | auto CMD... | attach TERMINAL | ls | mirror [status|sync|end|off|on]" >&2; return 2 ;;
     esac
 }
