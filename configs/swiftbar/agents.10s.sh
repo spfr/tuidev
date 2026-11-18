@@ -1650,7 +1650,9 @@ section_hogs() {
 # a machine does not answer. Its submenu: the dev servers and previews first,
 # each a click from your browser (one on another machine through a forward
 # `agents forward open` makes), then a line a machine with what it left
-# behind, then the forwards open here, Open the map, and when it was checked.
+# behind, then the forwards open here (a dead one closes on a click; one
+# where the link watcher found nothing answering lately still opens, with a
+# Close item under it), Open the map, and when it was checked.
 # Shown once there is something beyond this machine's own summary. Stopping
 # and sweeping stay in `agents map`, which asks before it does either.
 section_machines() {
@@ -1694,6 +1696,10 @@ section_machines() {
     while IFS=$'\t' read -r lp m rp st; do
         [[ -n "$lp" ]] || continue
         if [[ "$st" == dead ]]; then put "--localhost:$lp → $m:$rp · dead | $ACT param1=forward param2=close param3=$lp sfimage=xmark.circle symbolize=false"
+        elif [[ "$st" == unanswered ]]; then
+            # The watcher's mark may be wrong by now: a click still opens it, and closing is its own item.
+            put "--localhost:$lp → $m:$rp · nothing answers | href=http://localhost:$lp sfimage=arrow.left.arrow.right symbolize=false"
+            put "--Close localhost:$lp | $ACT param1=forward param2=close param3=$lp sfimage=xmark.circle symbolize=false"
         else put "--localhost:$lp → $m:$rp | href=http://localhost:$lp sfimage=arrow.left.arrow.right symbolize=false"; fi
     done <<<"$map_fwd"
     [[ $n_map_fwd -eq 0 ]] || put "--Close every forward | $ACT param1=forward param2=close param3=--all sfimage=xmark.circle"

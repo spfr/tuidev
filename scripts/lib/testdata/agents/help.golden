@@ -96,8 +96,10 @@ OTHER MACHINES (over ssh: Herdr's saved machines, and AGENTS_REMOTE_HOSTS)
                                bring a port of MACHINE here (loopback to loopback,
                                one ssh -L) and open it in your browser: the same
                                port number when it is free here
-  agents forward [ls]          the forwards and whether each still answers
+  agents forward [ls]          the forwards and each one's state: active, nothing
+                               answers, or dead (its ssh is gone)
   agents forward close --all | --dead | LOCALPORT | MACHINE PORT
+                               --dead: the dead ones and those nothing answers
   agents push [-m MACHINE] FILE...
                                copy files into MACHINE's ~/.cache/tuidev/drop and
                                print the paths (macOS: copied too), to paste there

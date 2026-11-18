@@ -403,6 +403,15 @@ _agents_link_room() {
     [[ $((kb / 1024)) -lt $_AGENTS_LINK_STORE_MB ]]
 }
 
+# _agents_link_pruned — what agents_forward_open closed to make room under
+# its cap (_AGENTS_FWD_PRUNED), on the watcher's log.
+_agents_link_pruned() {
+    local line
+    while IFS= read -r line; do
+        [[ -z "$line" ]] || echo "agents link: $line: to make room for a new request" >&2
+    done <<<"${_AGENTS_FWD_PRUNED:-}"
+}
+
 # _agents_link_handle LABEL TARGET LINE — act on one request from LABEL.
 # _AGENTS_LINK_T/_N (the caller's) count them: five in ten seconds.
 _agents_link_handle() {
@@ -430,15 +439,19 @@ _agents_link_handle() {
         # is 127.0.0.1, not localhost: another machine's page then shares no
         # cookies with what you run on localhost yourself.
         if agents_forward_open "$label" "$target" "$rport" asked 2>/dev/null </dev/null; then
+            _agents_link_pruned
             # No tab onto nothing: a port nobody holds over there gets a
-            # banner, and its forward is not kept.
+            # banner, and a forward this click made, or one a request made,
+            # is not kept. One of yours it reused stays: you opened it.
             if _agents_forward_answers "$_AGENTS_FWD_LPORT" </dev/null; then
+                _agents_forward_answered "$_AGENTS_FWD_LPORT"
                 _agents_open_local "$scheme://127.0.0.1:$_AGENTS_FWD_LPORT$path" || true
             else
-                _agents_forward_drop "$_AGENTS_FWD_LPORT" "$target"
+                [[ -z "$_AGENTS_FWD_NEW" && "$_AGENTS_FWD_KIND" == yours ]] || _agents_forward_drop "$_AGENTS_FWD_LPORT" "$target"
                 _agents_link_complain "$label: nothing answers on its port $rport"
             fi
         else
+            _agents_link_pruned
             _agents_link_complain "$label: no tunnel to its port $rport (agents forward open $label $rport says why)"
         fi
     else
@@ -501,8 +514,10 @@ _agents_link_loop() {
 }
 
 # _agents_link_watch — a loop per machine, and every minute one for each
-# machine added since. One watcher a user (the lock); AGENTS_LINK=0 ends it
-# at once, successfully, so its LaunchAgent stays down.
+# machine added since, and a look at the forwards (_agents_forward_sweep:
+# those that requests made and that nothing answers twice in a row, or whose
+# ssh ended, are closed). One watcher a user (the lock); AGENTS_LINK=0 ends
+# it at once, successfully, so its LaunchAgent stays down.
 _agents_link_watch() {
     local lock known=" " label target
     if [[ "$AGENTS_LINK" == 0 ]]; then echo "agents: link is off (AGENTS_LINK=0)"; return 0; fi
@@ -523,6 +538,7 @@ _agents_link_watch() {
             known+="$label "
             _agents_link_loop "$label" "$target" &
         done < <(_agents_machines)
+        _agents_forward_sweep </dev/null || true
         sleep 60 &
         wait $!
     done

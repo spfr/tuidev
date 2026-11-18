@@ -120,11 +120,15 @@ _agents_map_rows() {
         $1 == "P" && !agent[$3] && !sys[$3] && $5 != "/" && $5 != "-" && $5 != ENVIRON["HOME"] { print "port\t" $2 "\t" $3 "\t" $4 "\t" $5 }'
 }
 
-# _agents_map_all [MACHINE|local] — every machine's rows, each prefixed with
-# its label: this one first, the others in the machine list's order, asked at
-# the same time and given 12 s; then "fwd" rows for the forwards open here.
+# _agents_map_all [--cached] [MACHINE|local] — every machine's rows, each
+# prefixed with its label: this one first, the others in the machine list's
+# order, asked at the same time and given 12 s; then "fwd" rows for the
+# forwards open here, checked meanwhile (_agents_forward_states; --cached,
+# the menu bar's board: no probe, the link watcher's last finding).
 _agents_map_all() {
-    local only="${1:-}" dir label target f l lab tgt rp e now state
+    local cached="" only dir label target f l lab _t rp e _k now state
+    if [[ "${1:-}" == --cached ]]; then cached=--cached; shift; fi
+    only="${1:-}"
     dir="$(mktemp -d "${TMPDIR:-/tmp}/agents-map.XXXXXX")" || return 1
     if [[ -z "$only" || "$only" == local ]]; then
         _agents_map_rows > "$dir/0.local" 2>/dev/null &
@@ -145,19 +149,19 @@ _agents_map_all() {
               [[ -s "$dir/$i.$label" ]] || printf 'sys\tno answer (ssh %s)\n' "$target" > "$dir/$i.$label" ) &
         done < "$dir/machines"
     fi
+    _agents_forward_states $cached > "$dir/fwd" 2>/dev/null &
     wait
     for f in "$dir"/[0-9]*.*; do
         [[ -f "$f" ]] || continue
         label="${f##*/}"; label="${label#*.}"
         awk -v l="$label" '{ print l "\t" $0 }' "$f"
     done
-    rm -rf "$dir"
     _agents_now now
-    while IFS=$'\t' read -r l lab tgt rp e; do
+    while IFS=$'\t' read -r l lab _t rp e _k state; do
         [[ -n "$l" ]] || continue
-        if _agents_forward_alive "$l" "$tgt"; then state=active; else state=dead; fi
         printf 'local\tfwd\t%s\t%s\t%s\t%s\t%s\n' "$l" "$lab" "$rp" "$state" "$(( (now - e) / 60 ))"
-    done < <(_agents_forward_records)
+    done < "$dir/fwd"
+    rm -rf "$dir"
 }
 
 # _agents_map_list [--all] [MACHINE] — the list fzf shows, one line a thing:
@@ -273,7 +277,7 @@ _agents_map_list() {
                 m = pm[i]; k = m SUBSEP ppid[i]
                 proj = pw[i]; sub(/.*\//, "", proj)
                 if (m == "local") opens = "http://localhost:" pp[i]
-                else if ((m, pp[i]) in fwd) { f = fwd[m, pp[i]]; used[f] = 1; opens = "http://localhost:" fl[f] (fs[f] == "active" ? "  (forwarded)" : "  (forward is dead)") }
+                else if ((m, pp[i]) in fwd) { f = fwd[m, pp[i]]; used[f] = 1; opens = "http://localhost:" fl[f] (fs[f] == "active" ? "  (forwarded)" : (fs[f] == "unanswered" ? "  (forwarded, nothing answers)" : "  (forward is dead)")) }
                 else opens = "enter: forward it here"
                 note = (k in isstale && isstale[k]) ? "  · left behind" : ((k in owner && owner[k] != "") ? "  · by " owner[k] : "")
                 printf "%s\tport\t%s:%s\t   %-12s %-7s %-10s %-16s %6s %6s %7s  %s%s\n", m, pp[i], ppid[i], m, ":" pp[i], substr(pc[i], 1, 10), substr(proj, 1, 16), pcpu[k], pmem[k], page[k], opens, note
@@ -308,7 +312,7 @@ _agents_map_list() {
                 print "-\thead\t-\t"
                 group("FORWARDS", "open here, to a port not listed above · ctrl-k closes one")
                 for (i = 1; i <= nf; i++) if (!used[i])
-                    printf "local\tfwd\t%s\t   %-12s %-7s %-34s %6sm  %s\n", fl[i], fm[i], ":" fr[i], "http://localhost:" fl[i], fa[i], fs[i]
+                    printf "local\tfwd\t%s\t   %-12s %-7s %-34s %6sm  %s\n", fl[i], fm[i], ":" fr[i], "http://localhost:" fl[i], fa[i], (fs[i] == "unanswered" ? "nothing answers" : fs[i])
             }
             print "-\thead\t-\t"
             group("MACHINES", "ctrl-s sweeps what sessions left behind on one")
@@ -372,14 +376,20 @@ _agents_map_act() {
         peek:proc)
             if [[ "$m" == local ]]; then agents_main peek "$id" 200 | ${PAGER:-less -R}
             else _agents_map_remote "$m" peek "$id" 200 2>&1 | _agents_map_plain | ${PAGER:-less -R}; fi ;;
+        # What you stopped on another machine takes its forwards here with
+        # it: a server's own (its machine's label and its port), at once,
+        # yours too; then, after it and after a process or a sweep (which may
+        # have held other ports), that machine's forwards that requests made
+        # and that nothing answers now. A stop or sweep that was cancelled or
+        # failed leaves every forward alone.
         stop:proc)
             if [[ "$m" == local ]]; then agents_main kill "$id"
-            else _agents_map_remote -t "$m" kill "$id"; fi ;;
+            else _agents_map_remote -t "$m" kill "$id" || return; _agents_forward_prune "$m"; fi ;;
         go:port|peek:port)   _agents_ports_go "$m" "$port" ;;
         stop:port)
             [[ "$pid" != - ]] || { echo "agents: that machine did not say which process holds :$port" >&2; return 1; }
             if [[ "$m" == local ]]; then agents_main kill "$pid"
-            else _agents_map_remote -t "$m" kill "$pid"; fi ;;
+            else _agents_map_remote -t "$m" kill "$pid" || return; _agents_forward_close_server "$m" "$port"; _agents_forward_prune "$m"; fi ;;
         go:file|peek:file)
             if [[ "$m" == local ]]; then _agents_open_local "$id"
             else _agents_map_target "$m" && _agents_remote_fetch_open "$id" >/dev/null; fi ;;
@@ -387,7 +397,7 @@ _agents_map_act() {
         stop:fwd)            _agents_forward_close "$id" ;;
         sweep:*)
             if [[ "$m" == local ]]; then agents_main reap
-            elif [[ "$m" != - ]]; then _agents_map_remote -t "$m" reap; fi ;;
+            elif [[ "$m" != - ]]; then _agents_map_remote -t "$m" reap || return; _agents_forward_prune "$m"; fi ;;
         *) return 0 ;;
     esac
 }
@@ -435,12 +445,13 @@ _agents_map_preview() {
 #   mach<TAB>LABEL<TAB>SUMMARY
 #   port<TAB>LABEL<TAB>PORT<TAB>COMMAND<TAB>PROJECT<TAB>LOCALPORT|-<TAB>stale|-
 #   left<TAB>LABEL<TAB>COUNT          (stale processes there)
-#   fwd<TAB>LOCALPORT<TAB>LABEL<TAB>PORT<TAB>active|dead
+#   fwd<TAB>LOCALPORT<TAB>LABEL<TAB>PORT<TAB>active|unanswered|dead
 # The same checks _agents_map_list makes of a row (awk/lib_maprows.awk), and
-# no text longer than a menu line.
+# no text longer than a menu line. No forward is probed for it: unanswered
+# is the link watcher's last finding (_agents_forward_states --cached).
 _agents_map_bar() {
     # shellcheck disable=SC2016
-    _agents_map_all | _agents_awk_eval "lib_maprows" '
+    _agents_map_all --cached | _agents_awk_eval "lib_maprows" '
         $2 == "sys"  { mr_sys(); if (!($1 in seen)) { seen[$1] = 1; mo[++nm] = $1 } msys[$1] = R_text; next }
         $2 == "proc" {
             if (!mr_proc() || R_line ~ /^  /) next

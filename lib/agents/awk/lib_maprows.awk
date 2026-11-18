@@ -19,7 +19,8 @@
 #              holds it or "-", the command, the project directory (clean)
 # R_path, R_session   file: an absolute path of plain characters, its session
 # R_flocal, R_flabel, R_fremote, R_fstate, R_fage   fwd: the local port, the
-#              machine, its port, active|dead, minutes open
+#              machine, its port, active|unanswered|dead (unanswered: its ssh
+#              is alive and nothing answers over there), minutes open
 #
 # The awk here runs under LC_ALL=C, so a character is its bytes.
 
@@ -64,7 +65,7 @@ function mr_file() {
 }
 # A forward is a row of this machine only: one another machine sends is no row.
 function mr_fwd() {
-    if ($1 != "local" || !mr_numok($3, 5) || $4 !~ /^[A-Za-z0-9._-]+$/ || length($4) > 64 || !mr_numok($5, 5) || $6 !~ /^(active|dead)$/ || !mr_numok($7, 9)) return 0
+    if ($1 != "local" || !mr_numok($3, 5) || $4 !~ /^[A-Za-z0-9._-]+$/ || length($4) > 64 || !mr_numok($5, 5) || $6 !~ /^(active|unanswered|dead)$/ || !mr_numok($7, 9)) return 0
     R_flocal = $3; R_flabel = $4; R_fremote = $5; R_fstate = $6; R_fage = $7
     return 1
 }

@@ -61,7 +61,7 @@ case "$cmd" in
     *"link serve"*)  cat "$FAKE/serve.$target" 2>/dev/null || exit 255 ;;
     *"ports --tsv"*) cat "$FAKE/ports.$target" 2>/dev/null || exit 255 ;;
     *"map --rows"*)  cat "$FAKE/map.$target" 2>/dev/null || exit 255 ;;
-    *'.local/bin/agents"'*) printf '%s|%s\n' "$target" "${args[*]:1}" >> "$FAKE/remote.log" ;;
+    *'.local/bin/agents"'*) printf '%s|%s\n' "$target" "${args[*]:1}" >> "$FAKE/remote.log"; [[ ! -e "$FAKE/cancel" ]] || exit 1 ;;
     *"cat > "*)      name="${cmd##*/}"; cat > "$FAKE/pushed.$name"; echo "/srv/u/.cache/tuidev/drop/$name" ;;
     # A far end that swallows whatever stdin it is given, and sends its file
     # whole: the size cap and the caller's own stdin are this side's to keep.
@@ -120,7 +120,7 @@ grep -q -- "-o BatchMode=yes" "$FAKE/ssh.log" || fail "ssh could prompt"
 grep -q -- "-o ForwardAgent=no -o ForwardX11=no" "$FAKE/ssh.log" || fail "the tunnel could forward your ssh agent"
 ! grep -q -- "ClearAllForwardings" "$FAKE/ssh.log" || fail "the tunnel's own -L would be cleared"
 grep -q -- "-o ExitOnForwardFailure=yes" "$FAKE/ssh.log" || fail "ssh could hide a failed forward"
-[[ "$(cat "$AGENTS_RUN_DIR/forward/f.5173")" == "5173${T}devbox${T}devbox${T}5173${T}$NOW" ]] || fail "the record: $(cat "$AGENTS_RUN_DIR/forward/f.5173")"
+[[ "$(cat "$AGENTS_RUN_DIR/forward/f.5173")" == "5173${T}devbox${T}devbox${T}5173${T}$NOW${T}yours" ]] || fail "the record: $(cat "$AGENTS_RUN_DIR/forward/f.5173")"
 reset
 out="$(agents_forward open --no-open devbox 'http://127.0.0.1:5173/docs?a=1')" || fail "reuse failed"
 [[ "$out" == "http://localhost:5173/docs?a=1  ->  devbox:5173" ]] || fail "a URL keeps its path: $out"
@@ -156,6 +156,189 @@ out="$(agents_forward open devbox 8080 2>&1)" && fail "a refused forward succeed
 [[ "$out" == *"no tunnel to devbox:8080: Permission denied (publickey)."* && ! -e "$AGENTS_RUN_DIR/forward/f.8080" ]] || fail "refused: $out"
 rm -f "$FAKE/refuse"
 pass "forward: loopback only, the same port when free, reuse, dead ones replaced, close, ssh's error passed on"
+
+# --- 2b. What a forward leads to: active, nothing answers, dead; the watcher's minute -------------
+# The stand-in probe: logs each port it is asked about, says nothing is served
+# on the ports in $FAKE/quiet, and takes a second with $FAKE/slow.
+cat > "$tmp/probe" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$1" >> "$FAKE/probe.log"
+[[ ! -e "$FAKE/slow" ]] || sleep 1
+# $FAKE/onprobe, when there is one, runs once, inside the first probe: what a click does in that second.
+if [[ -f "$FAKE/onprobe" ]] && mkdir "$FAKE/onprobe.once" 2>/dev/null; then . "$FAKE/onprobe"; fi
+case " $(cat "$FAKE/quiet" 2>/dev/null) " in *" $1 "*) exit 1 ;; esac
+exit 0
+EOF
+chmod +x "$tmp/probe"
+export NOW   # the onprobe snippets run in the probe's own process
+onprobe() { rm -rf "$FAKE/onprobe.once"; printf '%s\n' "$1" > "$FAKE/onprobe"; }
+noprobe() { rm -rf "$FAKE/onprobe" "$FAKE/onprobe.once"; }
+misses() { cut -f1 "$fdir/f.$1.miss" 2>/dev/null; }
+sweep_at() { AGENTS_NOW="$1" _agents_forward_sweep 2>"$tmp/sweep.err"; }
+export AGENTS_PROBE="$tmp/probe"
+quiet() { printf '%s\n' "$*" > "$FAKE/quiet"; }
+probed() { cat "$FAKE/probe.log" 2>/dev/null | sort -n | tr '\n' ' '; }
+fdir="$AGENTS_RUN_DIR/forward"
+# A record says whose it is; an old one without the field is a request's at 47000 and above, unless
+# its local port is its remote port (yours takes the same number first).
+mkdir -p "$fdir"
+printf '5173\tdevbox\tdevbox\t5173\t%s\n' "$NOW" > "$fdir/f.5173"
+printf '47000\tdevbox\tdevbox\t3000\t%s\n' "$NOW" > "$fdir/f.47000"
+printf '47001\tdevbox\tdevbox\t3001\t%s\tbogus\n' "$NOW" > "$fdir/f.47001"
+printf '48080\tdevbox\tdevbox\t48080\t%s\n' "$NOW" > "$fdir/f.48080"
+printf '3\n' > "$fdir/f.5173.miss"
+[[ "$(_agents_forward_records)" == "47000${T}devbox${T}devbox${T}3000${T}$NOW${T}asked"$'\n'"48080${T}devbox${T}devbox${T}48080${T}$NOW${T}yours"$'\n'"5173${T}devbox${T}devbox${T}5173${T}$NOW${T}yours" ]] || fail "old records: $(_agents_forward_records)"
+rm -f "$fdir"/f.*
+( agents_forward_open devbox devbox 3000 asked && [[ "$(cut -f6 "$fdir/f.$_AGENTS_FWD_LPORT")" == asked ]] ) || fail "a request's record does not say asked: $(cat "$fdir"/f.*)"
+agents_forward close --all >/dev/null
+# Three states in ls, and every live forward probed at the same time (four probes of a second each).
+for p in 5173 4000 4001 4002; do agents_forward open --no-open devbox "$p" >/dev/null; done
+agents_forward open --no-open workbox 5173 >/dev/null   # localhost:5174
+quiet 4000; rm -f "$FAKE/up.f.5174.sock" "$FAKE/probe.log"; : > "$FAKE/slow"
+SECONDS=0
+out="$(agents_forward ls | tr -s ' ')"
+[[ $SECONDS -le 2 ]] || fail "ls probed one forward after another (${SECONDS}s)"
+rm -f "$FAKE/slow"
+[[ "$out" == *"http://localhost:5173 devbox:5173 active 0m"* && "$out" == *"http://localhost:4000 devbox:4000 nothing answers 0m"* && "$out" == *"http://localhost:5174 workbox:5173 dead 0m"* ]] || fail "ls, three states: $out"
+[[ "$(probed)" == "4000 4001 4002 5173 " ]] || fail "ls probed a dead forward, or missed one: $(probed)"
+# The map's rows: probed for agents map; the menu bar's board probes nothing and shows the watcher's mark.
+( _agents_map_rows() { printf 'sys\tx\n'; }
+  rm -f "$FAKE/probe.log"
+  rows="$(_agents_map_all local)"
+  [[ "$rows" == *"local${T}fwd${T}4000${T}devbox${T}4000${T}unanswered${T}0"* && "$rows" == *"local${T}fwd${T}5174${T}workbox${T}5173${T}dead${T}0"* && "$rows" == *"local${T}fwd${T}5173${T}devbox${T}5173${T}active${T}0"* ]] || fail "map rows, three states: $rows"
+  list="$(NO_COLOR=1 _agents_map_list local | tr -s ' ')"
+  [[ "$list" == *"local${T}fwd${T}4000${T} devbox :4000 http://localhost:4000 0m nothing answers"* && "$list" == *"local${T}fwd${T}5174${T} workbox :5173 http://localhost:5174 0m dead"* ]] || fail "map list, forwards: $list"
+  rm -f "$FAKE/probe.log"
+  bar="$(_agents_map_bar)"
+  [[ ! -e "$FAKE/probe.log" ]] || fail "the menu bar's board probed: $(probed)"
+  [[ "$bar" == *"fwd${T}4000${T}devbox${T}4000${T}active"* && "$bar" == *"fwd${T}5174${T}workbox${T}5173${T}dead"* ]] || fail "map bar without a mark: $bar"
+  printf '1\t%s\n' "$((NOW - 10))" > "$fdir/f.4000.miss"
+  [[ "$(_agents_map_bar)" == *"fwd${T}4000${T}devbox${T}4000${T}unanswered"* ]] || fail "map bar: the watcher's mark not shown: $(_agents_map_bar)"
+  # A mark the watcher stopped keeping (older than 150 s, or without a time) says nothing.
+  printf '1\t%s\n' "$((NOW - 200))" > "$fdir/f.4000.miss"
+  [[ "$(_agents_map_bar)" == *"fwd${T}4000${T}devbox${T}4000${T}active"* ]] || fail "map bar: an old mark still shown: $(_agents_map_bar)"
+  printf '1\n' > "$fdir/f.4000.miss"
+  [[ "$(_agents_map_bar)" == *"fwd${T}4000${T}devbox${T}4000${T}active"* ]] || fail "map bar: a mark without a time shown: $(_agents_map_bar)"
+  rm -f "$fdir/f.4000.miss" ) || exit 1
+# A server's row whose forward leads nowhere says so; the board takes the state.
+( _agents_map_all() { printf 'devbox\tport\t4000\t91\tnode\t/srv/a\nlocal\tfwd\t47000\tdevbox\t4000\tunanswered\t1\n'; }
+  [[ "$(NO_COLOR=1 _agents_map_list)" == *"http://localhost:47000  (forwarded, nothing answers)"* ]] || fail "map: a server whose forward nothing answers: $(NO_COLOR=1 _agents_map_list)"
+  [[ "$(_agents_map_bar)" == *"fwd${T}47000${T}devbox${T}4000${T}unanswered"* ]] || fail "map bar: unanswered refused: $(_agents_map_bar)" ) || exit 1
+# close --dead: the dead and the unanswered, yours or not; what answers stays.
+[[ "$(agents_forward close --dead)" == "closed localhost:4000 (devbox:4000)"$'\n'"closed localhost:5174 (workbox:5173)" ]] || fail "close --dead with three states"
+[[ "$(_agents_forward_records | cut -f1 | tr '\n' ' ')" == "4001 4002 5173 " ]] || fail "close --dead closed what answers: $(_agents_forward_records)"
+agents_forward close --all >/dev/null
+# The watcher's minute (a minute apart: NOW, +60, +120). Requests' forwards: 47000 (goes quiet), 47001
+# (quiet, then served again), 47002 (its ssh ends); yours: 4000 (quiet), 4001 (its ssh ends).
+for p in 3000 3001 3002; do agents_forward_open devbox devbox "$p" asked || fail "asked forward to $p"; done
+for p in 4000 4001; do agents_forward open --no-open devbox "$p" >/dev/null; done
+quiet 47000 47001 4000
+sweep_at "$NOW"
+[[ "$(misses 47000) $(misses 47001) $(misses 4000)" == "1 1 1" && ! -s "$tmp/sweep.err" ]] || fail "sweep 1: one miss is kept and marked: $(ls "$fdir"; cat "$tmp/sweep.err")"
+[[ "$(cat "$fdir/f.47000.miss")" == "1${T}$NOW" ]] || fail "sweep 1: the mark: $(cat "$fdir/f.47000.miss")"
+# Two looks seconds apart (a watcher that restarts looks at once) are one miss, not two.
+quiet 47000 4000
+sweep_at "$((NOW + 5))"
+[[ -e "$fdir/f.47000" && "$(cat "$fdir/f.47000.miss")" == "1${T}$NOW" && ! -s "$tmp/sweep.err" ]] || fail "a second look 5 s later counted as a miss: $(ls "$fdir"; cat "$fdir/f.47000.miss")"
+sweep_at "$((NOW + 60))"
+[[ ! -e "$fdir/f.47000" && ! -e "$fdir/f.47000.miss" && ! -e "$FAKE/up.f.47000.sock" ]] || fail "sweep 2: a request's forward that missed twice was kept: $(ls "$fdir")"
+[[ "$(cat "$tmp/sweep.err")" == "agents link: closed localhost:47000 (devbox:3000): nothing answered there twice in a row" ]] || fail "sweep 2: the watcher's line: $(cat "$tmp/sweep.err")"
+[[ -e "$fdir/f.4000" && "$(misses 4000)" == 2 ]] || fail "sweep 2: yours was closed, or not marked: $(ls "$fdir")"
+[[ -e "$fdir/f.47001" && ! -e "$fdir/f.47001.miss" ]] || fail "sweep 2: a served check did not clear the miss: $(ls "$fdir")"
+quiet 47001 4000; rm -f "$FAKE/up.f.47002.sock" "$FAKE/up.f.4001.sock"
+sweep_at "$((NOW + 120))"
+[[ -e "$fdir/f.47001" && "$(misses 47001)" == 1 ]] || fail "sweep 3: a miss after a served check counted as the second: $(ls "$fdir")"
+[[ ! -e "$fdir/f.47002" && -e "$fdir/f.4001" && -e "$fdir/f.4000" && "$(misses 4000)" == 3 ]] || fail "sweep 3: dead ones: $(ls "$fdir")"
+[[ "$(cat "$tmp/sweep.err")" == "agents link: closed localhost:47002 (devbox:3002): its ssh had ended" ]] || fail "sweep 3: the line for a dead one: $(cat "$tmp/sweep.err")"
+# ls shows yours with its mark as nothing answers, now; the dead one of yours stays for you to close.
+[[ "$(agents_forward ls | tr -s ' ')" == *"devbox:4000 nothing answers"*"devbox:4001 dead"* ]] || fail "ls after the sweeps: $(agents_forward ls)"
+agents_forward close --all >/dev/null
+[[ -z "$(ls "$fdir")" ]] || fail "close --all left files: $(ls "$fdir")"
+# Each acts only on the forward it checked. In the second a probe takes, a click can close a dead
+# forward and open a new one on the same local port, or reuse one (yours now): $FAKE/onprobe does
+# that from inside the slow probe of another forward, after the dead one was found dead.
+: > "$FAKE/slow"
+agents_forward_open devbox devbox 3000 asked; agents_forward_open devbox devbox 3001 asked   # 47000 47001
+rm -f "$FAKE/up.f.47000.sock" "$FAKE/ssh.log"
+onprobe 'printf "47000\tdevbox\tdevbox\t3005\t%s\tasked\n" "$((NOW + 1))" > "$AGENTS_RUN_DIR/forward/f.47000"; : > "$FAKE/up.f.47000.sock"'
+sweep_at "$((NOW + 200))"; noprobe
+[[ "$(cut -f4 "$fdir/f.47000")" == 3005 && -e "$FAKE/up.f.47000.sock" && ! -s "$tmp/sweep.err" ]] || fail "race: the sweep closed the forward a click had just made on that port: $(cat "$fdir/f.47000" 2>&1; cat "$tmp/sweep.err")"
+! grep -q 'f.47000.sock -O exit' "$FAKE/ssh.log" || fail "race: the sweep sent -O exit to the new forward"
+agents_forward close --all >/dev/null
+# A miss: not written into, nor counted as the second for, a forward made again meanwhile, or made yours.
+for p in 3000 3001; do agents_forward_open devbox devbox "$p" asked; done                    # 47000 47001
+printf '1\t%s\n' "$NOW" > "$fdir/f.47000.miss"; printf '1\t%s\n' "$NOW" > "$fdir/f.47001.miss"
+quiet 47000 47001
+onprobe 'rm -f "$AGENTS_RUN_DIR/forward/f.47000.miss" "$AGENTS_RUN_DIR/forward/f.47001.miss"
+  printf "47000\tdevbox\tdevbox\t3000\t%s\tasked\n" "$((NOW + 1))" > "$AGENTS_RUN_DIR/forward/f.47000"
+  printf "47001\tdevbox\tdevbox\t3001\t%s\tyours\n" "$NOW" > "$AGENTS_RUN_DIR/forward/f.47001"'
+sweep_at "$((NOW + 60))"; noprobe
+[[ -e "$fdir/f.47000" && -e "$fdir/f.47001" && ! -e "$fdir/f.47000.miss" && ! -e "$fdir/f.47001.miss" && ! -s "$tmp/sweep.err" ]] || fail "race: a miss reached a forward made again or made yours: $(ls "$fdir"; cat "$tmp/sweep.err")"
+agents_forward close --all >/dev/null
+# The same in a prune and in close --dead: a forward made again meanwhile is not closed.
+agents_forward_open devbox devbox 3000 asked; quiet 47000
+onprobe 'printf "47000\tdevbox\tdevbox\t3000\t%s\tasked\n" "$((NOW + 1))" > "$AGENTS_RUN_DIR/forward/f.47000"'
+[[ -z "$(_agents_forward_prune devbox)" && -e "$fdir/f.47000" ]] || fail "race: a prune closed a forward made again meanwhile"
+onprobe 'printf "47000\tdevbox\tdevbox\t3000\t%s\tasked\n" "$((NOW + 2))" > "$AGENTS_RUN_DIR/forward/f.47000"'
+[[ -z "$(agents_forward close --dead)" && -e "$fdir/f.47000" ]] || fail "race: close --dead closed a forward made again meanwhile"
+noprobe; rm -f "$FAKE/slow"
+agents_forward close --all >/dev/null
+# A click that reuses a request's forward and finds it answering forgets its misses.
+agents_forward_open devbox devbox 3000 asked; printf '1\t%s\n' "$NOW" > "$fdir/f.47000.miss"
+( reset; _AGENTS_LINK_T=0 _AGENTS_LINK_N=0; _agents_link_handle devbox devbox "open-url${T}http://localhost:3000/" 2>/dev/null
+  [[ "$(opened)" == "http://127.0.0.1:47000/" && ! -e "$fdir/f.47000.miss" ]] ) || fail "a click that found the forward answering kept its misses"
+agents_forward close --all >/dev/null
+# A forward of yours that a click asks for again stays yours, and is never closed for not answering.
+printf '#!/bin/bash\nexit 56\n' > "$tmp/curl56"; chmod +x "$tmp/curl56"
+agents_forward open --no-open devbox 3000 >/dev/null
+( reset; _AGENTS_LINK_T=0 _AGENTS_LINK_N=0; _agents_link_handle devbox devbox "open-url${T}http://localhost:3000/" 2>/dev/null
+  [[ "$(opened)" == "http://127.0.0.1:3000/" && "$(cut -f6 "$fdir/f.3000")" == yours ]] ) || fail "a click on a port you forwarded: $(cat "$fdir"/f.* 2>&1)"
+( reset; AGENTS_CURL="$tmp/curl56" _AGENTS_LINK_T=0 _AGENTS_LINK_N=0; _agents_link_handle devbox devbox "open-url${T}http://localhost:3000/" 2>/dev/null
+  [[ -z "$(opened)" && -e "$fdir/f.3000" && -e "$FAKE/up.f.3000.sock" ]] ) || fail "a click that found nothing answering closed your forward"
+# ...while one the click made, or a request's, still goes.
+( reset; AGENTS_CURL="$tmp/curl56" _AGENTS_LINK_T=0 _AGENTS_LINK_N=0; _agents_link_handle devbox devbox "open-url${T}http://localhost:3001/" 2>/dev/null
+  [[ -z "$(opened)" && "$(_agents_forward_records | cut -f1 | tr '\n' ' ')" == "3000 " ]] ) || fail "a click kept a forward it made onto nothing: $(_agents_forward_records)"
+agents_forward close --all >/dev/null
+# No forwards: a wake does nothing at all, not even a probe or an ssh.
+rm -f "$FAKE/probe.log" "$FAKE/ssh.log"
+_agents_forward_any && fail "forwards found where there are none: $(ls "$fdir")"
+_agents_forward_sweep
+[[ ! -e "$FAKE/probe.log" && ! -e "$FAKE/ssh.log" ]] || fail "a wake with no forwards did work"
+grep -q '_agents_forward_sweep' "$REPO_DIR/lib/agents/link.sh" || fail "the link watcher does not sweep the forwards"
+rm -f "$FAKE/quiet"
+# The real probe sends nothing and only watches the connection: closed at once is nothing served, a
+# connection kept open or a server that speaks first is served, and so is nothing to connect to.
+if command -v perl >/dev/null 2>&1; then
+    cat > "$tmp/srv.pl" <<'EOF'
+use IO::Socket::INET;
+my ($mode, $out) = @ARGV;
+my $s = IO::Socket::INET->new(LocalAddr => "127.0.0.1", LocalPort => 0, Listen => 5, ReuseAddr => 1) or die;
+open(my $fh, ">", $out) or die; print $fh $s->sockport, "\n"; close $fh;
+while (my $c = $s->accept) {
+    if ($mode eq "close") { close $c; next }
+    print $c "SSH-2.0-x\r\n" if $mode eq "speak";
+    my $buf = ""; my $n = sysread($c, $buf, 100);
+    open(my $g, ">>", "$out.got") or die; print $g length($buf), "\n"; close $g; close $c;
+}
+EOF
+    srv=""
+    for mode in close hold speak; do
+        perl "$tmp/srv.pl" "$mode" "$tmp/port.$mode" & srv+=" $!"
+    done
+    for _ in $(seq 1 50); do [[ -s "$tmp/port.close" && -s "$tmp/port.hold" && -s "$tmp/port.speak" ]] && break; sleep 0.1; done
+    _agents_forward_held "$(cat "$tmp/port.close")" && fail "the probe: a connection closed at once was served"
+    _agents_forward_held "$(cat "$tmp/port.hold")" || fail "the probe: a connection held open was not served"
+    _agents_forward_held "$(cat "$tmp/port.speak")" || fail "the probe: a server that speaks first was not served"
+    for _ in $(seq 1 20); do [[ -s "$tmp/port.hold.got" ]] && break; sleep 0.1; done
+    [[ "$(cat "$tmp/port.hold.got")" == 0 ]] || fail "the probe sent something: $(cat "$tmp/port.hold.got")"
+    # shellcheck disable=SC2086  # a list of pids
+    { kill $srv; wait $srv || true; } 2>/dev/null
+    _agents_forward_held "$(cat "$tmp/port.close")" || fail "the probe: nothing to connect to was not counted as served"
+else
+    echo "SKIP: the real probe (no perl for a loopback server)"
+fi
+unset AGENTS_PROBE
+pass "forward states: active, nothing answers and dead in ls and the map (probed at once; never for the menu bar), close --dead, the watcher's two misses"
 
 # --- 3. A click with nobody attached opens here ---------------------------------------------------
 reset
@@ -233,6 +416,21 @@ _agents_link_session devbox devbox 2>/dev/null
 # Eight forwards a machine by request; the ninth is refused. Yours are not capped.
 ( reset; for i in 1 2 3 4; do AGENTS_NOW=$((NOW + 20 * i)) _agents_link_handle devbox devbox "open-url${T}http://localhost:500$i/" 2>/dev/null; done
   [[ "$(grep -c -- ' -L ' "$FAKE/ssh.log")" -eq 2 ]] ) || fail "more than eight requested forwards for one machine"
+# At eight, that machine's requested forwards that nothing answers or whose ssh ended go first.
+( reset; AGENTS_PROBE="$tmp/probe"; printf '47000 47002\n' > "$FAKE/quiet"; rm -f "$FAKE/up.f.47001.sock"
+  [[ "$(ls "$AGENTS_RUN_DIR/forward" | grep -c '^f\.4700[0-7]$')" -eq 8 ]] || fail "the cap test needs eight: $(ls "$AGENTS_RUN_DIR/forward")"
+  AGENTS_NOW=$((NOW + 150)) _agents_link_handle devbox devbox "open-url${T}http://localhost:5009/" 2>"$tmp/cap.err"
+  [[ "$(grep 'make room' "$tmp/cap.err")" == "agents link: closed localhost:47000 (devbox:4001): to make room for a new request"$'\n'"agents link: closed localhost:47001 (devbox:4002): to make room for a new request"$'\n'"agents link: closed localhost:47002 (devbox:4003): to make room for a new request" ]] || fail "at the cap: what it closed is not on the watcher's log: $(cat "$tmp/cap.err")"
+  [[ "$(grep -c -- ' -L ' "$FAKE/ssh.log")" -eq 1 && "$(opened)" == "http://127.0.0.1:47000/" && "$(cut -f4 "$AGENTS_RUN_DIR/forward/f.47000")" == 5009 ]] || fail "at the cap: no room made: $(opened) $(ls "$AGENTS_RUN_DIR/forward")"
+  [[ ! -e "$AGENTS_RUN_DIR/forward/f.47001" && ! -e "$AGENTS_RUN_DIR/forward/f.47002" && -e "$AGENTS_RUN_DIR/forward/f.47003" ]] || fail "at the cap: the wrong forwards closed: $(ls "$AGENTS_RUN_DIR/forward")"
+  rm -f "$FAKE/quiet"
+  # Eight that all answer: refused, and told how to make room (close --dead would free nothing now).
+  agents_forward_open devbox devbox 5010 asked && agents_forward_open devbox devbox 5011 asked || fail "at the cap: room made, yet refused"
+  out="$(agents_forward_open devbox devbox 5012 asked 2>&1)" && fail "a ninth request was let in"
+  [[ "$out" == "agents: devbox already has 8 forwards it asked for, all answering: close one (agents forward ls, then agents forward close LOCALPORT)" ]] || fail "at the cap: the refusal: $out"
+  # A request's forward you open yourself becomes yours; it no longer counts toward the cap.
+  agents_forward open --no-open devbox 5009 >/dev/null
+  [[ "$(cut -f6 "$AGENTS_RUN_DIR/forward/f.47000")" == yours ]] || fail "a request's forward you opened is not yours: $(cat "$AGENTS_RUN_DIR/forward/f.47000")" ) || exit 1
 agents_forward open --no-open devbox 6001 >/dev/null || fail "your own forward was capped"
 agents_forward close --all >/dev/null
 # The size cap is kept here: a far end that sends more is cut off and nothing is kept.
@@ -521,7 +719,19 @@ agents_forward close 9999 >/dev/null
 [[ "$(agents_map | head -1)" == "PREVIEWS AND DEV SERVERS"* ]] || fail "map without a terminal is not the plain list"
 # The keys: each acts on the row's own machine, and only on an id of the right shape.
 reset; rm -f "$FAKE/remote.log"
-agents_map --act stop devbox proc 77@Tue_2 >/dev/null; agents_map --act sweep devbox head - >/dev/null; agents_map --act stop devbox port 8000:91 >/dev/null
+agents_map --act stop devbox proc 77@Tue_2 >/dev/null; agents_map --act sweep devbox head - >/dev/null
+# Stopping a server on another machine closes its forward here at once, yours too, and says so; then
+# that machine's requested forwards that nothing answers go too (the process may have held them).
+# Matched by the machine's label alone: another machine whose ssh target is spelled "devbox", and
+# another machine's same port, keep theirs.
+printf '18001\tother\tdevbox\t8000\t%s\tyours\n' "$NOW" > "$AGENTS_RUN_DIR/forward/f.18001"; : > "$FAKE/up.f.18001.sock"
+agents_forward open --no-open workbox 8000 >/dev/null                                       # 8001
+agents_forward_open devbox devbox 3000 asked; agents_forward_open devbox devbox 3001 asked   # 47000 47001
+out="$(AGENTS_PROBE="$tmp/probe"; printf '47000\n' > "$FAKE/quiet"; agents_map --act stop devbox port 8000:91)"
+rm -f "$FAKE/quiet"
+[[ "$out" == "closed localhost:8000 (devbox:8000)"$'\n'"closed localhost:47000 (devbox:3000)" && ! -e "$AGENTS_RUN_DIR/forward/f.8000" ]] || fail "map: stopping a server: $out"
+[[ "$(_agents_forward_records | cut -f1 | tr '\n' ' ')" == "18001 47001 8001 " ]] || fail "map: stopping a server closed another machine's forward: $(_agents_forward_records)"
+agents_forward close --all >/dev/null
 [[ "$(sed 's/"$HOME\/.local\/bin\/agents" //' "$FAKE/remote.log")" == "devbox|kill 77@Tue_2"$'\n'"devbox|reap"$'\n'"devbox|kill 91" ]] || fail "map: stop and sweep on another machine: $(cat "$FAKE/remote.log")"
 [[ "$(grep -c -- ' -t ' "$FAKE/ssh.log")" -eq 3 ]] || fail "map: a stop elsewhere had no terminal for its question"
 for bad in '77;reboot' '$(id)' '77@a b' ''; do
@@ -529,6 +739,28 @@ for bad in '77;reboot' '$(id)' '77@a b' ''; do
 done
 agents_map --act stop devbox port '8000:-' >/dev/null 2>&1 && fail "map: stopped a server without knowing its process"
 [[ "$(wc -l < "$FAKE/remote.log" | tr -d ' ')" -eq 3 ]] || fail "map: refused ids reached a machine: $(cat "$FAKE/remote.log")"
+# After a sweep or a stopped process there, that machine's requested forwards that nothing answers
+# close; yours and those that answer stay, and so does every other machine's.
+( AGENTS_PROBE="$tmp/probe"; rm -f "$FAKE/remote.log"
+  for p in 3000 3001; do agents_forward_open devbox devbox "$p" asked; done          # 47000 47001
+  agents_forward_open workbox workbox 3000 asked                                       # 47002
+  agents_forward open --no-open devbox 4000 >/dev/null
+  printf '47000 47002 4000\n' > "$FAKE/quiet"
+  out="$(agents_map --act sweep devbox head -)"
+  [[ "$out" == "closed localhost:47000 (devbox:3000)" ]] || fail "map: after a sweep: $out"
+  [[ -e "$AGENTS_RUN_DIR/forward/f.47001" && -e "$AGENTS_RUN_DIR/forward/f.47002" && -e "$AGENTS_RUN_DIR/forward/f.4000" ]] || fail "map: after a sweep, closed too much: $(ls "$AGENTS_RUN_DIR/forward")"
+  printf '47001\n' > "$FAKE/quiet"
+  [[ "$(agents_map --act stop devbox proc 77@Tue_2)" == "closed localhost:47001 (devbox:3001)" ]] || fail "map: after a stopped process"
+  # A stop or sweep that was cancelled, or failed, there: every forward stays.
+  agents_forward_open devbox devbox 3000 asked; agents_forward open --no-open devbox 8000 >/dev/null
+  printf '47000 8000\n' > "$FAKE/quiet"; : > "$FAKE/cancel"
+  agents_map --act stop devbox port 8000:91 > "$tmp/cancel.out" 2>&1 && fail "map: a cancelled stop succeeded"
+  agents_map --act stop devbox proc 77@Tue_2 >> "$tmp/cancel.out" 2>&1 && fail "map: a cancelled kill succeeded"
+  agents_map --act sweep devbox head - >> "$tmp/cancel.out" 2>&1 && fail "map: a cancelled sweep succeeded"
+  rm -f "$FAKE/cancel"
+  [[ "$(_agents_forward_records | cut -f1 | tr '\n' ' ')" == "4000 47000 47002 8000 " && "$(cat "$tmp/cancel.out")" != *closed* ]] || fail "map: a cancelled stop or sweep closed forwards: $(cat "$tmp/cancel.out"; _agents_forward_records)"
+  rm -f "$FAKE/quiet"; agents_forward close --all >/dev/null ) || exit 1
+agents_forward open --no-open devbox 8000 >/dev/null
 reset; agents_map --act go devbox port 8000:91 >/dev/null; agents_map --act go local fwd 8000 >/dev/null
 [[ "$(opened)" == "http://localhost:8000"$'\n'"http://localhost:8000" ]] || fail "map: enter on a server and a forward: $(opened)"
 [[ "$(agents_map --act stop local fwd 8000)" == "closed localhost:8000 (devbox:8000)" ]] || fail "map: ctrl-k on a forward"
@@ -714,7 +946,7 @@ mkdir -p "$tmp/mbin" "$tmp/sbcache"
   printf 'map\tat\t%s\n' "$(date +%s)"
   printf 'map\tmach\tlocal\tcpu 5%% · 1 session\nmap\tmach\tdevbox\tcpu 40%% · 2 sessions\nmap\tmach\tbad|box;x\tevil\n'
   printf 'map\tport\tlocal\t5173\tnode\tshop\t-\t-\nmap\tport\tdevbox\t8000\tpython3\tapp\t-\tstale\nmap\tport\tdevbox\t80;id\tsh\tx\t-\t-\n'
-  printf 'map\tleft\tdevbox\t2\nmap\tfwd\t47000\tdevbox\t3000\tactive\n'; } > "$tmp/menu.tsv"
+  printf 'map\tleft\tdevbox\t2\nmap\tfwd\t47000\tdevbox\t3000\tactive\nmap\tfwd\t47001\tdevbox\t3001\tunanswered\n'; } > "$tmp/menu.tsv"
 # shellcheck disable=SC2016  # the stub's own variables
 printf '#!/bin/bash\necho "$*" >> "%s/calls"\n[[ "$1" != tsv ]] || cat "%s/menu.tsv"\n' "$tmp/mbin" "$tmp" > "$tmp/mbin/agents"
 printf '#!/bin/bash\necho "$*" >> "%s/calls"\n' "$tmp/mbin" > "$tmp/mbin/open"
@@ -726,7 +958,8 @@ menu="$(mbar env)"
     || fail "menu: the machines row: $(printf '%s\n' "$menu" | grep -i machines)"
 [[ "$menu" == *"shop :5173 · node | sfimage=globe href=http://localhost:5173"* ]] || fail "menu: a local server is not a link: $menu"
 [[ "$(printf '%s\n' "$menu" | grep 'app :8000')" == "--app :8000 · python3 · on devbox · left behind |"*"param1=forward param2=open param3=devbox param4=8000"* ]] || fail "menu: a remote server does not forward: $(printf '%s\n' "$menu" | grep 8000)"
-[[ "$menu" == *$'\n'"--Forwards open here (1) | "*$'\n'"----localhost:47000 → devbox:3000 | href=http://localhost:47000"* && "$menu" == *"param2=map param3=devbox"* ]] || fail "menu: forwards and the machine's row: $menu"
+[[ "$menu" == *$'\n'"--Forwards open here (2) | "*$'\n'"----localhost:47000 → devbox:3000 | href=http://localhost:47000"* && "$menu" == *"param2=map param3=devbox"* ]] || fail "menu: forwards and the machine's row: $menu"
+[[ "$(printf '%s\n' "$menu" | grep 47001)" == "----localhost:47001 → devbox:3001 · nothing answers | href=http://localhost:47001 sfimage=arrow.left.arrow.right symbolize=false"$'\n'"----Close localhost:47001 | "*"param1=forward param2=close param3=47001 sfimage=xmark.circle symbolize=false" ]] || fail "menu: a forward nothing answers: $(printf '%s\n' "$menu" | grep 47001)"
 [[ "$menu" != *"80;id"* && "$menu" != *"box;x"* ]] || fail "menu: a row of another shape got in"
 # Its timer asked agents for the snapshot and nothing else.
 [[ "$(cat "$tmp/mbin/calls")" == tsv ]] || fail "menu: a timed refresh ran more than agents tsv: $(cat "$tmp/mbin/calls")"
