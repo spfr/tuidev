@@ -23,10 +23,9 @@
 # when it is due (and `tuidev` is installed beside agents).
 _agents_release() {
     local have="" latest="-" next=0 now cli="${AGENTS_PATH%/*}/tuidev"
-    local IFS=$' \t\n'
     REPLY="" REPLY_HAVE=""
-    { read -r have < "${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/version"; } 2>/dev/null || true
-    { read -r latest next _ < "${XDG_CACHE_HOME:-$HOME/.cache}/tuidev/latest"; } 2>/dev/null || true
+    { IFS=$' \t\n' read -r have < "${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/version"; } 2>/dev/null || true
+    { IFS=$' \t\n' read -r latest next _ < "${XDG_CACHE_HOME:-$HOME/.cache}/tuidev/latest"; } 2>/dev/null || true
     [[ "$next" =~ ^[0-9]+$ ]] || next=0
     _agents_now now
     if (( now >= next )) && [[ -x "$cli" && -z "${AGENTS_TESTING:-}" ]]; then
@@ -47,9 +46,12 @@ _agents_release() {
 # _agents_release_newer A B — is version A newer than B? Both X.Y.Z; part by
 # part as numbers, so 3.10.0 is newer than 3.9.0.
 _agents_release_newer() {
-    local a b i IFS=.
-    # shellcheck disable=SC2206  # split on dots
-    a=($1) b=($2)
+    local a b i re='^([0-9]+)\.([0-9]+)\.([0-9]+)$'
+    # Split with the match itself: no IFS to set, and none of the caller's to trust.
+    [[ "$1" =~ $re ]] || return 1
+    a=("${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
+    [[ "$2" =~ $re ]] || return 1
+    b=("${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
     for i in 0 1 2; do
         (( 10#${a[i]} > 10#${b[i]} )) && return 0
         (( 10#${a[i]} < 10#${b[i]} )) && return 1
