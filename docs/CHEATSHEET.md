@@ -160,6 +160,7 @@ Herdr's phone app, through herdr-core (`--pack herdr-core`; [remote.md](remote.m
 agents hc                               # is herdr-core running, and in your desktop login?
 agents hc run claude                    # in a Herdr pane: the agent, hosted in herdr-core, listed on the phone
 agents hc attach NAME                   # come back to one; ctrl+\ detaches and leaves it running
+claude                                  # with AGENTS_HC_AUTO=1, in a Herdr pane: hosted in herdr-core by itself
 agents hc mirror                        # experimental (AGENTS_HC_MIRROR=1): each agent pane and its mirror in herdr-core
 agents hc mirror end                    # end every mirror; the agents stay in their panes
 agents hc up --restart                  # at the Mac, not over SSH: replace a core outside the desktop login (ends its terminals)

@@ -10,7 +10,7 @@
 
 # Tests change variables inside ( … ) on purpose; the stand-ins are called by
 # the code under test.
-# shellcheck disable=SC2030,SC2031,SC2034,SC2329,SC2317
+# shellcheck disable=SC2016,SC2030,SC2031,SC2034,SC2329,SC2317
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,9 +19,10 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq is not installed"; exit 0; }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
+tmp="$(cd "$tmp" && pwd)"   # as cd spells it ($TMPDIR may end in a slash)
 trap 'rm -rf "$tmp"' EXIT
 for v in XDG_CONFIG_HOME XDG_STATE_HOME XDG_RUNTIME_DIR TUIDEV_STATE_DIR AGENTS_NO_HERDR HC_SOCKET HC_SESSION \
-         HERDR_ENV HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_SOCKET_PATH SSH_CONNECTION SSH_CLIENT SSH_TTY; do
+         AGENTS_HC_AUTO HC_TERMINAL_ID HC_TERMINAL_SOCKET CLAUDE_CONFIG_DIR CODEX_HOME HERDR_ENV HERDR_PANE_ID HERDR_TAB_ID HERDR_WORKSPACE_ID HERDR_SOCKET_PATH SSH_CONNECTION SSH_CLIENT SSH_TTY; do
     unset "$v"
 done
 export HOME="$tmp/home" NO_COLOR=1 TZ=UTC AGENTS_CONF="$tmp/none.conf" AGENTS_DATA_DIR="$tmp/data" AGENTS_RUN_DIR="$tmp/run"
@@ -54,7 +55,8 @@ case "$1" in
                cat "$FAKE/events" 2>/dev/null
                [[ ! -e "$FAKE/events.live" ]] || { echo "$$" > "$FAKE/events.pid"; exec sleep 30; } ;;
     attach)    [[ ! -e "$FAKE/attach.wait" ]] || sleep "$(cat "$FAKE/attach.wait")"
-               [[ ! -e "$FAKE/attach.sig" ]] || { kill -"$(cat "$FAKE/attach.sig")" 0; sleep 5; } ;;
+               [[ ! -e "$FAKE/attach.sig" ]] || { kill -"$(cat "$FAKE/attach.sig")" 0; sleep 5; }
+               [[ ! -e "$FAKE/attach.rc" ]] || exit "$(cat "$FAKE/attach.rc")" ;;
     server)    [[ ! -e "$FAKE/server.fail" ]] || exit 1
                [[ "$2" != start ]] || echo "{\"result\":{\"login_session\":{\"gui\":$(cat "$FAKE/start.gui" 2>/dev/null || echo true)}}}" > "$FAKE/hello.json" ;;
     run)       [[ ! -e "$FAKE/run.fail" ]] || { echo '{"error":{"message":"name taken"}}'; exit 1; }
@@ -85,7 +87,8 @@ _AGENTS_HC_WAIT=2 _AGENTS_HC_HERDR_WAIT=1 _AGENTS_HC_PAUSE=0.2
 
 LS_ONE='{"terminals":[{"name":"api","state":"live"},{"name":"old","state":"finished"}]}'
 reset() {
-    rm -f "$AGENTS_RUN_DIR/hc-up.said" "$FAKE"/*.calls "$FAKE"/*.fail "$FAKE"/*.env "$FAKE"/*.hang "$FAKE"/attach.* "$FAKE"/events.* "$FAKE"/start.gui
+    rm -f "$AGENTS_RUN_DIR/hc-up.said" "$FAKE"/*.calls "$FAKE"/*.fail "$FAKE"/*.env "$FAKE"/*.hang "$FAKE"/attach.* "$FAKE"/events.* "$FAKE"/start.gui \
+          "$FAKE"/agent.*
     echo "$LS_ONE" > "$FAKE/ls.json"
 }
 hello() { printf '{"result":{"login_session":{"gui":%s}}}\n' "$1" > "$FAKE/hello.json"; }
@@ -492,6 +495,275 @@ for sig in HUP TERM; do
     ! kill -0 "$(cat "$FAKE/events.pid" 2>/dev/null || echo 0)" 2>/dev/null || fail "SIG$sig: the events stream outlived the attach"
 done
 pass "an attach that is hung up or killed still releases the pane and leaves no pipe or mark"
+
+# --- automatic hosting: agents hc auto ---
+# What counts as an interactive start: only options an interactive session
+# takes; a prompt, a subcommand, -p, --help or --version is run as typed.
+while IFS='|' read -r want line; do
+    [[ -n "$want" ]] || continue
+    # shellcheck disable=SC2086  # the table's words are the arguments
+    set -f; eval "set -- $line"; set +f
+    got=1; _agents_hc_auto_interactive "$@" && got=0
+    [[ "$got" == "$want" ]] || fail "interactive start: [$line] is $got, not $want"
+done <<'EOF'
+0|claude
+0|claude --continue
+0|claude -c
+0|claude --resume
+0|claude -r 4f1c
+0|claude --resume 4f1c --fork-session
+0|claude --model opus
+0|claude --model=opus --verbose
+0|claude --permission-mode plan --add-dir ../a '../b c' --ide
+0|claude --dangerously-skip-permissions --mcp-config a.json b.json
+0|/opt/bin/claude --continue
+0|codex
+0|codex --model gpt-5 --search
+0|codex -p work -c model=o3 --no-alt-screen
+0|codex --no-daemon
+0|codex resume
+0|codex resume --last
+0|codex resume 0199ab
+1|claude -p hi
+1|claude --print hi
+1|claude -p
+1|claude --continue -p 'sum up'
+1|claude --help
+1|claude -h
+1|claude --version
+1|claude -v
+1|claude 'fix the bug'
+1|claude ''
+1|claude mcp list
+1|claude update
+1|claude doctor
+1|claude setup-token
+1|claude --model
+1|claude --model opus 'do it'
+1|claude --append-system-prompt -x
+1|claude --continue=yes
+1|claude -cr
+1|claude --no-such-flag
+1|claude --
+1|claude -
+1|codex exec 'run tests'
+1|codex login
+1|codex mcp list
+1|codex --version
+1|codex -h
+1|codex 'fix it'
+1|codex review
+1|codex resume a b
+1|grok
+1|bash -c true
+EOF
+pass "an interactive start is claude or codex with only an interactive session's options; anything else is run as typed"
+
+# Stand-in agents on PATH: each logs its name and arguments (a line each,
+# after a "--" line) and what it saw of the environment, says one line, and
+# exits with $FAKE/agent.rc.
+mkdir -p "$tmp/bin" "$tmp/My Proj"
+for a in claude codex; do
+    cat > "$tmp/bin/$a" <<'EOF'
+#!/bin/bash
+{ echo "--"; printf '%s\n' "${0##*/}" "$@"; } >> "$FAKE/agent.calls"
+{ echo "jre=$(env | grep -c '^AGENTS_JRE_')"; echo "token=${MY_TOKEN-unset}"; echo "mine=${AGENTS_MINE-unset}"; } > "$FAKE/agent.env"
+echo "agent here"
+exit "$(cat "$FAKE/agent.rc" 2>/dev/null || echo 0)"
+EOF
+    chmod +x "$tmp/bin/$a"
+done
+PATH="$tmp/bin:$PATH"
+TTY=true
+_agents_hc_auto_tty() { [[ "$TTY" == true ]]; }
+AGENTS_HC_AUTO=1 HERDR_ENV=1 HERDR_PANE_ID=w1:p1 AGENTS_NO_HERDR=1
+
+# auto ARG... — agents hc auto in "My Proj", in a subshell (it may exec):
+# what it printed in $out, its status in $rc.
+auto() { rc=0; out="$(cd "$tmp/My Proj" && agents_main hc auto "$@" 2>&1)" || rc=$?; }
+# ran_plain WHY RC ARG... — the agent ran here exactly as typed, with its
+# status, and nothing was said but what it said; herdr-core started nothing.
+ran_plain() {
+    local why="$1" want="$2"
+    shift 2
+    [[ $rc -eq $want ]] || fail "$why: status $rc, not $want: $out"
+    [[ "$(cat "$FAKE/agent.calls" 2>/dev/null)" == "$(printf '%s\n' -- "$@")" ]] || fail "$why: the agent ran as: $(calls agent)"
+    [[ "$out" == "agent here" ]] || fail "$why: more than the agent said: $out"
+    [[ "$(calls hc)" != *"-- run "* ]] || fail "$why: herdr-core was asked to run it: $(calls hc)"
+}
+no_core() { [[ ! -e "$FAKE/hc.calls" ]] || fail "$1: herdr-core was asked: $(calls hc)"; }
+
+RUNNING=true MAC=true
+reset; hello true; echo 3 > "$FAKE/agent.rc"
+AGENTS_HC_AUTO=0 auto claude --model opus;  ran_plain "setting off" 3 claude --model opus; no_core "setting off"
+reset; hello true
+(unset AGENTS_HC_AUTO; auto claude; ran_plain "setting unset" 0 claude; no_core "setting unset")
+reset; HERDR_ENV='' auto claude;            ran_plain "not a Herdr pane" 0 claude; no_core "not a Herdr pane"
+reset; HERDR_PANE_ID='' auto claude;        ran_plain "no pane id" 0 claude; no_core "no pane id"
+reset; HC_TERMINAL_ID=t9 auto claude;       ran_plain "in a herdr-core terminal" 0 claude; no_core "in a herdr-core terminal"
+reset; TTY=false auto codex --search;       ran_plain "no terminal" 0 codex --search; no_core "no terminal"
+reset; auto claude -p "a  b" --model opus;  ran_plain "claude -p" 0 claude -p "a  b" --model opus; no_core "claude -p"
+reset; auto codex exec "x y";               ran_plain "codex exec" 0 codex exec "x y"; no_core "codex exec"
+reset; echo $$ > "$(_agents_hc_pane_mark w1:p1)"
+auto claude;                                ran_plain "a pane already on a core terminal" 0 claude; no_core "a marked pane"
+rm -f "$AGENTS_RUN_DIR"/hc-pane.*
+reset; AGENTS_HC_BIN="$tmp/nope" auto claude; ran_plain "no herdr-core" 0 claude; no_core "no herdr-core"
+reset; RUNNING=false auto claude;           ran_plain "no core" 0 claude; no_core "no core"
+reset; hello false; auto claude;            ran_plain "a core outside the desktop login" 0 claude
+reset; echo '{"result":{"version":"0.1.21"}}' > "$FAKE/hello.json"
+auto claude;                                ran_plain "a core that does not say where it runs (macOS)" 0 claude
+pass "every case that cannot host runs the agent as typed, with its status and no word of its own; no core is asked before it is known to run"
+
+# A core that does not answer: the start waited for it, so one line says why.
+reset; hello true; touch "$FAKE/connect.hang"; echo 4 > "$FAKE/agent.rc"
+t0=$SECONDS; auto claude --continue
+[[ $((SECONDS - t0)) -le $((_AGENTS_HC_WAIT + 2)) ]] || fail "a core that does not answer held the start $((SECONDS - t0)) s"
+[[ $rc -eq 4 && "$(cat "$FAKE/agent.calls")" == "$(printf '%s\n' -- claude --continue)" ]] || fail "no answer: rc $rc, $(calls agent)"
+[[ "$out" == "agents hc: herdr-core did not answer within $_AGENTS_HC_WAIT s; claude starts here, not in herdr-core"$'\n'"agent here" ]] \
+    || fail "no answer: $out"
+pass "a core that does not answer in time: the agent starts here, after one line that says why"
+
+# Hosting: herdr-core runs the real binary through env(1), in this
+# directory, with the pane's PATH and the few variables that are passed on;
+# no token of the shell's, no Herdr identity. The pane attaches to it.
+reset; hello true; echo '{"state":"finished"}' > "$FAKE/get.json"; echo 5 > "$FAKE/attach.rc"
+export MY_TOKEN=s3cret
+CLAUDE_CONFIG_DIR="$tmp/cc" auto claude --model opus --add-dir "a b" c
+unset MY_TOKEN
+[[ $rc -eq 5 ]] || fail "hosted: the attach's status was not passed on: rc $rc ($out)"
+[[ ! -e "$FAKE/agent.calls" ]] || fail "hosted, and run here too: $(calls agent)"
+log="$(cat "$FAKE/hc.calls")"
+[[ "$log" == *"$(printf '%s\n' run --bg --json --no-parent --cwd "$tmp/My Proj" --name my-proj -- /usr/bin/env "PATH=$PATH")"* ]] \
+    || fail "hosted: the start: $(calls hc)"
+[[ "$log" == *"$(printf '%s\n' "CLAUDE_CONFIG_DIR=$tmp/cc" "$tmp/bin/claude" --model opus --add-dir "a b" c --)"* ]] \
+    || fail "hosted: the command and its arguments: $(calls hc)"
+[[ "$log" == *"$(printf '%s\n' -- attach t3)"* ]] || fail "hosted: no attach: $(calls hc)"
+! grep -qE '^(MY_TOKEN|HERDR_[A-Z_]*|AGENTS_[A-Z_]*|CODEX_HOME)=' "$FAKE/hc.calls" || fail "hosted: passed on what it must not: $(calls hc)"
+pass "hosting starts the real binary in herdr-core in this directory with PATH and a few named variables only, attaches, and passes on the attach's status"
+
+# Hosting decided, and the core then refuses: the agent starts here, after one line.
+reset; hello true; touch "$FAKE/run.fail"; echo 6 > "$FAKE/agent.rc"
+auto claude --resume 4f1c
+[[ $rc -eq 6 && "$(cat "$FAKE/agent.calls")" == "$(printf '%s\n' -- claude --resume 4f1c)" ]] || fail "refused: rc $rc, $(calls agent)"
+[[ "$out" == "agents hc: herdr-core did not start it (name taken); claude starts here, not in herdr-core"$'\n'"agent here" ]] || fail "refused: $out"
+[[ "$(calls hc)" != *"-- attach"* ]] || fail "refused, and attached: $(calls hc)"
+# Off macOS the core is not asked where it runs.
+reset; hello false; MAC=false auto codex
+[[ $rc -eq 0 && ! -e "$FAKE/agent.calls" && "$(calls hc)" != *"-- connect"* && "$(calls hc)" == *"-- run "* ]] \
+    || fail "Linux: $(calls hc) / $out"
+pass "a core that refuses the start leaves the agent to start here, with one line; off macOS the desktop login is not asked about"
+
+reset
+out="$(agents_main hc auto 2>&1)" && fail "auto with no command passed"
+rc=0; out="$(agents_main hc auto no-such-agent 2>&1)" || rc=$?
+[[ $rc -eq 127 && "$out" == *"no-such-agent: command not found"* ]] || fail "a missing command: rc $rc, $out"
+pass "auto needs a command, and a missing one is 127 like the shell's"
+
+# Through bin/agents itself: the modules it loads hold everything hc.sh
+# calls, and the agent gets the environment it was given, without the
+# patterns loading agents exports.
+fns="$(grep -oE '_agents_[a-z0-9_]+' "$REPO_DIR/lib/agents/hc.sh" | sort -u)"
+missing="$(env -i PATH="$PATH" HOME="$HOME" AGENTS_CONF="$AGENTS_CONF" bash -c '
+    for m in $1; do . "$2/lib/agents/$m.sh"; done
+    for f in $3; do declare -F "$f" >/dev/null || echo "$f"; done' _ "$_AGENTS_AUTO_MODULES" "$REPO_DIR" "$fns")"
+[[ -z "$missing" ]] || fail "agents hc auto does not load what defines: $missing"
+reset
+rc=0; out="$(cd "$tmp/My Proj" && env -i PATH="$PATH" HOME="$HOME" FAKE="$FAKE" AGENTS_CONF="$AGENTS_CONF" AGENTS_HC_AUTO=1 \
+    MY_TOKEN=x AGENTS_MINE=1 "$REPO_DIR/bin/agents" hc auto claude -p "a b" 2>&1)" || rc=$?
+[[ $rc -eq 0 && "$out" == "agent here" && "$(cat "$FAKE/agent.calls")" == "$(printf '%s\n' -- claude -p "a b")" ]] || fail "bin/agents: rc $rc, $out"
+[[ "$(cat "$FAKE/agent.env")" == $'jre=0\ntoken=x\nmine=1' ]] || fail "bin/agents: the agent's environment: $(cat "$FAKE/agent.env")"
+pass "bin/agents hc auto loads only what it needs, and a start it does not host gets the environment it was given"
+
+# Status says whether it is on.
+reset; hello true
+out="$(AGENTS_HC_AUTO=0 agents_main hc status 2>&1)" || true
+[[ "$out" == *"automatic hosting: off (AGENTS_HC_AUTO=1"* ]] || fail "status, off: $out"
+out="$(agents_main hc status 2>&1)" || true
+[[ "$out" == *"automatic hosting: on, but the shell fragment is missing"* ]] || fail "status, no fragment: $out"
+mkdir -p "$HOME/.config/tuidev/shell.d"; : > "$HOME/.config/tuidev/shell.d/hc-auto.zsh"
+out="$(RUNNING=false agents_main hc status 2>&1)" || true
+[[ "$out" == *"not running"*"automatic hosting: on for claude and codex"* ]] || fail "status, on, no core: $out"
+pass "agents hc says whether automatic hosting is on, and when the shell fragment is missing"
+unset AGENTS_HC_AUTO HERDR_ENV HERDR_PANE_ID AGENTS_NO_HERDR
+
+# --- the shell fragment (zsh) ---
+if ! command -v zsh >/dev/null 2>&1; then
+    echo "SKIP: no zsh: the hc-auto fragment's functions not checked"
+else
+    frag="$REPO_DIR/configs/zsh/hc-auto.zsh"
+    zsh -n "$frag" || fail "hc-auto.zsh is not valid zsh"
+    zb="$tmp/zbin"; mkdir -p "$zb"
+    printf '#!/bin/sh\n{ echo --; printf "%%s\\n" agents "$@"; } >> "$FAKE/zagents.calls"\n' > "$zb/agents"
+    printf '#!/bin/sh\nexit 0\n' > "$zb/herdr-core"
+    cp "$tmp/bin/claude" "$tmp/bin/codex" "$zb/"
+    chmod +x "$zb"/*
+    # zsh_frag [NAME=VALUE...] -- [ZSH OPTION...] — an interactive zsh -f that
+    # sources the fragment, then runs $ZCMD; the environment is only these.
+    zsh_frag() {
+        local envs=()
+        while [[ $# -gt 0 && "$1" != -- ]]; do envs+=("$1"); shift; done
+        [[ $# -eq 0 ]] || shift
+        env -i PATH="$zb:/usr/bin:/bin" HOME="$HOME" FAKE="$FAKE" AGENTS_CONF="$tmp/z.conf" ${envs[@]+"${envs[@]}"} \
+            zsh -f "${@:--i}" -c "source '$frag'; $ZCMD" 2>&1
+    }
+    printf 'AGENTS_HC_MIRROR=0\nAGENTS_HC_AUTO="1"   # on\n' > "$tmp/z.conf"
+    ZCMD='whence -w claude codex'
+    [[ "$(zsh_frag HERDR_ENV=1)" == $'claude: function\ncodex: function' ]] || fail "fragment, on: $(zsh_frag HERDR_ENV=1)"
+    # Not typed at a terminal (an agent's tool shell, a pipe): the real command, agents not run.
+    reset; ZCMD='claude --model opus "a b"; echo "rc=$?"'
+    out="$(echo 2 > "$FAKE/agent.rc"; zsh_frag HERDR_ENV=1)"
+    [[ "$out" == $'agent here\nrc=2' && "$(cat "$FAKE/agent.calls")" == "$(printf '%s\n' -- claude --model opus "a b")" ]] \
+        || fail "fragment, no terminal: $out / $(calls agent)"
+    [[ ! -e "$FAKE/zagents.calls" ]] || fail "fragment, no terminal: agents was run: $(calls zagents)"
+    # Where it does not apply, nothing is defined: a shell that is not
+    # interactive (an agent's), the setting off, a herdr-core terminal, no Herdr.
+    ZCMD='whence -w claude'
+    for c in "HERDR_ENV=1 -- +i" "HERDR_ENV=1 AGENTS_HC_AUTO=0" "HERDR_ENV=1 HC_TERMINAL_ID=t1" "HERDR_ENV="; do
+        # shellcheck disable=SC2086  # the case's words
+        got="$(zsh_frag $c)"
+        [[ "$got" == "claude: command" ]] || fail "fragment where it does not apply ($c): $got"
+    done
+    printf 'AGENTS_HC_AUTO=1\nAGENTS_HC_AUTO=0\n' > "$tmp/z.conf"
+    [[ "$(zsh_frag HERDR_ENV=1)" == "claude: command" ]] || fail "fragment: the conf's last line did not win"
+    rm -f "$tmp/z.conf"
+    [[ "$(zsh_frag HERDR_ENV=1)" == "claude: command" ]] || fail "fragment: no agents.conf is off"
+    [[ "$(zsh_frag HERDR_ENV=1 AGENTS_HC_AUTO=1)" == "claude: function" ]] || fail "fragment: the environment's setting"
+    for b in herdr-core agents; do
+        mv "$zb/$b" "$tmp/$b.keep"
+        [[ "$(zsh_frag HERDR_ENV=1 AGENTS_HC_AUTO=1)" == "claude: command" ]] || fail "fragment without $b"
+        mv "$tmp/$b.keep" "$zb/$b"
+    done
+    pass "the fragment defines claude and codex only in an interactive Herdr pane with the setting on, and a call not typed at a terminal is the real command"
+
+    # Typed at a terminal: agents hc auto gets the command and its arguments
+    # whole; with agents gone since the shell started, the real command runs.
+    # script(1) gives zsh a pseudo-terminal (util-linux and BusyBox take -c,
+    # BSD the command after the file); there is none in some sandboxes.
+    printf '#!/bin/sh\nexec env -i PATH="%s:/usr/bin:/bin" HOME="%s" FAKE="%s" HERDR_ENV=1 AGENTS_HC_AUTO=1 zsh -f -i -c "source %s; $ZCMD"\n' \
+        "$zb" "$HOME" "$FAKE" "'$frag'" > "$tmp/ztty"
+    chmod +x "$tmp/ztty"
+    ztty() {
+        if script -qc true /dev/null >/dev/null 2>&1 </dev/null; then
+            ZCMD="$1" script -qc "$tmp/ztty" /dev/null >/dev/null 2>&1 </dev/null || true
+        elif script -q /dev/null true >/dev/null 2>&1 </dev/null; then
+            ZCMD="$1" script -q /dev/null "$tmp/ztty" >/dev/null 2>&1 </dev/null || true
+        fi
+    }
+    reset; ztty 'claude --model opus "a b"'
+    if [[ ! -e "$FAKE/zagents.calls" && ! -e "$FAKE/agent.calls" ]]; then
+        echo "SKIP: no pseudo-terminal here (sandbox?): the fragment's call at a terminal not checked"
+    else
+        [[ "$(cat "$FAKE/zagents.calls" 2>/dev/null)" == "$(printf '%s\n' -- agents hc auto claude --model opus "a b")" ]] \
+            || fail "fragment at a terminal: agents got: $(calls zagents) (the agent: $(calls agent))"
+        [[ ! -e "$FAKE/agent.calls" ]] || fail "fragment at a terminal: the agent ran here as well: $(calls agent)"
+        cp "$zb/agents" "$tmp/agents.keep"
+        reset; ztty 'rm -f '"'$zb/agents'"'; rehash; codex --search'
+        cp "$tmp/agents.keep" "$zb/agents"
+        [[ "$(cat "$FAKE/agent.calls" 2>/dev/null)" == "$(printf '%s\n' -- codex --search)" ]] \
+            || fail "fragment at a terminal, agents gone: the agent ran as: $(calls agent)"
+        pass "typed at a terminal, claude goes to agents hc auto with its arguments whole; without agents, the real command runs"
+    fi
+fi
 
 agents_usage | grep -q 'agents hc run' || fail "agents --help does not list agents hc"
 pass "agents --help lists it"

@@ -230,6 +230,17 @@ if [[ -f "$zshrc" ]]; then
 else
     fail ".zshrc - file not found"
 fi
+# The packs' shell.d fragments are zsh too.
+for frag in "$REPO_DIR"/configs/zsh/*.zsh; do
+    [[ -f "$frag" ]] || continue
+    if ! command_exists zsh; then
+        missing_tool "zsh not installed - ${frag##*/} syntax not checked"
+    elif zsh -n "$frag" 2>/dev/null; then
+        pass "${frag##*/} - syntax OK (zsh -n)"
+    else
+        fail "${frag##*/} - zsh -n syntax check failed"
+    fi
+done
 echo ""
 
 # ============================================================================

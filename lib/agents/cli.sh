@@ -35,6 +35,12 @@ _agents_term_cols() {
 agents_main() {
     local cmd="${1:-triage}"
     [[ $# -gt 0 ]] && shift
+    # In front of every agent typed in a Herdr pane: no colors or width to set.
+    if [[ "$cmd" == hc && "${1:-}" == auto ]]; then
+        shift
+        agents_hc_auto "$@"
+        return
+    fi
     AGENTS_DRY_RUN=false AGENTS_YES=false AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false AGENTS_STUCK=false
     AGENTS_AUTO=false AGENTS_THROTTLE=false
     _agents_colors

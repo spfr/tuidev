@@ -1,7 +1,8 @@
 #!/bin/bash
 # Tests for scripts/install/packs/herdr-core.sh: the LaunchAgent (macOS) and
 # the systemd user timer (Linux) that start herdr-core at login and again
-# every 5 minutes, and uninstall.sh removing the timer. A throwaway HOME;
+# every 5 minutes, uninstall.sh removing the timer, and the AGENTS_HC_AUTO
+# shell fragment (its behaviour is in test_agents_hc.sh). A throwaway HOME;
 # stand-in launchctl, systemctl, loginctl and uname that log their calls; and
 # is_macos stubbed per case: nothing real is loaded, enabled or installed.
 # Run: bash scripts/lib/test_herdr_core_pack.sh  -> exit 0 on pass.
@@ -85,6 +86,7 @@ reset; fake_bins
 DRY_RUN=true run_pack true
 [[ ! -e "$HOME/Library" ]] || fail "dry run wrote under HOME/Library"
 [[ ! -e "$TUIDEV_MANIFEST_FILE" ]] || fail "dry run wrote the manifest"
+[[ ! -e "$TUIDEV_STATE_DIR/shell.d" ]] || fail "dry run wrote the shell fragment"
 [[ ! -s "$LOG" ]] || fail "dry run ran launchctl: $(cat "$LOG")"
 grep -q "installing herdr-core at login" <<< "$out" || fail "dry run did not say what it would do: $out"
 grep -q "herdr-core pack complete" <<< "$out" || fail "dry run: no completion line"
@@ -110,6 +112,14 @@ grep -qxF "file $PLIST" "$TUIDEV_MANIFEST_FILE" || fail "plist not in the manife
 grep -qx "bootstrap gui/$(id -u) $PLIST" "$LOG" || fail "no bootstrap: $(cat "$LOG")"
 [[ ! -e "$HOME/.config/systemd" && ! -s "$SCTL_LOG" ]] || fail "macOS path installed or enabled a systemd unit"
 pass "macOS install: plist filled (every 5 minutes, not KeepAlive), linted, recorded, bootstrapped"
+
+# The AGENTS_HC_AUTO fragment: tuidev's own file in shell.d, recorded, valid zsh.
+FRAG="$TUIDEV_STATE_DIR/shell.d/hc-auto.zsh"
+cmp -s "$FRAG" "$REPO_DIR/configs/zsh/hc-auto.zsh" || fail "fragment not installed as shipped"
+grep -qxF "file $FRAG" "$TUIDEV_MANIFEST_FILE" || fail "fragment not in the manifest (uninstall would leave it)"
+if command -v zsh >/dev/null 2>&1; then zsh -n "$FRAG" || fail "fragment is not valid zsh"; fi
+grep -q "AGENTS_HC_AUTO=1" <<< "$out" || fail "the pack does not say how to turn it on: $out"
+pass "the hc-auto shell fragment is installed, recorded for uninstall, and the pack says how to turn it on"
 
 # 3. Second run: idempotent; a loaded job is booted out first, so a changed
 # plist (a new interval) applies without a migration.
@@ -157,6 +167,7 @@ grep -qF "sudo loginctl enable-linger $USER" <<< "$out" || fail "no linger comma
 grep -q "claude setup-token" <<< "$out" || fail "no setup-token line: $out"
 grep -q "systemctl --user disable --now tuidev-hc.timer" <<< "$out" || fail "no off switch: $out"
 grep -q "herdr-core pack complete" <<< "$out" || fail "Linux: did not complete"
+[[ -f "$TUIDEV_STATE_DIR/shell.d/hc-auto.zsh" ]] || fail "Linux: no hc-auto fragment"
 pass "Linux: timer and service installed as shipped, recorded, enabled; linger off prints the sudo command"
 
 # The units: a one-shot run of agents hc up -q every 5 minutes, the core in a

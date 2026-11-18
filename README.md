@@ -116,6 +116,7 @@ agents hc run claude                                 # in a Herdr pane: the agen
 ```
 
 - **An agent started with `agents hc run`** is in the pane, in Herdr's sidebar and in the phone's inbox, and keeps running when the pane closes.
+- **Or just type `claude`.** With `AGENTS_HC_AUTO=1`, a `claude` or `codex` you type in a Herdr pane is hosted in herdr-core by itself. Whenever that cannot work (no core running, `claude -p`, a subcommand) it starts the plain way, as typed.
 - **The agents you already run can show up too, as an experiment.** `AGENTS_HC_MIRROR=1` mirrors each agent pane of this machine's Herdr into herdr-core. While the phone shows a session, its pane at your desk has the phone's size, and gets its own back when the phone stops. It is off by default until that has been tested with the phone app itself.
 - **Your agents keep going with the laptop shut,** on a box that stays on (a Raspberry Pi, a VM). There the pack installs a systemd user timer that starts herdr-core at boot; on a Mac, a login item. Either one starts it again within 5 minutes if it stops.
 - **What it needs:** herdr-core on the machine (its own installer, or Herdr's desktop app; tuidev does not install it), Herdr's phone app, and SSH from the phone, which Tailscale gives you. Each machine runs its own herdr-core and is added in the app by itself.

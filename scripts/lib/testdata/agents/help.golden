@@ -167,6 +167,12 @@ FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herd
                                lists it, and it outlives the pane. In a Herdr pane the
                                sidebar shows its state. ctrl+\ detaches. It gets the
                                core's environment, not this shell's
+  agents hc auto CMD [ARG...]  off unless AGENTS_HC_AUTO=1: what claude and codex typed
+                               in a Herdr pane run (the herdr-core pack's shell
+                               fragment). Hosts an interactive start in herdr-core
+                               as run does, with this directory and PATH, when a core
+                               already runs (in the desktop login, on macOS); else
+                               runs CMD as typed
   agents hc attach TERMINAL    back onto one (herdr-core ls names them)
   agents hc mirror [status]    experimental, off unless AGENTS_HC_MIRROR=1: each agent
                                pane of this machine's Herdr and its mirror in

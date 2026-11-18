@@ -25,10 +25,15 @@
 # stream per attached pane, for as long as it is attached (opened again when
 # the core restarts under it).
 #
-# Owns: `agents hc` (status, up, run, attach), the hc-pane.* marks, hc-up.said.
-# Uses: config.sh (AGENTS_RUN_DIR, AGENTS_NO_HERDR), herdrlabel.sh
-#   (_agents_hl_herdr, _agents_hl_ready), util.sh (_agents_timeout,
-#   _agents_replace).
+# With AGENTS_HC_AUTO=1, `agents hc auto` does the same for a `claude` or
+# `codex` typed in a Herdr pane (the herdr-core pack's shell fragment calls
+# it), and runs the command as typed whenever hosting cannot work.
+#
+# Owns: `agents hc` (status, up, run, auto, attach), the hc-pane.* marks,
+#   hc-up.said.
+# Uses: config.sh (AGENTS_RUN_DIR, AGENTS_NO_HERDR, AGENTS_HC_AUTO),
+#   herdrlabel.sh (_agents_hl_herdr, _agents_hl_ready), util.sh
+#   (_agents_timeout, _agents_replace), bin/agents (_AGENTS_ENV_IN).
 # Public: agents_hc.
 
 _AGENTS_HC_SOURCE="tuidev-hc"    # our reports' source in Herdr: what leaving a pane releases
@@ -191,11 +196,13 @@ agents_hc_status() {
     v="$("$_AGENTS_HC_BIN" --version 2>/dev/null)"
     if ! _agents_hc_running; then
         echo "herdr-core ${v#hc }: not running (agents hc up starts it)"
+        _agents_hc_auto_status
         return 1
     fi
     hello="$(_agents_hc_hello)"
     if [[ -z "$hello" ]]; then
         echo "herdr-core ${v#hc }: running, but it did not answer within ${_AGENTS_HC_WAIT} s"
+        _agents_hc_auto_status
         return 1
     fi
     gui="$(_agents_hc_gui "$hello")"
@@ -204,10 +211,25 @@ agents_hc_status() {
     if [[ "$gui" == false ]] && _agents_hc_is_mac; then
         echo "  ! $_AGENTS_HC_HEADLESS."
         echo "    At this Mac, not over SSH: agents hc up --restart (it ends the core's terminals)."
+        _agents_hc_auto_status
         return 1
     fi
     [[ "$gui" != true ]] || echo "  in your desktop login: agents started in it can use the Keychain"
     echo "  phone: Herdr's app reaches it over SSH (Tailscale SSH needs no key); agents hc run CMD puts an agent in its inbox"
+    _agents_hc_auto_status
+}
+
+# _agents_hc_auto_status — one line: is automatic hosting on, and can the
+# shell reach it (the herdr-core pack's fragment defines claude and codex).
+_agents_hc_auto_status() {
+    local frag="${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/shell.d/hc-auto.zsh"
+    if [[ "${AGENTS_HC_AUTO:-0}" != 1 ]]; then
+        echo "  automatic hosting: off (AGENTS_HC_AUTO=1 in agents.conf hosts claude and codex typed in a Herdr pane)"
+    elif [[ ! -f "$frag" ]]; then
+        echo "  automatic hosting: on, but the shell fragment is missing (tuidev install --pack herdr-core)"
+    else
+        echo "  automatic hosting: on for claude and codex typed in a Herdr pane (a new shell picks up a change)"
+    fi
 }
 
 # agents_hc_up [--restart] [-q] — a core in the desktop session: started when
@@ -492,6 +514,165 @@ agents_hc_run() {
     _agents_hc_attach "$t" "${shown:-$t}"
 }
 
+# --- automatic hosting: agents hc auto CMD [ARG...] ---
+#
+# The herdr-core pack's shell fragment turns a `claude` or `codex` typed in
+# a Herdr pane into `agents hc auto claude ...`. It hosts the agent in
+# herdr-core only when everything for that holds, and otherwise runs the
+# command as typed: its own environment, its exit status, nothing added.
+# Every test before the core's is a variable or a file; the core is asked
+# only once it is known to run, and never started from here.
+
+# The options an interactive session takes, per agent: flags (F), options
+# with one value (V: the next argument, or --opt=VALUE), options with any
+# number of values (M), and with an optional one (O). Any other option, or
+# an argument that is no option's value (a prompt, a subcommand such as
+# `claude mcp` or `codex exec`), runs the command as typed: -p, --help and
+# --version are not on these lists. A new option of the agent's is one more
+# word here; until then the agent starts the plain way.
+_AGENTS_HC_AUTO_CLAUDE_F=" -c --continue --fork-session --verbose --ide --chrome --no-chrome --strict-mcp-config --dangerously-skip-permissions --allow-dangerously-skip-permissions "
+_AGENTS_HC_AUTO_CLAUDE_V=" --model --permission-mode --settings --setting-sources --append-system-prompt --system-prompt --agent --agents --session-id "
+_AGENTS_HC_AUTO_CLAUDE_M=" --add-dir --mcp-config --allowed-tools --allowedTools --disallowed-tools --disallowedTools --plugin-dir "
+_AGENTS_HC_AUTO_CLAUDE_O=" -r --resume --debug "
+_AGENTS_HC_AUTO_CODEX_F=" --search --full-auto --dangerously-bypass-approvals-and-sandbox --oss --no-alt-screen --no-daemon "
+_AGENTS_HC_AUTO_CODEX_V=" -m --model -p --profile -s --sandbox -a --ask-for-approval -C --cd -c --config --local-provider --enable --disable "
+_AGENTS_HC_AUTO_CODEX_M=" -i --image --add-dir "
+# What a hosted agent gets from the pane besides its directory, when set
+# there: the PATH it was found on, the locale, the editor, and where the
+# agents keep their settings. Never the rest of the shell's environment: a
+# token exported there would live on in a terminal of a long-lived core.
+_AGENTS_HC_AUTO_ENV="PATH LANG LC_ALL LC_CTYPE LC_MESSAGES TZ EDITOR VISUAL CLAUDE_CONFIG_DIR CODEX_HOME"
+
+# _agents_hc_auto_interactive CMD [ARG...] — is this the start of an
+# interactive session: claude or codex with only the options above (codex
+# also as `codex resume [--last|--all] [SESSION]`)? Pure bash, no fork.
+_agents_hc_auto_interactive() {
+    local cmd="${1##*/}" f v m o="" a want="" pos=0 maxpos=0
+    shift
+    case "$cmd" in
+        claude) f="$_AGENTS_HC_AUTO_CLAUDE_F" v="$_AGENTS_HC_AUTO_CLAUDE_V" m="$_AGENTS_HC_AUTO_CLAUDE_M" o="$_AGENTS_HC_AUTO_CLAUDE_O" ;;
+        codex)  f="$_AGENTS_HC_AUTO_CODEX_F" v="$_AGENTS_HC_AUTO_CODEX_V" m="$_AGENTS_HC_AUTO_CODEX_M"
+                if [[ "${1:-}" == resume ]]; then shift; f+="--last --all "; maxpos=1; fi ;;
+        *)      return 1 ;;
+    esac
+    for a in "$@"; do
+        # The value of the option before it (an M option takes the next ones too).
+        if [[ -n "$want" && "$a" != -* ]]; then
+            [[ "$want" == m ]] || want=""
+            continue
+        fi
+        [[ "$want" != v ]] || return 1
+        want=""
+        case "$a" in
+            --*=*)  case "$v$m$o" in *" ${a%%=*} "*) continue ;; esac
+                    return 1 ;;
+            -*)     case "$f" in *" $a "*) continue ;; esac
+                    case "$v" in *" $a "*) want=v; continue ;; esac
+                    case "$m" in *" $a "*) want=m; continue ;; esac
+                    case "$o" in *" $a "*) want=o; continue ;; esac
+                    return 1 ;;
+            *)      pos=$((pos + 1))
+                    [[ $pos -le $maxpos ]] || return 1 ;;
+        esac
+    done
+    [[ "$want" != v ]]
+}
+
+# A person typed it: stdin and stdout are the terminal.
+_agents_hc_auto_tty() { [[ -t 0 && -t 1 ]]; }
+
+# _agents_hc_auto_wanted CMD [ARG...] — should this start be hosted? Silent
+# when it should not; _AGENTS_HC_WHY says why only when the core was asked
+# and did not answer (the start waited for it).
+_agents_hc_auto_wanted() {
+    local hello
+    _AGENTS_HC_WHY=""
+    [[ "${AGENTS_HC_AUTO:-0}" == 1 ]] || return 1
+    # A Herdr pane, not a terminal of herdr-core's (where the agent would be
+    # hosted already), with a person at it.
+    [[ "${HERDR_ENV:-}" == 1 && -n "${HERDR_PANE_ID:-}" && -z "${HC_TERMINAL_ID:-}" ]] || return 1
+    _agents_hc_auto_tty || return 1
+    _agents_hc_auto_interactive "$@" || return 1
+    ! _agents_hc_pane_marked "$HERDR_PANE_ID" || return 1
+    command -v jq >/dev/null 2>&1 && _agents_hc_bin || return 1
+    _agents_hc_running || return 1
+    _agents_hc_is_mac || return 0
+    # A core outside the desktop login would give "Not logged in"; one that
+    # does not say where it runs is not trusted with it either.
+    hello="$(_agents_hc_hello)"
+    if [[ -z "$hello" ]]; then
+        _AGENTS_HC_WHY="herdr-core did not answer within ${_AGENTS_HC_WAIT} s"
+        return 1
+    fi
+    [[ "$(_agents_hc_gui "$hello")" == true ]]
+}
+
+# _agents_hc_auto_host REAL [ARG...] — start REAL in herdr-core, in this
+# directory with _AGENTS_HC_AUTO_ENV from this shell, and attach to it.
+# False, with _AGENTS_HC_WHY, when the core did not start it; else true,
+# with the attach's status in _AGENTS_HC_RC.
+_agents_hc_auto_host() {
+    local real="$1" name out t shown rc=0 k envs=()
+    shift
+    for k in $_AGENTS_HC_AUTO_ENV; do
+        [[ -z "${!k+set}" ]] || envs+=("$k=${!k}")
+    done
+    name="$(_agents_hc_name "$PWD")"
+    # env(1) sets them: herdr-core's CLI has no option for it. No parent, as
+    # in agents_hc_run.
+    out="$(_agents_timeout "$_AGENTS_HC_WAIT" "$_AGENTS_HC_BIN" run --bg --json --no-parent --cwd "$PWD" \
+        ${name:+--name "$name"} -- /usr/bin/env ${envs[@]+"${envs[@]}"} "$real" "$@" 2>/dev/null)" || rc=$?
+    if [[ $rc -eq 124 ]]; then
+        _AGENTS_HC_WHY="herdr-core did not answer within ${_AGENTS_HC_WAIT} s"
+        return 1
+    elif [[ $rc -ne 0 ]]; then
+        _AGENTS_HC_WHY="$(printf '%s' "$out" | jq -r '.error.message // empty' 2>/dev/null | head -n 1)"
+        _AGENTS_HC_WHY="herdr-core did not start it${_AGENTS_HC_WHY:+ (${_AGENTS_HC_WHY})}"
+        return 1
+    fi
+    t="$(printf '%s' "$out" | jq -r '.address // empty' 2>/dev/null)"
+    if [[ -z "$t" ]]; then
+        _AGENTS_HC_WHY="herdr-core did not say what it started"
+        return 1
+    fi
+    shown="$(printf '%s' "$out" | jq -r '.name // empty' 2>/dev/null)"
+    _AGENTS_HC_RC=0
+    _agents_hc_attach "$t" "${shown:-$t}" || _AGENTS_HC_RC=$?
+    return 0
+}
+
+# _agents_hc_auto_exec CMD REAL [ARG...] — run REAL as CMD with the
+# environment this process was given: what loading agents exported itself
+# (config.sh's patterns) is taken back out first (bin/agents kept the names
+# it was started with in _AGENTS_ENV_IN).
+_agents_hc_auto_exec() {
+    local cmd="$1" real="$2" n
+    shift 2
+    if [[ -n "${_AGENTS_ENV_IN:-}" ]]; then
+        for n in $(compgen -e); do
+            # shellcheck disable=SC2163  # the variable named by $n
+            [[ "$_AGENTS_ENV_IN" == *$'\n'"$n"$'\n'* ]] || export -n "$n"
+        done
+    fi
+    exec -a "$cmd" "$real" "$@"
+}
+
+# agents_hc_auto CMD [ARG...] — CMD hosted in herdr-core when
+# _agents_hc_auto_wanted says so, else CMD as typed. CMD is looked up on
+# PATH (this is bash: the shell's claude function is not here).
+agents_hc_auto() {
+    local cmd="${1:-}" real
+    [[ -n "$cmd" ]] || { echo "usage: agents hc auto CMD [ARG...]" >&2; return 2; }
+    shift
+    real="$(type -P "$cmd" 2>/dev/null)"
+    [[ -n "$real" ]] || { echo "agents hc: $cmd: command not found" >&2; return 127; }
+    if _agents_hc_auto_wanted "$cmd" "$@"; then
+        _agents_hc_auto_host "$real" "$@" && return "$_AGENTS_HC_RC"
+    fi
+    [[ -z "$_AGENTS_HC_WHY" ]] || echo "agents hc: $_AGENTS_HC_WHY; $cmd starts here, not in herdr-core" >&2
+    _agents_hc_auto_exec "$cmd" "$real" "$@"
+}
+
 agents_hc() {
     local cmd="${1:-status}"
     [[ $# -gt 0 ]] && shift
@@ -499,12 +680,13 @@ agents_hc() {
         status) agents_hc_status ;;
         up)     agents_hc_up "$@" ;;
         run)    agents_hc_run "$@" ;;
+        auto)   agents_hc_auto "$@" ;;
         mirror) agents_hc_mirror "$@" ;;
         _mirror) agents_hc_mirror_run "$@" ;;   # what a mirror's core terminal runs
         attach) [[ $# -eq 1 && "$1" != -* ]] || { echo "usage: agents hc attach TERMINAL" >&2; return 2; }
                 _agents_hc_need || return 1
                 _agents_hc_running || { echo "agents hc: no core runs (agents hc up)" >&2; return 1; }
                 _agents_hc_attach "$1" ;;
-        *)      echo "usage: agents hc [status] | up [--restart] [-q] | run [--name NAME] [--] CMD... | attach TERMINAL | mirror [status|sync]" >&2; return 2 ;;
+        *)      echo "usage: agents hc [status] | up [--restart] [-q] | run [--name NAME] [--] CMD... | auto CMD... | attach TERMINAL | mirror [status|sync]" >&2; return 2 ;;
     esac
 }

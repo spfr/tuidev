@@ -23,6 +23,11 @@
 #     the pack checks and prints the one sudo command. No systemd (a
 #     container): a warning, and what to run by hand.
 #
+# On every platform, a shell fragment (shell.d/hc-auto.zsh) for the opt-in
+# AGENTS_HC_AUTO=1: a `claude` or `codex` typed in a Herdr pane is then
+# hosted in herdr-core by itself (`agents hc auto`), and starts the plain way
+# whenever that cannot work. With the setting off it defines nothing.
+#
 # Install policy: herdr-core itself is not installed here. Its releases are
 # checked against a sha256 from the same server and, on macOS, installed as a
 # signed app bundle by its own installer; the pack prints where that is.
@@ -48,6 +53,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HERDR_CORE_LABEL="dev.tuidev.hc"
 HERDR_CORE_UNIT="tuidev-hc"
 HERDR_CORE_URL="https://herdr.dev/core/"
+HERDR_CORE_REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 _herdr_core_bin() {
     command -v herdr-core 2>/dev/null || { [[ -x "$HOME/.local/bin/herdr-core" ]] && echo "$HOME/.local/bin/herdr-core"; }
@@ -78,6 +84,13 @@ _herdr_core_systemd() {
     fi
 }
 
+# The claude and codex functions for AGENTS_HC_AUTO, in our own shell.d dir.
+_herdr_core_fragment() {
+    local src="$HERDR_CORE_REPO/configs/zsh/hc-auto.zsh"
+    [[ -f "$src" ]] || { print_warning "hc-auto fragment missing: $src"; return 0; }
+    install_config "$TUIDEV_STATE_DIR/shell.d/hc-auto.zsh" "$src" --overwrite
+}
+
 herdr_core_install() {
     print_header "Pack: herdr-core"
 
@@ -100,7 +113,9 @@ herdr_core_install() {
         _herdr_core_systemd
         print_info "No Keychain here: log Claude Code in with a token on this machine (claude setup-token)."
     fi
+    _herdr_core_fragment
     print_info "Start an agent the phone can see: agents hc run claude   (ctrl+\\ detaches; it keeps running)"
+    print_info "Or have each claude and codex typed in a Herdr pane hosted there: AGENTS_HC_AUTO=1 in agents.conf (opt-in; a new shell picks it up)."
     print_info "Phone: Herdr's app, add this machine over SSH (Tailscale SSH needs no key). See docs/remote.md."
     print_success "herdr-core pack complete"
 }

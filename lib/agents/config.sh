@@ -24,7 +24,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
 _AGENTS_CONF_KEYS+=" AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL AGENTS_MEM_IDLE"
-_AGENTS_CONF_KEYS+=" AGENTS_LINK AGENTS_REMOTE_HOSTS AGENTS_GLYPHS AGENTS_HERDR_NAMES AGENTS_HC_MIRROR AGENTS_HC_UP"
+_AGENTS_CONF_KEYS+=" AGENTS_LINK AGENTS_REMOTE_HOSTS AGENTS_GLYPHS AGENTS_HERDR_NAMES AGENTS_HC_MIRROR AGENTS_HC_UP AGENTS_HC_AUTO"
 _AGENTS_CONF_KEYS+=" AGENTS_JOB_TEST AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP"
 _AGENTS_CONF_KEYS+=" AGENTS_PARKED_MIN AGENTS_THEME AGENTS_COLOR_NEED AGENTS_COLOR_DONE AGENTS_COLOR_RUN"
 _AGENTS_CONF_KEYS+=" AGENTS_COLOR_WARN AGENTS_COLOR_DIM AGENTS_COLOR_ACCENT"
@@ -60,7 +60,7 @@ _agents_conf_valid() {
         AGENTS_NAMES)       [[ "$2" =~ ^[A-Za-z0-9._\ -]+$ ]] ;;
         AGENTS_NO_HERDR)    [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_TERMINAL)    [[ "$2" =~ ^(auto|ghostty|iterm|terminal|wezterm|kitty)$ ]] ;;
-        AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP|AGENTS_LINK|AGENTS_HERDR_NAMES|AGENTS_HC_MIRROR|AGENTS_HC_UP) [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_LID|AGENTS_HISTORY|AGENTS_AUTO_REAP|AGENTS_LINK|AGENTS_HERDR_NAMES|AGENTS_HC_MIRROR|AGENTS_HC_UP|AGENTS_HC_AUTO) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_REMOTE_HOSTS) [[ -z "$2" || "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._@:/-]*(\ +[A-Za-z0-9][A-Za-z0-9._@:/-]*)*$ ]] ;;
         AGENTS_HISTORY_DAYS) [[ "$2" =~ ^[1-9][0-9]{0,3}$ ]] ;;
         AGENTS_MEM_GUARD)   [[ "$2" =~ ^(kill|warn|off)$ ]] ;;
@@ -267,6 +267,12 @@ _agents_env_check AGENTS_HC_MIRROR 0
 # nothing, so a core you stopped stays down.
 AGENTS_HC_UP="${AGENTS_HC_UP:-1}"
 _agents_env_check AGENTS_HC_UP 1
+# Automatic hosting (hc.sh, `agents hc auto`): 1 hosts a claude or codex typed
+# in a Herdr pane in herdr-core by itself (the herdr-core pack's shell
+# fragment), so the phone lists it; it starts the plain way whenever that
+# cannot work. 0 (the default) leaves every start alone.
+AGENTS_HC_AUTO="${AGENTS_HC_AUTO:-0}"
+_agents_env_check AGENTS_HC_AUTO 0
 AGENTS_BAR_ICON="${AGENTS_BAR_ICON:-terminal}"
 AGENTS_BAR_TOP="${AGENTS_BAR_TOP:-3}"
 # The menu bar's backstop timer: it refreshes when something changes
