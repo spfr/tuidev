@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.25.0] - 2026-11-18
+
 ### Added
 
 - **See what your phone reaches, and keep a pane off it.** `agents hc ls` lists what Herdr's phone app lists from this machine: each herdr-core terminal with its name, whether it is hosted (and in which pane) or a mirror of a pane, its state as the core has it (`working`, `needs you`, `idle`, `finished`…) and its directory, then one line counting the agent panes of this machine's Herdr the phone cannot reach and why (opted out, mirrors off, not mirrored yet). It never starts a core and changes nothing; with no core running, or one that does not answer within 5 s, it says so in one line and exits 1. On the board, a session the phone reaches has a `☏` before its name (`@` without UTF-8; `phone=` in `AGENTS_GLYPHS` picks another) and its card says `on the phone: hosted in herdr-core as NAME` or `mirrored as NAME`; the board reads the menu bar's 30 s cache, so drawing it asks the core nothing, and without herdr-core or with nothing reachable it looks as before. `agents hc mirror off [PANE]` (this pane by default) ends a pane's mirror and keeps syncs from starting another until `agents hc mirror on [PANE]`; the board's `ctrl-p` has the same switch, and `agents hc mirror status` lists the opted-out panes. The list lives in the run dir and a sync drops panes Herdr no longer has, because a pane id does not outlive a Herdr restart. The palette's `Phone: status` row now runs `agents hc; agents hc ls`. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
