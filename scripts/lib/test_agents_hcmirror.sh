@@ -57,6 +57,7 @@ case "$1 $2" in
     "api snapshot") [[ ! -f "$FAKE/hang.snapshot" ]] || exec sleep 30
                     cat "$FAKE/snap.json" ;;
     "pane get")     cat "$FAKE/pane.json" 2>/dev/null || exit 1 ;;
+    "pane process-info") cat "$FAKE/procinfo.json" 2>/dev/null || exit 1 ;;
     "agent wait")   if [[ -f "$FAKE/wait.hang" ]]; then echo "$$" > "$FAKE/wait.pid"; exec sleep 30; fi
                     n=$(( $(cat "$FAKE/wait.n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE/wait.n"
                     [[ -f "$FAKE/wait.$n" ]] || exit 1
@@ -128,7 +129,7 @@ reset; RECT="p1:120:40"; snap "p1|claude|working|$tmp/proj-a"
 out="$(agents_hc_mirror_sync 2>&1)" || fail "sync failed: $out"
 r="$(runs)"
 [[ "$(printf '%s\n' "$r" | grep -c .)" == 1 ]] || fail "one mirror expected: $r"
-[[ "$r" == "run --bg --json --no-parent --no-notify --rm --name proj-a --label tuidev_mirror=p1 --cwd $tmp/proj-a -- /usr/bin/env HERDR_BIN_PATH=$tmp/herdr HERDR_SOCKET_PATH=$HOME/.config/herdr/herdr.sock bash $AGENTS_PATH hc _mirror p1 120 40" ]] \
+[[ "$r" == "run --bg --json --no-parent --no-notify --rm --name proj-a --label tuidev_mirror=p1 --cwd $tmp/proj-a -- /usr/bin/env HERDR_BIN_PATH=$tmp/herdr HERDR_SOCKET_PATH=$HOME/.config/herdr/herdr.sock bash $AGENTS_PATH hc _mirror p1 120 40 120 40" ]] \
     || fail "mirror command: $r"
 [[ "$out" == *"mirror p1 (claude, proj-a)"* ]] || fail "output: $out"
 [[ -f "$AGENTS_RUN_DIR/hc-mirror.started/p1" ]] || fail "no start time kept for p1"
@@ -136,7 +137,7 @@ pass "an agent pane with no mirror gets one (--rm): name, label, cwd, size from 
 
 reset; RECT=""; snap "p2|codex|idle|$tmp/proj-b"
 agents_hc_mirror_sync -q
-[[ "$(runs)" == *"_mirror p2 160 50" ]] || fail "default size: $(runs)"
+[[ "$(runs)" == *"_mirror p2 160 50 160 50" ]] || fail "default size: $(runs)"
 (HERDR_SOCKET_PATH=/x/h.sock; reset; snap "p2|codex|idle|$tmp/proj-b"; agents_hc_mirror_sync -q
  [[ "$(runs)" == *"HERDR_SOCKET_PATH=/x/h.sock bash"* ]]) || fail "HERDR_SOCKET_PATH not passed"
 pass "a pane with no layout is 160x50; the socket path of the caller is passed on"
@@ -431,7 +432,7 @@ pass "herdr sync --throttle: the mirrors are synced only when the labels are; ag
 # --- the size ---
 reset
 ( _agents_hm_tty() { return 0; }
-  stty() { echo "$*" >> "$FAKE/stty.calls"; return "${STTY_RC:-0}"; }
+  stty() { [[ "$1" != size ]] || { echo "120 200"; return 0; }; echo "$*" >> "$FAKE/stty.calls"; return "${STTY_RC:-0}"; }
   for sz in "3 1:cols 20 rows 5" "120 40:cols 120 rows 40" "99999 0040:cols 1000 rows 40" "100 123456789012345678901:cols 100 rows 500"; do
       rm -f "$FAKE/stty.calls" "$FAKE/attach.calls"
       # shellcheck disable=SC2086  # COLS ROWS, two words
@@ -449,6 +450,51 @@ reset
   [[ ! -e "$FAKE/stty.calls" && -s "$FAKE/attach.calls" ]] || fail "no tty: stty=$(calls stty) attach=$(calls attach)"
 ) || fail "no tty"
 pass "_mirror sizes its tty to the pane, kept within 20x5 and 1000x500; no attach when the tty takes no size; no tty, no stty"
+
+# --- the pane's own size, and getting it back ---
+# A pane's terminal can be a column or a row smaller than its place in the
+# layout; a size that is not near the place is not the pane's own.
+cat > "$FAKE/procinfo.json" <<<'{"result":{"process_info":{"shell_pid":4242}}}'
+( ps() { echo " null"; }
+  stty() { cat "$FAKE/stty.size"; }
+  echo "39 119" > "$FAKE/stty.size"
+  [[ "$(_agents_hm_pane_size p1 120 40)" == "119 39" ]] || fail "a pane a column and a row smaller: $(_agents_hm_pane_size p1 120 40)"
+  echo "40 120" > "$FAKE/stty.size"
+  [[ "$(_agents_hm_pane_size p1 120 40)" == "120 40" ]] || fail "a pane as large as its place"
+  for odd in "120 200" "31 43" "41 120" "x y" ""; do
+      echo "$odd" > "$FAKE/stty.size"
+      [[ "$(_agents_hm_pane_size p1 120 40)" == "120 40" ]] || fail "size '$odd' was taken for the pane's own"
+  done
+  ps() { echo "??"; }; echo "39 119" > "$FAKE/stty.size"
+  [[ "$(_agents_hm_pane_size p1 120 40)" == "120 40" ]] || fail "a shell with no tty"
+) || fail "pane size"
+rm -f "$FAKE/procinfo.json"
+[[ "$(_agents_hm_pane_size p1 120 40)" == "120 40" ]] || fail "Herdr did not say the pane's process"
+reset; snap "p1|claude|idle|$tmp/proj-a"; cat > "$FAKE/procinfo.json" <<<'{"result":{"process_info":{"shell_pid":4242}}}'
+( ps() { echo "null"; }; stty() { echo "49 159"; }
+  RECT="p1:160:50"; snap "p1|claude|idle|$tmp/proj-a"; agents_hc_mirror_sync -q
+  [[ "$(runs)" == *"_mirror p1 159 49 160 50" ]] || fail "the mirror did not start at the pane's own size: $(runs)"
+) || fail "start size"
+rm -f "$FAKE/procinfo.json"
+# The core gives a terminal its own size back when its last viewer leaves:
+# only then is the pane's size set again, from its place as it is now.
+( _AGENTS_HM_TTY=/dev/null _AGENTS_HM_BASE="120 200" _AGENTS_HM_COLS=119 _AGENTS_HM_ROWS=39 _AGENTS_HM_DC=1 _AGENTS_HM_DR=1
+  stty() { if [[ "$1" == size ]]; then cat "$FAKE/stty.size"; else echo "$*" >> "$FAKE/stty.calls"; fi; }
+  RECT="p1:120:40"; snap "p1|claude|idle|$tmp/proj-a"
+  for viewer in "31 43" "39 119" "50 80"; do
+      echo "$viewer" > "$FAKE/stty.size"; _agents_hm_resized p1
+      [[ ! -e "$FAKE/stty.calls" ]] || fail "size $viewer (a viewer's, or the pane's own) was changed: $(calls stty)"
+  done
+  echo "120 200" > "$FAKE/stty.size"; _agents_hm_resized p1
+  [[ "$(cat "$FAKE/stty.calls")" == "cols 119 rows 39" ]] || fail "back at the core's size: $(calls stty)"
+  rm -f "$FAKE/stty.calls"; RECT="p1:90:30"; snap "p1|claude|idle|$tmp/proj-a"; _agents_hm_resized p1
+  [[ "$(cat "$FAKE/stty.calls")" == "cols 89 rows 29" ]] || fail "the pane's place changed meanwhile: $(calls stty)"
+  rm -f "$FAKE/stty.calls"; printf 'garbage\n' > "$FAKE/snap.json"; _agents_hm_resized p1
+  [[ "$(cat "$FAKE/stty.calls")" == "cols 119 rows 39" ]] || fail "Herdr did not answer: $(calls stty)"
+  rm -f "$FAKE/stty.calls"; _AGENTS_HM_BASE=""; _agents_hm_resized p1
+  [[ ! -e "$FAKE/stty.calls" ]] || fail "with no size from the core, a size was set"
+) || fail "resized"
+pass "a mirror starts at the pane's own size; a terminal back at the core's size gets the pane's size again, a viewer's size is left alone"
 
 # --- the follower ends with the attach ---
 reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; : > "$FAKE/wait.hang"

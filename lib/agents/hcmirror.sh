@@ -119,11 +119,34 @@ _agents_hm_why_not() {
 _agents_hm_started_dir() { printf '%s\n' "$AGENTS_RUN_DIR/hc-mirror.started"; }
 _agents_hm_file_name() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_'; }
 
-# _agents_hm_start PANE COLS ROWS CWD — a mirror of PANE in herdr-core. It
-# runs this same agents, by its path, with the Herdr it was asked from: the
-# core's own environment may know neither. 124 when the core did not answer.
+# _agents_hm_pane_size PANE W H — "COLS ROWS", the size PANE's own terminal
+# has now: its layout place is W by H, and the terminal inside can be a
+# column or a row less (a border). Read from the tty of the pane's shell;
+# the place itself when that cannot be read or is not near it (a pane an
+# earlier attach left at another size).
+_agents_hm_pane_size() {
+    local pane="$1" w="$2" h="$3" pid tty r c
+    pid="$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr pane process-info --pane "$pane" 2>/dev/null \
+        | jq -r '.result.process_info.shell_pid // empty' 2>/dev/null)"
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+        tty="$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')"
+        if [[ "$tty" =~ ^[A-Za-z0-9/]+$ && -c "/dev/$tty" ]]; then
+            read -r r c <<<"$(stty size < "/dev/$tty" 2>/dev/null)"
+            if [[ "$r" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ && $c -le $w && $c -ge $((w - 2)) && $r -le $h && $r -ge $((h - 2)) ]]; then
+                printf '%s %s\n' "$c" "$r"; return 0
+            fi
+        fi
+    fi
+    printf '%s %s\n' "$w" "$h"
+}
+
+# _agents_hm_start PANE W H CWD — a mirror of PANE in herdr-core, at the size
+# the pane's terminal has (W by H is its place in the layout). It runs this
+# same agents, by its path, with the Herdr it was asked from: the core's own
+# environment may know neither. 124 when the core did not answer.
 _agents_hm_start() {
-    local pane="$1" cols="$2" rows="$3" cwd="$4" name herdr
+    local pane="$1" w="$2" h="$3" cwd="$4" name herdr cols rows
+    read -r cols rows <<<"$(_agents_hm_pane_size "$pane" "$w" "$h")"
     name="$(_agents_hc_name "$cwd")"
     herdr="${HERDR_BIN_PATH:-}"
     [[ -n "$herdr" && -x "$herdr" ]] || herdr="$(command -v herdr 2>/dev/null)" || return 1
@@ -133,7 +156,7 @@ _agents_hm_start() {
         --label "$_AGENTS_HM_LABEL=$pane" --cwd "$cwd" -- \
         /usr/bin/env HERDR_BIN_PATH="$herdr" \
         HERDR_SOCKET_PATH="${HERDR_SOCKET_PATH:-$HOME/.config/herdr/herdr.sock}" \
-        bash "$AGENTS_PATH" hc _mirror "$pane" "$cols" "$rows" >/dev/null 2>&1
+        bash "$AGENTS_PATH" hc _mirror "$pane" "$cols" "$rows" "$w" "$h" >/dev/null 2>&1
 }
 
 # agents_hc_mirror_sync [-q] [-n] — one mirror for each agent pane, none for
@@ -258,10 +281,11 @@ _agents_hm_report() {
 # is that process's, and a ( ) body would put it in a child the caller's
 # kill never reaches.
 _agents_hm_follow() {
-    local pane="$1" out cur="" agent s args h="${HERDR_BIN_PATH:-}"
+    local pane="$1" out cur="" agent s args wp h="${HERDR_BIN_PATH:-}"
     [[ -n "$h" && -x "$h" ]] || h="$(command -v herdr 2>/dev/null)" || return 0
     _AGENTS_HM_OUT=""
     trap 'kill $(jobs -p) 2>/dev/null; wait; [[ -z "$_AGENTS_HM_OUT" ]] || rm -f "$_AGENTS_HM_OUT"; exit 0' HUP TERM
+    [[ -z "$_AGENTS_HM_BASE" ]] || trap '_agents_hm_resized "$pane"' WINCH
     out="$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr pane get "$pane" 2>/dev/null)" || return 0
     cur="$(printf '%s' "$out" | jq -r '.result.pane.agent_status // empty' 2>/dev/null)"
     agent="$(printf '%s' "$out" | jq -r '.result.pane.agent // empty' 2>/dev/null)"
@@ -273,13 +297,42 @@ _agents_hm_follow() {
         args=()
         for s in idle working blocked "done" unknown; do [[ "$s" == "$cur" ]] || args+=(--until "$s"); done
         "$h" agent wait "$pane" "${args[@]}" > "$_AGENTS_HM_OUT" 2>/dev/null &
-        wait $! || break
+        wp=$!
+        # A resize (WINCH) ends a wait early; the job is waited for again.
+        while kill -0 "$wp" 2>/dev/null; do wait "$wp" 2>/dev/null; done
+        wait "$wp" 2>/dev/null || break
         s="$(jq -r '.result.agent.agent_status // empty' "$_AGENTS_HM_OUT" 2>/dev/null)"
         [[ -n "$s" && "$s" != "$cur" ]] || { sleep 1; continue; }
         cur="$s"
         _agents_hm_report "$cur" "$agent"
     done
     rm -f "$_AGENTS_HM_OUT"
+}
+
+# The size a pane gets back when the phone stops looking. A viewer of the
+# mirror (the phone) sets the mirror terminal's size, the attach passes it on
+# and the pane takes it. When the last viewer leaves, herdr-core gives the
+# terminal its own size again (200x120 unless its config says otherwise), not
+# the one the mirror set, and the pane would stay at that. The follower gets a
+# WINCH for every change: a terminal back at the core's size (_AGENTS_HM_BASE,
+# read before the mirror set its own) has no viewer, so it is set to the
+# pane's size again. That is the pane's place in the layout as it is now,
+# less what the pane's terminal was smaller by when the mirror started
+# (_AGENTS_HM_DC, _AGENTS_HM_DR); the size at the start when Herdr does not
+# answer. A size that is neither is a viewer's: left alone.
+_AGENTS_HM_BASE="" _AGENTS_HM_COLS="" _AGENTS_HM_ROWS="" _AGENTS_HM_DC=0 _AGENTS_HM_DR=0
+_AGENTS_HM_TTY=/dev/tty
+_agents_hm_resized() {
+    local pane="$1" now w h cols="$_AGENTS_HM_COLS" rows="$_AGENTS_HM_ROWS"
+    now="$(stty size < "$_AGENTS_HM_TTY" 2>/dev/null)" || return 0
+    [[ -n "$_AGENTS_HM_BASE" && "$now" == "$_AGENTS_HM_BASE" && "$now" != "$rows $cols" ]] || return 0
+    read -r w h <<<"$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr api snapshot 2>/dev/null \
+        | jq -r --arg p "$pane" '[.result.snapshot.layouts[]?.panes[]? | select(.pane_id == $p) | .rect][0] | "\(.width) \(.height)"' 2>/dev/null)"
+    if [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ && $((w - _AGENTS_HM_DC)) -ge 20 && $((h - _AGENTS_HM_DR)) -ge 5 ]]; then
+        cols=$((w - _AGENTS_HM_DC)) rows=$((h - _AGENTS_HM_DR))
+    fi
+    stty cols "$cols" rows "$rows" < "$_AGENTS_HM_TTY" 2>/dev/null
+    return 0
 }
 
 # _agents_hm_size COLS ROWS — the terminal's size; a tty that cannot take it
@@ -291,13 +344,16 @@ _agents_hm_size() {
     stty cols "$1" rows "$2" 2>/dev/null
 }
 
-# agents_hc_mirror_run PANE COLS ROWS — what a mirror's core terminal runs.
-# The size is kept to one a pane can have (a sliver of a pane would
-# otherwise leave the core's default in place).
+# agents_hc_mirror_run PANE COLS ROWS [W H] — what a mirror's core terminal
+# runs: COLS by ROWS is the pane's terminal, W by H its place in the layout
+# (the same when not given). The size is kept to one a pane can have (a
+# sliver of a pane would otherwise leave the core's default in place).
 agents_hc_mirror_run() {
-    local pane="${1:-}" cols="${2:-}" rows="${3:-}" follow rc=0
+    local pane="${1:-}" cols="${2:-}" rows="${3:-}" w="${4:-}" h="${5:-}" follow rc=0
     [[ "$pane" =~ $_AGENTS_HM_PANE_RE && "$cols" =~ ^[0-9]+$ && "$rows" =~ ^[0-9]+$ ]] \
-        || { echo "usage: agents hc _mirror PANE COLS ROWS" >&2; return 2; }
+        || { echo "usage: agents hc _mirror PANE COLS ROWS [W H]" >&2; return 2; }
+    [[ -z "$w$h" || ( "$w" =~ ^[0-9]{1,4}$ && "$h" =~ ^[0-9]{1,4}$ ) ]] \
+        || { echo "usage: agents hc _mirror PANE COLS ROWS [W H]" >&2; return 2; }
     [[ ${#cols} -le 4 ]] || cols=9999
     [[ ${#rows} -le 4 ]] || rows=9999
     cols=$((10#$cols)) rows=$((10#$rows))
@@ -305,7 +361,15 @@ agents_hc_mirror_run() {
     [[ $cols -le 1000 ]] || cols=1000
     [[ $rows -ge 5 ]] || rows=5
     [[ $rows -le 500 ]] || rows=500
+    # What the core gave this terminal, before it gets the pane's size.
+    ! _agents_hm_tty || _AGENTS_HM_BASE="$(stty size 2>/dev/null)"
     _agents_hm_size "$cols" "$rows" || { echo "agents hc _mirror: could not size this terminal to ${cols}x${rows}; not attached" >&2; return 1; }
+    _AGENTS_HM_COLS="$cols" _AGENTS_HM_ROWS="$rows"
+    if [[ -n "$w" ]]; then
+        w=$((10#$w)) h=$((10#$h))
+        [[ $w -lt $cols || $((w - cols)) -gt 2 ]] || _AGENTS_HM_DC=$((w - cols))
+        [[ $h -lt $rows || $((h - rows)) -gt 2 ]] || _AGENTS_HM_DR=$((h - rows))
+    fi
     _agents_hm_follow "$pane" &
     follow=$!
     _agents_hl_herdr agent attach "$pane" || rc=$?
