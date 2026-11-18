@@ -5,10 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.24.1] - 2026-11-18
 
 ### Fixed
 
+- **`tuidev update --yes` updates.** With only `--yes` or `--dry-run` it opened the update menu, which a script cannot answer; found by the first real update from one release to the next (3.23.0 to 3.24.0, in a Linux container). Those two flags say how, not what: alone they now mean tuidev itself, as plain `tuidev update` does.
 - **A Ctrl-click on a file link that can't open says why.** A link to a file that is gone, or of a kind a click doesn't open, used to do nothing you could see: the reason went to the plugin's stderr. It is now a notification ("that file is gone: board.gif").
 - **The board names a busy app by its name.** Its warning line cut a command line at the first space, so a helper of an app whose name has one read as half of it ("Google at 98% CPU"). An app's process is now named after its bundle ("Google Chrome at 98% CPU").
 

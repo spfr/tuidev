@@ -390,10 +390,15 @@ _tuidev_rollback() {
 }
 
 cmd_update() {
-    local repo reply
+    local repo reply a what=self
     _tuidev_repo || return 1; repo="$REPLY"
+    # --yes and --dry-run say how, not what: alone they still mean tuidev
+    # itself (update.sh without a what would open its menu).
+    for a in "$@"; do
+        case "$a" in --yes|-y|--dry-run) ;; *) what="" ;; esac
+    done
+    [[ -z "$what" ]] || exec "$repo/scripts/update.sh" --self "$@"
     case "${1:-}" in
-        "")         exec "$repo/scripts/update.sh" --self ;;
         --rollback) _tuidev_rollback "$repo" ;;
         --ask)
             _tuidev_refresh force || _tuidev_err "could not reach $_TUIDEV_RELEASES/latest; showing what was known"

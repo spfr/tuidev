@@ -369,6 +369,9 @@ reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"
 tuidev update; [[ "$(calls)" == "update.sh --self" ]] || fail "update: $(calls)"
 : > "$CALLS"; tuidev update --check; [[ "$(calls)" == "update.sh --check" ]] || fail "update --check: $(calls)"
 : > "$CALLS"; tuidev update --packages --yes; [[ "$(calls)" == "update.sh --packages --yes" ]] || fail "update --packages --yes: $(calls)"
+# --yes and --dry-run alone still mean tuidev itself, never update.sh's menu.
+: > "$CALLS"; tuidev update --yes; [[ "$(calls)" == "update.sh --self --yes" ]] || fail "update --yes: $(calls)"
+: > "$CALLS"; tuidev update --dry-run -y; [[ "$(calls)" == "update.sh --self --dry-run -y" ]] || fail "update --dry-run -y: $(calls)"
 : > "$CALLS"; tuidev install --profile minimal --dry-run; [[ "$(calls)" == "install.sh --profile minimal --dry-run" ]] || fail "install: $(calls)"
 
 # --ask
