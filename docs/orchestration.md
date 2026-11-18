@@ -3,20 +3,21 @@
 `--pack orchestration` installs one multi-agent policy for Claude Code and Codex. The main session is the orchestrator: it plans, delegates bounded work to subagents pinned to the cheapest tier that does the job reliably, reviews and verifies what comes back, and stops review-ready. The always-on part is a few rules the CLIs don't apply by default; the `delegation` skill loads only when parallel worktrees are in play.
 
 ```bash
-./install.sh --pack ai-clis --pack orchestration   # the usual pair: gates + policy
+tuidev install --pack ai-clis --pack orchestration   # the usual pair: gates + policy
 ```
 
 ## Just this pack
 
-You don't need the rest of tuidev. From a clone, the pack installs on its own: no shell, theme or package changes.
+You don't need the rest of tuidev. Run the pack's script from a clone, or from the release `get.sh --fetch` downloads, and it installs on its own: no shell, theme or package changes, and no `tuidev` command, so use the script paths below.
 
 ```bash
 git clone https://github.com/spfr/tuidev.git && cd tuidev
+# without git: curl -fsSLO https://github.com/spfr/tuidev/releases/latest/download/get.sh && cd "$(bash get.sh --fetch)"
 bash scripts/install/packs/orchestration.sh    # add DRY_RUN=true in front to preview
 bash scripts/install/packs/ai-clis.sh          # optional: the git and gh write gates (see below)
 ```
 
-Update with `git pull` and the same command. The run is recorded in `~/.config/tuidev/manifest`, so `./uninstall.sh` removes exactly what it wrote, and leaves your own text in `~/.codex/AGENTS.md`. `ai-clis.sh` adopts `~/.claude/settings.json` and `~/.codex/config.toml` only where they're absent or an unmodified tuidev copy, so it never overwrites settings you already have.
+To update, `git pull` (or fetch the new release the same way) and run the same command. The run is recorded in `~/.config/tuidev/manifest`, so `./uninstall.sh` in that directory removes exactly what it wrote, and leaves your own text in `~/.codex/AGENTS.md`. `ai-clis.sh` adopts `~/.claude/settings.json` and `~/.codex/config.toml` only where they're absent or an unmodified tuidev copy, so it never overwrites settings you already have.
 
 ## What it installs
 
@@ -30,7 +31,7 @@ Update with `git pull` and the same command. The run is recorded in `~/.config/t
 
 Claude Code loads every file in `~/.claude/rules/` at session start, like `~/.claude/CLAUDE.md`, so the policy lives in a file of its own and your `CLAUDE.md` stays entirely yours. Codex has no rules folder for instructions: it reads `~/.codex/AGENTS.md` (or `AGENTS.override.md`, which then hides it; the pack warns), so the policy goes there as a managed block between HTML-comment markers, and your text outside it stays yours. Codex reads user skills from `~/.agents/skills/`.
 
-Agent and skill files carry generic names (`reviewer`, `executor`, `delegation`, …): the pack owns them, replaces your edits on every `update.sh --configs` (backing them up first), and skips any of them that is a symlink of yours.
+Agent and skill files carry generic names (`reviewer`, `executor`, `delegation`, …): the pack owns them, replaces your edits on every `tuidev update --configs` (backing them up first), and skips any of them that is a symlink of yours.
 
 The git and gh write gates are not in this pack. They belong to `--pack ai-clis`, which owns the CLIs' settings: Claude Code `ask` rules for `git add|commit|push|merge|tag` and `gh pr create|merge`, `gh release`, `gh api`, and the same list as Codex `prefix_rule`s in `~/.codex/rules/tuidev.rules`. Both match command prefixes, so `git -C . push` or a script that runs git itself gets past them: a colleague-grade guard, not a security boundary.
 

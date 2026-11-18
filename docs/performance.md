@@ -2,13 +2,13 @@
 
 Agents change what a dev machine does all day. Worktrees are created and deleted by the dozen, dependency trees are installed into each one, and thousands of freshly built binaries run once. The operating system's background services were tuned for a person editing documents: they index, back up, scan and watch every one of those files.
 
-This page lists what is worth changing on macOS and Linux, in order of effect, with the command, its cost and how to undo it. Each claim says where it comes from: **measured** (on an M4 Pro MacBook, macOS 27.2, November 2026), **sourced** (linked), or **unverified**. tuidev checks all of it for you and applies the few fixes that are safe to automate: [let tuidev check](#let-tuidev-check).
+Read this when the machine slows down under agents, or to see what `tuidev perf` and `tuidev disk` check. It lists what is worth changing on macOS and Linux, in order of effect, with the command, its cost and how to undo it. Each claim says where it comes from: **measured** (on an M4 Pro MacBook, macOS 27.2, November 2026), **sourced** (linked), or **unverified**. tuidev checks all of it for you and applies the few fixes that are safe to automate: [let tuidev check](#let-tuidev-check).
 
 ## Let tuidev check
 
 ```bash
-make perf          # the audit; changes nothing
-make perf-fix      # the audit, then each fix that needs no root, one question at a time
+tuidev perf            # the audit; changes nothing
+tuidev perf --fix      # the audit, then each fix that needs no root, one question at a time
 ```
 
 ```text
@@ -21,23 +21,23 @@ make perf-fix      # the audit, then each fix that needs no root, one question a
 ⚠ Spotlight indexes 270240 files in ~/Library/pnpm/store/v11, a package store no one searches
     fix: System Settings > Spotlight > Search Privacy > + > ~/Library/pnpm/store/v11   (macOS has no command for this list)
     undo: System Settings > Spotlight > Search Privacy > select it > -
-ℹ 2 to change, 1 of them by './scripts/perf.sh --fix'. Why: docs/performance.md
+ℹ 2 to change, 1 of them by 'tuidev perf --fix'. Why: docs/performance.md
 ```
 
 Every line says how it was measured (the command, and the threshold it is compared against), so the report has numbers even when everything is right; every fix has its undo. `--fix` prints the whole plan before it asks anything, asks once per fix with No as the default, does nothing without a terminal unless you add `--yes`, and logs each change with its undo in `~/.config/tuidev/disk.log` (`--dry-run` prints the commands and log lines instead).
 
-The same report closes every install, `make update-check` and `make update-all` (there without the `how:` lines and without what is fine), so the machine is checked again whenever you update: a new package manager's store, a backup disk you added, a limit a reinstall reset.
+The same report closes every install, `tuidev update --check` and `tuidev update --all` (there without the `how:` lines and without what is fine), so the machine is checked again whenever you update: a new package manager's store, a backup disk you added, a limit a reinstall reset.
 
 | It checks | It fixes | Otherwise | How to undo |
 |-----------|----------|-----------|-------------|
 | Package stores and repo folders in the Spotlight index (it asks Spotlight how many files it holds under each) | | Names the folder to add in System Settings | Search Privacy: select it, then − |
 | Package stores in Time Machine backups, when a backup disk is set up | `tmutil addexclusion` | | `tmutil removeexclusion PATH` |
 | `core.untrackedCache`, and a global `core.fsmonitor` | Sets the first, recorded for uninstall | Prints the command for the second | `git config --global --unset core.untrackedCache` |
-| The open-files limit in your shell | The shipped `.zshrc` raises it | Points at `update.sh --configs` | Delete the `ulimit` line |
+| The open-files limit in your shell | The shipped `.zshrc` raises it | Points at `tuidev update --configs` | Delete the `ulimit` line |
 | Low Power Mode on the charger; repos in iCloud-synced folders; a store on another volume | | Says what to change | The same setting, back |
 | Linux: inotify limits, swap, `updatedb` | | Prints the drop-in or the line, for you to run with `sudo` | `sudo rm /etc/sysctl.d/zz-tuidev-inotify.conf && sudo sysctl --system` |
 | Measured, macOS: CPU since boot of `mds`, `mds_stores`, `mdworker*`, `fseventsd`, `syspolicyd`, `XprotectService`, `logd` and endpoint agents (`ps -Ao time,comm` over `kern.boottime`); memory pressure and swap (`sysctl`); local Time Machine snapshots | | Warns from 15% of one core averaged since boot (after the first hour), on pressure `warn` or `critical`; notes swap past a quarter of RAM | Nothing to undo: it only reads |
-| Measured, both: free space on your home's volume (`df -Pk`); a corporate endpoint agent (CrowdStrike, Sophos, SentinelOne, Jamf Protect, Defender) | | Warns below 10% free and points at `make disk`; for an endpoint agent, ask IT for exclusions, never turn it off | Nothing to undo |
+| Measured, both: free space on your home's volume (`df -Pk`); a corporate endpoint agent (CrowdStrike, Sophos, SentinelOne, Jamf Protect, Defender) | | Warns below 10% free and points at `tuidev disk`; for an endpoint agent, ask IT for exclusions, never turn it off | Nothing to undo |
 | Measured, Linux: load over 5 minutes against cores, swap in use, a `/tmp` in RAM (tmpfs) | | Warns when load exceeds the cores | Nothing to undo |
 
 The 15% threshold: on the test Mac, busy with agents, Spotlight averaged about 4% of one core. Averaged over the whole uptime, 15% means a service spent a seventh of every hour flat out: an index rebuild, a package store churning inside the index, or a scanner chasing every file a build writes. A sandbox that denies `ps` or `sysctl` makes those checks say nothing rather than guess.
@@ -47,15 +47,15 @@ It finds your package stores by asking pnpm, Go, uv and npm, and looks for repos
 ## Disk
 
 ```bash
-make disk          # a summary: one line per item, grouped by what to do, then the next step; deletes nothing
-make disk-fix      # the same, then the plan, then one question per tool cleanup command
-make disk-agent    # ask Claude Code or Codex to look and write a cleanup plan (read-only; sends them the audit)
-./scripts/disk.sh --details       # every item in full: what, why, cost, command
-./scripts/disk.sh --explain ID    # one item in full (the ID is the summary's third column)
-./scripts/disk.sh --json          # one JSON object, for an agent you ask to plan a cleanup
-./scripts/disk.sh --quick         # leave out the repos in your code folders
-./scripts/disk.sh --min 1G        # hide what is smaller (default 100 MB)
-./scripts/disk.sh --verbose       # say every place looked at and how, and which are not there
+tuidev disk                # a summary: one line per item, grouped by what to do, then the next step; deletes nothing
+tuidev disk --fix          # the same, then the plan, then one question per tool cleanup command
+tuidev disk --agent        # ask Claude Code or Codex to look and write a cleanup plan (read-only; sends them the audit)
+tuidev disk --details      # every item in full: what, why, cost, command
+tuidev disk --explain ID   # one item in full (the ID is the summary's third column)
+tuidev disk --json         # one JSON object, for an agent you ask to plan a cleanup
+tuidev disk --quick        # leave out the repos in your code folders
+tuidev disk --min 1G       # hide what is smaller (default 100 MB)
+tuidev disk --verbose      # say every place looked at and how, and which are not there
 ```
 
 It is not a Mac cleaner. It looks only at what dev tools and agents leave behind, in places it names with `--verbose` (on stderr, so `--json` stays clean; without it, one line per stage of the scan): the Go build and module caches, the npm, npx, pnpm (store and metadata), Yarn, bun, uv, pip and Deno caches, node-gyp's headers, Homebrew's downloads, the Cargo registry and git checkouts, Maven's repository, Gradle's caches, distributions and JDKs, Playwright's and Cypress's browsers, CocoaPods' cache and spec repos, Xcode's DerivedData, iOS DeviceSupport and simulators, Podman, Docker and Apple `container` storage, Node versions fnm installed and Pythons uv installed that a newer patch has superseded, the versions RVM, rbenv, pyenv, nvm, rustup, SDKMAN, asdf and mise installed (listed with that manager's uninstall command, never offered: nothing here can tell whether a project needs one), Claude Code transcripts and Codex sessions, tuidev's own backups, and in each git repo in your code folders (to a depth of 4, `TUIDEV_DISK_DEPTH`) the untracked `node_modules`, `target`, `.next`, `.turbo`, `dist` and `.venv` at its root and its linked worktrees. Each is sized with one `du -sk`, eight at a time. On the test Mac a full run took 15 to 40 seconds depending on what else was running, and `--quick` about 8. It never walks the home folder, and never looks at app data, browser or system caches, Downloads or Trash. A code folder reached twice (a symlink, or `~/projects` and `~/Projects` on a case-insensitive disk) is scanned once.
@@ -81,10 +81,10 @@ Yours   11 GB   listed for information, never offered
       11 GB  Claude Code transcripts    claude                 ~/.claude/projects
 
 Next
-  ./scripts/disk.sh --fix          clear what is ready: the plan first, then one question each
-  ./scripts/disk.sh --explain ID   one item: what it is, what clearing it costs, its command (ID: third column)
-  ./scripts/disk.sh --details      every item in full
-  ./scripts/disk.sh --agent        ask Claude Code or Codex to look and write you a cleanup plan (read-only)
+  tuidev disk --fix          clear what is ready: the plan first, then one question each
+  tuidev disk --explain ID   one item: what it is, what clearing it costs, its command (ID: third column)
+  tuidev disk --details      every item in full
+  tuidev disk --agent        ask Claude Code or Codex to look and write you a cleanup plan (read-only)
 ```
 
 **`--agent` gets a second opinion.** It hands the audit, as JSON, to the agent CLI on your machine (`claude -p --permission-mode plan`, else `codex exec --sandbox read-only`; `TUIDEV_DISK_AGENT` names another) with rules: delete nothing, look to confirm, group into clear now, look first and leave alone, and use only the commands in the audit. The agent can check what the audit cannot, such as which projects pin a Node version it calls superseded. The audit's paths and sizes go to that CLI's provider, which the tool says before it starts; nothing is sent without `--agent`.
@@ -201,7 +201,7 @@ On the test Mac, 77 minutes after boot with agents running, Spotlight (`mds`, `m
 | `sudo mdutil -i off /Volumes/NAME` | Yes, per volume | Suits a separate APFS volume for code. Clones can't cross volumes, so the package stores must move there too. |
 | Editing `VolumeConfiguration.plist` with PlistBuddy | Unsupported | Needs root, and sources disagree on whether `mds` reads it before a reboot. Not something to script. |
 
-**So can a command line manage it?** Reading, yes; writing, no. `mdfind -onlyin DIR -count …` says how many files Spotlight holds under a folder, without root, and that is what `make perf` runs on every update: an exclusion that works reads as zero. Adding to the list has one supported route, the Settings window. tuidev stops there on purpose. The plist edit writes as root into a file `mds` owns, and no source shows it taking effect on macOS 26 or 27 without a reboot.
+**So can a command line manage it?** Reading, yes; writing, no. `mdfind -onlyin DIR -count …` says how many files Spotlight holds under a folder, without root, and that is what `tuidev perf` runs on every update: an exclusion that works reads as zero. Adding to the list has one supported route, the Settings window. tuidev stops there on purpose. The plist edit writes as root into a file `mds` owns, and no source shows it taking effect on macOS 26 or 27 without a reboot.
 
 **What to do.**
 
@@ -369,12 +369,13 @@ Ubuntu 24.04 and later restrict unprivileged user namespaces through AppArmor. A
 
 ## What tuidev runs in the background
 
-Everything tuidev starts without you typing a command, by pack. Nothing here is a cloud service or phones home. A cost is given only where this repo measured one (on an M4 Pro, macOS 27.2); an empty cell means no figure was taken. The switches are the keys in [`~/.config/agents.conf`](agent-workflows.md#settings-configagentsconf).
+Everything tuidev starts without you typing a command, by pack. Nothing here is a cloud service, and the only request tuidev makes of its own is the daily update check in the first row. (With `--pack nvim`, lazy.nvim fetches its plugins from GitHub and looks for their updates while you use Neovim; that is Neovim's plugin manager, on when you opted into the pack.) A cost is given only where this repo measured one (on an M4 Pro, macOS 27.2); an empty cell means no figure was taken. The switches are the keys in [`~/.config/agents.conf`](agent-workflows.md#settings-configagentsconf).
 
 | What | Pack | Trigger | How often | Cost (measured) | Turn it off |
 |---|---|---|---|---|---|
+| [Update check](updating.md#hearing-about-a-new-release) (`tuidev latest --if-due`): asks github.com for the latest release's tag | every install | A menu refresh, a Herdr event or start, or a run of `agents` finds a check due (it reads the due time from a file; at most one start an hour) | Once a day; an hour after one that failed | One HTTPS request | `tuidev latest off` |
 | [Memory guard](agent-workflows.md#memory-guard-agents-mem): a LaunchAgent, `dev.tuidev.memguard` (macOS; on Linux you run `agents mem guard` yourself) | `monitoring` | Loaded at login; restarted if it fails | Every `AGENTS_MEM_POLL` seconds (5) while something needs watching, every `AGENTS_MEM_IDLE` seconds (20) otherwise | About 2% of a core, nearly all of it the `ps` snapshot (0.05 s of CPU a look with nothing large running) | `AGENTS_MEM_GUARD=off` (it exits and stays down); `warn` keeps the warnings but stops nothing |
-| [Menu bar plugin](agent-workflows.md#menu-bar-swiftbar-macos) (SwiftBar runs it; macOS) | `monitoring` | Events (a Claude Code hook, a Herdr agent event, opening the menu); a timer as a backstop | `AGENTS_BAR_REFRESH` (1m); idle, a timed run may reuse the last output for up to 5 minutes; every 10 s while a command runs | One refresh: about 0.4 s of wall time, 0.3 s of CPU. Idle: 12 an hour instead of 360 | Quit SwiftBar, or remove the plugin from its plugin folder; `./uninstall.sh` removes it |
+| [Menu bar plugin](agent-workflows.md#menu-bar-swiftbar-macos) (SwiftBar runs it; macOS) | `monitoring` | Events (a Claude Code hook, a Herdr agent event, opening the menu); a timer as a backstop | `AGENTS_BAR_REFRESH` (1m); idle, a timed run may reuse the last output for up to 5 minutes; every 10 s while a command runs | One refresh: about 0.4 s of wall time, 0.3 s of CPU. Idle: 12 an hour instead of 360 | Quit SwiftBar, or remove the plugin from its plugin folder; `tuidev uninstall` removes it |
 | History sampler (`agents sample`), started by that refresh, or by `agents watch` where no menu bar runs | `monitoring` | A refresh finds a sample due | At most once a minute (due 55 s after the last); a quiet machine writes a stamp and skips the scan | | `AGENTS_HISTORY=0` |
 | Herdr health check (a stale server, outdated integrations), started by the menu refresh | `monitoring`, with Herdr | The menu refresh | Hourly while all is current, every minute while it reports something | | `AGENTS_NO_HERDR=1` |
 | Tab names (`agents herdr sync --throttle`), started by the menu refresh while an agent runs in a Herdr pane | `monitoring`, `herdr` | The menu refresh | At most every 30 s | | `AGENTS_HERDR_NAMES=0` |
@@ -383,7 +384,7 @@ Everything tuidev starts without you typing a command, by pack. Nothing here is 
 | Herdr plugin event hooks (`tuidev.link`: `agents herdr sync`, and a menu bar poke on an agent's events) | `herdr` | A tab, pane or agent comes, goes or moves; an agent changes state; a tab is focused; the server starts. Herdr runs each on its own server | On each event; a burst costs one sync and one more pass | | `AGENTS_HERDR_NAMES=0` stops the renaming; `herdr plugin unlink tuidev.link` removes the hooks |
 | [Claude Code hooks](agent-workflows.md#cleanup-hooks-claude-code): `agents bar poke`, wait records, cleanup of what a finished subagent or cleared session left running, notifications | `ai-clis` | A prompt, a turn's end, a permission or idle prompt, a subagent's end, a session's end; never a tool call, except the wait hooks, which start `agents` only while that session has a wait open | On each event; the menu poke goes out at most once every 2 s | The hooks' guard: about 0.04 ms when it declines | `AGENTS_HOOK_REAP=0` stops the cleanups; `AGENTS_HISTORY=0` records no waits; remove a hook from `~/.claude/settings.json` |
 | Claude Code status line (`agents statusline`) | `ai-clis` | Claude Code draws its status line | Claude Code's own schedule | | Remove `statusLine` from `~/.claude/settings.json` |
-| Fan daemon, `dev.tuidev.fan`: a LaunchDaemon, root (macOS, Apple silicon) | `cooling` | Loaded at boot | Reads the sensors every 2 s while it holds the fans or the chip is within 10 °C of the curve, every 10 s otherwise | About 0.3% of one core while busy, 7 MB of memory | `agents cool off` hands the fans back to macOS; `./uninstall.sh` removes the daemon |
+| Fan daemon, `dev.tuidev.fan`: a LaunchDaemon, root (macOS, Apple silicon) | `cooling` | Loaded at boot | Reads the sensors every 2 s while it holds the fans or the chip is within 10 °C of the curve, every 10 s otherwise | About 0.3% of one core while busy, 7 MB of memory | `agents cool off` hands the fans back to macOS; `tuidev uninstall` removes the daemon |
 | tmux status line | `tmux` | A timer | `status-interval 15` in `~/.config/tmux/tmux.conf`; bells and window changes redraw at once | | Raise or set the interval in your tmux config |
 
 The memory guard, the link watcher and the fan daemon are the processes that stay up; the rest start when something happens or a timer fires, and exit. Each cost figure was measured where its linked section says: the guard's on a Mac with a 6 GB VM running, the refresh's and the fan daemon's on an M4 Pro. Measure your own with Activity Monitor or `top`; the guard's process is `agents mem guard`.
@@ -400,7 +401,7 @@ The memory guard, the link watcher and the fan daemon are the processes that sta
 | `cat`, `ls` and `top` that stay the real commands for agents | the shipped `.zshrc` |
 | An open-files limit of 65,536 for the shell and what it starts | the shipped `.zshrc` |
 | `core.untrackedCache`, while you have not set it | the git defaults |
-| Time Machine exclusions for package stores, when you say yes | `make perf-fix` |
-| Tools' own cache cleanups and superseded runtimes, each when you say yes | `make disk-fix` |
+| Time Machine exclusions for package stores, when you say yes | `tuidev perf --fix` |
+| Tools' own cache cleanups and superseded runtimes, each when you say yes | `tuidev disk --fix` |
 
-It does not touch Spotlight's list, Gatekeeper, power settings or sysctls. Those belong to you, most need root, and one trades away a malware scan. `make perf` tells you where they stand.
+It does not touch Spotlight's list, Gatekeeper, power settings or sysctls. Those belong to you, most need root, and one trades away a malware scan. `tuidev perf` tells you where they stand.

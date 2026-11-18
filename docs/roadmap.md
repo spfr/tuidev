@@ -2,7 +2,7 @@
 
 *Last updated: 29 September 2026.*
 
-This is not a feature list. It is groundwork for a landscape that keeps
+Read this to see which outside projects tuidev watches, what would make it adopt one, and why its design (packs, managed blocks, migrations) keeps those changes cheap. It is not a feature list. It is groundwork for a landscape that keeps
 moving faster than most tools can absorb — multiplexers, sandboxing, and
 fleet-scale agent orchestration are all mid-shift right now. The goal is a
 repo that can adopt what wins without a rewrite, and ignore what doesn't
@@ -88,7 +88,10 @@ need to change for callers.
    [`agent-workflows.md`](agent-workflows.md) — Tailscale/SSH plus tmux or
    Herdr on a box that never sleeps — is already the shape a real fleet
    takes. Scaling it further (more nodes, more repos) is an extension of
-   that pattern, not a new architecture.
+   that pattern, not a new architecture. The part that already exists is on
+   top of plain ssh: `agents map`, `agents ports` and `agents forward` show
+   what runs on each machine and bring its ports here
+   ([`remote.md`](remote.md#remote-feels-local-ports-links-and-files)).
 
 None of this requires a Kubernetes-shaped rewrite. The bet is that
 "SSH to a durable session, know what needs attention" scales further than
@@ -109,7 +112,10 @@ they are *why* (a)–(c) above don't require rewrites:
   writes `~/.zshrc`, SSH config, etc. inside `# >>> tuidev managed >>>`
   fences. User edits outside the fence survive every re-run and every
   future migration.
-- **Drift-detecting updates and one-shot migrations.** `scripts/update.sh`
+- **Drift-detecting updates and one-shot migrations.** `tuidev update` takes
+  the latest release (checked against its sha256) and hands over to that
+  release's own `scripts/update.sh`, so a migration always comes from the
+  version you move to. `update.sh`
   separates package updates from config-drift detection per profile, and
   timestamped migrations (`scripts/migrations/`) repair what past releases
   left behind: removed packs (a multiplexer, OpenCode), and the move of

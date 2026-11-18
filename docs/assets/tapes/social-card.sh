@@ -27,8 +27,8 @@ echo
 # Blocks in the accent blue, their shadow in the palette's dim grey.
 for line in "${title[@]}"; do centre 46 $'\033[90m' "${line//█/$'\033[34m'█$'\033[90m'}"; done
 echo
-centre 45 $'\033[1m' "Run many AI coding agents and stay in control"
-centre 49 $'\033[1;32m' "know who needs you · clean up · keys out of reach"
+centre 47 $'\033[1m' "Run many AI coding agents, know which needs you"
+centre 47 $'\033[1;32m' "one-line install · clean up · keys out of reach"
 echo
 centre 49 $'\033[37m' "Herdr · Claude Code · Codex · macOS · Linux · MIT"
 sleep "${1:-30}"

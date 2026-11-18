@@ -1,6 +1,6 @@
 # Remote and Mobile
 
-The host runs the terminal, tmux, the editor and the agents. You connect from any client and re-attach. Work survives disconnects because tmux does. Tailscale, SSH, mosh and phone apps are only transport.
+Read this to set up an always-on machine you connect to from your laptop or phone, and to make its agents, previews and files reachable from where you sit. The host runs the terminal, tmux, the editor and the agents. You connect from any client and re-attach. Work survives disconnects because tmux does. Tailscale, SSH, mosh and phone apps are only transport.
 
 > **Only need to steer an agent from your phone?** Claude Code's native Remote Control covers that without SSH (see [agent-workflows.md](agent-workflows.md#remote-control-from-a-phone)). This doc covers the full-terminal path underneath it.
 
@@ -9,9 +9,11 @@ The host runs the terminal, tmux, the editor and the agents. You connect from an
 On the machine you'll connect to:
 
 ```bash
-./install.sh --profile remote     # or, on a Mac you also sit at: --profile desktop --remote --pack tmux
+curl -fsSL https://github.com/spfr/tuidev/releases/latest/download/get.sh | bash -s -- --profile remote --pack ai-clis
 tailscale up && tailscale status  # join the tailnet
 ```
+
+The same install is the third choice ("A headless box that stays on") when you run the one-liner without flags. On a Mac you also sit at, add the pieces to what it has: `tuidev install --remote --pack tmux`. With a clone, run `./install.sh` with the same flags. Once the box has `tuidev`, `tuidev update` keeps it current.
 
 `remote` = core + remote + sandbox + `--pack tmux`, so a single `--profile remote` install gets Tailscale, mosh, SSH and a durable tmux session together — you don't add `--pack tmux` yourself. `--remote` on its own installs Tailscale (a cask on macOS; on Linux it links to the official installer), mosh, the SSH client config as a managed block, and sshd hardening snippets: key-only auth, no root login, modern ciphers. The snippets are copied into `/etc/ssh/sshd_config.d/` only when that directory is writable. Otherwise the installer prints the `sudo cp` commands. On macOS, turn on Remote Login in System Settings → General → Sharing, or run `sudo systemsetup -setremotelogin on`.
 
@@ -103,7 +105,7 @@ A stop is `agents kill` on the machine that runs the thing, with its refusals an
 
 So nothing needs `pkill`, and nothing needs you to remember which machine a dev server was started on. `agents map workbox` or `agents map local` narrows it to one machine; piped, it prints the list.
 
-**A click just works.** Ctrl-click a `localhost` URL in a Herdr pane of another machine and it opens in the browser of the machine you sit at, through a tunnel made on the spot. Ctrl-click a file link an agent printed (a `.md`, `.html`, image or PDF) and the file is fetched and opened here. Pieces:
+**Ctrl-click opens it here.** Ctrl-click a `localhost` URL in a Herdr pane of another machine and it opens in the browser of the machine you sit at, through a tunnel made on the spot. Ctrl-click a file link an agent printed (a `.md`, `.html`, image or PDF) and the file is fetched and opened here. Pieces:
 
 - **The plugin** (`tuidev.link`, linked by `--pack herdr`). Herdr runs a plugin on the machine that owns the pane, so the click is handled over there, where there is no browser. The plugin hands it to `agents link click`.
 - **The watcher** (`agents link watch`; a LaunchAgent on macOS, a tmux pane or systemd user service on Linux). The machine you sit at keeps one ssh to each of your machines and reads requests from it. Nothing listens anywhere, and the other machine never connects to yours.
@@ -118,7 +120,7 @@ So nothing needs `pkill`, and nothing needs you to remember which machine a dev 
 - The dialog needs the Mac you sit at; from a Linux desktop use `agents push FILE`, which does the same copy by hand.
 - The hook ships in Claude Code's settings (`UserPromptSubmit`) and starts `agents` only while a watcher is attached. Codex has no prompt hook to carry it: there, `agents push`.
 
-`agents link` shows the watcher and each machine it follows. `--pack herdr` binds two keys for the plugin, as a managed block in `~/.config/herdr/config.toml`: prefix+m for the map and prefix+shift+o for the ports popup (`agents ports --pick`). A binding of your own outside the block is yours to keep.
+`agents link` shows the watcher and each machine it follows. `--pack herdr` binds the plugin's keys as a managed block in `~/.config/herdr/config.toml`: prefix+m for the map and prefix+shift+o for the ports popup (`agents ports --pick`), beside prefix+space for the [board](agent-workflows.md#the-board-every-session-one-screen), prefix+a for the [palette and prefix+u for updates](agent-workflows.md#fleet-attention--herdr---pack-herdr). A binding of your own outside the block is yours to keep.
 
 **What a forward is.** One `ssh -N -L` of its own, from this machine's `127.0.0.1` to the other machine's `localhost`: nothing is bound to a public address at either end. One you open yourself takes the same port number when that is free here, so the URL a program printed works as it stands; otherwise the next free one. ssh runs with `BatchMode`, so a machine that needs a password is reported, never prompted for: load the key (`ssh-add`) or reconnect it (`herdr machine reconnect workbox`) first. These connections carry nothing your ssh config would add for the host: no agent or X11 forwarding, and none of its `LocalForward` lines.
 

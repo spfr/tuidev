@@ -1,8 +1,51 @@
 # Updating an Installed tuidev
 
-How an existing install moves forward, and what the installer records so it can
+Read this to update tuidev, roll an update back, understand migrations, or remove
+tuidev again: how an existing install moves forward, and what the installer records so it can
 be undone. For what each profile installs see
 [profiles.md](profiles.md).
+
+## The short version
+
+```bash
+tuidev update              # tuidev itself: the latest release, its migrations, its configs
+tuidev update --check      # preview: packages, migrations, config drift, the latest release
+tuidev update --packages   # the packages of your active packs
+tuidev update --all        # all of it, non-interactive
+tuidev update --rollback   # back to the release before this one
+tuidev whatsnew [FROM]     # this release's changelog, or everything since FROM
+```
+
+`tuidev` is installed into `~/.local/bin` by every install and finds tuidev's files through the path the installer recorded (`repo=` in `~/.config/tuidev/profile`). On its own it opens the palette, a searchable list of everything it and `agents` can do. In a clone the Makefile has the same actions as targets (`make update-check`, `make check`, `make perf`, `make disk`; `make help` lists them), and `./install.sh`, `./uninstall.sh` and `./scripts/update.sh` are what `tuidev install`, `uninstall` and `update` run.
+
+## Installed with get.sh, or from a clone
+
+Both run the same `install.sh`. They differ in where tuidev's files live and how the next version arrives.
+
+| | `get.sh` (the one-line install) | A git clone |
+|---|---|---|
+| Files | `~/.local/share/tuidev/versions/X.Y.Z`, with `current` pointing at the one in use | Wherever you cloned it |
+| Needs | `curl`, `tar`, `shasum` or `sha256sum` | `git` |
+| `tuidev update` | Asks which release is the latest and, when it is newer, downloads it, checks it and moves `current` to it | `git pull --ff-only` |
+| Version | A tagged release | Whatever you checked out |
+| Rollback | `tuidev update --rollback` | `git checkout` a tag, then `./install.sh` |
+
+[`get.sh`](../get.sh) is about 230 lines and is the only code that fetches tuidev. It downloads `tuidev.tar.gz` and `tuidev.tar.gz.sha256` from the release, refuses the archive unless the sha256 matches, every path in it sits under one `tuidev-X.Y.Z/` directory and none is a symlink or a hard link, unpacks it, asks what this machine should get when you named no flags (the installer's own four choices), and asks before it runs `install.sh` (answer `p` for a `--dry-run` first; with no terminal, as in CI or a container build, it installs only with `--yes`). `TUIDEV_VERSION=v3.23.0` picks a release other than the latest, and `bash get.sh --fetch` only downloads. The checksum guards against a truncated or mismatched download; that the files are tuidev's rests on HTTPS to github.com and on who can publish a release. The archive is `git archive` of the tagged commit. Each download is capped at 5 minutes and 64 MB. `current` switches with one rename, so it never points nowhere, and a re-download that is interrupted puts the earlier files back. If the installer stops partway, `get.sh` says the install is not complete and names `tuidev update --rollback` when an earlier release is kept. The release before the current one stays on disk, both for `--rollback` and because an update in progress still reads its files from there. Releases before 3.23.0 have no archive: clone the repo for those.
+
+An update hands over to the new release's own `update.sh` before it runs migrations or writes configs, so those always come from the version you are moving to.
+
+## Hearing about a new release
+
+Once a day, `tuidev latest --if-due` asks `https://github.com/spfr/tuidev/releases/latest` where it redirects to, which is the latest release's tag. It is one request with no body, no API call and no identifier beyond the request itself, and the answer goes into `~/.cache/tuidev/latest`. A check that fails is tried again an hour later, and checks that start together make one request. Nothing starts a timer for this: the menu bar's refresh, a Herdr event, Herdr starting and a run of `agents` each read when the next check is due from that file, and start it only then.
+
+When the release is newer than the one installed:
+
+- the menu bar shows a row for it, with Update now… and What changed (macOS, `--pack monitoring`);
+- Herdr shows one toast, and **prefix+u** opens a popup with the installed and the latest version that asks before it updates (`--pack herdr`);
+- `agents` ends with one line, and so does `tuidev latest`;
+- the palette's first row is the update.
+
+You are told once per release. Nothing is ever updated without you asking. `tuidev latest off` turns the check off for this machine (`tuidev latest on` back on); `tuidev update --check` and `--ask` still ask when you run them. `TUIDEV_UPDATE_CHECK=0` does the same for commands that inherit it, such as a CI job; the menu bar and Herdr don't see your shell's environment, so use `tuidev latest off` for those.
 
 ## Upgrading to 3.0
 
@@ -11,8 +54,7 @@ favor of the CLIs' own native sandboxes, and removed the `bosun`, `yazi` and
 `nnn` packs. On an existing machine, upgrade with:
 
 ```bash
-git pull
-./scripts/update.sh --configs     # or: make update-configs
+tuidev update               # a clone from before 3.23 has no tuidev command: git pull && ./scripts/update.sh --configs
 ```
 
 That runs the three migrations below, then re-applies the configs of every
@@ -30,7 +72,7 @@ The migrations, in order:
   nothing you were using disappears. Prints what it carried over and how to
   drop it by hand (edit `extra_packs` in `~/.config/tuidev/profile`). A
   `tmux.conf` of your own never gains the `tuidev-tmux` block from an update;
-  `./install.sh --pack tmux` adds it.
+  `tuidev install --pack tmux` adds it.
 - `202609231210_v3_drop_tui_packs.sh` — removes `bosun`, `yazi` and `nnn` from
   `extra_packs`. The tools themselves are left installed; only the pack
   registration goes.
@@ -38,7 +80,7 @@ The migrations, in order:
   tuidev-owned `ai-clis.zsh` shell fragment, so `cc`/`cx` disappear. It never
   edits `~/.claude/settings.json`; it tells you where that file stands. With
   a `sandbox` block, plain `claude` is sandboxed. An unmodified 2.x copy is
-  upgraded by `./scripts/update.sh --configs`, and one you edited gets the
+  upgraded by `tuidev update --configs`, and one you edited gets the
   `sandbox` block merged in by it (see
   [Shipped configs you may have edited](#shipped-configs-you-may-have-edited)).
   Until then, `claude` runs unsandboxed.
@@ -50,9 +92,9 @@ machinery:
 
 | Change | Handled by | Runs |
 |--------|-----------|------|
-| A package got a new version | `update.sh --packages` | every time |
-| A repo-owned config changed | `update.sh --configs` (managed blocks) | every time |
-| A past release left an artifact behind | `update.sh --migrations` | once per machine |
+| A package got a new version | `tuidev update --packages` | every time |
+| A repo-owned config changed | `tuidev update --configs` (managed blocks) | every time |
+| A past release left an artifact behind | `tuidev update --migrations` | once per machine |
 
 The first two converge *current* state and are safe to repeat forever. The third
 cannot be: once a file's source is deleted from the repo, no amount of
@@ -62,10 +104,10 @@ in `$HOME`. That is what migrations are for.
 ## Migrations
 
 ```bash
-make update-check                 # lists pending migrations, runs nothing
-./scripts/update.sh --migrations  # runs them
-./scripts/update.sh --configs     # runs pending migrations first, then configs
-./scripts/update.sh --all         # pull the repo, then packages, migrations + configs (a pull that brings a new tuidev continues with it)
+tuidev update --check       # lists pending migrations, runs nothing
+tuidev update --migrations  # runs them
+tuidev update --configs     # runs pending migrations first, then configs
+tuidev update --all         # tuidev's files first (a pull or the latest release), then packages, migrations and configs; a new release continues with itself
 ```
 
 Each migration is a script in `scripts/migrations/`, named
@@ -84,7 +126,7 @@ Three properties worth knowing:
 - **Fresh installs skip history; upgrades apply it.** On a machine tuidev has
   never touched, `install.sh` marks every existing migration applied without
   running it — a brand-new machine has no legacy state to repair. On a machine
-  that already has a tuidev install, re-running `install.sh` (`./install.sh
+  that already has a tuidev install, re-running the installer (`tuidev install
   --pack herdr`, say) *applies* pending migrations first, before the packs write
   anything. The "never touched" test is the absence of both
   `~/.config/tuidev/profile` and `~/.config/tuidev/manifest`, checked before the
@@ -105,7 +147,7 @@ Writing one? The contract is in
 ## The install manifest
 
 `~/.config/tuidev/profile` records *which packs you picked*. Each run merges
-into it: a pack-only run like `./install.sh --pack herdr` adds to
+into it: a pack-only run like `tuidev install --pack herdr` adds to
 `extra_packs`, only ever turns the built-in pack flags (core, remote, sandbox,
 ui, extras) on, and keeps the recorded profile name unless you pass
 `--profile` again.
@@ -134,16 +176,16 @@ stale (a formula you later removed by hand), so every consumer re-checks that a
 thing exists before acting on it.
 
 **Only what tuidev installed is recorded.** A package that was already present
-when a pack ran is skipped, so `./uninstall.sh` won't remove the `ripgrep` you
+when a pack ran is skipped, so `tuidev uninstall` won't remove the `ripgrep` you
 had before you found this repo.
 
 ## Uninstall
 
 ```bash
-./uninstall.sh --dry-run   # preview
-./uninstall.sh             # interactive: asks before each step
-./uninstall.sh --all       # yes to every step (keeps the agents history)
-./uninstall.sh --purge-history   # also delete the agents history, without asking
+tuidev uninstall --dry-run   # preview
+tuidev uninstall             # interactive: asks before each step
+tuidev uninstall --all       # yes to every step (keeps the agents history)
+tuidev uninstall --purge-history   # also delete the agents history, without asking
 ```
 
 It removes only what the manifest records:
@@ -163,6 +205,9 @@ It removes only what the manifest records:
   uses: then it prints `rm ~/.local/bin/herdr` for after you have stopped the
   server. Say no and it is kept, with the same command;
 - tuidev's state dir, except `backups/`;
+- the releases `get.sh` downloaded (`versions/` and `current` in the home the
+  uninstall runs from, `~/.local/share/tuidev` unless you set `TUIDEV_HOME`)
+  and the update check's cache. A git clone is yours and stays;
 - the [agents history](agent-workflows.md#history-and-agents-report) (`~/.local/state/tuidev/agents`, or under `$XDG_STATE_HOME`), only when you say so. In a terminal, uninstall asks and the default is to keep it (no answer is no). `--purge-history` deletes it without asking; `--all` keeps it and never asks. It never asks when stdin isn't a terminal. Only that one directory goes, only inside `$HOME`, and never through a symlink. `--dry-run` shows the removal.
 
 An install that predates the manifest gets only the safe subset: managed blocks,
@@ -172,18 +217,18 @@ you to review.
 ## Everything else `update.sh` does
 
 ```bash
-make update-check          # preview: packages, migrations, drift, repo, performance
-make update-packages       # upgrade the packages of your active packs only
-make update-configs        # migrations, then re-apply managed blocks + pack configs
-make update-all            # non-interactive: repo first, then packages + configs
-make update-security       # audit Tailscale, SSH permissions, Seatbelt profile drift
-make perf                  # performance audit: Spotlight, Time Machine, limits, git
-make perf-fix              # the same, then offer each fix that needs no root
+tuidev update --check          # preview: packages, migrations, drift, repo, performance
+tuidev update --packages       # upgrade the packages of your active packs only
+tuidev update --configs        # migrations, then re-apply managed blocks + pack configs
+tuidev update --all            # non-interactive: repo first, then packages + configs
+tuidev update --security       # audit Tailscale, SSH permissions, Seatbelt profile drift
+tuidev perf                    # performance audit: Spotlight, Time Machine, limits, git
+tuidev perf --fix              # the same, then offer each fix that needs no root
 ```
 
-`make update-check` and `make update-all` end with the performance report, so a package store that crept back into the Spotlight index or a new backup disk shows up the next time you update. It only reports there; `make perf-fix` (or `update.sh --perf`) applies. What it checks and why is in [performance.md](performance.md#let-tuidev-check).
+`tuidev update --check` and `tuidev update --all` end with the performance report, so a package store that crept back into the Spotlight index or a new backup disk shows up the next time you update. It only reports there; `tuidev perf --fix` (or `tuidev update --perf`) applies. What it checks and why is in [performance.md](performance.md#let-tuidev-check).
 
-A bare `./scripts/update.sh` gives an interactive menu with the same actions.
+`tuidev update` with any of `update.sh`'s flags runs that mode. In a clone, a bare `./scripts/update.sh` gives an interactive menu with the same actions.
 Every mode honors `--dry-run`. `update.sh` runs under macOS's stock bash 3.2.
 
 ### Packages on Linux
@@ -280,7 +325,7 @@ The unit pattern is in
 A Homebrew herdr is switched instead (after asking): `--packages` installs the
 release binary in its place, as the `202610161843_herdr_direct_install`
 migration does, and prints what is left by hand. A failed download is retried
-on the next `--packages`, or by `./install.sh --pack herdr`.
+on the next `--packages`, or by `tuidev install --pack herdr`.
 
 ### Shipped configs you may have edited
 
@@ -326,8 +371,8 @@ it only adds: new keys and new list entries arrive, and none of your values
 change or go. That also means a shipped key or list entry you had deleted
 comes back, because without a base tuidev can't tell a deletion from a
 missing addition. Preview it first with
-`./install.sh --pack ai-clis --dry-run`, which lists the paths that would
-change and writes nothing (`./scripts/update.sh --dry-run` doesn't show this
+`tuidev install --pack ai-clis --dry-run`, which lists the paths that would
+change and writes nothing (`tuidev update --dry-run` doesn't show this
 preview). From then on the base is there, and a deletion sticks.
 
 A file that isn't valid JSON (say, one with comments), or a machine without
@@ -339,11 +384,11 @@ belong in `~/.claude/settings.json` itself, and they survive updates unless
 a release removes that same entry. `~/.codex/config.toml` is TOML and is not
 merged.
 
-`make update-configs` re-runs the packs, so this happens on every update.
+`tuidev update --configs` re-runs the packs, so this happens on every update.
 Files you added (say, `~/.config/nvim/lua/plugins/mine.lua`) are never
 touched. After a Neovim upgrade, `:Lazy sync` installs and cleans plugins.
 
-`make update-configs` also applies new **git defaults** (`scripts/lib/gitconfig.sh`)
+`tuidev update --configs` also applies new **git defaults** (`scripts/lib/gitconfig.sh`)
 to keys you have not set, `[include]`d files included.
-`make update-security` also shows how your profiles differ from the shipped
+`tuidev update --security` also shows how your profiles differ from the shipped
 ones (see [sandboxing.md](sandboxing.md#customizing)).

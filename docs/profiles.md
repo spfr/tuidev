@@ -1,17 +1,28 @@
 # Profiles and Packs
 
-A **pack** is one install script. There are five built-in packs, each selected by its own flag (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`), and a set of optional packs, each selected with `--pack NAME`. A **profile** is a named set of built-in packs. Profiles are shortcuts, not walls: combine a profile with more flags, or skip profiles and compose packs directly.
+A **pack** is one install script; a **profile** is a named set of packs. Read this page to see what each profile and pack installs, or to choose packs yourself. There are five built-in packs, each selected by its own flag (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`), and a set of optional packs, each selected with `--pack NAME`. Profiles are shortcuts, not walls: combine a profile with more flags, or skip profiles and compose packs directly.
+
+The one-line install asks what the machine should get. Each answer is a set of flags:
+
+| You pick | Flags it runs |
+|----------|---------------|
+| Everything for agent work | `--profile full` |
+| Shell and sandboxed agents | `--profile desktop --pack ai-clis` |
+| A headless box that stays on | `--profile remote --pack ai-clis` |
+| Just the shell | `--profile minimal` |
+
+To skip the question, put the flags after `bash -s --` on the one-liner, or pass them to `tuidev install` (or `./install.sh` in a clone):
 
 ```bash
-./install.sh --profile desktop                      # a profile
-./install.sh --profile desktop --pack ai-clis        # a profile plus an optional pack
-./install.sh --core --sandbox --pack herdr           # no profile: built-in packs by flag
-./install.sh --pack nvim                             # add one pack to an existing install
+tuidev install --profile desktop                       # a profile
+tuidev install --profile desktop --pack ai-clis        # a profile plus an optional pack
+tuidev install --core --sandbox --pack herdr           # no profile: built-in packs by flag
+tuidev install --pack nvim                             # add one pack to an existing install
 ```
 
-With no flags, `./install.sh` doesn't ask: it installs `desktop` on macOS and `minimal` on Linux. Unknown `--pack` names are rejected before anything runs. Re-running is safe. On an existing install, pending [migrations](updating.md#migrations) run before any pack. Every run is merged into `~/.config/tuidev/profile`, so a later `--pack` run keeps what you picked before.
+With no flags on a terminal, the installer asks the question above. With no flags and no terminal, it installs `desktop` on macOS and `minimal` on Linux. Unknown `--pack` names are rejected before anything runs. Re-running is safe. On an existing install, pending [migrations](updating.md#migrations) run before any pack. Every run is merged into `~/.config/tuidev/profile`, so a later `--pack` run keeps what you picked before.
 
-**Package managers.** macOS uses Homebrew, and the installer warns and skips packages if Homebrew is missing. On Linux, packs use Homebrew when it is installed, and otherwise `apt-get`, `dnf` or `pacman`, in that order (`scripts/lib/pkg.sh`). System package managers run only as root or through passwordless `sudo`. Otherwise the exact command is printed. A tool the distro doesn't package is skipped with a link to its upstream installer. tuidev never pipes a remote script into a shell for you.
+**Package managers.** macOS uses Homebrew, and the installer warns and skips packages if Homebrew is missing. On Linux, packs use Homebrew when it is installed, and otherwise `apt-get`, `dnf` or `pacman`, in that order (`scripts/lib/pkg.sh`). System package managers run only as root or through passwordless `sudo`. Otherwise the exact command is printed. A tool the distro doesn't package is skipped with a link to its upstream installer. tuidev never pipes a third-party installer into a shell for you.
 
 ## Profiles
 
@@ -70,7 +81,7 @@ What each tool replaces, and why it was picked, is in [toolbox.md](toolbox.md).
 | `--pack tmux` | `tmux`, the `tuidev-tmux` managed block in `~/.config/tmux/tmux.conf`, and TPM (tmux-resurrect, tmux-continuum). Included by the `remote` profile. |
 | `--pack herdr` | [Herdr](https://herdr.dev/), an agent-aware runtime for fleet attention: its release binary in `~/.local/bin/herdr` (macOS and Linux), checked against the sha256 its GitHub release lists, so `herdr update --handoff` can upgrade a running server without stopping its panes. `TUIDEV_HERDR_VERSION` pins a release. A herdr installed another way (mise, Nix) is left alone. Adopts a Tokyo Night `~/.config/herdr/config.toml`, and links the `tuidev.link` plugin (in `~/.local/lib/tuidev/herdr-plugins/`): a Ctrl-click on a `localhost` or file link in a pane of another machine opens on the machine you sit at, and the map and ports popups on prefix+m and prefix+shift+o ([remote.md](remote.md#remote-feels-local-ports-links-and-files); needs `--pack monitoring`). |
 | `--pack sandbox-container` | Tier 2 sandboxing: finds a container runtime (Apple `container`, then Podman, then Docker), installs Podman only when none exists, and starts it. See [sandboxing.md](sandboxing.md#tier-2-containers). |
-| `--pack fnm` | fnm (Fast Node Manager): the only way the shipped `.zshrc` puts Node on `PATH`. `update.sh --packages` keeps each installed Node major on its latest patch ([updating.md](updating.md#node-fnm)). |
+| `--pack fnm` | fnm (Fast Node Manager): the only way the shipped `.zshrc` puts Node on `PATH`. `tuidev update --packages` keeps each installed Node major on its latest patch ([updating.md](updating.md#node-fnm)). |
 | `--pack hunk` | [hunk](https://hunk.dev), a review-first diff viewer for agent-written changesets (`hunk diff --watch`, `hunk show`). Homebrew only; 0.x, so opt-in. Nothing is written to `$HOME`: to page git through it, run `git config --global core.pager "hunk pager"`. |
 | `--pack ci` | `actionlint` (lints GitHub Actions workflows), `zizmor` (audits them for security problems) and `betterleaks` (a secret scanner that reads `.gitleaks.toml`), for the checks an agent runs before it commits. Homebrew first; on Linux whatever the package manager lacks is skipped with an install pointer. Nothing is written to `$HOME`. Included in `full`. |
 | `--pack monitoring` | `bottom` (`btm`, aliased as `top`), and `agents` in `~/.local/bin` (its modules and the theme palettes in `~/.local/lib/tuidev/agents/`): agent sessions, orphaned MCP and dev servers, CPU and memory hogs, a memory guard that stops a runaway agent process before macOS runs out of memory (`agents mem`; a LaunchAgent on macOS), keep-awake and thermal pressure, and your other machines over ssh (`agents ports`, `agents forward`, `agents push`, `agents open`, and the link watcher, a LaunchAgent on macOS: [remote.md](remote.md#remote-feels-local-ports-links-and-files)), with settings in `~/.config/agents.conf` (placed once, yours to edit). On macOS, also SwiftBar and an `agents` menu-bar plugin that doubles as a CPU, memory, battery and thermal readout, and `terminal-notifier`, which makes an agent's notification clickable: a click jumps to its session ([Notifications](agent-workflows.md#notifications)). See [agent-workflows.md](agent-workflows.md#local-processes-agents---pack-monitoring). |

@@ -129,4 +129,4 @@ For a team, the project's README lists the names each developer stores with `sec
 3. Find the copies with file names only, never printing the value: `rg -l -F 'FIRST-CHARS' ~/.zsh_history ~/.claude/projects ~/.codex/sessions <dotfiles repo>`, and atuin's history if you use it. Agent transcripts hold whatever a command printed.
 4. A token pushed to git stays in its history and forks: rotating, not rewriting history, is what makes it harmless.
 
-`./uninstall.sh` removes the `secret` command but not your stored secrets; `secret rm` them first if you want them gone.
+`tuidev uninstall` removes the `secret` command but not your stored secrets; `secret rm` them first if you want them gone.

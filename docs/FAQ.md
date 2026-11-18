@@ -1,8 +1,16 @@
 # FAQ
 
-Troubleshooting, one question at a time. Each topic's full reference is in its own doc: [profiles](profiles.md), [sandboxing](sandboxing.md), [agent workflows](agent-workflows.md), [remote](remote.md), [updating](updating.md).
+Read this when something fails or surprises you: short answers to the questions people hit after installing, one at a time. Each topic's full reference is in its own doc: [profiles](profiles.md), [sandboxing](sandboxing.md), [agent workflows](agent-workflows.md), [remote](remote.md), [updating](updating.md).
 
 ## Install and update
+
+**Do I need git?** No. The one-line install downloads a release, checks it and runs the installer; `tuidev update` gets the next one the same way. A clone works too and updates with `git pull`. [How they differ](updating.md#installed-with-getsh-or-from-a-clone).
+
+**Is piping curl into bash safe here?** It runs one script, [`get.sh`](../get.sh), about 230 lines: it downloads the release archive, refuses it unless its sha256 matches or if it holds a symlink, a hard link or a path outside its one directory, and asks before it installs (answer `p` to preview every change; with no terminal it installs only with `--yes`). The checksum catches a broken download, not a hostile release: what you trust is HTTPS to github.com and whoever can publish a tuidev release, much as with a clone. If you would rather read first, download it and run `bash get.sh`, or clone the repo.
+
+**How do I know there is a new release?** The menu bar gets a row, Herdr shows one toast, and `agents` ends with a line. `tuidev update` applies it, and nothing updates on its own. The check is one request a day; `tuidev latest off` stops it. [Hearing about a new release](updating.md#hearing-about-a-new-release).
+
+**An update broke something.** `tuidev update --rollback` puts the release before it back and re-applies its configs (from a clone, check out the earlier tag and run `./install.sh`). Then see the entry on updates below.
 
 **Does it work on Intel Macs?** Yes. Homebrew's prefix (`/opt/homebrew` or `/usr/local`) is detected at shell start.
 
@@ -16,19 +24,19 @@ Troubleshooting, one question at a time. Each topic's full reference is in its o
 
 **Where are my backups?** `~/.config/tuidev/backups/` (or `$XDG_CONFIG_HOME/tuidev/backups/`). tuidev backs up a file there before it overwrites or removes it, and keeps the most recent copies of each.
 
-**How do I undo everything?** Run `./uninstall.sh`, or `--dry-run` it first. It removes only what `~/.config/tuidev/manifest` records: the managed blocks, `~/.local/bin` helpers, the git defaults tuidev set (while they still hold tuidev's value) and, if you agree, the configs and Homebrew packages tuidev installed. CLI auth and session state are never touched. See [updating.md](updating.md#uninstall).
+**How do I undo everything?** Run `tuidev uninstall`, or `tuidev uninstall --dry-run` to see first. It removes only what `~/.config/tuidev/manifest` records: the managed blocks, `~/.local/bin` helpers, the git defaults tuidev set (while they still hold tuidev's value) and, if you agree, the configs and Homebrew packages tuidev installed. CLI auth and session state are never touched. See [updating.md](updating.md#uninstall).
 
-**Something broke after an update.** Run `make check`, then `make update-check` to see config drift and pending migrations. A failed migration is not recorded, so the next `make update-migrations` retries it.
+**Something broke after an update.** Run `tuidev check`, then `tuidev update --check` to see config drift and pending migrations. A failed migration is not recorded, so the next `tuidev update --migrations` retries it.
 
 ## Shell and terminal
 
-**`work`, `dev`, `ai`, `ai-triple` and the other tmux layouts are gone.** 3.0 dropped every tmux-wrapper function and its ten layouts, along with `tk`/`tka` and `make test-layouts`. tmux itself is now optional (`--pack tmux`), not baked into any profile except `remote`. `.zshrc` keeps only a small attach-or-create helper: `t [NAME]` (default session name `main`) and `tls` to list sessions. See [remote.md](remote.md#connect-and-re-attach).
+**`work`, `dev`, `ai`, `ai-triple` and the other tmux layouts are gone.** 3.0 dropped every tmux-wrapper function and its ten layouts, along with `tk` and `tka`. tmux itself is now optional (`--pack tmux`), not baked into any profile except `remote`. `.zshrc` keeps only a small attach-or-create helper: `t [NAME]` (default session name `main`) and `tls` to list sessions. See [remote.md](remote.md#connect-and-re-attach).
 
-**Where did Ruby, jenv, Yarn, RVM, the Android SDK, gcloud and iTerm2's integration go?** Out of the shipped `.zshrc`: they are personal toolchains, not part of an agent terminal, and Ruby's global `LDFLAGS`/`CPPFLAGS` leaked into unrelated native builds. On an existing machine, `update.sh --configs` first moved the ones it found into a marked section of `~/.zshrc.local`, which is yours to keep or trim; Ruby keeps only its `PATH` line. On a new machine, set up the ones you use in `~/.zshrc.local`.
+**Where did Ruby, jenv, Yarn, RVM, the Android SDK, gcloud and iTerm2's integration go?** Out of the shipped `.zshrc`: they are personal toolchains, not part of an agent terminal, and Ruby's global `LDFLAGS`/`CPPFLAGS` leaked into unrelated native builds. On an existing machine, `tuidev update --configs` first moved the ones it found into a marked section of `~/.zshrc.local`, which is yours to keep or trim; Ruby keeps only its `PATH` line. On a new machine, set up the ones you use in `~/.zshrc.local`.
 
 **Up arrow doesn't open atuin.** By design: Up recalls history entries that start with what you have typed. `Ctrl+r` opens atuin.
 
-**The shell is slow to start.** A stock shell starts in about 70 ms. Measure it with `time zsh -i -c exit`. Tool init scripts (starship, zoxide, atuin, fzf) are cached in `~/.cache/zsh/init-*.zsh` and regenerate when the tool's binary changes. Look in `~/.zshrc.local` for anything that sources `nvm.sh` or runs `eval "$(tool init)"` eagerly. After installing new completions, run `rm ~/.cache/zsh/zcompdump-*`.
+**The shell is slow to start.** Measure it with `time zsh -i -c exit`. Tool init scripts (starship, zoxide, atuin, fzf) are cached in `~/.cache/zsh/init-*.zsh` and regenerate when the tool's binary changes. Look in `~/.zshrc.local` for anything that sources `nvm.sh` or runs `eval "$(tool init)"` eagerly. After installing new completions, run `rm ~/.cache/zsh/zcompdump-*`.
 
 **Word jumps, Home or End print garbage.** In Ghostty, Option acts as Alt (`macos-option-as-alt = true`), so `Alt+b` / `Alt+f` move by word, and the shipped `.zshrc` binds Home, End and Delete. In iTerm2, set Preferences → Profiles → Keys → Left/Right Option key to `Esc+`. To see what a key actually sends, run `cat -v` and press it.
 
@@ -42,11 +50,11 @@ Troubleshooting, one question at a time. Each topic's full reference is in its o
 
 tmux is optional now (`--pack tmux`), bundled automatically by the `remote` profile. These only apply once it's installed.
 
-**The theme didn't apply to tmux.** Themes live in `~/.config/tmux/theme.conf`, which the shipped `tmux.conf` sources above its plugin block. If your managed `tmux.conf` predates the theme-file split, run `make update-configs`, then `make theme NAME=...` again.
+**The theme didn't apply to tmux.** Themes live in `~/.config/tmux/theme.conf`, which the shipped `tmux.conf` sources above its plugin block. If your managed `tmux.conf` predates the theme-file split, run `tuidev update --configs`, then `tuidev theme ...` again.
 
-**tmux-continuum stopped auto-saving.** Older configs appended the theme below the TPM line, which reset `status-right` after continuum hooked it. Migration `202609222000_tmux_theme_file` moves that block into `theme.conf`. Run `make update-migrations`, then `make update-configs`.
+**tmux-continuum stopped auto-saving.** Older configs appended the theme below the TPM line, which reset `status-right` after continuum hooked it. Migration `202609222000_tmux_theme_file` moves that block into `theme.conf`. Run `tuidev update --migrations`, then `tuidev update --configs`.
 
-**Links agents print aren't clickable inside tmux.** tmux passes OSC 8 links through only with the `hyperlinks` terminal feature (tmux 3.4+), which the shipped `tmux.conf` turns on (`tmux show -s terminal-features` lists `*:hyperlinks`). Claude Code also stops emitting links when `TERM_PROGRAM=tmux`, so the shipped `.zshrc` exports `FORCE_HYPERLINK=1` in tmux panes, as it does in Herdr. After `make update-configs`, restart the tmux server (`tmux kill-server`) or at least run `exec zsh` in each pane, then Cmd-click the link in Ghostty (Shift-Cmd-click if tmux's mouse mode takes the click).
+**Links agents print aren't clickable inside tmux.** tmux passes OSC 8 links through only with the `hyperlinks` terminal feature (tmux 3.4+), which the shipped `tmux.conf` turns on (`tmux show -s terminal-features` lists `*:hyperlinks`). Claude Code also stops emitting links when `TERM_PROGRAM=tmux`, so the shipped `.zshrc` exports `FORCE_HYPERLINK=1` in tmux panes, as it does in Herdr. After `tuidev update --configs`, restart the tmux server (`tmux kill-server`) or at least run `exec zsh` in each pane, then Cmd-click the link in Ghostty (Shift-Cmd-click if tmux's mouse mode takes the click).
 
 **Agent-team teammates don't open as panes.** Teams are off in the shipped settings, so turn them on first. Split panes need `claude` to run inside tmux (the shipped `teammateMode` is `auto`), which means `--pack tmux` installed and a session already attached. Outside tmux, teammates run in-process. See [agent-workflows.md](agent-workflows.md#agent-teams).
 
@@ -92,4 +100,4 @@ Neovim is optional now (`--pack nvim`).
 
 ## Getting help
 
-Open an issue that includes your tuidev version (`git describe --tags`), your OS version, your profile and packs (`cat ~/.config/tuidev/profile`) and the output of `make check`. Report security issues through [SECURITY.md](../SECURITY.md).
+Open an issue that includes your tuidev version (`tuidev version`), your OS version, your profile and packs (`cat ~/.config/tuidev/profile`) and the output of `tuidev check`. Report security issues through [SECURITY.md](../SECURITY.md).

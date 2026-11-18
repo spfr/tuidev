@@ -22,7 +22,7 @@ The forward-looking view (fleet-scale agents, sandbox succession, watch-list cri
 
 **CLI-agnostic core.** The terminal layer doesn't depend on any AI CLI. Claude Code (primary) and Codex (secondary) are one opt-in pack. When a CLI is deprecated or a new one appears, the core doesn't move.
 
-**Public means generic.** The repo ships best practices only. Hosts, IPs, usernames and hardware stay in gitignored `*.local` files. No telemetry, ever.
+**Public means generic.** The repo ships best practices only. Hosts, IPs, usernames and hardware stay in gitignored `*.local` files. No telemetry, ever: the one request tuidev makes of its own is a daily look at which release is the latest, and `tuidev latest off` stops it.
 
 ## What we take, and what we refuse
 
@@ -30,7 +30,7 @@ From [Omarchy](https://omarchy.org) and [Omacosy](https://github.com/paulsp94/om
 
 - **A small core with explicit packs.** A tool that isn't essential is `--pack NAME` or `--extras` — that now includes tmux and Neovim.
 - **One palette, applied everywhere.** One `palette.toml` renders tmux, Ghostty and Starship (see [docs/theming.md](docs/theming.md)).
-- **No telemetry.** Nothing phones home.
+- **No telemetry.** Nothing reports on you. The daily update check asks github.com for a release tag and sends nothing else.
 - **Idempotent installs and manifest-driven uninstall.**
 
 From OpenClaw's 2.0 rework, we take three lessons: complexity should be progressive (a first install looks small, and depth is discoverable); CI scales with pack count (every pack gets lint, validation and contract tests); and agents orchestrate existing tools through their CLIs and sockets rather than reimplementing them, which is why `sbx` wraps `sandbox-exec` instead of replacing it.
@@ -51,7 +51,7 @@ We refuse:
 - In-editor ACP agents. Users can add them, but the repo won't ship them.
 - A team or deployment secret manager. `secret` is one person's tokens on one machine ([docs/secrets.md](docs/secrets.md#when-to-use-something-else)).
 - Non-FOSS defaults. Docker Desktop and OrbStack are never installed.
-- Piping remote install scripts into a shell. When a package manager can't supply a tool, the installer prints the official command instead.
+- Piping third-party install scripts into a shell for you. When a package manager can't supply a tool, the installer prints the official command instead. tuidev's own `get.sh` is the one script it asks you to pipe, and it is short enough to read first.
 
 ## Sources
 

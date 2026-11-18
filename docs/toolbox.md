@@ -119,8 +119,8 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 
 | Tool | Instead of | Why it is here | How it is used |
 |------|-----------|----------------|----------------|
-| [uv](https://docs.astral.sh/uv/) (extras) | pyenv, virtualenv, pip, pipx | One binary for Python versions, venvs, lockfiles and tools. It links packages from one cache instead of copying them into every venv, which is what makes a venv per worktree cheap. | Both: `uv sync`, `uv run`, `uvx TOOL`. `update.sh --packages` patches uv and the Pythons it manages. |
-| [fnm](https://github.com/Schniz/fnm) (`--pack fnm`) | nvm | Switches Node per `.nvmrc` on `cd`, without nvm's shell start-up cost. | Both. Agents never edit `PATH` for Node. `update.sh --packages` keeps each installed major on its latest patch. |
+| [uv](https://docs.astral.sh/uv/) (extras) | pyenv, virtualenv, pip, pipx | One binary for Python versions, venvs, lockfiles and tools. It links packages from one cache instead of copying them into every venv, which is what makes a venv per worktree cheap. | Both: `uv sync`, `uv run`, `uvx TOOL`. `tuidev update --packages` patches uv and the Pythons it manages. |
+| [fnm](https://github.com/Schniz/fnm) (`--pack fnm`) | nvm | Switches Node per `.nvmrc` on `cd`, without nvm's shell start-up cost. | Both. Agents never edit `PATH` for Node. `tuidev update --packages` keeps each installed major on its latest patch. |
 
 ### Shell, sessions and machines
 
@@ -146,7 +146,7 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 | [`sbx -- CMD`](sandboxing.md#sbx-the-general-purpose-tool) | Run anything with no access to credentials and no writes outside the project. |
 | [`mcp-lazy`](agent-workflows.md#mcp-servers-by-name) | Start an MCP server on its first tool call instead of once per session. |
 | [`notify.sh`](agent-workflows.md#notifications) | Tell me an agent needs me, once, where I am looking. |
-| `make check`, `make update`, `./uninstall.sh` | Is the install healthy? What drifted? Remove exactly what was installed. See [updating.md](updating.md). |
+| `tuidev check`, `tuidev update`, `tuidev uninstall` | Is the install healthy? What drifted? Remove exactly what was installed. See [updating.md](updating.md). |
 
 ## How agents know which tool to use
 
@@ -180,7 +180,7 @@ The tools above serve one loop. Each step has a default that works on both syste
 | **Verify** | Done means the checks ran, and the result is pasted, not claimed. | The definition of done in `AGENTS.md`; `hyperfine` when the claim is "faster" |
 | **Review** | A person reads the diff before it is committed. | `hunk`, `delta`, `lazygit`, the git and gh ask rules |
 | **Clean up** | What a session started is stopped when it ends, with evidence for the rest. | Cleanup hooks, `agents why`, `agents reap` |
-| **Stay current and safe** | Updates are one command, and a release younger than three days does not install. | `make update`, `--pack release-age` |
+| **Stay current and safe** | Updates are one command, and a release younger than three days does not install. | `tuidev update`, `--pack release-age` |
 | **Keep the machine fast** | The OS does not index, back up or scan what agents churn. | [performance.md](performance.md) |
 
 What differs by system:

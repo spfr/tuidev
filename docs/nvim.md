@@ -103,7 +103,7 @@ return {
 }
 ```
 
-`tokyonight-night` is set in the `LazyVim/LazyVim` spec in `~/.config/nvim/init.lua`. `make theme` does not touch Neovim, so switch the colorscheme there (see [theming.md](theming.md#neovim-is-not-themed-by-this-pipeline)).
+`tokyonight-night` is set in the `LazyVim/LazyVim` spec in `~/.config/nvim/init.lua`. `tuidev theme` does not touch Neovim, so switch the colorscheme there (see [theming.md](theming.md#neovim-is-not-themed-by-this-pipeline)).
 
 Edit `~/.config/nvim/lua/config/keymaps.lua` to add keymaps:
 

@@ -1,15 +1,15 @@
 # Theming
 
-One palette file drives the whole terminal. Instead of hand-syncing the same
-hex codes across `tmux.conf`, the Ghostty config, `starship.toml` and Herdr's
-config, you edit (or pick) a palette and run one command. `agents` and its menu
-follow on their own.
+Read this to switch the color theme of your terminal, or to add a theme of your
+own. One palette file drives tmux, Ghostty, Starship and Herdr, so you don't
+copy the same hex codes between their configs: you pick or edit a palette and
+run one command. `agents` and its menu follow on their own.
 
 ```bash
-scripts/theme.sh list                       # what's available (* = active)
-scripts/theme.sh show catppuccin-mocha      # inspect a palette, with swatches
-scripts/theme.sh apply catppuccin-mocha     # write it into your configs
-scripts/theme.sh apply tokyo-night --dry-run  # preview, mutate nothing
+tuidev theme                              # what's available (* = active)
+tuidev theme show catppuccin-mocha        # inspect a palette, with swatches
+tuidev theme catppuccin-mocha             # write it into your configs
+tuidev theme apply tokyo-night --dry-run  # preview, change nothing
 ```
 
 Applying `tokyo-night` on a stock install is a visual no-op: its values are
@@ -60,14 +60,15 @@ silently becoming "the color that never applied".
 
 ## Adding a theme
 
-Drop a directory in and you are done — `list` auto-discovers it:
+Drop a directory in and you are done: `tuidev theme` lists it. The themes live in `configs/themes/` of the files `tuidev home` prints. In a release install that folder is replaced by the next `tuidev update`, so keep a copy of your palette elsewhere, or work in a clone. `TUIDEV_THEMES_DIR` points `theme.sh` at a different folder of themes.
 
 ```bash
+cd "$(tuidev home)"
 mkdir -p configs/themes/gruvbox-dark
 cp configs/themes/tokyo-night/palette.toml configs/themes/gruvbox-dark/palette.toml
 $EDITOR configs/themes/gruvbox-dark/palette.toml   # edit [theme] name + the 26 colors
-scripts/theme.sh show gruvbox-dark                 # eyeball the swatches
-scripts/theme.sh apply gruvbox-dark --dry-run      # read the rendered snippets
+tuidev theme show gruvbox-dark                     # eyeball the swatches
+tuidev theme apply gruvbox-dark --dry-run          # read the rendered snippets
 ```
 
 Take the hex values from the theme's upstream repo rather than sampling a
@@ -94,7 +95,7 @@ palettes do this, which is what makes them auditable.
    block in place — it never appends a second copy.
 3. **Keep the Ghostty and Starship blocks last** (see below).
 4. **Record the active theme** in `~/.config/tuidev/theme`, which is what the
-   `*` in `theme.sh list` reads.
+   `*` in `tuidev theme` reads.
 5. **Reload live tmux.** If a tmux server is running, the whole `tmux.conf`
    is re-sourced, so open panes re-theme immediately.
 
@@ -111,7 +112,7 @@ block after that line would reset it and silently stop continuum's autosave. So
 the shipped `tmux.conf` sources `theme.conf` *above* its TPM block (with
 `source-file -q`, so a missing file is fine). If `apply` finds an older managed
 `tmux.conf` that doesn't source it yet, it warns you to run
-`make update-configs`. It also removes a theme block left in `tmux.conf` by an
+`tuidev update --configs`. It also removes a theme block left in `tmux.conf` by an
 earlier release, and migration `202609222000_tmux_theme_file` does the same on
 upgrade.
 
@@ -120,11 +121,11 @@ Starship applies in new shells; Herdr reloads with `herdr server reload-config`.
 
 ## Fresh installs ship pre-themed
 
-`./install.sh` applies `tokyo-night` for you at the end of a fresh,
+The installer applies `tokyo-night` for you at the end of a fresh,
 non-dry-run install (the "Default theme" step, right before the profile
 record is written) — as long as `~/.config/tuidev/theme` doesn't already exist.
 A stock install is themed with no manual step and no
-`Could not find color palette: tuidev` warning; `make theme NAME=...` is how
+`Could not find color palette: tuidev` warning; `tuidev theme ...` is how
 you *switch* themes afterward, not how you bootstrap the first one. An
 already-themed machine (theme file present) is left alone, and `--dry-run`
 never touches it.
@@ -134,7 +135,7 @@ the starship managed block and the top-level `palette = "tuidev"` selector —
 the two things `apply` requires before it will touch `starship.toml` (see
 below). If you hand-rolled or adopted a `starship.toml` that never went
 through `install.sh`'s config-writing step, that prep hasn't happened, and the
-refusal-gate below still applies until you run `./install.sh` (or add the line
+refusal-gate below still applies until you run `tuidev install` (or add the line
 yourself, as described below).
 
 ## The starship refusal-gate
@@ -149,7 +150,7 @@ modes are not equally bad:
 - **Ghostty: repaired automatically.** If an install has landed its
   `tuidev-ghostty` block *below* the theme block, the shipped colors would
   silently win. `apply` notices its block is no longer last, removes it, and
-  re-appends it at the end. The practical rule: **re-run `make theme` after an
+  re-appends it at the end. The practical rule: **re-run `tuidev theme NAME` after an
   install or update** and the theme wins again.
 - **Starship — refused, not repaired.** TOML has no way to close a table, so
   every key appended after `[palettes.tuidev]` lands *inside* it. Writing the
@@ -233,7 +234,7 @@ AGENTS_COLOR_NEED=ansi_red   # any token: a palette key or #rrggbb
 
 The palettes ship with the monitoring pack, beside the `agents` modules, so an
 installed `agents` needs no repo. A palette you added to `configs/themes/` reaches
-it with the next `./install.sh --pack monitoring`; until then it uses the 16 colors.
+it with the next `tuidev install --pack monitoring`; until then it uses the 16 colors.
 
 The menu tints its symbols with the same tokens, where they suit the menu's
 appearance: a dark palette's pastels wash out on a light menu, so that keeps Apple's
@@ -264,5 +265,5 @@ Ideas that fit the same palette contract without changing it:
   and are currently unthemed; each is one more renderer function.
 - **OSC live reload** — emit OSC 4/10/11/12 sequences on apply so already-open
   terminal panes recolor without a Ghostty restart.
-- **Theme drift detection** — teach `update.sh --configs` about the
+- **Theme drift detection** — teach `tuidev update --configs` about the
   `tuidev-theme` block so a re-install does not silently revert a chosen theme.

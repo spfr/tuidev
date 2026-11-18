@@ -32,10 +32,14 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `configs/tmux/tmux.conf` | `~/.config/tmux/tmux.conf` | managed block `tuidev-tmux` + TPM bootstrap (`tmux` pack) |
 | `bin/agents`, `bin/mcp-lazy`, `lib/agents/`, `configs/swiftbar/agents.10s.sh` | `~/.local/bin/agents` and `mcp-lazy` beside it, `~/.local/lib/tuidev/agents/` (`TUIDEV_LIB_DIR`), SwiftBar's plugin folder (default `~/.config/swiftbar/plugins/`, named after `AGENTS_BAR_REFRESH`) | overwrite, file by file (`monitoring` pack; the plugin on macOS only) |
 | `configs/agents/agents.conf` | `~/.config/agents.conf` | adopt-existing (`monitoring` pack) |
+| `bin/tuidev` | `~/.local/bin/tuidev`, and the installed version in `~/.config/tuidev/version` | overwrite (every install and `update --configs`: `tuidev_install_cli`) |
+| a release's `tuidev.tar.gz` | `~/.local/share/tuidev/versions/X.Y.Z`, `current` (a symlink to one) and `previous` (`TUIDEV_HOME`) | unpacked and switched by `get.sh`, which keeps the version before; removed by `uninstall.sh` |
 
 tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/tuidev`. It is defined once, in `scripts/lib/ui.sh`, and holds `profile`, `manifest`, `env`, `migrations`, `theme`, `backups/`, `sandbox/` and `shell.d/`. Derive every state path from it.
 
 ```
+get.sh                  the install without git: fetch a release, check its sha256 and layout, unpack, ask, run its install.sh (standalone)
+bin/tuidev              one command for the install: palette, install, update (and the daily update check), whatsnew, rollback (standalone)
 bin/sbx                 Seatbelt wrapper
 bin/secret              API tokens in the OS secret store (core pack); plain bash, runs without the repo
 bin/agents              agent process monitor (monitoring pack): the entrypoint, sourceable for tests
@@ -48,7 +52,7 @@ scripts/install/        built-in packs (core remote sandbox ui extras); packs/ =
 scripts/migrations/     timestamped one-shot fixups
 scripts/*.sh            update, health_check, test_suite, theme, validate_configs,
                         check_links, check_paths, container, notify, fix_completions, screenshots,
-                        perf, render_menu
+                        perf, render_menu; dist (a release's assets) and release (release.yml's steps)
 templates/              AGENTS_TEMPLATE.md for downstream projects
 docs/assets/            README images; tapes/ holds their VHS sources and demo fixtures
 ```
@@ -71,9 +75,11 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `system.sh` | thermal pressure, energy mode, sleep disabled, load, memory, battery, machine CPU% |
 | `awake.sh` | the keep-awake holder and `agents awake` |
 | `lid.sh` | `awake lid`: the root guard, the admin dialog, the lid state |
+| `release.sh` | is a newer tuidev out: reads the installed version and what `tuidev latest` cached with builtins only, starts that daily check detached when it is due; the tsv's `release` row and the line under `agents` |
 | `cool.sh` | `agents cool`: the fan daemon's status file and mode file (`--pack cooling`), the tsv's cool row |
 | `remote.sh` | your other machines: the machine list (Herdr's saved machines, `AGENTS_REMOTE_HOSTS`), the one ssh command line (`BatchMode`, never a prompt), `agents ports`, `agents push`, `agents open` |
 | `forward.sh` | `agents forward`: one `ssh -N -L` per forward, loopback to loopback, with a control socket and a record per local port (`run/forward/f.PORT`), so no pid is stored |
+| `board.sh` | `agents board`: every session on every machine in one fzf list, by what you would do about it (Needs you, To review, Working, the parked folded), with a card that follows the cursor; this machine's rows are `awk/board_rows.awk` (`--rows` is what a machine answers over ssh, kept in the run dir's `board/` and asked again in the background), the list, header and card are `awk/board_view.awk`, the one place a row from another machine is checked; each key prints its fzf actions (`--key`), a row's fields reaching the commands only as fzf's own placeholders; go and stop are `map.sh`'s actions; the Trace is one bounded `tail -c` of a Claude Code transcript through one jq, laid out by `awk/board_trace.awk`; a board listens on a Unix socket only (never a port) and `--poke`, which the Herdr plugin's event hooks run, reloads it; a board's state, rows and header are its own (`ui.PID.*`), and the start sweeps what gone boards left |
 | `map.sh` | `agents map`: every machine's sessions, leftovers and dev servers in one fzf list (`--rows` is what a machine answers over ssh), with go, stop, sweep and peek on the row's own machine; the list and the menu bar's board take a row from another machine only through `awk/lib_maprows.awk`, and the list puts each session's mark (`glyph.sh`'s table) in front of its kind |
 | `link.sh` | `agents link`: the fifo a watcher's ssh reads on the far machine (`serve`), what the Herdr plugin runs for a click (`click`), and the watcher that validates and acts on each request (`watch`) |
 | `herdrlabel.sh` | `agents herdr`: Herdr's labels say what runs where, from one `herdr api snapshot` and one jq that decides: tab names (mark, task title or directory), each workspace's `$tuidev_agents` roll-up, agent rows' display names; a write only for what differs, never a tab you renamed (`herdr-labels.tsv`), one sync at a time with a mark for the events that came in meanwhile (`herdr-labels.lock`, `.dirty`), and `reset` |
@@ -105,7 +111,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `usage.sh` | `agents --help` |
 | `cli.sh` | `agents_main`: options and the subcommand table; `agents cwd` |
 | `awk/lib_*.awk` | awk functions shared by several programs: process-table primitives (`lib_proc`), what a tool shell runs and the name it and an MCP server go by, and the launcher an MCP server starts through (`lib_activity`), jobs (`lib_jobs`), where a process lives (`lib_where`), JSON strings (`lib_json`), ordering, heapsorts (`lib_sort`), durations, sizes, cells padded by what the terminal shows, and the block-glyph `gauge` (`lib_fmt`), a session's stretches of waiting (`lib_waits`), API list prices and which line prices a model (`lib_price`), the checks for a row another machine sent to `agents map` (`lib_maprows`: `clean`, `tilde` and one validator per row kind) |
-| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `triage`, `triage_view`, `waits_state`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `tokens_plan`, `tokens`, `tokens_state` (the scan state's compaction), `tokens_rollup` (`tokens.tsv` by day), `tokens_session` (one session's tokens), `limits` (`agents limits` and the menu's usage records, with each window's pace), `mem_view` (`agents mem`'s bars), `statusline` (Claude Code's status line JSON), `refusal`, `tree`, `new_members`, `hook_*`, `mcp` and `mcp_toml` (the inventory), `mcp_toml_launch` (`agents mcp lazy\|eager` for Codex), `mcp_view` (`agents mcp`), `where`, `root` (`agents root-of`), `show_tree` and `show`, `pick`), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_tokens` (`tokens.tsv`, `compacts.tsv`, `limits.tsv`, the costs, and the tokens view), `report_context` (`uses.tsv`, the inventory, and the context view), `report_denials` (`denials.tsv` and the denials view), `report_waits` (`waits.tsv`, `notify.tsv` and the waits view), `report_insights`, `report_views` |
+| `awk/*.awk` | one program each (`classify`, `enrich`, `assess`, `triage`, `triage_view`, `waits_state`, `render`, `json`, `report`, `sample`, `runs_obs`, `runs`, `runs_view`, `tokens_plan`, `tokens`, `tokens_state` (the scan state's compaction), `tokens_rollup` (`tokens.tsv` by day), `tokens_session` (one session's tokens), `limits` (`agents limits` and the menu's usage records, with each window's pace), `mem_view` (`agents mem`'s bars), `statusline` (Claude Code's status line JSON), `refusal`, `tree`, `new_members`, `hook_*`, `mcp` and `mcp_toml` (the inventory), `mcp_toml_launch` (`agents mcp lazy\|eager` for Codex), `mcp_view` (`agents mcp`), `where`, `root` (`agents root-of`), `show_tree` and `show`, `pick`, `board_rows`, `board_view` and `board_trace` (`agents board`)), run by `_agents_awk` after the libraries it names; `report` comes in parts: `report_fmt` (numbers and cells), `report_runs` (reads `runs.tsv` once for every view), `report_tokens` (`tokens.tsv`, `compacts.tsv`, `limits.tsv`, the costs, and the tokens view), `report_context` (`uses.tsv`, the inventory, and the context view), `report_denials` (`denials.tsv` and the denials view), `report_waits` (`waits.tsv`, `notify.tsv` and the waits view), `report_insights`, `report_views` |
 | `prices.tsv` | API list prices, USD per million tokens, with the date they were checked and their sources: data, not code (`bin/agents` runs without it, unpriced) |
 
 `bin/mcp-lazy` is the one program that is not shell: a JSON-RPC relay has to parse JSON and juggle two pipes without blocking, which bash 3.2 can't do safely. It is Perl because `/usr/bin/perl` and its core modules (`JSON::PP`, `Digest::SHA`) come with macOS and every mainstream Linux, so it needs no install and nothing to build, and it idles at about 10 MB where a Node server holds 60 MB or more. `make validate-configs` runs `perl -c` on it, and `test_mcp_lazy.sh` drives it against a fake server.
@@ -128,11 +134,12 @@ Source these instead of reimplementing them. Each lib is idempotent to source, s
 
 | Lib | Provides |
 |-----|----------|
-| `ui.sh` | `print_header/step/success/warning/error/info`, `run_cmd` (dry-run aware), `command_exists`, `is_macos`/`is_linux`, `file_mode`/`file_owner`, `die`, `TUIDEV_STATE_DIR`, `TUIDEV_LIB_DIR` |
+| `ui.sh` | `print_header/step/success/warning/error/info`, `run_cmd` (dry-run aware), `command_exists`, `is_macos`/`is_linux`, `file_mode`/`file_owner`, `file_sha256`, `die`, `TUIDEV_STATE_DIR`, `TUIDEV_LIB_DIR` |
+| `version.sh` | tuidev's own versions and releases: `version_valid` (X.Y.Z), `version_newer A B` (part by part, as numbers), `tuidev_is_release DIR` (a release `get.sh` unpacked), `tuidev_release_home DIR` (the home a `current` or `versions/X.Y.Z` lives in). `get.sh`, `bin/tuidev` and `lib/agents/release.sh` run without libs and keep copies, which `test_contract.sh` runs against these |
 | `pkg.sh` | `pkg_install NAME...`: Homebrew, then `apt-get`, `dnf`, `pacman`, using Homebrew names mapped per distro (macOS-only formulae skipped on Linux). Also `pkg_manager`, `pkg_manual_hint` and `PKG_UNAVAILABLE`, plus the `pkg_native_*` helpers `update.sh --packages` uses to find and upgrade outdated apt/dnf/pacman packages. It fails soft, never prompts for a sudo password, and records what it installs |
 | `gitconfig.sh` | `tuidev_git_defaults`: opinionated global git defaults (histogram, zdiff3, rerere, autoSquash/updateRefs, autoSetupRemote, delta). Sets a key only while it is unset, `[include]`s counted, records each in the manifest; run by install.sh and `update.sh --configs` |
 | `perf.sh` | The performance audit: `perf_collect` (read-only checks: Spotlight, Time Machine, Low Power Mode and iCloud on macOS; inotify, swap and `updatedb` on Linux; open files, git and store volumes on both; measured: daemon CPU since boot, memory pressure and swap, free disk, endpoint agents, Linux load and tmpfs `/tmp`), each with how it measured (`_perf_how`) and its undo, `perf_report [--brief]`, `perf_plan`, `perf_apply [CONFIRM_FN]` (only fixes that need no root, the plan first), `perf_log` (the action log, `$TUIDEV_STATE_DIR/disk.log`, shared with `disk.sh`). `perf_store_dirs` lists the package stores, `perf_code_dirs` the code folders. Reasons and sources: [performance.md](performance.md) |
-| `disk.sh` | The disk audit (`make disk`): `disk_collect [--quick]` (caches, stores, runtimes, container storage, transcripts, build trees and worktrees, one `du -sk` each, progress on stderr), `disk_report`, `disk_explain ID`, `disk_json`, `disk_apply [CONFIRM_FN]` (plan, then one question per tool's own cleanup command from `_disk_allowed`; never `rm`, never `yours` or `managed`; in-use and path checks in `_disk_busy` and `_disk_unsafe`; each run logged with `perf_log`). Reasons: [performance.md](performance.md#disk) |
+| `disk.sh` | The disk audit (`tuidev disk`): `disk_collect [--quick]` (caches, stores, runtimes, container storage, transcripts, build trees and worktrees, one `du -sk` each, progress on stderr), `disk_report`, `disk_explain ID`, `disk_json`, `disk_apply [CONFIRM_FN]` (plan, then one question per tool's own cleanup command from `_disk_allowed`; never `rm`, never `yours` or `managed`; in-use and path checks in `_disk_busy` and `_disk_unsafe`; each run logged with `perf_log`). Reasons: [performance.md](performance.md#disk) |
 | `disk_fixture.sh` | The throwaway machine (HOME, stub tools, repos and worktrees) that `test_disk.sh` and `test_disk_fix.sh` source; never run on its own |
 | `brew.sh` | `brew_install_formulae` / `brew_install_casks` (and the singular forms), `brew_has_formula` / `brew_has_cask`, `brew_update_once`. Use it for casks and tap formulae. Everything else goes through `pkg_install` |
 | `release.sh` | `release_install REPO TAG ASSET DEST`: one GitHub release asset, checked against the sha256 `digest` the release's API record lists (refused without one, or on a mismatch), into a temp file beside DEST and renamed over it. Never piped into a shell; DRY_RUN fetches nothing |
@@ -207,7 +214,30 @@ Deleting or renaming something the installer used to place needs a migration. Re
 - **shellcheck-clean.** Quote variables, prefer `[[ ]]`, declare `local`.
 - **`$HOME`, never a literal home path.** CI rejects `/Users/<name>/`, `/home/<name>/` and `user@host.local` forms. Placeholders such as `/Users/NAME` are fine.
 - **Nothing personal.** Hosts, IPs, usernames and hardware go in gitignored `*.local` files or `.local/`. See [CONTRIBUTING.md](../CONTRIBUTING.md#personal-vs-published).
-- **No `curl | sh`.** When a package manager can't supply a tool, print the official command and let the user run it.
+- **No third-party `curl | sh`.** When a package manager can't supply a tool, print the official command and let the user run it. tuidev's own `get.sh` is the exception users pipe: standalone, bash 3.2, no libs, and every refusal it makes has a case in `test_get.sh`.
+
+## Releasing
+
+A release is a tag, its notes and three assets that `get.sh` and `tuidev update` download from `releases/latest/download/`. Pushing the tag makes the rest:
+
+```bash
+# VERSION says X.Y.Z and CHANGELOG.md's newest section is "## [X.Y.Z]", committed on main
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+`.github/workflows/release.yml` first runs all of CI (`ci.yml`) on the tagged commit, and stops if any job fails. Then `scripts/release.sh check` refuses a tag that is not on `main`, a `VERSION` that says another version, and a changelog whose newest section is another version or has no notes. `scripts/dist.sh --release` builds the assets, GitHub artifact attestations sign a build provenance for each of them (Sigstore, keyed to this workflow and commit), and `scripts/release.sh publish` creates the release with that changelog section as its notes. The steps are tested by `test_release.sh`; `test_contract.sh` keeps the asset names the same in the workflow, `release.sh`, `dist.sh` and `get.sh`.
+
+A release that exists is never changed. To run it again for a tag, run it from that tag: `gh workflow run release.yml --ref vX.Y.Z -f tag=vX.Y.Z`. Add `-f attach_missing=true` to upload only the assets a release lacks, once the ones it has match the rebuild byte for byte; a draft left by a run cut short is then published. A run from a branch is refused, so the provenance always names the commit it built. Check a release with `gh attestation verify tuidev.tar.gz --repo spfr/tuidev --signer-workflow spfr/tuidev/.github/workflows/release.yml` (the same for its other two assets).
+
+If the workflow cannot run, the same bytes can be released by hand, without the provenance:
+
+```bash
+make dist                  # dist/tuidev.tar.gz, dist/tuidev.tar.gz.sha256, dist/get.sh; refused unless the tree is clean
+scripts/release.sh notes vX.Y.Z > "$TMPDIR/notes.md"
+gh release create vX.Y.Z dist/tuidev.tar.gz dist/tuidev.tar.gz.sha256 dist/get.sh --verify-tag --notes-file "$TMPDIR/notes.md"
+```
+
+The asset names carry no version, so the one-line install never changes. The archive is `git archive` of the last commit under `tuidev-X.Y.Z/`, without `docs/assets` and `.github`: committed files only, with no owner names or extended attributes from the machine that built it, and the same bytes for the same commit. Attach assets once and do not replace them: installs check the download against the sha256 beside it, not against the tag. A release without the assets breaks `tuidev update` for everyone installed through `get.sh` until they are attached, and so does a `VERSION` that was not bumped: `test_contract.sh` keeps `VERSION` at or ahead of the changelog's newest section.
 
 ## Verification
 
@@ -217,7 +247,7 @@ Run these locally, in this order. `make ci-test` runs the first four.
 make lint              # shellcheck -x over every shell file (the list lives in the Makefile)
 make validate-configs  # JSON, TOML, Lua, zsh/sh syntax (CI adds --strict)
 make check-links       # every relative link in every tracked .md resolves
-make test-lib          # scripts/lib/test_*.sh: agents, agents_golden, agents_history, agents_hooks, agents_report, agents_report_tokens, agents_install, agents_mcp, agents_needs, agents_runs, agents_show, agents_tokens, agents_limits, agents_refresh, agents_triage, config_write, container, contract, gitconfig, herdr, mcp_lazy, migrations, notify, orchestration, pkg, profile, theme, update_packages
+make test-lib          # every scripts/lib/test_*.sh harness, in parallel (scripts/test_lib.sh)
 make test-core         # core-tagged tests against this machine
 make container-test    # core-tagged tests in an Alpine container (tests scripts and configs, not the installer)
 ```

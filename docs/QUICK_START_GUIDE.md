@@ -1,20 +1,19 @@
 # Quick Start
 
-From a fresh clone to a sandboxed agent running next to your editor, in about ten minutes. tuidev is a terminal dev environment for Claude Code and Codex: modern CLI tools, agents sandboxed by default with `--pack ai-clis`, easy to watch, and installed in layers you can undo. For what each installed tool replaces and why, see [toolbox.md](toolbox.md); for keys and commands, [CHEATSHEET.md](CHEATSHEET.md).
+Read this once after installing tuidev: it takes you from the one-line install to a sandboxed Claude Code or Codex session next to your editor, and shows where the tmux, Neovim and token steps fit. For what each installed tool replaces, see [toolbox.md](toolbox.md); for keys and commands, [CHEATSHEET.md](CHEATSHEET.md).
 
 ## 1. Install
 
-tuidev configures Claude Code and Codex but doesn't install them, since they update themselves. Install whichever you use first, with its official instructions: [Claude Code](https://code.claude.com/docs/en/setup), [Codex](https://github.com/openai/codex). Then install tuidev:
+tuidev configures Claude Code and Codex but doesn't install them, since they update themselves. Install whichever you use first, with its official instructions: [Claude Code](https://code.claude.com/docs/en/setup), [Codex](https://github.com/openai/codex). Then install tuidev. You need `curl` and `tar`, and on macOS [Homebrew](https://brew.sh); you don't need git:
 
 ```bash
-git clone https://github.com/spfr/tuidev.git
-cd tuidev
-./install.sh --profile desktop --pack ai-clis --dry-run   # preview every change
-./install.sh --profile desktop --pack ai-clis
+curl -fsSL https://github.com/spfr/tuidev/releases/latest/download/get.sh | bash
 exec zsh -l
 ```
 
-`--pack ai-clis` writes the Claude Code and Codex settings that turn on their native sandboxes; without it, `claude` and `codex` run with whatever settings you already have.
+It downloads the latest release, checks it against its sha256, and asks what this machine should get. Pick "Shell and sandboxed agents" (`--profile desktop --pack ai-clis`) for what this guide walks through, or "Everything for agent work" (`--profile full`). It then asks once more before it changes anything; answer `p` to preview every change first. To skip the questions, name the flags: `… | bash -s -- --profile desktop --pack ai-clis`. Every install gives you the `tuidev` command. If you cloned the repo instead, the same flags go to `./install.sh` (`--dry-run` previews); [updating.md](updating.md#installed-with-getsh-or-from-a-clone) says how the two differ.
+
+`--pack ai-clis` writes the Claude Code and Codex settings that turn on their native sandboxes. Without it, `claude` and `codex` run with the settings you already have. Both of the first two choices include it.
 
 | Profile   | Packs                   | Use when                        |
 |-----------|-------------------------|----------------------------------|
@@ -23,18 +22,18 @@ exec zsh -l
 | `remote`  | core + remote + sandbox + `--pack tmux` | A headless box you SSH into |
 | `full`    | desktop + extras + the agent packs | The whole agent setup on a Mac |
 
-Add optional packs at any time: `./install.sh --pack monitoring` (the `agents` command and, on macOS, its menu bar), `--pack cooling` (fans that keep an Apple Silicon MacBook cool to the touch) or `--pack orchestration` (tiered subagents). Re-running is safe. See [profiles.md](profiles.md) for every pack.
+Add optional packs at any time: `tuidev install --pack monitoring` (the `agents` command and, on macOS, its menu bar), `--pack cooling` (a fan curve for Apple Silicon MacBooks) or `--pack orchestration` (tiered subagents). Re-running is safe. [profiles.md](profiles.md) lists every pack.
 
-Everything at once on a Mac (`--dry-run` first if you like; `cooling` asks for your password once):
+To get everything on a Mac later, add `--dry-run` first if you like; `cooling` asks for your password once:
 
 ```bash
-./install.sh --profile full   # desktop + extras + ai-clis, orchestration, monitoring, cooling, herdr, tmux, release-age
+tuidev install --profile full   # desktop + extras + ai-clis, orchestration, monitoring, cooling, herdr, tmux, release-age, ci
 ```
 
 Check the result:
 
 ```bash
-make check      # health check against the installed profile
+tuidev check    # health check against the installed profile
 ```
 
 ## 2. Your first session
@@ -45,7 +44,7 @@ Open a Ghostty tab in your project and run an agent. `claude` and `codex` are sa
 claude    # or: codex
 ```
 
-Work the agent produces, then review the diff in your editor — `/ide` inside a `claude` session connects it to VS Code or Cursor (see [agent-workflows.md](agent-workflows.md#editor-integration)).
+Review what the agent produces as a diff in your editor. `/ide` inside a `claude` session connects it to VS Code or Cursor (see [agent-workflows.md](agent-workflows.md#editor-integration)).
 
 If you installed `--pack tmux` (included in the `remote` profile), you also get a tiny attach-or-create helper for durable sessions over SSH:
 
@@ -74,7 +73,7 @@ The prefix is `Ctrl+a`: press it, release, then press the key. The full table is
 `claude` and `codex` are sandboxed automatically, by the settings `--pack ai-clis` writes (`sandbox.enabled` for Claude Code, `sandbox_mode = "workspace-write"` for Codex). If you skipped it in step 1, add it now; then just run them:
 
 ```bash
-./install.sh --pack ai-clis
+tuidev install --pack ai-clis
 claude
 codex
 ```
@@ -93,7 +92,7 @@ Never run `sbx` around a CLI whose native sandbox is on — Seatbelt doesn't nes
 
 ## 5. Neovim essentials (if you installed `--pack nvim`)
 
-Neovim is optional now. Install it with `./install.sh --pack nvim`. The leader key is `Space`. Press it and wait: which-key shows the menu.
+Neovim is optional now. Install it with `tuidev install --pack nvim`. The leader key is `Space`. Press it and wait: which-key shows the menu.
 
 | Keys | Action |
 |------|--------|

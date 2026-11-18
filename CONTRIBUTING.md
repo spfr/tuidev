@@ -1,10 +1,10 @@
 # Contributing to tuidev
 
-Thanks for your interest. tuidev is a terminal dev environment for AI coding agents: modern CLI tools, agents sandboxed by default and orchestrated, easy to watch, and installed in layers you can undo. A good change makes it better at that without growing the core. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
+Read this before you open an issue or a pull request. tuidev sets up a terminal for running Claude Code and Codex agents: a shell, agents sandboxed by default, a view of which agent needs you, and installs in layers you can undo. A good change makes it better at that without growing the core. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
 
 ## Reporting issues
 
-Search existing issues first, then use the issue template. Include your tuidev version (`git describe --tags`), OS and version, profile and packs (`cat ~/.config/tuidev/profile`), and the output of `make check`. Report security issues privately (see [SECURITY.md](SECURITY.md)).
+Search existing issues first, then use the issue template. Include your tuidev version (`tuidev version`), OS and version, profile and packs (`cat ~/.config/tuidev/profile`), and the output of `tuidev check`. Report security issues privately (see [SECURITY.md](SECURITY.md)).
 
 ## Pull requests
 
@@ -46,7 +46,7 @@ CI runs lint, validate-configs (`--strict`), check-links, check-paths, test-lib 
 
 Good areas to contribute: new packs, tighter Seatbelt rules, Linux parity (a `bubblewrap` backend for `sbx`; wider dnf and pacman coverage), bug fixes with a test, and docs that gain clarity without gaining volume.
 
-Not wanted: GUI apps outside the `ui` pack; AI that runs in-editor by default; breaking public commands (`t`, `sbx`, `claude -w`, …) without a deprecation path; non-FOSS tools on default paths; `curl | sh` on the user's behalf.
+Not wanted: GUI apps outside the `ui` pack; AI that runs in-editor by default; breaking public commands (`t`, `sbx`, `claude -w`, …) without a deprecation path; non-FOSS tools on default paths; third-party `curl | sh` installers run on the user's behalf (tuidev's own `get.sh` is the one script it asks users to pipe).
 
 ## Personal vs published
 

@@ -1,6 +1,6 @@
 # Cheatsheet
 
-Commands, keys and layouts in one place. Run `make help` for every Makefile target and `<command> --help` for any script.
+Look commands and keys up here: tmux, shell aliases, `sbx`, `secret`, `agents`, Herdr and `tuidev`. Run `tuidev` for the searchable palette and `<command> --help` for any command; in a clone, `make help` lists the Makefile targets.
 
 ## tmux (`--pack tmux`)
 
@@ -72,7 +72,7 @@ Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi 
 | `fcd`, `fif TEXT`, `fshow` | fzf: cd into a directory / grep files / browse commits |
 | `mkcd DIR`, `bench CMD` | mkdir+cd / hyperfine |
 | `ts-status`, `ts-ip`, `remote-status` | Tailscale and SSH status |
-| `tui-update`, `tui-check` | `scripts/update.sh` / `update.sh --check` |
+| `tui-update`, `tui-check` | `scripts/update.sh` / `tuidev update --check` |
 | `reload`, `zshconfig` | Re-source / edit `~/.zshrc` |
 
 `procs` and `dust` keep their own names: they are never aliased over `ps` or `du`, because their flags differ. Personal aliases go in `~/.zshrc.local`.
@@ -103,7 +103,7 @@ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude   # agent teams, off by default
 | `sbx --project DIR -- CMD` | Writable project directory (default: `$PWD`) |
 | `sbx --allow-herdr -- CMD` | `strict`, plus access to the herdr socket |
 | `sbx --dry-run -- CMD` | Print the `sandbox-exec` command without running it |
-| `make sbx-test` | Check that the project is readable and `~/.ssh` is denied |
+| `make sbx-test` (in a clone) | Check that the project is readable and `~/.ssh` is denied |
 
 `sbx` runs binaries, not shell functions or aliases. Seatbelt doesn't nest, so plain `claude` already runs under its native sandbox; to run it under `sbx` instead, turn that off for the run: `sbx -- claude --settings '{"sandbox":{"enabled":false}}'`. Details: [sandboxing.md](sandboxing.md).
 
@@ -141,6 +141,7 @@ herdr integration status                # after every upgrade: reinstall anythin
 Other machines, over ssh (`--pack monitoring`; [remote.md](remote.md#remote-feels-local-ports-links-and-files)):
 
 ```bash
+agents board                            # every session on every machine, by who needs you; ? lists its keys (Herdr: prefix+space)
 agents map                              # what runs where on every machine; enter go, ctrl-k stop, ctrl-s sweep (Herdr: prefix+m)
 agents ports [--pick]                   # what listens where, here and on your machines (Herdr: prefix+shift+o)
 agents forward open workbox 5173        # that port, here, in your browser
@@ -153,7 +154,7 @@ agents herdr reset                      # every tab a sync named gets its number
 agents herdr reset TAB_ID               # one tab back to auto-naming, one you renamed too (ids: agents herdr)
 ```
 
-Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. Plain `herdr` is the `default` session; keep one per machine and split projects into workspaces. Upgrade with `herdr update --handoff` from outside Herdr: the server keeps its panes. A server a systemd unit runs upgrades with `make update-packages` (the unit's reload hands over), never `--handoff`. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
+Herdr's prefix is `Ctrl+b`. Detach with `Ctrl+b q`. Plain `herdr` is the `default` session; keep one per machine and split projects into workspaces. Upgrade with `herdr update --handoff` from outside Herdr: the server keeps its panes. A server a systemd unit runs upgrades with `tuidev update --packages` (the unit's reload hands over), never `--handoff`. `workbox` is a placeholder: real hosts go in `~/.ssh/config.local`. Practices: [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
 
 ## macOS hotkeys (desktop profile)
 
@@ -164,6 +165,7 @@ Rectangle owns `Ctrl+Alt` plus arrows and letters for window snapping (its "Reco
 | `Ctrl+Alt+←` / `→` / `↑` / `↓` | Snap window to a half |
 | `Ctrl+Alt+Return` | Maximize |
 | ``Ctrl+` `` | Ghostty quick terminal (global) |
+| `Cmd+P` | tuidev palette in Herdr (sends `ctrl+b a`; outside Herdr the app in front gets `ctrl+b` and `a`; `keybind = cmd+p=unbind` turns it off) |
 
 Ghostty keeps its macOS defaults (`Cmd+T`, `Cmd+D`, and so on) and adds `Ctrl+Shift+T/W/D/N/C/V` for Linux habits.
 
@@ -198,15 +200,31 @@ The full guide is in [vim.md](vim.md).
 ## Theming
 
 ```bash
-make theme-list                   # themes; * marks the active one
-make theme NAME=catppuccin-mocha  # apply (the default is tokyo-night)
-scripts/theme.sh show tokyo-night # palette swatches
-scripts/theme.sh apply tokyo-night --dry-run
+tuidev theme                   # themes; * marks the active one
+tuidev theme catppuccin-mocha  # apply (the default is tokyo-night)
+tuidev theme show tokyo-night  # palette swatches
+tuidev theme apply tokyo-night --dry-run
 ```
 
 Themes are written to tmux (`~/.config/tmux/theme.conf`, when `--pack tmux` is installed), Ghostty and Starship. The details are in [theming.md](theming.md).
 
+## tuidev
+
+```bash
+tuidev                             # the palette: everything here, searchable (Herdr: prefix+a)
+tuidev install --pack NAME         # add a pack; --dry-run previews
+tuidev update                      # the latest release, its migrations and configs (Herdr: prefix+u asks first)
+tuidev update --check | --packages | --all | --rollback
+tuidev latest [on|off]             # the latest release known; the daily check on or off
+tuidev whatsnew [FROM]             # this release's changelog, or all since FROM
+tuidev check | perf | disk         # health check and the two audits
+tuidev theme [NAME]                # list themes, or apply one
+tuidev uninstall                   # remove what the manifest records
+```
+
 ## Makefile
+
+In a clone. Each of the first rows has a `tuidev` twin above.
 
 ```bash
 make install-dry PROFILE=desktop   # preview an install

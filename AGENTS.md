@@ -7,6 +7,8 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working **on 
 tuidev: an opinionated, agent-first terminal setup for macOS (and Linux). It is shell scripts plus configs:
 
 - `install.sh` / `uninstall.sh`: a layered, manifest-recording installer.
+- `get.sh`: the one-line install, which downloads a release, checks it and runs `install.sh`. It is standalone (no libs) and the only code that fetches tuidev.
+- `bin/tuidev`: the command every install gets (`tuidev update`, `check`, `uninstall`, the palette), a thin front for the scripts below ([docs/updating.md](docs/updating.md)).
 - `scripts/`: packs, libs, update, tests, migrations.
 - `configs/`: what gets installed into `$HOME`.
 - `bin/sbx`: the Seatbelt wrapper.
@@ -64,7 +66,8 @@ The full conventions are in [docs/engineering.md](docs/engineering.md). The rule
 - **Removing or renaming an installed artifact needs a migration**, `scripts/migrations/YYYYMMDDHHMM_slug.sh`. See [scripts/migrations/README.md](scripts/migrations/README.md).
 - **bash 3.2:** no associative arrays, `mapfile`, `${var,,}` or namerefs. `.zshrc` is zsh (`zsh -n`), not bash.
 - **Portable paths:** `$HOME` and `$TUIDEV_STATE_DIR`, never a literal home directory.
-- **No `curl | sh`.** If a package manager can't supply a tool, print the official command for the user.
+- **No third-party `curl | sh`.** If a package manager can't supply a tool, print the official command for the user. tuidev's own `get.sh` is the one script users pipe: keep it short, standalone and verified by `test_get.sh`.
+- **A release is a pushed `vX.Y.Z` tag** on a commit on `main` whose `VERSION` and newest `CHANGELOG.md` section say X.Y.Z. `.github/workflows/release.yml` runs CI on it, builds the three assets `get.sh` and `tuidev update` download, attests them and publishes the release ([docs/engineering.md](docs/engineering.md#releasing)).
 - **Nothing personal:** no real hostnames, IPs, usernames or hardware. Use placeholders (`devbox`, `workbox`, `/Users/NAME`). Personal notes belong in the gitignored `.local/` folder or `CLAUDE.local.md`.
 - **Docs:** each topic has one owning doc, listed in the README's documentation index. Update that doc, add a `CHANGELOG.md` entry, and keep `make check-links` green.
 

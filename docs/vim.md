@@ -3,7 +3,7 @@
 `--pack vim` is the lightweight terminal editor: plain Vim 9 with a zero-plugin vimrc. It suits servers and small boxes (a Raspberry Pi, a VM, a CI runner you SSH into), where [`--pack nvim`](nvim.md) and LazyVim would bring hundreds of megabytes of plugins, parsers and language servers you don't need. It starts in milliseconds and has nothing to update.
 
 ```bash
-./install.sh --pack vim
+tuidev install --pack vim
 ```
 
 The pack installs `vim`. On macOS it uses the system `/usr/bin/vim`, which is already Vim 9, and skips Homebrew's build with its language runtimes. The config lands in `~/.vim/vimrc` and is upgraded in place while you haven't edited it, like the other shipped configs. Vim reads `~/.vimrc` before `~/.vim/vimrc`, so a `~/.vimrc` of your own wins, and the pack leaves it alone.
@@ -52,6 +52,6 @@ source ~/.vim/vimrc
 colorscheme retrobox
 ```
 
-Or edit `~/.vim/vimrc` directly. The pack then stops upgrading it, and `./scripts/update.sh --configs` prints the `diff` to compare against the new version.
+Or edit `~/.vim/vimrc` directly. The pack then stops upgrading it, and `tuidev update --configs` prints the `diff` to compare against the new version.
 
 Add plugins as native packages, without a plugin manager: `git clone URL ~/.vim/pack/plugins/start/NAME`.
