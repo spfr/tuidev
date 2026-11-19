@@ -58,8 +58,9 @@ It costs one store call per name at every shell start. `secret` itself adds abou
 
 A variable exported in the shell you start `claude` or `codex` from is in the agent's environment and in every command it runs. `secret run` never puts anything there. So level 1 keeps values away from agents and level 2 hands them over, unless you also strip them:
 
-- **Claude Code** unsets the variables listed in `sandbox.credentials.envVars` before each sandboxed command. The shipped settings list common publish tokens (`GITHUB_TOKEN`, `NPM_TOKEN` and others); add your level-2 names in your own `~/.claude/settings.json` (`{ "name": "BUILD_CACHE_TOKEN", "mode": "deny" }`). Claude Code itself still has them.
-- **Codex**: list them under `[shell_environment_policy] exclude` in `~/.codex/config.toml` (not checked here: confirm with a Codex session running `env`).
+- **Claude Code** unsets the variables listed in `sandbox.credentials.envVars` before each sandboxed command and the processes it starts. The shipped settings list publish and cloud tokens (`GITHUB_TOKEN`, `NPM_TOKEN`, `GITLAB_TOKEN`, `HF_TOKEN`, `CLOUDFLARE_API_TOKEN`, `VERCEL_TOKEN`, `STRIPE_API_KEY` and others), plus `DATABASE_URL` and `PGPASSWORD`; add your level-2 names in your own `~/.claude/settings.json` (`{ "name": "BUILD_CACHE_TOKEN", "mode": "deny" }`). Names are exact: no wildcards. Claude Code itself, hooks, MCP servers and the unsandboxed `gh` still have them.
+- **Codex** removes the same names, plus `TF_TOKEN_*`, from every command it runs, inside its sandbox or not (`[shell_environment_policy.filters]` in `~/.codex/config.toml`; patterns take `*` and `?`). Add yours there as `NAME = "exclude"`. Checked on Codex 0.170 with `codex sandbox -- env`.
+- **A test that needs one of them** (a local `DATABASE_URL`, say) doesn't get it from your shell. Set it in the command itself (`DATABASE_URL=postgres://localhost/app_test npm test`), or remove that name from your copy of the settings.
 
 Reading the store directly is the other way in. What stops an agent's command from doing that, by store and by sandbox:
 
@@ -71,7 +72,7 @@ Reading the store directly is the other way in. What stops an agent's command fr
 
 Command rules match the plain command (`secret get X`), not a script or `sh -c` that runs it, so they catch a mistake, not a determined agent. The sandbox is the boundary. That gives the recommendation:
 
-- Use `secret run`, and don't export secrets in the shell you start agents from. If you must, list the names in `sandbox.credentials.envVars` and Codex's `exclude`.
+- Use `secret run`, and don't export secrets in the shell you start agents from. If you must, list the names in `sandbox.credentials.envVars` and Codex's `[shell_environment_policy.filters]`.
 - For Codex near secrets that matter, run it under `sbx` (`sbx -- codex -s danger-full-access -a on-request`), which denies the stores, instead of `workspace-write`.
 - `secret run -n NAME -- claude` hands NAME to the agent. Do it only when you mean to.
 - On macOS, items written by `security` trust `/usr/bin/security`, so any unconfined process running as you reads them without a prompt. For a high-value token, open it in Keychain Access, Access Control, and set "Ask for Keychain password".

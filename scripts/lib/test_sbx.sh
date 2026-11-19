@@ -259,6 +259,36 @@ for sb in strict standard; do
 done
 pass "under sandbox-exec, strict and standard deny the steering paths and allow session state (live)"
 
+# The credential lockout, live: every path on the two lists (a trailing / is a
+# directory: probe a file inside it) is unreadable and unwritable, while the
+# files next to the narrow entries stay readable.
+CRED_PROBES="$(grep -hvE '^(#|$)' "$REPO_DIR/configs/sandbox/credential-paths.txt" "$REPO_DIR/configs/sandbox/browser-paths.txt" \
+    | sed -E 's:^~/::; s:/$:/probe:')"
+[[ "$(grep -c . <<<"$CRED_PROBES")" -ge 60 ]] || fail "the credential lists did not parse ($(grep -c . <<<"$CRED_PROBES") paths)"
+READABLE="
+.config/notes.txt
+.cache/huggingface/hub/model.bin
+.pulumi/bin/pulumi
+.config/google-chrome-extra/x
+Library/Application Support/SomeApp/state.json
+Library/Application Support/Google/Drive/x
+"
+while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    mkdir -p "$(dirname "$home/$p")"; printf secret > "$home/$p"
+done <<<"$CRED_PROBES$READABLE"
+for sb in strict standard; do
+    while IFS= read -r p; do
+        [[ "$(try "$sb" 'cat "$1" >/dev/null' "$home/$p")" == 1 ]] || fail "$sb.sb (live): read ~/$p"
+        [[ "$(try "$sb" 'printf x >> "$1"' "$home/$p")" == 1 ]] || fail "$sb.sb (live): wrote ~/$p"
+    done <<<"$CRED_PROBES"
+    while IFS= read -r p; do
+        [[ -n "$p" ]] || continue
+        [[ "$(try "$sb" 'cat "$1" >/dev/null' "$home/$p")" == 0 ]] || fail "$sb.sb (live): could not read ~/$p, which is not a credential"
+    done <<<"$READABLE"
+done
+pass "under sandbox-exec, strict and standard deny every credential and browser path and keep their neighbours readable (live)"
+
 # And through sbx itself, as a user runs it.
 # shellcheck disable=SC2015,SC2016  # fail on either step; expands in the sandboxed shell
 (cd "$proj" && HOME="$home" TUIDEV_SANDBOX_DIR="$PROFILES" "$SBX" -- /bin/sh -c 'printf ok > "$1"' sh "$proj/via-sbx") \

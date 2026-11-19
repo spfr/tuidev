@@ -78,10 +78,25 @@ CREDENTIALS (denied read + write in strict and standard)
   ~/.config/op ~/.azure ~/.docker ~/.kube ~/.terraform.d ~/.password-store
   ~/.netrc ~/.git-credentials ~/.npmrc ~/.pypirc ~/.cargo/credentials[.toml]
   ~/.vault-token ~/.pgpass ~/.config/git/credentials
-  ~/.config/containers/auth.json ~/.gem/credentials
+  ~/.config/containers/auth.json ~/.gem/credentials ~/.yarnrc.yml
+  ~/.composer/auth.json ~/.config/composer/auth.json
+  ~/.config/glab-cli ~/.config/rclone ~/.config/sops ~/.config/doctl
+  ~/.config/hcloud ~/.config/stripe ~/.fly ~/.supabase ~/.oci
+  ~/.pulumi/credentials.json ~/.cache/huggingface/token
+  ~/.cache/huggingface/stored_tokens ~/.sentryclirc ~/.terraformrc
+  ~/.databrickscfg ~/.boto ~/.s3cfg
   ~/.local/share/keyrings ~/.config/zsh/secrets.zsh
-  ~/.local/share/atuin ~/.zsh_history ~/.bash_history ~/Library/Cookies
-  ~/Library/Safari ~/.mozilla ~/.config/google-chrome ~/.config/chromium
+  ~/.local/share/atuin ~/.zsh_history ~/.bash_history ~/.zsh_sessions
+  ~/.local/share/fish/fish_history ~/.python_history ~/.node_repl_history
+  ~/.psql_history ~/.mysql_history
+  ~/Library/Cookies ~/Library/Safari ~/.mozilla ~/.config/mozilla ~/.zen
+  ~/.config/google-chrome ~/.config/google-chrome-beta
+  ~/.config/google-chrome-unstable ~/.config/google-chrome-canary
+  ~/.config/chromium ~/.config/BraveSoftware ~/.config/microsoft-edge
+  ~/.config/microsoft-edge-beta ~/.config/microsoft-edge-dev
+  ~/.config/vivaldi ~/.config/opera
+  and browser profiles in Library/Application Support (Chrome, Chromium,
+  Brave, Edge, Vivaldi, Opera, Arc, Firefox, Zen)
 
   gh keeps its token in ~/.config/gh, so `gh` inside sbx reports that you are
   not logged in, under either profile (--profile standard widens the network,

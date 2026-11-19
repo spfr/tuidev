@@ -58,11 +58,47 @@ exclude_slash_tmp = false
 [history]
 persistence = "save-all"
 
-# Cap Node's heap in the commands Codex runs: a runaway test fails fast with
-# "JavaScript heap out of memory" at 4 GB instead of taking the machine's
-# memory. Raise it for one command: NODE_OPTIONS=--max-old-space-size=8192 CMD
+# Pin Node's heap limit to 4 GB in the commands Codex runs, on every machine
+# (on a 16 GB+ one that is about Node's own default). It doesn't stop a
+# runaway on its own; on macOS the memory guard (`agents mem`) does. Raise
+# it for one command: NODE_OPTIONS=--max-old-space-size=8192 CMD
 [shell_environment_policy]
 set = { NODE_OPTIONS = "--max-old-space-size=4096" }
+
+# Third-party tokens the commands Codex runs never see (in the sandbox or
+# out): the same names Claude Code's settings unset, plus TF_TOKEN_*. Codex
+# keeps every other variable, *KEY*/*TOKEN* names included
+# (ignore_default_excludes defaults to true). Patterns are case-insensitive,
+# with * and ?. Add yours here; don't also use the legacy `exclude` array in
+# this file, Codex rejects the two together. gh then uses its own login.
+[shell_environment_policy.filters]
+GITHUB_TOKEN = "exclude"
+GH_TOKEN = "exclude"
+HOMEBREW_GITHUB_API_TOKEN = "exclude"
+NPM_TOKEN = "exclude"
+NODE_AUTH_TOKEN = "exclude"
+UV_PUBLISH_TOKEN = "exclude"
+CARGO_REGISTRY_TOKEN = "exclude"
+AWS_SECRET_ACCESS_KEY = "exclude"
+AWS_SESSION_TOKEN = "exclude"
+CLAUDE_CODE_OAUTH_TOKEN = "exclude"
+GITLAB_TOKEN = "exclude"
+GL_TOKEN = "exclude"
+HF_TOKEN = "exclude"
+HUGGING_FACE_HUB_TOKEN = "exclude"
+CLOUDFLARE_API_TOKEN = "exclude"
+VERCEL_TOKEN = "exclude"
+NETLIFY_AUTH_TOKEN = "exclude"
+SENTRY_AUTH_TOKEN = "exclude"
+STRIPE_API_KEY = "exclude"
+DIGITALOCEAN_ACCESS_TOKEN = "exclude"
+FLY_API_TOKEN = "exclude"
+SUPABASE_ACCESS_TOKEN = "exclude"
+PULUMI_ACCESS_TOKEN = "exclude"
+DOPPLER_TOKEN = "exclude"
+DATABASE_URL = "exclude"
+PGPASSWORD = "exclude"
+"TF_TOKEN_*" = "exclude"
 
 # Terminal notifications (OSC 9 / bell) while the pane is unfocused —
 # Ghostty and tmux surface them. `true` = all event types; the reference
