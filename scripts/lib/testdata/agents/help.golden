@@ -32,8 +32,9 @@ LOOK
                                half the RAM), or the largest past the warning while
                                pressure is critical (AGENTS_MEM_GUARD=kill|warn|off).
                                The monitoring pack runs it as a LaunchAgent (macOS)
+                               or a systemd user service (Linux)
   agents mem log [N]           the last N (20) incidents (memory.tsv)
-  agents mem restart           restart the LaunchAgent (after editing the settings)
+  agents mem restart           restart that service (after editing the settings)
   agents thermal               thermal pressure and energy mode (display only)
   agents cool [cool|auto|quiet|max|off]
                                fan control (--pack cooling, Apple Silicon): the fans,

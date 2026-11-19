@@ -161,7 +161,7 @@ validate-configs: ## Validate JSON, TOML, Lua and shell config syntax
 check-links: ## Check every relative link in the Markdown docs
 	@./scripts/check_links.sh
 
-check-paths: ## No hardcoded user paths or personal hosts (CI's check-paths job)
+check-paths: ## No hardcoded user paths or personal hosts (a step of CI's checks job)
 	@./scripts/check_paths.sh
 
 validate: validate-configs ## Alias for validate-configs

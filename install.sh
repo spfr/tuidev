@@ -469,7 +469,7 @@ echo ""
 printf '%b\n' "${CYAN}Docs:${NC}
   docs/profiles.md         what each profile and pack installs
   docs/sandboxing.md       native sandboxes, sbx, escape hatches
-  docs/remote.md           Tailscale + tmux + mosh workflow
+  docs/remote.md           other machines, links that open here, the phone
   docs/agent-workflows.md  AI CLIs, editors, worktrees, Herdr
   docs/performance.md      what the OS does behind your agents, and what to change
 "

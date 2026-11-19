@@ -2256,7 +2256,7 @@ parallel-agent tooling are opt-in packs. tmux stays the durable backbone.
 
 > **Heads-up (behavior change):** AI CLI wrappers (`cc`/`cx`/`oc`) moved out of
 > the default install into `--pack ai-clis`. If you relied on them, add the pack
-> — see [Migration](#migration-2-0--2-1).
+> — see [Migration](#migration-20--21).
 
 ### Added
 
