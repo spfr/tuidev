@@ -77,7 +77,7 @@ pass "a failed apt probe is status unknown, never up to date"
 # A recorded repo path that no longer exists falls back to this checkout
 # (only checkable when this tree is one: synced copies and tarballs aren't).
 if [[ -e "$LIB_DIR/../../.git" ]]; then
-    out="$(TUIDEV_REPO="$tmp/moved-away" GIT_ALLOW_PROTOCOL=none run_update --check)" || fail "--check with a stale repo path"
+    out="$(TUIDEV_REPO="$tmp/moved-away" GIT_ALLOW_PROTOCOL=none run_update --check 2>&1)" || fail "--check with a stale repo path: $out"
     [[ "$out" == *"Recorded repo $tmp/moved-away is not a git checkout; using"* ]] || fail "stale repo fallback: $out"
     pass "a stale recorded repo path falls back to the running checkout"
 else
