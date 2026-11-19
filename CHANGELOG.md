@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.27.1] - 2026-11-19
+
+### Changed
+
+- **Claude's complex tier runs on Fable**; review stays on Opus, so a hard change is checked by a different model. [Orchestration](docs/orchestration.md#tiers)
+
+### Fixed
+
+- **The docs record two checks on the real thing**: the five Codex roles each started on their pinned model on a paid plan, and a pane the phone app was still showing went back to full width when focused. [Orchestration](docs/orchestration.md#tiers) · [Phone](docs/remote.md#herdrs-phone-app-agents-hc)
+
 ## [3.27.0] - 2026-11-19
 
 ### Changed
