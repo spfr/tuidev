@@ -80,6 +80,16 @@ for script in "$REPO_DIR"/scripts/install/packs/*.sh; do
 done
 pass "every pack is registered, has a script, and defines its entrypoint"
 
+# 4b. `tuidev check` can tell whether each optional pack is in place: its own
+#     <pack>_check, or packages declared for pack_check to look for.
+for pack in "${TUIDEV_VALID_PACKS[@]}"; do
+    script="$(pack_script "$pack")"
+    grep -qE "^${pack//-/_}_check\(\)" "$script" \
+        || [[ -n "$(pack_array "$pack" formulae)$(pack_array "$pack" casks)" ]] \
+        || fail "$script has no ${pack//-/_}_check() and declares no packages: tuidev check cannot probe it"
+done
+pass "every optional pack has a health-check probe (its own, or its declared packages)"
+
 # Every shipped config the installer upgrades-if-unmodified (install_config
 # --upgrade-shipped) is fingerprinted, so it can tell an unmodified old copy
 # (upgrade it) from one the user edited (leave it alone). Each hash file lists

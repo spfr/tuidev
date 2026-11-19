@@ -120,6 +120,18 @@ herdr_core_install() {
     print_success "herdr-core pack complete"
 }
 
+# The health check's probe (pack_check): herdr-core is here, and so is the
+# job that keeps it up (the LaunchAgent, or the systemd timer's unit file).
+# File tests only: no core is asked anything (a client command starts one).
+herdr_core_check() {
+    [[ -n "$(_herdr_core_bin)" ]] || return 1
+    if is_macos; then
+        [[ -f "$HOME/Library/LaunchAgents/$HERDR_CORE_LABEL.plist" ]]
+    else
+        [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$HERDR_CORE_UNIT.timer" ]]
+    fi
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     herdr_core_install "$@"
 fi

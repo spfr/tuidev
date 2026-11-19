@@ -107,6 +107,23 @@ release_age_install() {
     print_success "release-age pack complete"
 }
 
+# The health check's probe (pack_check): each of npm, bun and uv that is
+# installed waits, by a block of ours or a setting of your own. ~/.npmrc may
+# hold tokens: the manifest's record of our block there is asked first, and
+# the file is read only without one.
+release_age_check() {
+    if _release_age_has npm && ! tuidev_manifest_has block "$RELEASE_AGE_BLOCK $HOME/.npmrc"; then
+        grep -qsE '^[[:space:]]*min-release-age[[:space:]]*=' "$HOME/.npmrc" || return 1
+    fi
+    if _release_age_has bun; then
+        grep -qsE '^[[:space:]]*minimumReleaseAge[[:space:]]*=' "$HOME/.bunfig.toml" || return 1
+    fi
+    if _release_age_has uv; then
+        grep -qsE '^[[:space:]]*exclude-newer[[:space:]]*=' "${XDG_CONFIG_HOME:-$HOME/.config}/uv/uv.toml" || return 1
+    fi
+    return 0
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     release_age_install "$@"
 fi

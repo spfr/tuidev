@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Health Check — macOS TUI Development Environment
+# tuidev health check (`tuidev check`)
 # ============================================================================
 # Profile-aware health check. Probes are split into required vs. optional:
 #
@@ -259,9 +259,16 @@ check_sandbox() {
 
     # Is Seatbelt itself functional? Probe with an inline allow-default profile
     # — stable across macOS versions (the built-in `no-profile` name was
-    # removed on recent releases).
-    "$fn" "sandbox-exec works (inline smoke profile)" \
-        "sandbox-exec -p '(version 1)(allow default)' /usr/bin/true"
+    # removed on recent releases). Seatbelt does not nest: run from inside a
+    # sandbox (an agent's), sandbox_apply is refused, which says nothing about
+    # Seatbelt itself, so that one answer is a skip. Any other failure counts.
+    local out rc=0
+    out="$(sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>&1)" || rc=$?
+    if [[ $rc -ne 0 && "$out" == *"sandbox_apply: Operation not permitted"* ]]; then
+        print_info "sandbox-exec works (inline smoke profile): skipped, already inside a sandbox (Seatbelt does not nest)"
+    else
+        "$fn" "sandbox-exec works (inline smoke profile)" "[[ $rc -eq 0 ]]"
+    fi
 
     # Does the strict profile exist where the installer puts it?
     "$fn" "sandbox profile present ($TUIDEV_STATE_DIR/sandbox/strict.sb)" \
@@ -380,23 +387,6 @@ lid_guard_running() {
 # Category: packs (optional, manifest-driven)
 # ---------------------------------------------------------------------------
 
-pack_probe() {
-    # Returns the probe command for a given pack name.
-    case "$1" in
-        monitoring)         echo "have_cmd agents && { have_cmd btm || have_cmd bottom || have_cmd htop; }" ;;
-        sandbox-container)  echo "have_cmd container || have_cmd podman || have_cmd docker" ;;
-        herdr)              echo "have_cmd herdr" ;;
-        fnm)                echo "have_cmd fnm" ;;
-        hunk)               echo "have_cmd hunk" ;;
-        ci)                 echo "have_cmd actionlint && have_cmd zizmor && have_cmd betterleaks" ;;
-        ai-clis)            echo "have_cmd claude || have_cmd codex" ;;
-        orchestration)      echo "[[ -f \"\$HOME/.claude/rules/tuidev-orchestration.md\" ]]" ;;
-        nvim)               echo "have_cmd nvim" ;;
-        tmux)               echo "have_cmd tmux && [[ -f \"\$HOME/.config/tmux/tmux.conf\" ]]" ;;
-        *)                  echo "have_cmd $1" ;;
-    esac
-}
-
 check_packs() {
     print_header "Packs (manifest-declared extras)"
 
@@ -412,10 +402,11 @@ check_packs() {
         return 0
     fi
 
-    local pack probe
+    # Each pack's own probe (<pack>_check in its file), else what it declares
+    # (scripts/lib/packs.sh pack_check).
+    local pack
     for pack in "${packs[@]}"; do
-        probe="$(pack_probe "$pack")"
-        check_optional "pack: $pack" "$probe"
+        check_optional "pack: $pack" "pack_check $pack"
     done
 
     # The monitoring pack: agents with its modules, and its SwiftBar plugin

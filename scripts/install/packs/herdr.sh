@@ -150,6 +150,10 @@ herdr_install() {
     print_success "herdr pack complete"
 }
 
+# The health check's probe (pack_check): herdr on PATH. It has no package
+# array (never brew); the health check's herdr section looks further.
+herdr_check() { command -v herdr >/dev/null 2>&1; }
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     herdr_install "$@"
 fi

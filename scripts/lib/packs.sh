@@ -15,6 +15,8 @@
 #                               the pack's <PACK>_FORMULAE / <PACK>_CASKS,
 #                               one per line, read without installing anything
 #   pack_binaries NAME          the commands its formulae put on PATH
+#   pack_check NAME             is it in place? the pack's own <pack>_check,
+#                               else what it declares (`tuidev check`'s probe)
 #   tuidev_formula_binary F     formula → command ("" for plugin-only formulae)
 #   tuidev_cask_app C           cask → /Applications bundle name
 
@@ -101,5 +103,42 @@ pack_binaries() {
         bin="$(tuidev_formula_binary "$formula")"
         [[ -n "$bin" ]] && printf '%s\n' "$bin"
     done < <(pack_array "$1" formulae)
+    return 0
+}
+
+# pack_check NAME — is the pack in place? `tuidev check`'s probe for it: the
+# pack's own <pack>_check (hyphens as underscores) when its file defines one,
+# which is read-only, quiet and cheap, and true where its platform gives it
+# nothing to do. Else what it declares: every command its formulae put on
+# PATH (a macOS-only formula is not looked for elsewhere) and, on macOS,
+# every app its casks install. Sourced in a subshell, as pack_array does.
+pack_check() {
+    local name="$1" script fn
+    script="$(pack_script "$name")" || return 1
+    fn="${name//-/_}_check"
+    (
+        set +eu
+        # shellcheck disable=SC1090
+        . "$script" >/dev/null 2>&1
+        set +e   # the pack's own `set -e` must not end a probe halfway
+        if declare -F "$fn" >/dev/null; then "$fn"; exit; fi
+        _pack_check_declared "$name"
+    )
+}
+
+# _pack_check_declared NAME — every formula's command and (macOS) cask's app
+# NAME declares is here; true when it declares none for this platform.
+_pack_check_declared() {
+    local item bin app
+    while IFS= read -r item; do
+        if ! is_macos && declare -F _pkg_macos_only >/dev/null && _pkg_macos_only "$item"; then continue; fi
+        bin="$(tuidev_formula_binary "$item")"
+        [[ -z "$bin" ]] || command -v "$bin" >/dev/null 2>&1 || return 1
+    done < <(pack_array "$1" formulae)
+    is_macos || return 0
+    while IFS= read -r item; do
+        app="$(tuidev_cask_app "$item")"
+        [[ -d "/Applications/$app.app" || -d "$HOME/Applications/$app.app" ]] || return 1
+    done < <(pack_array "$1" casks)
     return 0
 }

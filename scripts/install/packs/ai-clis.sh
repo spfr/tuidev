@@ -106,6 +106,9 @@ ai_clis_install() {
     print_success "ai-clis pack complete"
 }
 
+# The health check's probe (pack_check): a CLI to run the configs with.
+ai_clis_check() { command -v claude >/dev/null 2>&1 || command -v codex >/dev/null 2>&1; }
+
 # Run if executed directly.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     ai_clis_install "$@"

@@ -179,6 +179,9 @@ orchestration_install() {
     print_success "orchestration pack complete"
 }
 
+# The health check's probe (pack_check): Claude Code's rule file is in place.
+orchestration_check() { [[ -f "$HOME/.claude/rules/tuidev-orchestration.md" ]]; }
+
 # Run if executed directly. Record what it writes, as install.sh does, so
 # ./uninstall.sh can remove it on a machine that has only this pack.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
