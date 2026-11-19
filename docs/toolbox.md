@@ -177,7 +177,7 @@ The tools above serve one loop. Each step has a default that works on both syste
 | **Route** | Search and command runs on the cheapest model, review on a top one. | `--pack orchestration` |
 | **Keep it running** | Work that must outlive the lid runs on a box that stays on. | tmux or Herdr on a `--profile remote` machine |
 | **Watch** | One place says who is blocked, on which machine. | Herdr's sidebar, `agents`, the menu bar, `notify.sh` |
-| **Verify** | Done means the checks ran, and the result is pasted, not claimed. | The definition of done in `AGENTS.md`; `hyperfine` when the claim is "faster" |
+| **Verify** | Done means the checks ran. | The definition of done in `AGENTS.md`; `hyperfine` when the claim is "faster" |
 | **Review** | A person reads the diff before it is committed. | `hunk`, `delta`, `lazygit`, the git and gh ask rules |
 | **Clean up** | What a session started is stopped when it ends, with evidence for the rest. | Cleanup hooks, `agents why`, `agents reap` |
 | **Stay current and safe** | Updates are one command, and a release younger than three days does not install. | `tuidev update`, `--pack release-age` |

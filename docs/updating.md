@@ -81,9 +81,11 @@ Once a day, `tuidev latest --if-due` asks `https://github.com/spfr/tuidev/releas
 When the release is newer than the one installed:
 
 - the menu bar shows a row for it, with Update now… and What changed (macOS, `--pack monitoring`);
-- Herdr shows one toast, and **prefix+u** opens a popup with the installed and the latest version that asks before it updates (`--pack herdr`); the palette (`tuidev`, Herdr **prefix+a**) starts with the same question: "Update tuidev to X" when one is known to be out, "Check for a new release" otherwise;
+- Herdr shows one toast, and **prefix+u** opens a popup with the installed and the latest version that asks before it updates (`--pack herdr`);
 - `agents` ends with one line, and so does `tuidev latest`;
-- the palette's first row is the update.
+- the palette's first row is the update, "Update tuidev to X".
+
+When no newer release is known, the palette (`tuidev`, Herdr **prefix+a**) starts with "Check for a new release": it asks now and offers the update when one is out.
 
 You are told once per release. Nothing is ever updated without you asking. `tuidev latest off` turns the check off for this machine (`tuidev latest on` back on); `tuidev update --check` and `--ask` still ask when you run them. `TUIDEV_UPDATE_CHECK=0` does the same for commands that inherit it, such as a CI job; the menu bar and Herdr don't see your shell's environment, so use `tuidev latest off` for those.
 

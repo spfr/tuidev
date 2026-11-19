@@ -646,7 +646,9 @@ _agents_hm_fit_pass() {
         [[ "$quiet" == true ]] || echo "agents hc mirror: $pane has no mirror; nothing to fit"
         return 0
     fi
-    if ! _agents_hm_pid_tty_size "$pid"; then
+    # The pid must still be this pane's attach: a pid reused since the core
+    # listed it would be another program's terminal.
+    if [[ "$(ps -o args= -p "$pid" 2>/dev/null)" != *"agent attach"*"$pane"* ]] || ! _agents_hm_pid_tty_size "$pid"; then
         [[ "$quiet" == true ]] || echo "agents hc mirror: the terminal of $pane's mirror cannot be read; nothing changed" >&2
         return 1
     fi

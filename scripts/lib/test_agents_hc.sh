@@ -855,8 +855,18 @@ PS
   }
   [[ "$(_agents_hc_remote_clients)" == 1 ]] || { echo "FAIL: remote clients: $(_agents_hc_remote_clients)"; exit 1; }
   [[ "$(_agents_hc_phone_status)" == "  connected now: 1 client over SSH" ]] || { echo "FAIL: phone line: $(_agents_hc_phone_status)"; exit 1; }
+  # Tailscale SSH has no sshd: tailscaled is the ancestor.
+  agents_snapshot() { cat <<'PS'
+  100     1   0 root 0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 /usr/sbin/tailscaled --state=/var/lib/tailscale/tailscaled.state
+  110   100   0 root 0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 /usr/sbin/tailscaled be-child ssh --uid=1000
+  111   110 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 -bash
+  112   111 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 herdr-core connect
+  120   111 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 herdr-core run --name x -- ssh host connect
+PS
+  }
+  [[ "$(_agents_hc_remote_clients)" == 1 ]] || { echo "FAIL: Tailscale SSH client: $(_agents_hc_remote_clients)"; exit 1; }
   agents_snapshot() { echo "  900     1 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 -zsh"; }
-  [[ "$(_agents_hc_phone_status)" == *"no phone or other device"* ]] || { echo "FAIL: no client line"; exit 1; }
+  [[ "$(_agents_hc_phone_status)" == *"no client seen over SSH"* ]] || { echo "FAIL: no client line"; exit 1; }
   agents_snapshot() { :; }
   [[ -z "$(_agents_hc_phone_status)" ]] || { echo "FAIL: an unreadable process table must print nothing"; exit 1; }
 ) || exit 1

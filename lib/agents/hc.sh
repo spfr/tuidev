@@ -223,7 +223,7 @@ agents_hc_status() {
 
 # _agents_hc_remote_clients — how many clients reach this core from another
 # device right now: `herdr-core connect` (or `hc connect`) processes with an
-# sshd above them. Nothing printed, and failure, when the process table can't
+# sshd above them (or tailscaled, for Tailscale SSH). Nothing printed, and failure, when the process table can't
 # be read (a sandbox).
 _agents_hc_remote_clients() {
     local ps
@@ -233,10 +233,10 @@ _agents_hc_remote_clients() {
         { pp[$1] = $2; a = ""; for (i = 14; i <= NF; i++) a = a (i > 14 ? " " : "") $i; av[$1] = a }
         END {
             for (p in av) {
-                if (av[p] !~ /(^|\/)(herdr-core|hc)( .*)? connect( |$)/) continue
+                if (av[p] !~ /(^|\/)(herdr-core|hc) connect( |$)/) continue
                 q = pp[p]; d = 0
                 while (q > 1 && (q in av) && d++ < 16) {
-                    if (av[q] ~ /^sshd|\/sshd|sshd-session|sshd:/) { n++; break }
+                    if (av[q] ~ /^sshd|\/sshd|sshd-session|sshd:|(^|\/)tailscaled( |$)/) { n++; break }
                     q = pp[q]
                 }
             }
@@ -253,7 +253,7 @@ _agents_hc_phone_status() {
     if [[ "$n" -gt 0 ]]; then
         echo "  connected now: $n client$( [[ "$n" -eq 1 ]] || echo s ) over SSH"
     else
-        echo "  connected now: no phone or other device. If the app says \"connecting\", look at the network between it and this machine (on the phone: Tailscale's own warnings, then off and on)"
+        echo "  connected now: no client seen over SSH. If the app says \"connecting\", look at the network between it and this machine (on the phone: Tailscale's own warnings, then off and on)"
     fi
 }
 

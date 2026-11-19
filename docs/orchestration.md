@@ -58,7 +58,7 @@ The pack owns these files and rewrites them on `tuidev update --configs`, so ove
 
 - **Claude, every tier:** point the aliases with `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` and `ANTHROPIC_DEFAULT_HAIKU_MODEL` (the `env` block of `~/.claude/settings.json`). On Amazon Bedrock, Google Cloud and Microsoft Foundry the aliases lag (`sonnet` is Sonnet 4.5 there), so set them to current ids. `ANTHROPIC_DEFAULT_OPUS_MODEL=claude-fable-5-2` runs the complex and review tiers on Fable, at twice Opus's price ($8/$40 per million input/output tokens against $4/$20).
 - **Claude, one tier:** a project agent of the same name (`.claude/agents/reviewer.md`) wins over the user-level one.
-- **Codex on a plan without the 6.2 models:** put project or user agents of the same names without a `model` line (they then run on your session's model), or name a model your plan lists.
+- **Codex on a plan without the 6.2 models:** put project agents of the same names (`.codex/agents/reviewer.toml` in the repo) without a `model` line, so they run on your session's model, or with a model your plan lists. Don't edit the copies in `~/.codex/agents/`: the next update rewrites them.
 - **Codex, one tier:** a project agent of the same name (`.codex/agents/reviewer.toml`). `codex debug models` lists the ids your Codex knows.
 
 When either vendor ships a new family, re-read each agent's instructions. For Codex, check that the three pinned models are still current and listed, and put any new pin in the allow-list at the top of `scripts/lib/test_orchestration.sh`.

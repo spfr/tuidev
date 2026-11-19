@@ -23,7 +23,7 @@ export TUIDEV_STATE_DIR="$HOME/.config/tuidev"
 fail() { echo "FAIL: $1" >&2; exit 1; }
 pass() { echo "PASS: $1"; }
 
-# The models agent files may pin: aliases, or ids every Codex plan can run.
+# The models agent files may pin: aliases, or ids OpenAI's paid plans list.
 # Change a pin here, in the agent file and in docs/orchestration.md's tier
 # table together. A Codex agent may also leave `model` out to run on the
 # session's model.
@@ -87,6 +87,9 @@ for f in "$agents_src"/codex/agents/*.toml; do
         ! grep -qE "^\\[?$key" "$f" || fail "$rel sets $key, which Codex ignores in agent files"
     done
     model="$(toml_value "$f" model)"
+    # A pin toml_value cannot read (single quotes, a trailing comment) would
+    # slip past the allow-list: refuse the spelling.
+    [[ -n "$model" ]] || ! grep -qE '^model[[:space:]]*=' "$f" || fail "$rel: write the model as model = \"ID\" alone on its line"
     [[ -z "$model" ]] || in_list "$model" "$ORCH_CODEX_MODELS" || fail "$rel: model '$model' is not in ORCH_CODEX_MODELS"
     effort="$(toml_value "$f" model_reasoning_effort)"
     [[ -z "$effort" ]] || in_list "$effort" "$ORCH_EFFORTS" || fail "$rel: effort '$effort' is not one of: $ORCH_EFFORTS"

@@ -672,7 +672,7 @@ fitterm() {
 }
 focus() { jq -c --arg p "$1" '.result.snapshot.focused_pane_id = $p' "$FAKE/snap.json" > "$FAKE/snap.new" && mv "$FAKE/snap.new" "$FAKE/snap.json"; }
 started() { mkdir -p "$AGENTS_RUN_DIR/hc-mirror.started"; echo 1 > "$AGENTS_RUN_DIR/hc-mirror.started/$(_agents_hm_file_name "$1")"; }
-( ps() { echo " null"; }
+( ps() { case "$*" in *args=*) echo "herdr agent attach p1 p2 p9" ;; *) echo " null" ;; esac; }
   stty() { if [[ "$1" == size ]]; then cat "$FAKE/stty.size"; else echo "$*" >> "$FAKE/stty.calls"; fi; }
   reset; RECT="p1:120:40 p2:80:24"; snap "p1|claude|idle|$tmp/proj-a" "p2|claude|idle|$tmp/proj-b"; focus p1
   fitterm p1 4242 119 39 120 40
@@ -695,6 +695,14 @@ started() { mkdir -p "$AGENTS_RUN_DIR/hc-mirror.started"; echo 1 > "$AGENTS_RUN_
   out="$(agents_main hc mirror fit p1 2>&1)"
   [[ ! -e "$FAKE/stty.calls" && "$out" == "p1: at its place's size already (119x39)" ]] || fail "fit at its size: $(calls stty) / $out"
   pass "fit: a pane at its size already is left alone"
+  # The core's pid now belongs to another program (reused since it was
+  # listed): its terminal is not touched.
+  rm -f "$FAKE/stty.calls"; echo "31 43" > "$FAKE/stty.size"
+  # (the stub is a function of its own: bash 3.2 cannot parse a case inside $( ))
+  ps_reused() { if [[ "$*" == *args=* ]]; then echo "vim notes.txt"; else echo " null"; fi; }
+  out="$( ps() { ps_reused "$@"; }; agents_main hc mirror fit p1 2>&1 )" || true
+  [[ ! -e "$FAKE/stty.calls" && "$out" == *"cannot be read; nothing changed"* ]] || fail "fit on a reused pid: $(calls stty) / $out"
+  pass "fit: a pid that is no longer the pane's attach is never resized"
 
   # A pane with no mirror: nothing; by hand it says so. The hook's -q asks
   # no core for a pane no sync gave a mirror.
@@ -780,7 +788,7 @@ pass "plugin: pane.focused runs agents hc mirror fit -q only for a pane a sync m
 # Status says when a mirrored pane is not at its place's size.
 reset; RECT="p1:120:40"; snap "p1|claude|idle|$tmp/proj-a"; terms "t1|m|live|p1"
 cat > "$FAKE/procinfo.json" <<<'{"result":{"process_info":{"shell_pid":4242}}}'
-( ps() { echo " null"; }; stty() { cat "$FAKE/stty.size"; }
+( ps() { case "$*" in *args=*) echo "herdr agent attach p1 p2 p9" ;; *) echo " null" ;; esac; }; stty() { cat "$FAKE/stty.size"; }
   echo "31 43" > "$FAKE/stty.size"
   out="$(agents_main hc mirror 2>&1)"
   [[ "$out" == *"mirrored as m; phone-sized: 43x31 of 120x40 (agents hc mirror fit p1)"* ]] || fail "status, phone-sized: $out"
