@@ -96,6 +96,9 @@ FLY_API_TOKEN = "exclude"
 SUPABASE_ACCESS_TOKEN = "exclude"
 PULUMI_ACCESS_TOKEN = "exclude"
 DOPPLER_TOKEN = "exclude"
+ANTHROPIC_API_KEY = "exclude"
+ANTHROPIC_AUTH_TOKEN = "exclude"
+OPENAI_API_KEY = "exclude"
 "TF_TOKEN_*" = "exclude"
 
 # Terminal notifications (OSC 9 / bell) while the pane is unfocused —
