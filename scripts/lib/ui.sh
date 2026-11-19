@@ -67,6 +67,26 @@ print_warning() { echo -e "${YELLOW}⚠ ${NC}$1"; }
 print_error()   { echo -e "${RED}✗ ${NC}$1"; }
 print_info()    { echo -e "${CYAN}ℹ ${NC}$1"; }
 
+# print_usage SCRIPT COMMAND — SCRIPT's header comment (line 2 to the first
+# line that is not a comment) as its --help: without the `# ` markers or the
+# `# ====` rules, and with `./NAME.sh` shown as COMMAND (`tuidev install`),
+# which works for every install. Run directly from a clone, and not through
+# the tuidev command (TUIDEV_VIA_CLI), it keeps `./NAME.sh`.
+print_usage() {
+    local self="./${1##*/}" cmd="$2"
+    if [[ -z "${TUIDEV_VIA_CLI:-}" && -e "$(dirname "$1")/.git" ]]; then cmd="$self"; fi
+    awk -v self="$self" -v cmd="$cmd" '
+        NR == 1 { next }
+        !/^#/ { exit }
+        /^# *=+$/ { next }
+        {
+            sub(/^# ?/, "")
+            out = ""
+            while ((i = index($0, self)) > 0) { out = out substr($0, 1, i - 1) cmd; $0 = substr($0, i + length(self)) }
+            print out $0
+        }' "$1"
+}
+
 # run_cmd — echo-under-dry-run wrapper. Quotes preserved via "$@".
 run_cmd() {
     if [[ "$DRY_RUN" == true ]]; then

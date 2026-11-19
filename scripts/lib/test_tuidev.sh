@@ -235,7 +235,16 @@ setcache "3.9.0 99999999 1"; echo 'garbage' > "$tmp/clone/VERSION"; rc=0; tuidev
 echo 3.9.0 > "$tmp/clone/VERSION"
 rc=0; out="$(CURL_OUT="$TAG/v3.30.0" tuidev latest --refresh --newer 2>&1)" || rc=$?
 [[ "$rc" == 0 && -z "$out" && "$(cache)" == "3.30.0 1086400 1000000" ]] || fail "--refresh --newer: rc=$rc '$out' $(cache)"
-pass "latest --newer: silent; exit 0 newer known, 1 the latest is installed, 2 unknown"
+# Offline with a warm cache that says 3.9.0 is the latest: 3, not 1 (the cache says nothing about now).
+setcache "3.9.0 99999999 1"; rc=0; CURL_RC=6 tuidev latest --refresh --newer >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 3 ]] || fail "--refresh --newer offline with a warm cache: rc=$rc (want 3)"
+setcache "3.9.0 99999999 1"; rc=0; CURL_OUT="$TAG/v3.9.0" tuidev latest --refresh --newer >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 1 ]] || fail "--refresh --newer answered, the latest installed: rc=$rc"
+setcache "3.9.0 99999999 1"; echo off > "$TUIDEV_STATE_DIR/update-check"; rc=0
+CURL_OUT="$TAG/v3.9.0" tuidev latest --refresh --newer >/dev/null 2>&1 || rc=$?
+rm -f "$TUIDEV_STATE_DIR/update-check"
+[[ "$rc" == 3 ]] || fail "--refresh --newer with the check off asked nothing, so knows nothing: rc=$rc"
+pass "latest --newer: silent; exit 0 newer known, 1 the latest is installed, 2 unknown, 3 a --refresh had no answer"
 
 # off / on / TUIDEV_UPDATE_CHECK=0
 reset; fixture "$tmp/clone" 3.9.0; export TUIDEV_REPO="$tmp/clone"

@@ -48,9 +48,10 @@ The full conventions are in [docs/engineering.md](docs/engineering.md). The rule
   - `profile.sh`: the profile file and `TUIDEV_VALID_PACKS`
   - `manifest.sh`: install records
   - `migrate.sh`: the migration runner
+  - `lock.sh`: one install or update at a time, and `tuidev_excl` (noclobber, never `mkdir`)
 - **Pack contract:**
   - One file, at `scripts/install/<name>.sh` for built-in packs or `scripts/install/packs/<name>.sh` for optional ones.
-  - One entrypoint, `<name>_install` (hyphens become underscores).
+  - One entrypoint, `<name>_install` (hyphens become underscores), and optionally `<name>_check`, the read-only probe `tuidev check` runs (without one it looks for the declared packages).
   - Packages declared only as `<PACK>_FORMULAE` / `<PACK>_CASKS`.
   - The file defines only functions and arrays. It is sourced into the installer's shell.
   - Warn and continue on failure, never `exit`.
@@ -74,7 +75,7 @@ The full conventions are in [docs/engineering.md](docs/engineering.md). The rule
 ## Commits
 
 - Conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `ci:`), atomic and focused.
-- Punchy subject line; a body of a line or two only when the why isn't obvious. The CHANGELOG carries the detail.
+- Punchy subject line; a body of a line or two only when the why isn't obvious. A `CHANGELOG.md` entry is one or two lines per change and links to the owning doc, which carries the detail.
 - No attribution: no `Co-Authored-By`, "Generated with", or session-link lines. Traceability, if wanted, goes in `git notes`.
 - Don't commit, push or open a PR unless you were asked to.
 

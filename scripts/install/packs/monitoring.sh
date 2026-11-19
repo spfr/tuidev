@@ -193,6 +193,13 @@ monitoring_install() {
     print_success "monitoring pack complete"
 }
 
+# The health check's probe (pack_check): agents, and a process monitor.
+# terminal-notifier and the SwiftBar plugin have checks of their own there.
+monitoring_check() {
+    command -v agents >/dev/null 2>&1 || return 1
+    command -v btm >/dev/null 2>&1 || command -v htop >/dev/null 2>&1
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     monitoring_install "$@"
 fi

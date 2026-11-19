@@ -49,13 +49,20 @@ sandbox_container_install() {
     print_success "container runtime: $(tuidev_container_label "$rt")"
 
     print_step "starting the $(tuidev_container_label "$rt") VM/service"
+    # The commands work in a clone and in an install made with get.sh alike.
+    # shellcheck disable=SC2016  # printed for you to run, not expanded here
+    local ctl='"$(tuidev home)/scripts/container.sh"'
     run_cmd tuidev_container_up "$rt" \
-        || print_warning "could not start it now (continuing); retry with: make sandbox-up"
+        || print_warning "could not start it now (continuing); retry with: $ctl up"
 
-    print_info "Stop it when idle: 'make sandbox-down'; start: 'make sandbox-up'."
+    print_info "Stop it when idle: $ctl down; start: $ctl up"
     print_info "Force another runtime with TUIDEV_CONTAINER_RUNTIME=container|podman|docker."
     print_success "sandbox-container pack complete"
 }
+
+# The health check's probe (pack_check): any runtime, whichever it is (only
+# podman is declared, and only as the fallback).
+sandbox_container_check() { tuidev_container_runtime >/dev/null; }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     sandbox_container_install "$@"

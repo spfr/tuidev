@@ -5,10 +5,8 @@
 #
 # Usage:
 #   ./install.sh [--profile minimal|desktop|remote|full]
-#                [--core] [--remote] [--sandbox] [--ui] [--extras]
-#                [--pack NAME ...]
-#                [--no-overwrite] [--adopt-existing]
-#                [--dry-run]
+#       [--core] [--remote] [--sandbox] [--ui] [--extras] [--pack NAME ...]
+#       [--no-overwrite] [--adopt-existing] [--dry-run]
 #
 # With no flags on a terminal it asks what this machine should get (four
 # choices, below). With no flags and no terminal it installs the default:
@@ -70,6 +68,8 @@ TUIDEV_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$TUIDEV_REPO/scripts/lib/migrate.sh"
 # shellcheck source=scripts/lib/packs.sh disable=SC1091
 . "$TUIDEV_REPO/scripts/lib/packs.sh"
+# shellcheck source=scripts/lib/lock.sh disable=SC1091
+. "$TUIDEV_REPO/scripts/lib/lock.sh"
 
 # Is this a machine tuidev has never touched? Captured HERE, before a single
 # byte is written: the profile manifest is rewritten on every run, so asking
@@ -99,7 +99,7 @@ EXTRA_PACKS=()
 WRITE_MODE="managed-block"   # or "adopt-existing"
 CHOOSE_ONLY=false            # --choose: ask, print the flags, install nothing
 
-usage() { sed -n '2,49p' "$0"; }
+usage() { print_usage "$TUIDEV_REPO/install.sh" "tuidev install"; }
 
 # _parse_flags FLAGS... — the command line, and the flags a first-run answer
 # stands for, which so take the same path as typed ones.
@@ -211,6 +211,13 @@ for pack in "${EXTRA_PACKS[@]}"; do
     tuidev_is_valid_pack "$pack" \
         || die "unknown --pack: $pack  (valid: ${TUIDEV_VALID_PACKS[*]})"
 done
+
+# One install or update at a time (scripts/lib/lock.sh), until this exits.
+# A dry run changes nothing and takes none.
+if [[ "$DRY_RUN" != true ]]; then
+    tuidev_update_lock || exit 1
+    trap tuidev_update_unlock EXIT
+fi
 
 # ----------------------------------------------------------------------------
 # Pre-flight

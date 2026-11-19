@@ -80,6 +80,25 @@ for script in "$REPO_DIR"/scripts/install/packs/*.sh; do
 done
 pass "every pack is registered, has a script, and defines its entrypoint"
 
+# 4b. `tuidev check` can tell whether each optional pack is in place: its own
+#     <pack>_check, or packages declared for pack_check to look for.
+for pack in "${TUIDEV_VALID_PACKS[@]}"; do
+    script="$(pack_script "$pack")"
+    grep -qE "^${pack//-/_}_check\(\)" "$script" \
+        || [[ -n "$(pack_array "$pack" formulae)$(pack_array "$pack" casks)" ]] \
+        || fail "$script has no ${pack//-/_}_check() and declares no packages: tuidev check cannot probe it"
+done
+pass "every optional pack has a health-check probe (its own, or its declared packages)"
+
+# 4c. What the installer, update and packs tell you to run works without a
+#     clone: the one-line install has no Makefile to `make` and no ./install.sh
+#     in your directory (tuidev install, or "$(tuidev home)/scripts/...").
+hints="$(cd "$REPO_DIR" && grep -nE '(print_[a-z]+|echo|die)[^#]*(\bmake [a-z]|\./install\.sh|\./uninstall\.sh)' \
+    install.sh uninstall.sh scripts/update.sh scripts/health_check.sh scripts/install/*.sh scripts/install/packs/*.sh \
+    scripts/migrations/*.sh scripts/lib/*.sh | grep -v '^scripts/lib/test_' || true)"
+[[ -z "$hints" ]] || fail "hints that need a clone (use tuidev install, tuidev update or \"\$(tuidev home)/scripts/...\"): $hints"
+pass "no printed hint needs a clone (make, ./install.sh)"
+
 # Every shipped config the installer upgrades-if-unmodified (install_config
 # --upgrade-shipped) is fingerprinted, so it can tell an unmodified old copy
 # (upgrade it) from one the user edited (leave it alone). Each hash file lists
@@ -349,6 +368,11 @@ printf 'tuidev\n' > "$cvt/sum"
     || fail "get.sh's _get_sha256 and ui.sh's file_sha256 disagree"
 rm -rf "$cvt"
 pass "get.sh's _get_flip and _get_sha256 do what bin/tuidev's _tuidev_flip and ui.sh's file_sha256 do"
+
+# bin/tuidev's _tuidev_excl and lock.sh's tuidev_excl: the same body.
+[[ "$(fn_from "$REPO_DIR/bin/tuidev" _tuidev_excl | sed 1d)" == "$(fn_from "$SCRIPT_DIR/lock.sh" tuidev_excl | sed 1d)" \
+   && -n "$(fn_from "$SCRIPT_DIR/lock.sh" tuidev_excl | sed 1d)" ]] || fail "bin/tuidev's _tuidev_excl and lock.sh's tuidev_excl differ"
+pass "bin/tuidev's _tuidev_excl and lock.sh's tuidev_excl are the same"
 
 # The update check's files: bin/tuidev writes them, lib/agents/release.sh
 # reads them with builtins, uninstall.sh removes them. Same places, same names.

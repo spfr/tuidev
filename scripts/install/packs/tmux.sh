@@ -139,6 +139,9 @@ tmux_install() {
     print_success "tmux pack complete"
 }
 
+# The health check's probe (pack_check): tmux, and its config.
+tmux_check() { command -v tmux >/dev/null 2>&1 && [[ -f "$HOME/.config/tmux/tmux.conf" ]]; }
+
 # Run if executed directly.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     tmux_install "$@"

@@ -125,6 +125,14 @@ cooling_install() {
     print_success "cooling pack complete"
 }
 
+# The health check's probe (pack_check): the fan daemon is installed, file
+# tests only (no sudo, no build). Anywhere but an Apple Silicon Mac the pack
+# has nothing to do, so that passes.
+cooling_check() {
+    _cooling_apple_silicon || return 0
+    [[ -f "$COOLING_PLIST" && -x "$COOLING_ROOT_BIN" ]]
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cooling_install "$@"
 fi
