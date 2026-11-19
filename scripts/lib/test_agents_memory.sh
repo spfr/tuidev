@@ -564,8 +564,11 @@ printf '1000\tstop\t620\tnode\tclientFuelToday.test.js\tcairn\tclaude:600\t31457
 echo 50331648 > "$AGENTS_RUN_DIR/memtotal"
 row="$(_agents_mem_tsv_row)"
 [[ "$row" == $'memg\tnone\t-\t8388608\t25165824\t1000\tstop\tnode (clientFuelToday.test.js)\tcairn\t31457280' ]] || fail "memg row: $row"
-mkdir -p "$HOME/Library/LaunchAgents"; touch "$HOME/Library/LaunchAgents/dev.tuidev.memguard.plist"
-[[ "$(_agents_mem_guard_state)" == stopped ]] || fail "an installed LaunchAgent with no guard running is stopped"
+# The LaunchAgent on macOS, the systemd user service on Linux.
+unit="$(_agents_mem_unit)"; mkdir -p "${unit%/*}"; touch "$unit"
+[[ "$(_agents_mem_guard_state)" == stopped ]] || fail "an installed guard service with no guard running is stopped"
+[[ "$(OSTYPE=darwin25 _agents_mem_unit)" == "$HOME/Library/LaunchAgents/dev.tuidev.memguard.plist" ]] || fail "the guard's unit on macOS"
+[[ "$(OSTYPE=linux-gnu XDG_CONFIG_HOME='' _agents_mem_unit)" == "$HOME/.config/systemd/user/tuidev-memguard.service" ]] || fail "the guard's unit on Linux"
 [[ "$(AGENTS_MEM_GUARD=off _agents_mem_guard_state)" == off ]] || fail "off"
 echo 16777216 > "$AGENTS_RUN_DIR/memtotal"
 row="$(PS_OK=0 _agents_mem_tsv_row)"
