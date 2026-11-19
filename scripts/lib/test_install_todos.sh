@@ -60,8 +60,8 @@ print_warning "two" > "$tmp/w2"
 pass "warnings are counted and print as before"
 
 # --- 2. install.sh: the end of a dry run -------------------------------------------
-tail_of() {  # tail_of ARGS... -> the text after "Installation Complete"
-    "$SH" "$INSTALL" "$@" --dry-run < /dev/null 2>&1 | strip | sed -n '/Installation Complete/,$p'
+tail_of() {  # tail_of ARGS... -> the text after the closing header
+    "$SH" "$INSTALL" "$@" --dry-run < /dev/null 2>&1 | strip | sed -n '/Dry run complete: nothing was changed/,$p'
 }
 
 min="$(tail_of --profile minimal)"

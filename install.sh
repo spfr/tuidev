@@ -447,7 +447,8 @@ print_step "Performance check (changes nothing; 'tuidev perf --fix' offers the f
 # Done
 # ----------------------------------------------------------------------------
 
-print_header "Installation Complete"
+if [[ "$DRY_RUN" == true ]]; then print_header "Dry run complete: nothing was changed"
+else print_header "Installation Complete"; fi
 printf '%b\n' "${GREEN}Next:${NC}
   - Restart your shell:  ${YELLOW}exec zsh -l${NC}
   - Verify health:       ${YELLOW}tuidev check${NC}   and   ${YELLOW}tuidev perf${NC}  (Spotlight, backups, limits)
@@ -471,6 +472,7 @@ printf '%b\n' "${CYAN}Docs:${NC}
   docs/remote.md           Tailscale + tmux + mosh workflow
   docs/agent-workflows.md  AI CLIs, editors, worktrees, Herdr
   docs/performance.md      what the OS does behind your agents, and what to change
-
-${CYAN}Your profile manifest:${NC} $TUIDEV_PROFILE_FILE_DEFAULT
+"
+# A dry run wrote neither file.
+[[ "$DRY_RUN" == true ]] || printf '%b\n' "${CYAN}Your profile manifest:${NC} $TUIDEV_PROFILE_FILE_DEFAULT
 ${CYAN}What was installed:${NC}    $TUIDEV_MANIFEST_FILE  (read by tuidev uninstall)"
