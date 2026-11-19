@@ -214,6 +214,9 @@ mkdir -p "$HOME/.claude/sessions"
 printf '{"pid":5000,"sessionId":"5e550000-0000-4000-8000-000000005000","procStart":"Wed Jan  1 03:00:00 2020"}\n' > "$HOME/.claude/sessions/5000.json"
 printf '{"pid":84091,"sessionId":"0ld00000-0000-4000-8000-000000084091","procStart":"Tue Dec 31 10:00:00 2019"}\n' > "$HOME/.claude/sessions/84091.json"
 _agents_start() { printf '%s\n' "$FIX_PS" | awk -v p="$1" '$1 == p { print $9 "_" $10 "_" $11 "_" $12 "_" $13; exit }'; }
+# The memory guard reads its state as though ps sees the whole table (a
+# sandboxed run would say unknown).
+_agents_mem_ps_ok() { return 0; }
 _agents_keep_pids() { _agents_awake_pid; return 0; }
 # tmux: two panes, the shells that started claude 90419 and the sessions under 900.
 _agents_tmux_up() { return 0; }

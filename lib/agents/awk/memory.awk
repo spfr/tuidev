@@ -1,12 +1,16 @@
 # lib/agents/awk/memory.awk — the memory guard's candidates, from a snapshot
 # on stdin: the processes holding the most memory, biggest first, at most
 # -v max=N of them, one line each:
-#   PID START RSS_KIB UID NAME LABEL ROOT ROOT_KIND
+#   PID START RSS_KIB UID NAME LABEL ROOT ROOT_KIND TOOL TOOL_START TOOL_NAME
 # A process qualifies at -v screen=KIB of RSS or more; with -v floor=KIB as
 # well (memory pressure is up), the largest down to that floor do too. LABEL
 # is the script an interpreter runs (node's clientFuelToday.test.js), ROOT
 # the topmost agent above it and ROOT_KIND that agent's kind ("-" for both
-# outside any agent tree). With -v pids=" PID PID ", exactly those qualify
+# outside any agent tree). TOOL is the command the nearest agent above it
+# started (its direct child on the way down: a test runner, a shell running
+# one), with its start and name; "-" for all three outside an agent tree or
+# when the process is an agent itself (the guard's respawn escalation stops
+# that command's tree, never the agent). With -v pids=" PID PID ", exactly those qualify
 # (`agents mem`, which has top's list). Never this process or its ancestors
 # (-v self=PID). With -v probe=1 it prints 1 when any agent session runs, and
 # nothing else (the guard's idle interval). Needs lib_proc.
@@ -59,7 +63,15 @@ END {
         if (pids == "" && rss[p] < screen && j > 5) break
         top = ""; q = p; d = 0
         while (q > 1 && (q in pp) && d++ < 64) { if (agent_kind(av[q]) != "") top = q; q = pp[q] }
-        printf "%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n", p, st[p], rss[p], uid[p], printable(pname(av[p])), label(av[p]), \
-            (top == "" ? "-" : top), (top == "" ? "-" : agent_kind(av[top]))
+        # The tool command: up from p to the last process before an agent.
+        tool = ""
+        if (top != "" && agent_kind(av[p]) == "") {
+            q = p; d = 0
+            while ((pp[q] in pp) && agent_kind(av[pp[q]]) == "" && d++ < 64) q = pp[q]
+            if ((pp[q] in pp) && agent_kind(av[pp[q]]) != "") tool = q
+        }
+        printf "%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p, st[p], rss[p], uid[p], printable(pname(av[p])), label(av[p]), \
+            (top == "" ? "-" : top), (top == "" ? "-" : agent_kind(av[top])), \
+            (tool == "" ? "-" : tool), (tool == "" ? "-" : st[tool]), (tool == "" ? "-" : printable(pname(av[tool])))
     }
 }

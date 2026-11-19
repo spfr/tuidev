@@ -422,9 +422,21 @@ A test that leaks, or loops while building an array, can take a Mac's memory in 
 
 1. **The Node heap cap** in the shipped Claude Code and Codex settings (`NODE_OPTIONS=--max-old-space-size=4096`, [above](#ai-clis)) makes a JavaScript heap leak fail at 4 GB inside the agent's own command, on every machine (on a 16 GB+ one, Node's default is about the same).
 2. **The memory guard**, `agents mem guard`, which the pack runs as a LaunchAgent (`~/Library/LaunchAgents/dev.tuidev.memguard.plist`, loaded at login, restarted if it fails), covers every language. Every `AGENTS_MEM_POLL` seconds (5) while anything needs watching (a process past half the warning, memory pressure warn or critical, or free memory falling at half `AGENTS_MEM_RATE` or faster), and every `AGENTS_MEM_IDLE` seconds (20) otherwise (a minute with no agent session running, since nothing is then stoppable), it reads one `ps` snapshot, and for the few processes past half the warning (or the largest few while memory pressure is up) samples their footprint, which keeps counting what the compressor squeezed and swap took, while RSS falls as a runaway grows (`ps` showed 10 GB for that node; Activity Monitor showed 29). Then:
-   - past `AGENTS_MEM_WARN` (8 GB), and again at each doubling, a notification names the process, the script it runs, its project and session (`node (clientFuelToday.test.js) in cairn holds 16.6G; stopped at 24.0G`), and a click jumps to that session; growing faster than `AGENTS_MEM_RATE` (200 MB/s) gets one warning too;
+   - past the warning, and again at each doubling, a notification names the process, the script it runs, its project and session (`node (clientFuelToday.test.js) in cairn holds 16.6G; stopped at 24.0G`), and a click jumps to that session; growing faster than `AGENTS_MEM_RATE` (200 MB/s) gets one warning too. The warning is `AGENTS_MEM_WARN` (8 GB), or 60% of the stop size when that is smaller, so it always comes before the stop (table below);
    - a process in an agent tree, below the agent and yours, past `AGENTS_MEM_KILL` (half the RAM), or the largest such past the warning while macOS reports critical memory pressure, is stopped, tree and all, through the same engine as `agents kill` (its refusals, a start-time check, SIGTERM, then SIGKILL after `AGENTS_GRACE`), and the notification says so. An agent session itself, your apps and other users' processes are only ever warned about;
-   - every warning and stop goes to `memory.tsv` in the data directory (`epoch event pid name label project session footprint rss free% swap`, names only, pruned with the history), stops to `events.tsv` as `guard`/`memory` too, and a turn to critical pressure is recorded with the biggest process at the time, so the next morning `agents mem` says what happened.
+   - when the guard stops the same script again under the same tool command (the command the agent started: a test runner, the shell running it) within 120 seconds, that runner started it again, so the guard stops the tool command's tree instead, through the same engine and refusals. It is never the agent, and never anything outside the agent's tree. A runner that respawns its crashed worker would otherwise be stopped worker by worker (one log had the same test stopped twice in a minute); an agent running the command again starts a new tool command, which never matches;
+   - every warning and stop goes to `memory.tsv` in the data directory (`epoch event pid name label project session footprint rss free% swap`, names only, pruned with the history), stops to `events.tsv` as `guard`/`memory` too, and a turn to critical pressure is recorded with the biggest process at the time, so the next morning `agents mem` says what happened. An escalation is an `escalate` line with the tool command's pid and name, the runaway's script, and a twelfth field saying why (`node (x.test.js) stopped again 40s after the guard stopped pid 620 under the same command`).
+
+   | RAM | stop size (half the RAM) | warning | sampled from |
+   | --- | --- | --- | --- |
+   | 8 GB | 4 GB | 2.4 GB (60%) | 1.2 GB |
+   | 16 GB | 8 GB | 4.8 GB (60%) | 2.4 GB |
+   | 32 GB | 16 GB | 8 GB | 4 GB |
+   | 64 GB | 32 GB | 8 GB | 4 GB |
+
+   60% leaves 40% of the stop size between the two (1.6 GB on 8 GB, 3.2 GB on 16 GB): at least 8 s at `AGENTS_MEM_RATE`, more than one poll, so the warning lands before the stop; a lower share would warn about big but ordinary processes. Before, the 8 GB warning was the stop size on 16 GB and above it on 8 GB, so the first notice there was the stop.
+
+   **A guard that hangs says so.** `footprint` and `top` each get 5 seconds; one that hangs is cut off, and the processes it did not answer for keep their last footprint for that look (never a zero, never a reason to stop anything). The guard writes a heartbeat (`memguard.beat` in the run directory) after every look, and `agents mem` and the menu say `stalled` when it is older than three of the guard's polls while its pid lives on; `agents mem restart` (the menu's Restart) starts it again.
 
 **What it costs.** A look with nothing large running is one `ps` snapshot: about 0.05 s of CPU. A footprint sample is what costs: `footprint` reads one of your processes for 0.02 to 0.09 s of CPU (more for a bigger one), and `top`, which the guard needs only for other users' processes, samples every process on the Mac for about half a second, however few it is asked about. So the guard samples a process it could stop (in an agent tree, below the agent, yours) on every look while it is past half the warning, and any other large process (an app, a VM, an agent session itself, another user's daemon) once, then again only when its RSS moves by an eighth (at least 512 MB) or after 5 minutes; in between, its last footprint stands. While memory pressure is warn or critical, or free memory falls faster than `AGENTS_MEM_RATE`, it samples them all on every look. On an M4 Pro with a 6 GB VM running, the guard used 13% of a core when it ran `top` on every look; it now uses about 2%, nearly all of it the `ps` snapshot, and about 4% with a 6 GB test in an agent tree beside it (12% before). Off macOS, RSS is the footprint and nothing is sampled.
 
@@ -435,14 +447,14 @@ A test that leaks, or loops while building an array, can take a Mac's memory in 
 ```text
 MEMORY  ████████████▎░░░░░░░░░░░░░░░░░  41% used of 48.0G · pressure normal
 SWAP    ███████████████████████████▎░░  ! 11.8 of 13.0G
-GUARD   running (pid 42) · kill · 2 stops in 7 days
+GUARD   running (pid 42) · kill · 2 stops in 7 days, 1 escalated to the tool command (agents mem log)
 
 PID     FOOTPRINT    warn 8G        stop 24G  PROCESS
 80913        5.5G  █████▌░░│░░░░░░░░░░░░░░░░  vm guest · rss 900M
 2141        10.0G  ████████│██░░░░░░░░░░░░░░  node · billing · claude:7 · rss 9.1G
 ```
 
-Each process's bar ends at the guard's stop size, with its warning marked, so it reads as how far from being stopped. Swap fills up before a guard stop, so past 80% it shows in the summary of `agents` and in the menu too; below that, only here. The last incidents follow. Memory hogs (RSS past `AGENTS_MEM_WARN`) also lead the hogs in `agents hogs`, `agents ls` and the menu.
+Each process's bar ends at the guard's stop size, with its warning marked, so it reads as how far from being stopped. A stalled guard reads `stalled (pid 42, no look for 2m; agents mem restart)`; inside an agent's sandbox, where the process table can't be read, the guard and the memory read as `unknown: ... from inside a sandbox`, not as a guard that is down. Swap fills up before a guard stop, so past 80% it shows in the summary of `agents` and in the menu too; below that, only here. The last incidents follow. Memory hogs (RSS past `AGENTS_MEM_WARN`) also lead the hogs in `agents hogs`, `agents ls` and the menu.
 
 ### Fans (`--pack cooling`)
 
