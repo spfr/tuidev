@@ -47,7 +47,8 @@ case "$1" in
 esac
 EOF2
 # The stand-in herdr: a snapshot, a pane, a queue of states for `agent wait`
-# (wait.1, wait.2 … one a call; then it fails), and an attach. hang.snapshot
+# (wait.1, wait.2 … one a call; then it fails), and an attach. pane.fail N
+# makes the next N `pane get` fail. hang.snapshot
 # makes the snapshot hang; wait.hang makes `agent wait` hang (its pid in
 # wait.pid), and the attach then lasts until that wait has started.
 cat > "$tmp/herdr" <<'EOF2'
@@ -56,7 +57,9 @@ cat > "$tmp/herdr" <<'EOF2'
 case "$1 $2" in
     "api snapshot") [[ ! -f "$FAKE/hang.snapshot" ]] || exec sleep 30
                     cat "$FAKE/snap.json" ;;
-    "pane get")     cat "$FAKE/pane.json" 2>/dev/null || exit 1 ;;
+    "pane get")     n="$(cat "$FAKE/pane.fail" 2>/dev/null || echo 0)"
+                    if [[ $n -gt 0 ]]; then echo $((n - 1)) > "$FAKE/pane.fail"; exit 1; fi
+                    cat "$FAKE/pane.json" 2>/dev/null || exit 1 ;;
     "pane process-info") cat "$FAKE/procinfo.json" 2>/dev/null || exit 1 ;;
     "agent wait")   if [[ -f "$FAKE/wait.hang" ]]; then echo "$$" > "$FAKE/wait.pid"; exec sleep 30; fi
                     n=$(( $(cat "$FAKE/wait.n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FAKE/wait.n"
@@ -86,8 +89,10 @@ _agents_hc_running() { [[ "$RUNNING" == true ]]; }
 _agents_hl_socket() { return 0; }
 
 reset() {
-    rm -f "${FAKE:?}"/*.calls "${FAKE:?}"/wait.* "${FAKE:?}"/attach.rc "${FAKE:?}"/attach.pid "${FAKE:?}"/report.* "${FAKE:?}"/pane.json "${FAKE:?}"/hang.* "${AGENTS_RUN_DIR:?}"/hc-pane.*
-    rm -rf "${AGENTS_RUN_DIR:?}/hc-mirror.lock" "${AGENTS_RUN_DIR:?}/hc-mirror.started" "${AGENTS_RUN_DIR:?}/hc-mirror.off"
+    rm -f "${FAKE:?}"/*.calls "${FAKE:?}"/wait.* "${FAKE:?}"/attach.rc "${FAKE:?}"/attach.pid "${FAKE:?}"/report.* "${FAKE:?}"/pane.json "${FAKE:?}"/pane.fail "${FAKE:?}"/hang.* "${AGENTS_RUN_DIR:?}"/hc-pane.*
+    rm -rf "${AGENTS_RUN_DIR:?}/hc-mirror.lock" "${AGENTS_RUN_DIR:?}/hc-mirror.started" "${AGENTS_RUN_DIR:?}/hc-mirror.off" \
+        "${AGENTS_RUN_DIR:?}/hc-mirror.dirty" "${AGENTS_RUN_DIR:?}/hc-mirror.wait" "${AGENTS_RUN_DIR:?}"/hc-mirror-wait.* \
+        "${AGENTS_RUN_DIR:?}/herdr-labels.lock" "${AGENTS_RUN_DIR:?}/herdr-labels.dirty"
     unset AGENTS_NOW
     RUNNING=true
     echo '{"jsonrpc":"2.0","id":1,"result":{"terminals":[]}}' > "$FAKE/list.json"
@@ -332,21 +337,49 @@ gone="$(/bin/sh -c 'echo $$')"
 out="$(_agents_hm_follow p1 "$gone")"
 [[ "$(calls herdr)" != *"agent wait"* ]] || fail "the follower waited for a pane whose attach is gone: $(calls herdr)"
 [[ "$out" == *"state=idle"* ]] || fail "the follower did not report before it ended: $out"
-ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "a follower with no attach left its file"
-reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; st working 1
-out="$(_agents_hm_follow p1 "$$")"
-[[ "$(calls herdr)" == *"agent wait"* && "$out" == *"state=working"* ]] || fail "a follower whose attach lives did not wait: $(calls herdr)"
-pass "a follower whose attach is gone ends before it waits; while the attach lives it waits"
+ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 && fail "a follower with no attach left its file"
+# While the attach lives, a follower Herdr does not answer asks again, after
+# 2 s doubling to 60 s (the pause is a stand-in that only counts; the tenth
+# ends the test's follower), and a wait that worked starts the doubling over.
+# Each time Herdr answers again, the pane's state now is reported.
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"
+echo 2 > "$FAKE/pane.fail"; st working 1; st blocked 3
+out="$( _agents_hm_pause() { echo "$1" >> "$FAKE/pause.calls"; [[ "$(grep -c . "$FAKE/pause.calls")" -lt 10 ]] || exit 0; }
+        _agents_hm_follow p1 "$$" )"
+[[ "$(calls pause)" == "2 4 2 2 4 8 16 32 60 60 " ]] || fail "the follower's pauses: $(calls pause)"
+[[ "$(printf '%s' "$out" | grep -o 'state=[a-z]*' | tr '\n' ' ')" == "state=idle state=working state=idle state=blocked state=idle state=idle "* ]] \
+    || fail "the follower's reports across Herdr's misses: $(printf '%s' "$out" | grep -o 'state=[a-z]*' | tr '\n' ' ')"
+[[ "$(grep -cx get "$FAKE/herdr.calls")" -ge 9 ]] || fail "the follower did not ask for the pane again: $(calls herdr)"
+# A pane with no agent for now is asked again too.
+reset; echo '{"result":{"pane":{"agent":"","agent_status":""}}}' > "$FAKE/pane.json"
+out="$( _agents_hm_pause() { echo "$1" >> "$FAKE/pause.calls"; [[ "$(grep -c . "$FAKE/pause.calls")" -lt 3 ]] || exit 0; }
+        _agents_hm_follow p1 "$$" )"
+[[ -z "$out" && "$(calls pause)" == "2 4 8 " ]] || fail "a follower of a pane with no agent for now: $(calls pause) $out"
+# With its attach gone, a miss ends it: no pause, no report.
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; echo 5 > "$FAKE/pane.fail"
+out="$( _agents_hm_pause() { echo "$1" >> "$FAKE/pause.calls"; }; _agents_hm_follow p1 "$gone" )"
+[[ -z "$out" && ! -e "$FAKE/pause.calls" && "$(grep -cx get "$FAKE/herdr.calls")" == 1 ]] || fail "a follower whose attach is gone went on after a miss: $(calls pause) $(calls herdr)"
+# The attach ends during a pause: it ends right after it.
+reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; echo 5 > "$FAKE/pane.fail"
+# The owner is no child of this shell (one that ended would stay a zombie,
+# which kill -0 still finds), and keeps no EXIT trap of this script's.
+owner="$( (trap - EXIT; sleep 30 >/dev/null 2>&1 & echo $!) )"
+out="$( _agents_hm_pause() { echo "$1" >> "$FAKE/pause.calls"; kill "$owner" 2>/dev/null
+            for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do kill -0 "$owner" 2>/dev/null || break; sleep 0.1; done; }
+        _agents_hm_follow p1 "$owner" )"
+kill "$owner" 2>/dev/null || true
+[[ -z "$out" && "$(calls pause)" == "2 " && "$(grep -cx get "$FAKE/herdr.calls")" == 1 ]] || fail "a follower whose attach ended during a pause went on: $(calls pause) $(calls herdr)"
+pass "a follower whose attach is gone ends before it waits; while the attach lives, a miss of Herdr's is asked again, 2 s doubling to 60 s"
 # A report the terminal does not take ends the follower: at once, or after a change.
 reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; st working 1; st blocked 2
 (_agents_hm_follow p1 "$$" >&-) 2>/dev/null
 [[ "$(calls herdr)" != *"agent wait"* ]] || fail "a follower whose first report failed waited: $(calls herdr)"
-ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "a follower whose first report failed left its file"
+ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 && fail "a follower whose first report failed left its file"
 reset; echo '{"result":{"pane":{"agent":"claude","agent_status":"idle"}}}' > "$FAKE/pane.json"; st working 1; st blocked 2
 ( _agents_hm_report() { [[ ! -e "$FAKE/report.1" ]] || return 1; : > "$FAKE/report.1"; }
   _agents_hm_follow p1 "$$" >/dev/null )
 [[ "$(grep -cx wait "$FAKE/herdr.calls")" == 1 ]] || fail "a follower whose report failed after a change went on: $(calls herdr)"
-ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "a follower whose report failed left its file"
+ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 && fail "a follower whose report failed left its file"
 pass "a report the terminal does not take ends the follower, and it leaves no file"
 
 # --- _mirror ---
@@ -493,6 +526,69 @@ agents_main -n herdr sync -q >/dev/null 2>&1 || true
 unset AGENTS_NOW; rm -f "$AGENTS_RUN_DIR/herdr-labels.stamp"
 pass "herdr sync --throttle: the mirrors are synced only when the labels are; agents -n herdr sync leaves the core alone"
 
+# --- a burst of events: coalesced, and one snapshot ---
+# Syncs that come in while one runs leave a mark and return at once; the one
+# running goes again once for all of them. Here each pass is a stand-in that
+# counts, and the first one's events are five more syncs.
+reset
+( _AGENTS_HM_PAUSE=0
+  _agents_hm_pass() {
+      echo "pass ${3:-asked}" >> "$FAKE/pass.calls"
+      [[ "$(grep -c . "$FAKE/pass.calls")" -gt 1 ]] && return 0
+      local i; for i in 1 2 3 4 5; do _agents_hm_sync "" -q; done
+  }
+  _agents_hm_sync '{"given":1}' -q
+  [[ "$(cat "$FAKE/pass.calls")" == $'pass {"given":1}\npass asked' ]] || fail "a burst of six syncs: $(calls pass)"
+  [[ ! -e "$AGENTS_RUN_DIR/hc-mirror.dirty" && ! -e "$AGENTS_RUN_DIR/hc-mirror.lock" ]] || fail "a coalesced sync left its mark or lock"
+) || exit 1
+pass "a burst of syncs is two passes: the snapshot given for the first, a fresh one for the one the burst asked for"
+# agents herdr sync hands the mirror sync the label sync's snapshot: one
+# `herdr api snapshot` for both.
+reset; snap "p1|claude|idle|$tmp/proj-a"
+agents_main herdr sync -q >/dev/null 2>&1 || true
+[[ "$(runs)" == *"_mirror p1 "* ]] || fail "herdr sync -q did not start the mirror: $(calls hc)"
+[[ "$(grep -c '^snapshot$' "$FAKE/herdr.calls")" == 1 ]] || fail "herdr sync asked for $(grep -c '^snapshot$' "$FAKE/herdr.calls") snapshots, not one"
+# A herdr sync that finds a label sync running leaves both syncs to it: a
+# mark, no Herdr call, nothing asked of the core.
+reset; snap "p1|claude|idle|$tmp/proj-a"
+sleep 60 & holder_pid=$!
+mkdir "$AGENTS_RUN_DIR/herdr-labels.lock"
+echo "$holder_pid $(_agents_start "$holder_pid")" > "$AGENTS_RUN_DIR/herdr-labels.lock/holder"
+agents_main herdr sync -q >/dev/null 2>&1 || fail "a held label lock failed the sync"
+[[ -e "$AGENTS_RUN_DIR/herdr-labels.dirty" && ! -e "$FAKE/hc.calls" && "$(calls herdr)" != *snapshot* ]] \
+    || fail "a herdr sync left to a running one still synced: $(calls hc) $(calls herdr)"
+kill "$holder_pid" 2>/dev/null; wait "$holder_pid" 2>/dev/null || true; holder_pid=""
+# Names off: no label sync, so the mirror sync asks for its own.
+reset; snap "p1|claude|idle|$tmp/proj-a"
+AGENTS_HERDR_NAMES=0 agents_main herdr sync -q >/dev/null 2>&1 || true
+[[ "$(runs)" == *"_mirror p1 "* && "$(grep -c '^snapshot$' "$FAKE/herdr.calls")" == 1 ]] || fail "names off: the mirrors were not synced: $(calls hc)"
+pass "agents herdr sync: the mirror sync reads the label sync's snapshot, and a sync left to a running one leaves the mirrors to it"
+# off holds the sync's lock: a sync that came in meanwhile is taken up when it lets go.
+reset; snap "p1|claude|idle|$tmp/proj-a" "p2|codex|idle|$tmp/proj-b"; : > "$AGENTS_RUN_DIR/hc-mirror.dirty"
+agents_hc_mirror_off p2 >/dev/null 2>&1 || fail "off failed"
+[[ "$(runs)" == *"_mirror p1 "* && "$(runs)" != *"_mirror p2 "* && ! -e "$AGENTS_RUN_DIR/hc-mirror.dirty" ]] || fail "off did not take up the sync that came in: $(runs)"
+pass "off takes up a sync that found its lock held"
+
+# --- the followers' files ---
+# One a pane, in hc-mirror.wait/: a sync removes those of panes with no agent
+# with their start times. The random names of 3.25.0 and before go once, the
+# first time the folder is made.
+reset; snap "p1|claude|idle|$tmp/proj-a"
+: > "$AGENTS_RUN_DIR/hc-mirror-wait.AbC123"; : > "$AGENTS_RUN_DIR/hc-mirror-wait.zz9XyQ"
+agents_hc_mirror_sync -q -n
+[[ -e "$AGENTS_RUN_DIR/hc-mirror-wait.AbC123" && ! -d "$AGENTS_RUN_DIR/hc-mirror.wait" ]] || fail "a dry sync swept the old files"
+mkdir -p "$AGENTS_RUN_DIR/hc-mirror.started"; echo 1 > "$AGENTS_RUN_DIR/hc-mirror.started/p9"
+agents_hc_mirror_sync -q
+[[ ! -e "$AGENTS_RUN_DIR/hc-mirror-wait.AbC123" && ! -e "$AGENTS_RUN_DIR/hc-mirror-wait.zz9XyQ" && -d "$AGENTS_RUN_DIR/hc-mirror.wait" ]] \
+    || fail "the old followers' files were not swept: $(ls "$AGENTS_RUN_DIR")"
+: > "$AGENTS_RUN_DIR/hc-mirror-wait.Q1w2E3"
+: > "$AGENTS_RUN_DIR/hc-mirror.wait/p1"; : > "$AGENTS_RUN_DIR/hc-mirror.wait/p9"; echo 1 > "$AGENTS_RUN_DIR/hc-mirror.started/p9"
+agents_hc_mirror_sync -q
+[[ -e "$AGENTS_RUN_DIR/hc-mirror-wait.Q1w2E3" ]] || fail "the old files were swept again"
+[[ -e "$AGENTS_RUN_DIR/hc-mirror.wait/p1" && ! -e "$AGENTS_RUN_DIR/hc-mirror.wait/p9" && ! -e "$AGENTS_RUN_DIR/hc-mirror.started/p9" ]] \
+    || fail "a pane with no agent kept its follower's file or start time: $(ls -R "$AGENTS_RUN_DIR")"
+pass "a sync removes a gone pane's follower file with its start time, and the old random-named ones once"
+
 # --- the size ---
 reset
 ( _agents_hm_tty() { return 0; }; _agents_hm_follow() { echo "$*" > "$FAKE/follow.calls"; }
@@ -576,14 +672,32 @@ rc=0; wait "$mpid" || rc=$?
 wpid="$(cat "$FAKE/wait.pid" 2>/dev/null)"
 [[ "$wpid" =~ ^[0-9]+$ ]] || fail "the wait never started"
 kill -0 "$wpid" 2>/dev/null || fail "the wait ended before any hangup"
+[[ -f "$AGENTS_RUN_DIR/hc-mirror.wait/p1" ]] || fail "the follower's file is not the pane's: $(ls -R "$AGENTS_RUN_DIR")"
 kill -HUP -- "-$mpid" 2>/dev/null || fail "no process group to hang up"
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
     kill -0 "$wpid" 2>/dev/null || break; sleep 0.1
 done
 ! kill -0 "$wpid" 2>/dev/null || { kill "$wpid" 2>/dev/null; fail "herdr agent wait outlived the mirror's hangup"; }
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 || break; sleep 0.1; done
-ls "$AGENTS_RUN_DIR"/hc-mirror-wait.* >/dev/null 2>&1 && fail "the follower left its file: $(ls "$AGENTS_RUN_DIR")"
-pass "the attach takes the mirror's process; the hangup of its group ends the follower and its herdr agent wait, and no file is left"
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 || break; sleep 0.1; done
+ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 && fail "the follower left its file: $(ls -R "$AGENTS_RUN_DIR")"
+pass "the attach takes the mirror's process; the follower's file is the pane's; the hangup of its group ends the follower and its herdr agent wait, and no file is left"
+# A follower in a pause (Herdr did not answer) ends with the hangup at once,
+# its sleep with it: the pause is a job, as the wait is.
+reset; echo 100 > "$FAKE/pane.fail"; _AGENTS_HM_RETRY=30
+set -m
+( trap - EXIT; _agents_hm_follow p1 "$$" ) </dev/null >/dev/null 2>&1 &
+fpid=$!
+set +m
+_AGENTS_HM_RETRY=2
+await "$FAKE/herdr.calls" || fail "the follower never asked Herdr"
+sleep 0.5
+kill -0 "$fpid" 2>/dev/null || fail "the follower ended after one miss of Herdr's"
+t0=$SECONDS
+kill -HUP -- "-$fpid" 2>/dev/null || fail "no process group to hang up"
+rc=0; wait "$fpid" || rc=$?
+[[ $((SECONDS - t0)) -le 3 ]] || fail "a follower in a pause outlived its hangup by $((SECONDS - t0)) s"
+[[ "$(grep -cx get "$FAKE/herdr.calls")" == 1 ]] || fail "the follower asked again before its pause ended: $(calls herdr)"
+pass "a follower pausing after a miss of Herdr's ends with the terminal's hangup at once"
 
 # --- off ends what an earlier sync started; `mirror end` ends them by hand ---
 reset; snap "p1|claude|idle|$tmp/proj-a"; terms "t1|a|live|p1" "t2|b|live|p2" "t3|mine|live|"
