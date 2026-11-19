@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tuidev install --help` and `uninstall --help` read as help**, and hints name commands a one-line install has.
 - **The credential list covers more CLIs, histories and browsers**: GitLab, rclone, sops, doctl, hcloud, Fly, Supabase, OCI, Pulumi, Hugging Face, Sentry, Terraform, Databricks, boto and s3cmd tokens, Yarn and Composer auth, REPL and fish history, and the Chrome channels, Chromium, Edge, Vivaldi, Opera and Zen profiles on macOS and Linux. [Sandboxing](docs/sandboxing.md#credentials-denied-under-strict-and-standard)
 - **Agents' commands no longer see GitLab, Hugging Face, Cloudflare, Vercel, Netlify, Sentry, Stripe, DigitalOcean, Fly, Supabase, Pulumi or Doppler tokens**: Claude Code unsets them in sandboxed commands, Codex drops them (and `TF_TOKEN_*`) from every command it runs. [Secrets](docs/secrets.md#what-an-agent-can-reach)
+- **Short captioned clips, rendered like the screenshots**: install, the agent that needs you, leftovers, cost, keys, the menu, a memory hog and remote, in `docs/assets/clips/` (`make screenshots TAPES=clips`; captions in `clips.txt`). [Tapes](docs/assets/tapes/README.md#the-clips)
 - **`agents reap` stops only what its verdict calls safe to stop**, shows each verdict in the plan and counts the "check first" ones; `--all` takes those too, and `agents why` without a PID lists every verdict. [Flagged](docs/agent-workflows.md#flagged-is-it-safe-to-stop)
 
 ### Fixed

@@ -1,0 +1,13 @@
+# Captions for the clips in docs/assets/clips/ (README.md next to this file):
+# NAME, then the caption, one clip a line. scripts/screenshots.sh burns each
+# into the bottom of its clip; reword them here, then re-render that clip
+# (make screenshots TAPES=clip-NAME). A clip without a line here, or
+# CLIP_CAPTIONS=0, is left uncaptioned.
+install    Every change is shown before it is made, and checked after.
+needs-you  The agent that needs you is always first.
+leftovers  Only what is safe to stop gets stopped.
+cost       What your agents spent today, priced at API rates.
+keys       Agents run your tests, never read your keys.
+menu       Every agent, one click away in the menu bar.
+hog        A runaway test is caught long before it takes the Mac.
+remote     A server on another machine opens here, as if it were local.
