@@ -21,10 +21,13 @@
 #     attach reports none, so Herdr's state for the pane is printed as one:
 #     `herdr agent wait` blocks until it changes, no polling.
 # While the phone shows a mirror the pane has the phone's size, and it gets
-# its own back only when the phone stops showing that session (typing at the
-# desk does not give it back). Herdr's phone app keeps the last session it
-# opened attached while it shows its Inbox: until the app is closed, or opens
-# another session, that pane stays at the phone's size.
+# its own back when the phone stops showing that session (typing at the desk
+# does not give it back). Herdr's phone app keeps the last session it opened
+# attached while it shows its Inbox, so focusing the pane at the desk gives it
+# its own size back too (`agents hc mirror fit`, the tuidev.link plugin's
+# pane.focused hook): the desk wins while you are at it, and the phone's
+# view of that session is a corner of the pane until the phone sets a size
+# again (it opens the session again, or turns).
 #
 # Not mirrored: a pane that is itself on a core-hosted agent (`agents hc run`:
 # hc.sh marks it), a pane you opted out (`agents hc mirror off [PANE]`, until
@@ -37,18 +40,19 @@
 # not parse) changes nothing: read as "no mirrors" it would start them all
 # again.
 #
-# Owns: `agents hc mirror` (status, sync, end, off, on), `agents hc _mirror`,
+# Owns: `agents hc mirror` (status, sync, fit, end, off, on), `agents hc _mirror`,
 #   hc-mirror.lock, hc-mirror.dirty (a sync that came in while one ran),
+#   hc-mirror-fit.lock, hc-mirror-fit.dirty (the same for fits),
 #   hc-mirror.started/ (when each pane's mirror last started),
 #   hc-mirror.wait/ (each pane's follower's last answer from Herdr),
 #   hc-mirror.off (the opted-out panes).
-# Uses: config.sh (AGENTS_HC_MIRROR, AGENTS_RUN_DIR), hc.sh (_agents_hc_bin,
+# Uses: config.sh (AGENTS_HC_MIRROR, AGENTS_HC_MIRROR_FIT, AGENTS_RUN_DIR), hc.sh (_agents_hc_bin,
 #   _agents_hc_running, _agents_hc_name, _agents_hc_pane_marked,
 #   _AGENTS_HC_WAIT, _AGENTS_HC_HERDR_WAIT), herdrlabel.sh (_agents_hl_herdr,
 #   _agents_hl_ready), util.sh (_agents_lock, _agents_unlock, _agents_timeout,
 #   _agents_now, _agents_stamp_age, _agents_replace).
-# Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_end,
-#   agents_hc_mirror_off, agents_hc_mirror_on, _agents_hm_sync for
+# Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_fit,
+#   agents_hc_mirror_end, agents_hc_mirror_off, agents_hc_mirror_on, _agents_hm_sync for
 #   herdrlabel.sh (a sync from the snapshot it has), and for hcphone.sh
 #   _agents_hm_on, _agents_hm_list, _agents_hm_have_of, _agents_hm_want,
 #   _agents_hm_off_read, _agents_hm_is_off.
@@ -208,19 +212,38 @@ _agents_hm_file_name() { printf '%s' "$1" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_'; }
 # the place itself when that cannot be read or is not near it (a pane an
 # earlier attach left at another size).
 _agents_hm_pane_size() {
-    local pane="$1" w="$2" h="$3" pid tty r c
-    pid="$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr pane process-info --pane "$pane" 2>/dev/null \
-        | jq -r '.result.process_info.shell_pid // empty' 2>/dev/null)"
-    if [[ "$pid" =~ ^[0-9]+$ ]]; then
-        tty="$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')"
-        if [[ "$tty" =~ ^[A-Za-z0-9/]+$ && -c "/dev/$tty" ]]; then
-            read -r r c <<<"$(stty size < "/dev/$tty" 2>/dev/null)"
-            if [[ "$r" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ && $c -le $w && $c -ge $((w - 2)) && $r -le $h && $r -ge $((h - 2)) ]]; then
-                printf '%s %s\n' "$c" "$r"; return 0
-            fi
+    local pane="$1" w="$2" h="$3" c r
+    if _agents_hm_pane_tty_size "$pane"; then
+        read -r c r <<<"$REPLY"
+        if [[ $c -le $w && $c -ge $((w - 2)) && $r -le $h && $r -ge $((h - 2)) ]]; then
+            printf '%s %s\n' "$c" "$r"; return 0
         fi
     fi
     printf '%s %s\n' "$w" "$h"
+}
+
+# _agents_hm_pane_tty_size PANE — REPLY "COLS ROWS": the size PANE's own
+# terminal has now, read from its shell's tty; false when Herdr does not say
+# the shell, or its tty cannot be read.
+_agents_hm_pane_tty_size() {
+    local pid
+    pid="$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr pane process-info --pane "$1" 2>/dev/null \
+        | jq -r '.result.process_info.shell_pid // empty' 2>/dev/null)"
+    _agents_hm_pid_tty_size "$pid"
+}
+
+# _agents_hm_pid_tty_size PID — REPLY "COLS ROWS" of PID's terminal, and
+# _AGENTS_HM_PTTY that terminal (/dev/…); false when PID has none, or its
+# size cannot be read.
+_agents_hm_pid_tty_size() {
+    local tty r c
+    REPLY="" _AGENTS_HM_PTTY=""
+    [[ "$1" =~ ^[0-9]+$ ]] || return 1
+    tty="$(ps -o tty= -p "$1" 2>/dev/null | tr -d ' ')"
+    [[ "$tty" =~ ^[A-Za-z0-9/]+$ && -c "/dev/$tty" ]] || return 1
+    read -r r c <<<"$(stty size < "/dev/$tty" 2>/dev/null)"
+    [[ "$r" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ ]] || return 1
+    REPLY="$c $r" _AGENTS_HM_PTTY="/dev/$tty"
 }
 
 # _agents_hm_name TITLE CWD — a mirror's name in herdr-core: the session's
@@ -436,11 +459,24 @@ agents_hc_mirror_status() {
         elif _agents_hm_is_off "$pane" "$off"; then
             if [[ -n "$m" ]]; then m="opted out; its mirror $m ends at the next sync"
             else m="opted out (agents hc mirror on $pane)"; fi
-        elif [[ -n "$m" ]]; then m="mirrored as $m"
+        elif [[ -n "$m" ]]; then m="mirrored as $m$(_agents_hm_size_note "$pane" "$cols" "$rows")"
         else m="not mirrored yet (agents hc mirror sync)"; fi
         printf '%-10s %-8s %-8s %-24s %s\n' "$pane" "$agent" "$state" "${cwd##*/}" "$m"
     done <<<"$want"
     _agents_hm_off_say "$off"
+}
+
+# _agents_hm_size_note PANE W H — "; phone-sized: 43x31 of 139x48 (agents hc
+# mirror fit PANE)" when PANE's own terminal is not the size of its place W
+# by H (a border of up to 2 aside); nothing when it is, or cannot be read.
+_agents_hm_size_note() {
+    local c r
+    _agents_hm_pane_tty_size "$1" || return 0
+    read -r c r <<<"$REPLY"
+    [[ $c -gt $2 || $c -lt $(($2 - 2)) || $r -gt $3 || $r -lt $(($3 - 2)) ]] || return 0
+    if [[ $c -lt $2 || $r -lt $3 ]]; then printf '; phone-sized: %sx%s of %sx%s' "$c" "$r" "$2" "$3"
+    else printf '; at %sx%s, not %sx%s' "$c" "$r" "$2" "$3"; fi
+    printf ' (agents hc mirror fit %s)' "$1"
 }
 
 # _agents_hm_off_say LIST — one line naming the opted-out panes; nothing for none.
@@ -519,6 +555,121 @@ agents_hc_mirror_on() {
         echo "$pane: mirrored again once mirrors run (agents hc mirror: $(_agents_hm_why_not))"
     fi
 }
+
+# agents_hc_mirror_fit [-q] [PANE] — a mirrored pane takes its own size back
+# from a phone that still shows it: the mirror's terminal is set to the pane's
+# place in the layout less its border (_agents_hm_set_size, as the follower
+# does), and the attach passes that on to the pane. PANE defaults to the pane
+# Herdr has focused. A pane with no mirror, or at its size already, is left
+# alone. The phone keeps its own size: it sees the top left of the pane until
+# it sets a size again (it opens the session again, or turns), and the pane
+# then has the phone's size again until the next focus here.
+#
+# -q is the tuidev.link plugin's pane.focused hook: nothing unless
+# AGENTS_HC_MIRROR_FIT is 1 (the default) and a sync started the focused
+# pane's mirror (its start time), and nothing said. Fits coalesce as syncs do
+# (hc-mirror-fit.lock and .dirty): one that finds another running leaves a
+# mark and returns, and the running one goes again for the pane focused by
+# then, so a burst of focus events is one fit more, not one each. Never a
+# loop with the follower: what a fit sets is not the core's own size, which
+# is the only size the follower acts on, and a size a terminal has already is
+# never set again.
+agents_hc_mirror_fit() {
+    local quiet=false pane="" a tries=10 round=0 pass lock="$AGENTS_RUN_DIR/hc-mirror-fit.lock" dirty="$AGENTS_RUN_DIR/hc-mirror-fit.dirty"
+    for a in "$@"; do
+        case "$a" in
+            -q|--quiet) quiet=true tries=1 ;;
+            -*)         echo "usage: agents hc mirror fit [-q] [PANE]" >&2; return 2 ;;
+            *)          [[ -z "$pane" ]] || { echo "usage: agents hc mirror fit [-q] [PANE]" >&2; return 2; }
+                        pane="$a" ;;
+        esac
+    done
+    [[ -z "$pane" || "$pane" =~ $_AGENTS_HM_PANE_RE ]] || { echo "agents hc mirror: not a pane id: $pane" >&2; return 2; }
+    [[ "$quiet" == false || "${AGENTS_HC_MIRROR_FIT:-1}" == 1 ]] || return 0
+    if ! _agents_hm_ready; then
+        [[ "$quiet" == true ]] || echo "agents hc mirror: $(_agents_hm_why_not)"
+        return 0
+    fi
+    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
+    while [[ $round -lt 2 ]]; do
+        round=$((round + 1)) pass=0
+        if ! _agents_lock "$lock" "$tries" 0.2; then
+            : > "$dirty" 2>/dev/null
+            # The running fit may have let go between that try and the mark.
+            if ! _agents_lock "$lock"; then
+                [[ "$quiet" == true ]] || echo "agents hc mirror: another fit is running; it goes again for this one"
+                return 0
+            fi
+        fi
+        while [[ $pass -lt 5 ]]; do
+            pass=$((pass + 1))
+            rm -f "$dirty"
+            _agents_hm_fit_pass "$quiet" "$pane" || true
+            [[ -e "$dirty" ]] || break
+        done
+        _agents_unlock "$lock"
+        # A fit that came in between the last look and the unlock.
+        [[ -e "$dirty" ]] || break
+    done
+    return 0
+}
+
+# _agents_hm_fit_pass QUIET PANE — one fit, under its lock: PANE, else the
+# pane Herdr has focused now.
+_agents_hm_fit_pass() {
+    local quiet="$1" pane="$2" snap rect list row pid w h c r dc dr rc=0
+    if ! snap="$(_agents_hm_snap)"; then
+        [[ "$quiet" == true ]] || echo "agents hc mirror: Herdr did not answer; nothing changed" >&2
+        return 1
+    fi
+    if [[ -z "$pane" ]]; then
+        pane="$(printf '%s' "$snap" | jq -r '.result.snapshot.focused_pane_id // empty | tostring' 2>/dev/null)"
+        if [[ ! "$pane" =~ $_AGENTS_HM_PANE_RE ]]; then
+            [[ "$quiet" == true ]] || echo "agents hc mirror: Herdr has no pane focused; name one (agents hc mirror fit PANE)" >&2
+            return 1
+        fi
+    fi
+    # The hook's way: only a pane a sync gave a mirror is worth asking the core about.
+    [[ "$quiet" == false || -e "$(_agents_hm_started_dir)/$(_agents_hm_file_name "$pane")" ]] || return 0
+    if ! _agents_hm_rect "$pane" "$snap"; then
+        [[ "$quiet" == true ]] || echo "agents hc mirror: $pane is in no layout Herdr has; nothing changed" >&2
+        return 1
+    fi
+    rect="$REPLY"
+    if ! list="$(_agents_hm_list)"; then
+        [[ "$quiet" == true ]] || echo "agents hc mirror: herdr-core did not answer; nothing changed" >&2
+        return 1
+    fi
+    row="$(printf '%s\n' "$list" | jq -r --arg l "$_AGENTS_HM_LABEL" --arg p "$pane" "$_AGENTS_HM_FIT_JQ" 2>/dev/null | head -n 1)"
+    read -r pid c r w h <<<"$row"
+    if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
+        [[ "$quiet" == true ]] || echo "agents hc mirror: $pane has no mirror; nothing to fit"
+        return 0
+    fi
+    if ! _agents_hm_pid_tty_size "$pid"; then
+        [[ "$quiet" == true ]] || echo "agents hc mirror: the terminal of $pane's mirror cannot be read; nothing changed" >&2
+        return 1
+    fi
+    _agents_hm_border "$c" "$r" "$w" "$h"
+    read -r dc dr <<<"$REPLY"
+    _agents_hm_set_size "$_AGENTS_HM_PTTY" "$rect" "$dc" "$dr" || rc=$?
+    [[ "$quiet" == false ]] || return 0
+    read -r w h <<<"$rect"
+    case $rc in
+        0) echo "$pane: $((w - dc))x$((h - dr)), its place in the layout" ;;
+        1) echo "$pane: at its place's size already ($((w - dc))x$((h - dr)))" ;;
+        *) echo "agents hc mirror: $pane's place is ${w}x${h}: too small to set, or its mirror's terminal did not take it" >&2; return 1 ;;
+    esac
+}
+
+# A pane's live mirror in terminal.list -> "PID COLS ROWS W H": the attach's
+# pid (the mirror's terminal is its tty), and the sizes `_mirror` was started
+# with (its argv: _mirror PANE COLS ROWS [W H]), for the pane's border.
+# shellcheck disable=SC2016  # jq's $names
+_AGENTS_HM_FIT_JQ='
+.result.terminals[]? | select(.state == "live") | select((.labels // {})[$l] == $p) | select(.pid | type == "number")
+| (.argv // []) as $a | ([range(0; $a | length) | select($a[.] == "_mirror")][0]) as $i
+| [(.pid // ""), (if $i == null then [] else $a[$i + 2:$i + 6] end | .[])] | map(tostring | gsub("[^0-9]"; "")) | join(" ")'
 
 # Herdr's word for a state -> the OSC 7501 report herdr-core stores (printed
 # in one write, so it cannot land inside one of the attach's own sequences
@@ -631,20 +782,65 @@ _agents_hm_tell() {
 # pane's size again. That is the pane's place in the layout as it is now,
 # less what the pane's terminal was smaller by when the mirror started
 # (_AGENTS_HM_DC, _AGENTS_HM_DR); the size at the start when Herdr does not
-# answer. A size that is neither is a viewer's: left alone.
+# answer. A size that is neither is a viewer's: left alone here (a focus at
+# the desk takes it back: agents_hc_mirror_fit).
 _AGENTS_HM_BASE="" _AGENTS_HM_COLS="" _AGENTS_HM_ROWS="" _AGENTS_HM_DC=0 _AGENTS_HM_DR=0
 _AGENTS_HM_TTY=/dev/tty
 _agents_hm_resized() {
-    local pane="$1" now w h cols="$_AGENTS_HM_COLS" rows="$_AGENTS_HM_ROWS"
+    local pane="$1" now
     now="$(stty size < "$_AGENTS_HM_TTY" 2>/dev/null)" || return 0
-    [[ -n "$_AGENTS_HM_BASE" && "$now" == "$_AGENTS_HM_BASE" && "$now" != "$rows $cols" ]] || return 0
-    read -r w h <<<"$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr api snapshot 2>/dev/null \
-        | jq -r --arg p "$pane" '[.result.snapshot.layouts[]?.panes[]? | select(.pane_id == $p) | .rect][0] | "\(.width) \(.height)"' 2>/dev/null)"
-    if [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ && $((w - _AGENTS_HM_DC)) -ge 20 && $((h - _AGENTS_HM_DR)) -ge 5 ]]; then
-        cols=$((w - _AGENTS_HM_DC)) rows=$((h - _AGENTS_HM_DR))
-    fi
-    stty cols "$cols" rows "$rows" < "$_AGENTS_HM_TTY" 2>/dev/null
+    [[ -n "$_AGENTS_HM_BASE" && "$now" == "$_AGENTS_HM_BASE" && "$now" != "$_AGENTS_HM_ROWS $_AGENTS_HM_COLS" ]] || return 0
+    _agents_hm_rect "$pane" || REPLY=""
+    _agents_hm_set_size "$_AGENTS_HM_TTY" "$REPLY" "$_AGENTS_HM_DC" "$_AGENTS_HM_DR" "$_AGENTS_HM_COLS $_AGENTS_HM_ROWS" || true
     return 0
+}
+
+# The one sizing both the follower (above) and a fit (below) use.
+#
+# _agents_hm_rect PANE [SNAP] — REPLY "W H": PANE's place in its tab's
+# layout, from SNAP (a `herdr api snapshot` answer) or a snapshot asked for
+# now; false when Herdr did not answer or has no place for PANE.
+_agents_hm_rect() {
+    local snap="${2:-}" w h
+    [[ -n "$snap" ]] || snap="$(_agents_hm_snap)" || { REPLY=""; return 1; }
+    read -r w h <<<"$(printf '%s' "$snap" \
+        | jq -r --arg p "$1" '[.result.snapshot.layouts[]?.panes[]? | select(.pane_id == $p) | .rect][0] | "\(.width) \(.height)"' 2>/dev/null)"
+    REPLY=""
+    [[ "$w" =~ ^[0-9]{1,4}$ && "$h" =~ ^[0-9]{1,4}$ ]] || return 1
+    REPLY="$((10#$w)) $((10#$h))"
+}
+
+# _agents_hm_border COLS ROWS [W H] — REPLY "DC DR": how much a pane's own
+# terminal (COLS by ROWS) is smaller than its place (W by H): 0, 1 or 2 each
+# (a border); 0 for anything else, or with no place given.
+_agents_hm_border() {
+    local dc=0 dr=0
+    if [[ "$1" =~ ^[0-9]{1,4}$ && "$2" =~ ^[0-9]{1,4}$ && "${3:-}" =~ ^[0-9]{1,4}$ && "${4:-}" =~ ^[0-9]{1,4}$ ]]; then
+        dc=$((10#$3 - 10#$1)) dr=$((10#$4 - 10#$2))
+        [[ $dc -ge 0 && $dc -le 2 ]] || dc=0
+        [[ $dr -ge 0 && $dr -le 2 ]] || dr=0
+    fi
+    REPLY="$dc $dr"
+}
+
+# _agents_hm_set_size TTY "W H" DC DR ["COLS ROWS"] — TTY (a mirror's
+# terminal) at the pane's place W by H less DC by DR; at COLS by ROWS when no
+# place is given or what is left of it is less than 20x5, and nothing with
+# neither. Nothing either when TTY has that size already: the follower gets a
+# WINCH for every change, so a size set for nothing would wake it for nothing.
+# 0 when it set the size, 1 when it had it, 2 when there was none to set or
+# TTY did not take it.
+_agents_hm_set_size() {
+    local tty="$1" w h cols rows now
+    read -r w h <<<"$2"
+    read -r cols rows <<<"${5:-}"
+    if [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ && $((w - $3)) -ge 20 && $((h - $4)) -ge 5 ]]; then
+        cols=$((w - $3)) rows=$((h - $4))
+    fi
+    [[ "$cols" =~ ^[0-9]+$ && "$rows" =~ ^[0-9]+$ ]] || return 2
+    now="$(stty size < "$tty" 2>/dev/null)"
+    [[ "$now" != "$rows $cols" ]] || return 1
+    stty cols "$cols" rows "$rows" < "$tty" 2>/dev/null || return 2
 }
 
 # _agents_hm_size COLS ROWS — the terminal's size; a tty that cannot take it
@@ -689,11 +885,8 @@ agents_hc_mirror_run() {
     ! _agents_hm_tty || _AGENTS_HM_BASE="$(stty size 2>/dev/null)"
     _agents_hm_size "$cols" "$rows" || { echo "agents hc _mirror: could not size this terminal to ${cols}x${rows}; not attached" >&2; return 1; }
     _AGENTS_HM_COLS="$cols" _AGENTS_HM_ROWS="$rows"
-    if [[ -n "$w" ]]; then
-        w=$((10#$w)) h=$((10#$h))
-        [[ $w -lt $cols || $((w - cols)) -gt 2 ]] || _AGENTS_HM_DC=$((w - cols))
-        [[ $h -lt $rows || $((h - rows)) -gt 2 ]] || _AGENTS_HM_DR=$((h - rows))
-    fi
+    _agents_hm_border "$cols" "$rows" "$w" "$h"
+    read -r _AGENTS_HM_DC _AGENTS_HM_DR <<<"$REPLY"
     _agents_hm_follow "$pane" "$$" &
     exec "$herdr" agent attach "$pane"
 }
@@ -737,9 +930,10 @@ agents_hc_mirror() {
     case "$sub" in
         status) agents_hc_mirror_status ;;
         sync)   agents_hc_mirror_sync "$@" ;;
+        fit)    agents_hc_mirror_fit "$@" ;;
         end)    agents_hc_mirror_end "$@" ;;
         off)    agents_hc_mirror_off "$@" ;;
         on)     agents_hc_mirror_on "$@" ;;
-        *)      echo "usage: agents hc mirror [status | sync [-n] [-q] | end | off [PANE] | on [PANE]]" >&2; return 2 ;;
+        *)      echo "usage: agents hc mirror [status | sync [-n] [-q] | fit [-q] [PANE] | end | off [PANE] | on [PANE]]" >&2; return 2 ;;
     esac
 }

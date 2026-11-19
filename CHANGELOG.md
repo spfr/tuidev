@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A pane the phone app still shows takes your desk's size back when you focus it** (`agents hc mirror fit`; `AGENTS_HC_MIRROR_FIT=0` turns it off). Tested with a stand-in viewer, not yet with the app. [Phone](docs/remote.md#herdrs-phone-app-agents-hc)
+
 ## [3.26.0] - 2026-11-19
 
 ### Added

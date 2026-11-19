@@ -92,7 +92,8 @@ reset() {
     rm -f "${FAKE:?}"/*.calls "${FAKE:?}"/wait.* "${FAKE:?}"/attach.rc "${FAKE:?}"/attach.pid "${FAKE:?}"/report.* "${FAKE:?}"/pane.json "${FAKE:?}"/pane.fail "${FAKE:?}"/hang.* "${AGENTS_RUN_DIR:?}"/hc-pane.*
     rm -rf "${AGENTS_RUN_DIR:?}/hc-mirror.lock" "${AGENTS_RUN_DIR:?}/hc-mirror.started" "${AGENTS_RUN_DIR:?}/hc-mirror.off" \
         "${AGENTS_RUN_DIR:?}/hc-mirror.dirty" "${AGENTS_RUN_DIR:?}/hc-mirror.wait" "${AGENTS_RUN_DIR:?}"/hc-mirror-wait.* \
-        "${AGENTS_RUN_DIR:?}/herdr-labels.lock" "${AGENTS_RUN_DIR:?}/herdr-labels.dirty"
+        "${AGENTS_RUN_DIR:?}/herdr-labels.lock" "${AGENTS_RUN_DIR:?}/herdr-labels.dirty" \
+        "${AGENTS_RUN_DIR:?}/hc-mirror-fit.lock" "${AGENTS_RUN_DIR:?}/hc-mirror-fit.dirty"
     unset AGENTS_NOW
     RUNNING=true
     echo '{"jsonrpc":"2.0","id":1,"result":{"terminals":[]}}' > "$FAKE/list.json"
@@ -656,6 +657,139 @@ rm -f "$FAKE/procinfo.json"
   [[ ! -e "$FAKE/stty.calls" ]] || fail "with no size from the core, a size was set"
 ) || fail "resized"
 pass "a mirror starts at the pane's own size; a terminal back at the core's size gets the pane's size again, a viewer's size is left alone"
+
+# --- a focus at the desk takes the size back: agents hc mirror fit ---
+# The phone may keep a session attached while it shows its Inbox; a fit sets
+# the mirror's terminal (the attach's tty) to the pane's place less its
+# border, while the viewer stays. Here the attach's pid is 4242, ps says its
+# tty is /dev/null, and stty reads $FAKE/stty.size and logs what it sets.
+# fitterm PANE PID [ARGV TAIL...] — a live mirror of PANE, started as `_mirror ARGV TAIL`.
+fitterm() {
+    local pane="$1" pid="$2"; shift 2
+    jq -nc --arg p "$pane" --arg pid "$pid" --args '{jsonrpc:"2.0",id:1,result:{terminals:[
+        {address:"t1",name:"m",state:"live",labels:{tuidev_mirror:$p},pid:($pid | tonumber? // $pid),
+         argv:(["/usr/bin/env","bash","agents","hc","_mirror",$p] + $ARGS.positional)}]}}' "$@" > "$FAKE/list.json"
+}
+focus() { jq -c --arg p "$1" '.result.snapshot.focused_pane_id = $p' "$FAKE/snap.json" > "$FAKE/snap.new" && mv "$FAKE/snap.new" "$FAKE/snap.json"; }
+started() { mkdir -p "$AGENTS_RUN_DIR/hc-mirror.started"; echo 1 > "$AGENTS_RUN_DIR/hc-mirror.started/$(_agents_hm_file_name "$1")"; }
+( ps() { echo " null"; }
+  stty() { if [[ "$1" == size ]]; then cat "$FAKE/stty.size"; else echo "$*" >> "$FAKE/stty.calls"; fi; }
+  reset; RECT="p1:120:40 p2:80:24"; snap "p1|claude|idle|$tmp/proj-a" "p2|claude|idle|$tmp/proj-b"; focus p1
+  fitterm p1 4242 119 39 120 40
+  # The phone's size; the fit sets the pane's place less its border, 1x1 here.
+  echo "31 43" > "$FAKE/stty.size"
+  out="$(agents_main hc mirror fit p1 2>&1)" || fail "fit failed: $out"
+  [[ "$(calls stty)" == "cols 119 rows 39 " && "$out" == "p1: 119x39, its place in the layout" ]] || fail "fit: $(calls stty) / $out"
+  # No PANE: the one Herdr has focused.
+  rm -f "$FAKE/stty.calls"; out="$(agents_main hc mirror fit 2>&1)"
+  [[ "$(calls stty)" == "cols 119 rows 39 " ]] || fail "fit, the focused pane: $(calls stty) / $out"
+  # Its place now, not the one it started in; a mirror started without one has no border.
+  rm -f "$FAKE/stty.calls"; RECT="p1:150:45"; snap "p1|claude|idle|$tmp/proj-a"; focus p1; fitterm p1 4242 119 39
+  agents_main hc mirror fit p1 >/dev/null 2>&1
+  [[ "$(calls stty)" == "cols 150 rows 45 " ]] || fail "fit, a new place and no border: $(calls stty)"
+  pass "fit: the mirror's terminal gets the pane's place now, less the border it started with; no PANE is the focused one"
+
+  # At its size already: nothing set, so the follower gets no WINCH for nothing.
+  rm -f "$FAKE/stty.calls"; RECT="p1:120:40"; snap "p1|claude|idle|$tmp/proj-a"; focus p1; fitterm p1 4242 119 39 120 40
+  echo "39 119" > "$FAKE/stty.size"
+  out="$(agents_main hc mirror fit p1 2>&1)"
+  [[ ! -e "$FAKE/stty.calls" && "$out" == "p1: at its place's size already (119x39)" ]] || fail "fit at its size: $(calls stty) / $out"
+  pass "fit: a pane at its size already is left alone"
+
+  # A pane with no mirror: nothing; by hand it says so. The hook's -q asks
+  # no core for a pane no sync gave a mirror.
+  echo "31 43" > "$FAKE/stty.size"; fitterm p2 4242 79 24 80 24
+  rm -f "$FAKE"/*.calls; out="$(agents_main hc mirror fit p1 2>&1)"
+  [[ ! -e "$FAKE/stty.calls" && "$out" == *"p1 has no mirror; nothing to fit"* ]] || fail "fit, no mirror: $(calls stty) / $out"
+  terms "t1|x|live|p1"
+  rm -f "$FAKE"/*.calls; agents_main hc mirror fit p1 >/dev/null 2>&1
+  [[ ! -e "$FAKE/stty.calls" ]] || fail "fit, a mirror with no pid: $(calls stty)"
+  fitterm p1 4242 119 39 120 40; rm -f "$FAKE"/*.calls
+  out="$(agents_main hc mirror fit -q 2>&1)"
+  [[ -z "$out" && ! -e "$FAKE/hc.calls" && ! -e "$FAKE/stty.calls" ]] || fail "fit -q, no start time: $(calls hc) / $out"
+  started p1; rm -f "$FAKE"/*.calls
+  out="$(agents_main hc mirror fit -q 2>&1)"
+  [[ -z "$out" && "$(calls stty)" == "cols 119 rows 39 " ]] || fail "fit -q, a mirrored pane: $(calls stty) / $out"
+  rc=0; out="$(agents_main hc mirror fit 'p1;x' 2>&1)" || rc=$?
+  [[ $rc -eq 2 && "$out" == *"not a pane id"* ]] || fail "fit, a bad id: $rc $out"
+  rc=0; agents_main hc mirror fit p1 p2 >/dev/null 2>&1 || rc=$?; [[ $rc -eq 2 ]] || fail "fit, two panes: $rc"
+  pass "fit: a pane with no mirror is ignored; the hook's -q asks no core for a pane no sync mirrored"
+
+  # The off switch: the hook does nothing at all; by hand it still fits.
+  rm -f "$FAKE"/*.calls
+  AGENTS_HC_MIRROR_FIT=0 agents_main hc mirror fit -q >/dev/null 2>&1
+  [[ ! -e "$FAKE/herdr.calls" && ! -e "$FAKE/hc.calls" && ! -e "$FAKE/stty.calls" ]] || fail "AGENTS_HC_MIRROR_FIT=0: $(calls herdr) $(calls hc) $(calls stty)"
+  AGENTS_HC_MIRROR_FIT=0 agents_main hc mirror fit p1 >/dev/null 2>&1
+  [[ "$(calls stty)" == "cols 119 rows 39 " ]] || fail "AGENTS_HC_MIRROR_FIT=0, by hand: $(calls stty)"
+  rm -f "$FAKE"/*.calls
+  AGENTS_HC_MIRROR=0 agents_main hc mirror fit -q >/dev/null 2>&1
+  [[ ! -e "$FAKE/hc.calls" && ! -e "$FAKE/stty.calls" ]] || fail "mirrors off: a fit asked the core: $(calls hc)"
+  pass "AGENTS_HC_MIRROR_FIT=0: the focus hook fits nothing and asks nothing; by hand it still fits; nothing with mirrors off"
+
+  # One sizing: the follower's WINCH and the fit both go through _agents_hm_set_size.
+  ( _agents_hm_set_size() { echo "set $*" >> "$FAKE/set.calls"; return 0; }
+    rm -f "$FAKE"/*.calls
+    agents_main hc mirror fit p1 >/dev/null 2>&1
+    _AGENTS_HM_TTY=/dev/null _AGENTS_HM_BASE="120 200" _AGENTS_HM_COLS=119 _AGENTS_HM_ROWS=39 _AGENTS_HM_DC=1 _AGENTS_HM_DR=1
+    echo "120 200" > "$FAKE/stty.size"; _agents_hm_resized p1
+    [[ "$(cat "$FAKE/set.calls")" == $'set /dev/null 120 40 1 1\nset /dev/null 120 40 1 1 119 39' ]] || fail "one sizing: $(cat "$FAKE/set.calls")"
+  ) || exit 1
+  # No loop: what a fit set is no core size, so the follower's WINCH for it
+  # sets nothing; and a fit after the follower set the size sets nothing.
+  rm -f "$FAKE"/*.calls
+  ( _AGENTS_HM_TTY=/dev/null _AGENTS_HM_BASE="120 200" _AGENTS_HM_COLS=119 _AGENTS_HM_ROWS=39 _AGENTS_HM_DC=1 _AGENTS_HM_DR=1
+    echo "39 119" > "$FAKE/stty.size"; _agents_hm_resized p1
+    agents_main hc mirror fit p1 >/dev/null 2>&1
+    [[ ! -e "$FAKE/stty.calls" ]] || fail "a loop: $(calls stty)" ) || exit 1
+  pass "one sizing for the follower and the fit, and no loop between them"
+) || exit 1
+
+# A burst of focus events: fits that come in while one runs leave a mark and
+# return at once; the running one goes again once for all of them.
+reset
+( _agents_hm_fit_pass() {
+      echo "pass" >> "$FAKE/pass.calls"
+      [[ "$(grep -c . "$FAKE/pass.calls")" -gt 1 ]] && return 0
+      local i; for i in 1 2 3 4 5; do agents_hc_mirror_fit -q; done
+  }
+  agents_hc_mirror_fit -q
+  [[ "$(grep -c . "$FAKE/pass.calls")" == 2 ]] || fail "a burst of six fits: $(grep -c . "$FAKE/pass.calls") passes"
+  [[ ! -e "$AGENTS_RUN_DIR/hc-mirror-fit.dirty" && ! -e "$AGENTS_RUN_DIR/hc-mirror-fit.lock" ]] || fail "a coalesced fit left its mark or lock"
+) || exit 1
+pass "a burst of six fits is two passes, the second for the pane focused by then"
+
+# The plugin's pane.focused hook: one file test decides; agents only for a
+# pane a sync mirrored.
+plugin="$REPO_DIR/configs/herdr/plugins/tuidev-link"
+cat > "$tmp/agents-stub" <<'EOF2'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE/plugin.calls"
+EOF2
+chmod +x "$tmp/agents-stub"
+reset
+phook() { ( cd "$plugin" && env HERDR_PANE_ID="$1" AGENTS_BIN="$tmp/agents-stub" AGENTS_RUN_DIR="$AGENTS_RUN_DIR" sh run.sh fit ); }
+phook p1; [[ ! -e "$FAKE/plugin.calls" ]] || fail "hook: a pane no sync mirrored ran agents"
+started 'w1:p1'; phook 'w1:p1'
+[[ "$(cat "$FAKE/plugin.calls")" == "hc mirror fit -q" ]] || fail "hook: a mirrored pane: $(cat "$FAKE/plugin.calls" 2>/dev/null)"
+rm -f "$FAKE/plugin.calls"; started 'x_y'; phook 'x;y'; phook ''
+[[ ! -e "$FAKE/plugin.calls" ]] || fail "hook: a bad or no pane id ran agents"
+[[ "$(grep -A1 '^on = "pane.focused"' "$plugin/herdr-plugin.toml")" == *'"run.sh", "fit"'* ]] \
+    || fail "the plugin has no pane.focused hook that runs fit"
+pass "plugin: pane.focused runs agents hc mirror fit -q only for a pane a sync mirrored"
+
+# Status says when a mirrored pane is not at its place's size.
+reset; RECT="p1:120:40"; snap "p1|claude|idle|$tmp/proj-a"; terms "t1|m|live|p1"
+cat > "$FAKE/procinfo.json" <<<'{"result":{"process_info":{"shell_pid":4242}}}'
+( ps() { echo " null"; }; stty() { cat "$FAKE/stty.size"; }
+  echo "31 43" > "$FAKE/stty.size"
+  out="$(agents_main hc mirror 2>&1)"
+  [[ "$out" == *"mirrored as m; phone-sized: 43x31 of 120x40 (agents hc mirror fit p1)"* ]] || fail "status, phone-sized: $out"
+  echo "39 119" > "$FAKE/stty.size"
+  out="$(agents_main hc mirror 2>&1)"
+  [[ "$out" == *"mirrored as m" && "$out" != *"phone-sized"* ]] || fail "status, at its size: $out"
+) || exit 1
+rm -f "$FAKE/procinfo.json"
+pass "status names a phone-sized pane and the command that fits it"
 
 # --- the follower ends with the attach ---
 # Nothing kills the follower by hand: the terminal's hangup, sent to the

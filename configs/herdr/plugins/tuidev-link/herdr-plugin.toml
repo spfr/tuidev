@@ -20,9 +20,11 @@
 # sync`: tab names, the sidebar's $tuidev_agents roll-up, agent rows' marks), and
 # reload an open board (`agents board --poke`). Herdr
 # runs each hook on its own server, so every machine names its own tabs.
+# Focusing a pane mirrored to Herdr's phone app gives it its own size back
+# from a phone that still shows it (`agents hc mirror fit`, docs/remote.md).
 id = "tuidev.link"
 name = "tuidev link"
-version = "0.6.0"
+version = "0.7.0"
 min_herdr_version = "0.9.0"
 description = "A board of every session on every machine, by who needs you; a palette of everything tuidev can do; what runs where and one key to stop it; tabs named after what runs in them; links from another machine's panes opened on the machine you sit at; tuidev's own updates."
 platforms = ["linux", "macos"]
@@ -170,3 +172,10 @@ command = ["sh", "run.sh", "sync-poke"]
 [[events]]
 on = "pane.agent_status_changed"
 command = ["sh", "run.sh", "sync-poke"]
+
+# A pane focused at the desk (also when its tab or workspace is: Herdr sends
+# pane.focused for those too) that is mirrored to the phone takes its own size
+# back. One file test for any other pane.
+[[events]]
+on = "pane.focused"
+command = ["sh", "run.sh", "fit"]

@@ -162,6 +162,7 @@ agents hc run claude                    # in a Herdr pane: the agent, hosted in 
 agents hc attach NAME                   # come back to one; ctrl+\ detaches and leaves it running
 claude                                  # with AGENTS_HC_AUTO=1, in a Herdr pane: hosted in herdr-core by itself
 agents hc mirror                        # experimental (AGENTS_HC_MIRROR=1): each agent pane and its mirror in herdr-core
+agents hc mirror fit                    # the focused pane takes its size back from a phone that still shows it (focusing does it too)
 agents hc mirror end                    # end every mirror; the agents stay in their panes
 agents hc mirror off                    # in a Herdr pane: no mirror for this one (on brings it back; PANE for another)
 agents hc ls                            # what the phone lists from here, and the agent panes it cannot reach

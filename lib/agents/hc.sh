@@ -759,6 +759,6 @@ agents_hc() {
                 _agents_hc_need || return 1
                 _agents_hc_running || { echo "agents hc: no core runs (agents hc up)" >&2; return 1; }
                 _agents_hc_attach "$1" ;;
-        *)      echo "usage: agents hc [status] | up [--restart] [-q] | run [--name NAME] [--] CMD... | auto CMD... | attach TERMINAL | ls | mirror [status|sync|end|off|on]" >&2; return 2 ;;
+        *)      echo "usage: agents hc [status] | up [--restart] [-q] | run [--name NAME] [--] CMD... | auto CMD... | attach TERMINAL | ls | mirror [status|sync|fit|end|off|on]" >&2; return 2 ;;
     esac
 }
