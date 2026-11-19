@@ -69,9 +69,21 @@ _agents_find_lib() {
 
 # config first: it reads agents.conf. The others only define functions.
 _AGENTS_MODULES="config palette glyph util release snapshot classify mcp lazy where watched system awake lid cool remote forward link map board herdrlabel hc hcmirror hcphone kill notify events reap memory assess triage transcript history runs tokens grok limits statusline context report render json tsv terminal activity show pick bar hooks usage cli"
-# What `agents hc auto` loads (below; test_agents_hc.sh checks that they hold
-# every function hc.sh calls).
-_AGENTS_AUTO_MODULES="config util herdrlabel hc"
+# The runs that start often load only the modules they use (below): a row
+# each, "WORDS|MODULES|CALL": the words the run starts with, its modules
+# (config first), and the function it calls with the words after those (a
+# word after the function's name is given first). `hc auto` sits in front of
+# every agent typed in a Herdr pane, `statusline` runs after each message of
+# Claude Code's, `bar poke` and the wait hooks at its tool calls.
+# test_agents_install.sh checks that each list defines every function and
+# setting its call can reach.
+_AGENTS_FAST_PATHS=(
+    "hc auto|config util herdrlabel hc|agents_hc_auto"
+    "statusline|config palette util events snapshot limits statusline|agents_statusline"
+    "bar poke|config util bar|agents_bar_poke"
+    "hook wait-start|config util events snapshot classify where notify bar hooks|_agents_hook_wait wait-start"
+    "hook wait-end|config util events snapshot classify where notify bar hooks|_agents_hook_wait wait-end"
+)
 # The awk programs the modules run (awk/NAME.awk; test_agents_install.sh keeps
 # this list and the directory in step).
 _AGENTS_AWK_FILES="assess board_pane board_rows board_trace board_view classify enrich hook_children hook_claude hook_match json lib_activity lib_fmt lib_jobs lib_json lib_maprows lib_price lib_proc lib_sort lib_waits lib_where limits mcp mem_view memory mcp_toml mcp_toml_launch mcp_view new_members pick refusal render report report_context report_denials report_fmt report_insights report_runs report_tokens report_views report_waits root runs runs_obs runs_view sample show show_tree statusline tokens tokens_plan tokens_rollup tokens_session tokens_state tree triage triage_view waits_state where"
@@ -96,14 +108,32 @@ if [[ -n "$_agents_missing" ]]; then
     return 1
 fi
 _AGENTS_AWK_DIR="$_AGENTS_LIB/awk"
-# `agents hc auto` runs in front of every agent typed in a Herdr pane (the
-# herdr-core pack's shell fragment): it loads only the modules it uses, and
-# keeps the names exported before config.sh adds its own, so a command it
-# runs as typed gets the environment it was given.
-_agents_load="$_AGENTS_MODULES"
-if [[ "${BASH_SOURCE[0]}" == "${0}" && "${1:-}" == hc && "${2:-}" == auto ]]; then
-    _AGENTS_ENV_IN=$'\n'"$(compgen -e)"$'\n'
-    _agents_load="$_AGENTS_AUTO_MODULES"
+
+# _agents_fast ARGS... — the fast path a run with ARGS takes: its modules
+# (_AGENTS_FAST_MODS), its call (_AGENTS_FAST_CALL) and how many of ARGS that
+# row matched (_AGENTS_FAST_N); false for a run that loads every module.
+# Builtins only.
+_agents_fast() {
+    local row words w n
+    for row in "${_AGENTS_FAST_PATHS[@]}"; do
+        words="${row%%|*}" n=0
+        for w in $words; do
+            n=$((n + 1))
+            [[ "${!n:-}" == "$w" ]] || continue 2
+        done
+        row="${row#*|}"
+        _AGENTS_FAST_MODS="${row%%|*}" _AGENTS_FAST_CALL="${row#*|}" _AGENTS_FAST_N=$n
+        return 0
+    done
+    return 1
+}
+
+_agents_load="$_AGENTS_MODULES" _AGENTS_FAST_CALL=""
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]] && _agents_fast "$@"; then
+    _agents_load="$_AGENTS_FAST_MODS"
+    # `agents hc auto` keeps the names exported before config.sh adds its
+    # own, so a command it runs as typed gets the environment it was given.
+    [[ "$_AGENTS_FAST_CALL" != agents_hc_auto ]] || _AGENTS_ENV_IN=$'\n'"$(compgen -e)"$'\n'
 fi
 # In front of an agent, what agents.conf has wrong is not said at every start.
 [[ -z "${_AGENTS_ENV_IN:-}" ]] || exec 8>&2 2>/dev/null
@@ -111,13 +141,24 @@ for _agents_m in $_agents_load; do
     # shellcheck source=/dev/null  # each module is linted on its own (Makefile SHELL_FILES)
     . "$_AGENTS_LIB/$_agents_m.sh"
 done
+# A fast path whose call its modules do not define (a list out of step with
+# the modules) loads the rest and runs as any other run: slower, never broken.
+if [[ -n "$_AGENTS_FAST_CALL" ]] && ! declare -F "${_AGENTS_FAST_CALL%% *}" >/dev/null; then
+    for _agents_m in $_AGENTS_MODULES; do
+        case " $_agents_load " in *" $_agents_m "*) continue ;; esac
+        # shellcheck source=/dev/null
+        . "$_AGENTS_LIB/$_agents_m.sh"
+    done
+    _AGENTS_FAST_CALL=""
+fi
 [[ -z "${_AGENTS_ENV_IN:-}" ]] || exec 2>&8 8>&-
 unset _agents_m _agents_missing _agents_load
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    if [[ -n "${_AGENTS_ENV_IN:-}" ]]; then
-        shift 2
-        agents_hc_auto "$@"
+    if [[ -n "$_AGENTS_FAST_CALL" ]]; then
+        shift "$_AGENTS_FAST_N"
+        # The function's name, then any word the row gives it.
+        $_AGENTS_FAST_CALL "$@"
         exit
     fi
     agents_main "$@"

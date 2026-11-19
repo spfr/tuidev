@@ -351,18 +351,43 @@ _agents_hook_wait_end() {
 # would keep the subagent running. Quiet unless -n (or AGENTS_DRY_RUN=true):
 # then it prints what it would do, and signals and writes nothing.
 agents_hook() {
+    case "${1:-}" in wait-start|wait-end) _agents_hook_wait "$@"; return 0 ;; esac
     local _AGENTS_HL_AID=- _AGENTS_HL_HB=- _AGENTS_HL_TASKS=0 _AGENTS_HL_MATCHED=0
     local _AGENTS_HOOK_DRY="$_AGENTS_HOOK_DRY"   # -n lasts for this call only
-    local _AGENTS_HOOK_ENDED=""                  # set by a wait-end that ended a wait
+    local _AGENTS_HOOK_ENDED=""                  # session-end's wait-end sets it
     _agents_hook_run "$@"
-    # hooks.log is about cleanups; the wait hooks run at every tool call.
-    case "${1:-}" in wait-*) ;; *) _agents_hook_log "${1:-}" ;; esac
+    _agents_hook_log "${1:-}"
     # The menu bar shows what changed (session-end's hook entry pokes on its own).
-    if [[ "$_AGENTS_HOOK_DRY" != true ]]; then
-        case "${1:-}" in
-            subagent-stop|wait-start) agents_bar_poke ;;
-            wait-end) [[ -z "$_AGENTS_HOOK_ENDED" ]] || agents_bar_poke ;;
-        esac
+    [[ "$_AGENTS_HOOK_DRY" == true || "${1:-}" != subagent-stop ]] || agents_bar_poke
+    return 0
+}
+
+# _agents_hook_wait wait-start|wait-end [-n] < HOOK_JSON — the wait hooks,
+# which run at every tool call: only what they use, so `bin/agents` loads only
+# their modules for them (its fast paths). Not in hooks.log, which is about
+# cleanups. Returns 0 whatever happens.
+_agents_hook_wait() {
+    local event="${1:-}" a fields _ev _sid _main _aid _atype _agent cwd _reason ntype dur pmode
+    local _AGENTS_HOOK_DRY="$_AGENTS_HOOK_DRY"   # -n lasts for this call only
+    local _AGENTS_HOOK_ENDED=""                  # set by a wait-end that ended a wait
+    [[ $# -gt 0 ]] && shift
+    for a in "$@"; do case "$a" in -n|--dry-run) _AGENTS_HOOK_DRY=true ;; esac; done
+    command -v jq >/dev/null 2>&1 || return 0
+    if _agents_is_root; then return 0; fi
+    if [[ -t 0 ]]; then echo "agents hook: pipe the hook's JSON to stdin" >&2; return 0; fi
+    fields="$(_agents_hook_input)"
+    [[ -n "$fields" ]] || { _agents_hook_say "no hook JSON on stdin"; return 0; }
+    IFS=$'\t' read -r _ev _sid _main _aid _atype _agent cwd _reason ntype dur pmode <<<"$fields"
+    case "$event" in
+        wait-start)
+            [[ "$_ev" == PermissionRequest ]] && ntype=PermissionRequest
+            _agents_hook_wait_start "$_sid" "$ntype" "$cwd" "$pmode" ;;
+        wait-end) _agents_hook_wait_end "$_sid" "$dur" ;;
+        *) return 0 ;;
+    esac
+    # The menu bar shows what changed: a wait that opened, or one that ended.
+    if [[ "$_AGENTS_HOOK_DRY" != true && ( "$event" == wait-start || -n "$_AGENTS_HOOK_ENDED" ) ]]; then
+        agents_bar_poke
     fi
     return 0
 }
@@ -372,7 +397,7 @@ _agents_hook_run() {
     [[ $# -gt 0 ]] && shift
     for a in "$@"; do case "$a" in -n|--dry-run) _AGENTS_HOOK_DRY=true ;; esac; done
     case "$event" in
-        subagent-stop|session-end|wait-start|wait-end) ;;
+        subagent-stop|session-end) ;;
         *) echo "usage: agents hook subagent-stop|session-end|wait-start|wait-end [-n] < HOOK_JSON" >&2; return 0 ;;
     esac
     # AGENTS_HOOK_REAP turns the cleanups off, not the waits (session-end
@@ -383,17 +408,12 @@ _agents_hook_run() {
     command -v jq >/dev/null 2>&1 || return 0
     if _agents_is_root; then return 0; fi
     if [[ -t 0 ]]; then echo "agents hook: pipe the hook's JSON to stdin" >&2; return 0; fi
-    local fields _ev _sid main _aid atype agent cwd reason ntype dur pmode
+    local fields _ev _sid main _aid atype agent cwd reason _ntype _dur _pmode
     fields="$(_agents_hook_input)"
     [[ -n "$fields" ]] || { _agents_hook_say "no hook JSON on stdin"; return 0; }
-    IFS=$'\t' read -r _ev _sid main _aid atype agent cwd reason ntype dur pmode <<<"$fields"
-    case "$event" in
-        wait-start)
-            [[ "$_ev" == PermissionRequest ]] && ntype=PermissionRequest
-            _agents_hook_wait_start "$_sid" "$ntype" "$cwd" "$pmode"; return 0 ;;
-        wait-end)   _agents_hook_wait_end "$_sid" "$dur"; return 0 ;;
-        session-end) _agents_hook_wait_end "$_sid" ;;
-    esac
+    IFS=$'\t' read -r _ev _sid main _aid atype agent cwd reason _ntype _dur _pmode <<<"$fields"
+    # session-end also ends the wait of the session /clear or /resume left.
+    [[ "$event" != session-end ]] || _agents_hook_wait_end "$_sid"
     [[ "$AGENTS_HOOK_REAP" == 1 ]] || { _agents_hook_say "AGENTS_HOOK_REAP=$AGENTS_HOOK_REAP: off"; return 0; }
     main="$(_agents_tx_path "$main")"; agent="$(_agents_tx_path "$agent")"
     _agents_tx_type_ok "$atype" || atype=-

@@ -713,13 +713,17 @@ rc=0; out="$(agents_main hc auto no-such-agent 2>&1)" || rc=$?
 [[ $rc -eq 127 && "$out" == *"no-such-agent: command not found"* ]] || fail "a missing command: rc $rc, $out"
 pass "auto needs a command, and a missing one is 127 like the shell's"
 
-# Through bin/agents itself: the modules it loads hold everything hc.sh
-# calls, and the agent gets the environment it was given, without the
+# Through bin/agents itself: the modules its `hc auto` fast path loads hold
+# everything hc.sh calls (test_agents_install.sh checks every fast path's
+# reach), and the agent gets the environment it was given, without the
 # patterns loading agents exports.
+auto_mods=""
+for row in "${_AGENTS_FAST_PATHS[@]}"; do [[ "${row%%|*}" != "hc auto" ]] || { auto_mods="${row#*|}"; auto_mods="${auto_mods%%|*}"; }; done
+[[ "$auto_mods" == config\ * ]] || fail "no hc auto row in _AGENTS_FAST_PATHS: ${_AGENTS_FAST_PATHS[*]}"
 fns="$(grep -oE '_agents_[a-z0-9_]+' "$REPO_DIR/lib/agents/hc.sh" | sort -u)"
 missing="$(env -i PATH="$PATH" HOME="$HOME" AGENTS_CONF="$AGENTS_CONF" bash -c '
     for m in $1; do . "$2/lib/agents/$m.sh"; done
-    for f in $3; do declare -F "$f" >/dev/null || echo "$f"; done' _ "$_AGENTS_AUTO_MODULES" "$REPO_DIR" "$fns")"
+    for f in $3; do declare -F "$f" >/dev/null || echo "$f"; done' _ "$auto_mods" "$REPO_DIR" "$fns")"
 [[ -z "$missing" ]] || fail "agents hc auto does not load what defines: $missing"
 reset
 rc=0; out="$(cd "$tmp/My Proj" && env -i PATH="$PATH" HOME="$HOME" FAKE="$FAKE" AGENTS_CONF="$AGENTS_CONF" AGENTS_HC_AUTO=1 \
