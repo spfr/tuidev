@@ -10,7 +10,10 @@
 function bar_line(tag, p, c, rest) { print B lc(tag, 8) e gauge(p, BAR, -1, c, DIM, "") "  " rest }
 function gb(k) { return sprintf("%.1fG", k / 1048576) }
 function head_memory(   p, c, t) {
-    if (free !~ /^[0-9]+$/) { print B "MEMORY" e "  pressure " level; return }
+    if (free !~ /^[0-9]+$/) {
+        print B lc("MEMORY", 8) e (gstate == "unknown" ? "unknown: can't be read from inside a sandbox" : "pressure " (level == "-" ? "unknown" : level))
+        return
+    }
     p = 100 - free
     c = level == "critical" ? NEED : level == "warn" ? WARN : RUN
     t = p "%" (narrow ? "" : " used")
@@ -26,11 +29,23 @@ function head_swap(   p, hi) {
     p = 100 * su / stot; hi = p >= high
     bar_line("SWAP", p, hi ? WARN : RUN, (hi ? WARN "! " : "") sprintf("%.1f of %s", su / 1048576, gb(stot)) (hi ? e : ""))
 }
+function ago(s) { s += 0; return s >= 3600 ? int(s / 3600) "h" : s >= 60 ? int(s / 60) "m" : s "s" }
 function head_guard(   t) {
-    t = gstate == "on" ? "running (pid " gpid ")" : gstate == "stopped" ? WARN "not running" e " (agents mem restart)" : gstate == "off" ? "off (AGENTS_MEM_GUARD=off)" : "not running (run \"agents mem guard\" in a tmux pane)"
+    if (gstate == "on") t = "running (pid " gpid ")"
+    else if (gstate == "stalled") t = WARN "stalled" e " (pid " gpid ", no look for " ago(gage) "; agents mem restart)"
+    else if (gstate == "unknown") t = "unknown: the process table can't be read from inside a sandbox"
+    else if (gstate == "stopped") t = WARN "not running" e " (agents mem restart)"
+    else if (gstate == "off") t = "off (AGENTS_MEM_GUARD=off)"
+    else t = "not running (run \"agents mem guard\" in a tmux pane)"
     # Its sizes are over the table's bars.
     if (gstate != "off") t = t " " gl("dot") " " gmode
-    if (stops + 0 > 0) t = t " " gl("dot") " " stops " " (stops == 1 ? "stop" : "stops") " in 7 days"
+    # Where to read them: an escalation (the tool command that kept starting
+    # the runaway was stopped) says why in the log.
+    if (stops + 0 > 0) {
+        t = t " " gl("dot") " " stops " " (stops == 1 ? "stop" : "stops") " in 7 days"
+        if (escal + 0 > 0) t = t ", " escal " escalated to the tool command"
+        t = t " (agents mem log)"
+    }
     print B lc("GUARD", 8) e t
 }
 # table_head — the column titles, the guard's two sizes above where the bar
@@ -51,6 +66,7 @@ BEGIN {
     warn += 0; stop += 0; high += 0
     head_memory(); head_swap(); head_guard()
     print ""
+    if (late) print DIM "top did not answer in " wait " s: no footprints this time" e
     table_head()
 }
 {

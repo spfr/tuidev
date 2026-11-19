@@ -18,9 +18,12 @@
 #
 # memory.tsv, in $AGENTS_DATA_DIR (private, names only, pruned with the
 # history), one line per incident:
-#   epoch event pid name label project session footprint_kib rss_kib free_pct swap_used_kib
-#   event:   warn (past AGENTS_MEM_WARN, or a doubling of it), grow (faster
-#            than AGENTS_MEM_RATE), stop (the guard stopped it), refused (it
+#   epoch event pid name label project session footprint_kib rss_kib free_pct swap_used_kib [why]
+#   event:   warn (past the warning, or a doubling of it), grow (faster
+#            than AGENTS_MEM_RATE), stop (the guard stopped it), escalate
+#            (the same script was stopped again under the same tool command,
+#            so that command was stopped: pid and name are the command's,
+#            label the script's, and why says what repeated), refused (it
 #            could not), pressure (memory pressure turned critical; the
 #            biggest process at the time)
 #   label:   the script an interpreter runs (clientFuelToday.test.js), "-"
@@ -29,8 +32,16 @@
 # The LaunchAgent the monitoring pack installs on macOS to run the guard.
 AGENTS_MEM_LABEL="dev.tuidev.memguard"
 
-# _agents_mem_top ARGS... — macOS top, one sample (the tests replace it).
-_agents_mem_top() { LC_ALL=C top -l 1 "$@" 2>/dev/null; }
+# _AGENTS_MEM_PROBE_WAIT — seconds a footprint or top probe may take. Each
+# takes well under a second; one that hangs (a wedged sampler under heavy
+# memory pressure) is cut off, and the guard goes on with the readings it has
+# (_agents_mem_fp fails with 124) instead of stalling. Two of them in a look
+# still fit in three polls, the age at which `agents mem` calls it stalled.
+_AGENTS_MEM_PROBE_WAIT=5
+
+# _agents_mem_top ARGS... — macOS top, one sample, at most
+# _AGENTS_MEM_PROBE_WAIT seconds (124 when cut off; the tests replace it).
+_agents_mem_top() { _agents_timeout "$_AGENTS_MEM_PROBE_WAIT" env LC_ALL=C top -l 1 "$@" 2>/dev/null; }
 
 # _agents_mem_parse_top < top output — "pid<TAB>kib" for each row of a
 # `top -stats pid,mem` sample (MEM as 2809M, 1.2G, 512K or 0B, maybe with a
@@ -45,9 +56,9 @@ _agents_mem_parse_top() {
         $1 == "PID" { f = 1 }'
 }
 
-# _agents_mem_footprint PID... — macOS footprint's totals for those pids (the
-# tests replace it).
-_agents_mem_footprint() { LC_ALL=C footprint --noCategories -f bytes "$@" 2>/dev/null; }
+# _agents_mem_footprint PID... — macOS footprint's totals for those pids, at
+# most _AGENTS_MEM_PROBE_WAIT seconds (124 when cut off; the tests replace it).
+_agents_mem_footprint() { _agents_timeout "$_AGENTS_MEM_PROBE_WAIT" env LC_ALL=C footprint --noCategories -f bytes "$@" 2>/dev/null; }
 
 # _agents_mem_parse_footprint < footprint output — "pid<TAB>kib" for each
 # process's phys_footprint (what top's MEM shows), from `footprint
@@ -62,14 +73,22 @@ _agents_mem_parse_footprint() {
 # _agents_mem_fp PID... — "pid<TAB>footprint_kib" for each it can read;
 # nothing off macOS (RSS is the footprint there). footprint reads your own
 # processes for 20 to 90 ms of CPU each; top, for the rest (other users'),
-# samples every process whatever it is asked, about half a second.
+# samples every process whatever it is asked, about half a second. Fails with
+# 124 when a probe was cut off: what it printed then is dropped (a cut-off
+# sample could read as a tiny footprint), and the pids it did not answer for
+# have no reading this look.
 _agents_mem_fp() {
     [[ "$OSTYPE" == darwin* && $# -gt 0 ]] || return 0
-    local a=() p got
-    got="$(_agents_mem_footprint "$@" | _agents_mem_parse_footprint)"
+    local a=() p got="" raw rc=0
+    if raw="$(_agents_mem_footprint "$@")"; then :; elif [[ $? -eq 124 ]]; then rc=124 raw=""; fi
+    [[ -z "$raw" ]] || got="$(printf '%s\n' "$raw" | _agents_mem_parse_footprint)"
     [[ -z "$got" ]] || printf '%s\n' "$got"
     for p in "$@"; do [[ $'\n'"$got" == *$'\n'"$p"$'\t'* ]] || a+=(-pid "$p"); done
-    [[ ${#a[@]} -eq 0 ]] || _agents_mem_top -stats pid,mem "${a[@]}" | _agents_mem_parse_top
+    if [[ ${#a[@]} -gt 0 ]]; then
+        if raw="$(_agents_mem_top -stats pid,mem "${a[@]}")"; then :; elif [[ $? -eq 124 ]]; then rc=124 raw=""; fi
+        [[ -z "$raw" ]] || printf '%s\n' "$raw" | _agents_mem_parse_top
+    fi
+    return "$rc"
 }
 
 # _agents_mem_measured — true where a footprint is not RSS and costs a sample
@@ -196,6 +215,23 @@ _agents_mem_kill_kib() {
     else echo $((24 * 1048576)); fi
 }
 
+# _AGENTS_MEM_WARN_PCT — the warning never sits above this % of the stop
+# size. With the stop at half the RAM, an 8 GB warning would be the stop
+# itself on 16 GB and past it below that, so the first notice would be the
+# stop. At 60 % the warning comes first everywhere, and 40 % of the stop size
+# (1.6 GB on an 8 GB Mac, 3.2 GB on 16 GB) is left between them: at least
+# 8 s at AGENTS_MEM_RATE, more than one poll; a lower share would warn about
+# processes that are big but ordinary (2 GB on 8 GB at 50 %).
+_AGENTS_MEM_WARN_PCT=60
+
+# _agents_mem_warn_kib STOP_KIB — the guard's warning size: AGENTS_MEM_WARN GB,
+# or _AGENTS_MEM_WARN_PCT % of STOP_KIB when that is smaller.
+_agents_mem_warn_kib() {
+    local w=$((AGENTS_MEM_WARN * 1048576)) f=$((${1:-0} * _AGENTS_MEM_WARN_PCT / 100))
+    [[ $f -le 0 || $f -ge $w ]] || w="$f"
+    echo "$w"
+}
+
 # _agents_mem_gb KIB — "16.6G" (one decimal), for messages.
 _agents_mem_gb() { printf '%d.%dG' $(($1 / 1048576)) $(($1 * 10 / 1048576 % 10)); }
 
@@ -281,12 +317,12 @@ agents_mem_tick() {
     local total free level su stot warn stopkib screen floor snap cands fps="" now
     local pid start rss uid name label root rkind fp f v tok step last ts grew srss rate news="" prev="" first=""
     local what proj session msg stopped="" dry="${AGENTS_DRY_RUN:-false}" meas=0 busy=0 want=" " pf pts seen
-    local fall=0 hot=0
+    local fall=0 hot=0 late=0 tool tstart tname esc gone=" " why
     [[ "$AGENTS_MEM_GUARD" != off ]] || { echo "the memory guard is off (AGENTS_MEM_GUARD=off)"; return 0; }
     _agents_now now
     IFS=$'\t' read -r total free level su stot <<<"$(agents_mem_machine)"
     [[ "$total" =~ ^[0-9]+$ ]] || total=0
-    warn=$((AGENTS_MEM_WARN * 1048576)); stopkib="$(_agents_mem_kill_kib "$total")"
+    stopkib="$(_agents_mem_kill_kib "$total")"; warn="$(_agents_mem_warn_kib "$stopkib")"
     screen=$((warn / 2)); floor=0
     [[ "$level" == warn || "$level" == critical ]] && floor=524288
     snap="$(agents_snapshot)"
@@ -309,16 +345,20 @@ agents_mem_tick() {
             _agents_mem_state_get "$pid@$start"
             if [[ $busy == 1 ]] || _agents_mem_hot "$pid" "$uid" "$root" || _agents_mem_stale "$rss"; then want+="$pid "; fi
         done <<<"$cands"
+        # A probe cut off (124) is no reading for the pids it did not answer
+        # for: never a footprint of zero, never a reason to stop anything.
         # shellcheck disable=SC2086  # one pid per word
-        [[ "$want" == " " ]] || fps="$(_agents_mem_fp $want)"
+        if [[ "$want" != " " ]] && ! fps="$(_agents_mem_fp $want)"; then late=1; fi
     fi
-    while IFS=$'\t' read -r pid start rss uid name label root rkind; do
+    while IFS=$'\t' read -r pid start rss uid name label root rkind tool tstart tname; do
         [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        # Its tool command was stopped this look, with it in its tree.
+        [[ "$gone" != *" ${tool:--} "* ]] || continue
         tok="$pid@$start"; what="$(_agents_mem_what "$name" "$label")"
         session=-; [[ "$root" == - ]] || session="$rkind:$root"
         _agents_mem_state_get "$tok"
         fp="$rss"
-        if [[ $meas == 0 || "$want" == *" $pid "* ]]; then
+        if [[ $meas == 0 ]] || { [[ "$want" == *" $pid "* ]] && { [[ $late == 0 ]] || [[ $'\n'"$fps" == *$'\n'"$pid"$'\t'* ]]; }; }; then
             while IFS=$'\t' read -r f v; do [[ "$f" == "$pid" && "$v" -gt "$fp" ]] && fp="$v"; done <<<"$fps"
             seen="$fp $now" srss="$rss"
         else
@@ -334,14 +374,34 @@ agents_mem_tick() {
             && { [[ $fp -ge $stopkib ]] || { [[ "$level" == critical && $fp -ge $warn && -z "${stopped:-}" ]]; }; }; then
             proj="$(_agents_mem_project "$pid")"
             if [[ $fp -ge $stopkib ]]; then msg="past the $(_agents_mem_gb "$stopkib") limit"; else msg="while memory pressure is critical"; fi
+            # Stopped before under the same tool command: its runner started
+            # it again, so the runner goes (the command the agent started,
+            # never the agent: memory.awk's TOOL is below it).
+            esc=""
+            if [[ "$tool" =~ ^[0-9]+$ && "$tool" != "$pid" && "$tool" != "$root" ]] \
+                && _agents_mem_respawned "$tool@$tstart" "$what" "$now"; then
+                esc="$REPLY"
+                why="$what stopped again $((now - ${esc%% *}))s after the guard stopped pid ${esc#* } under the same command"
+            fi
             if [[ "$dry" == true ]]; then
-                echo "would stop $what in $proj ($session): $(_agents_mem_gb "$fp") $msg"
+                if [[ -n "$esc" ]]; then echo "would stop $tname (pid $tool), the command running $what in $proj ($session): $why"
+                else echo "would stop $what in $proj ($session): $(_agents_mem_gb "$fp") $msg"; fi
                 continue
             fi
+            if [[ -n "$esc" ]] && _AGENTS_EV_KIND=guard _AGENTS_EV_REASONS="$tool"$'\t'memory$'\t'"$session" \
+                _agents_kill_unattended "$tool@$tstart" >/dev/null 2>&1; then
+                _agents_mem_record escalate "$tool" "$tname" "$label" "$proj" "$session" "$fp" "$rss" "$free" "$su" "$why"
+                _agents_mem_say "Stopped $tname in $proj, the command that keeps starting $what: it held $(_agents_mem_gb "$fp") $msg again $((now - ${esc%% *}))s after the last stop ($session)" "$pid" "$snap"
+                stopped=1 gone+="$tool "
+                continue
+            fi
+            # Refused for the command (it hosts a session, say), or the first
+            # time: PID's own tree, as ever.
             if _AGENTS_EV_KIND=guard _AGENTS_EV_REASONS="$pid"$'\t'memory$'\t'"$session" _agents_kill_unattended "$tok" >/dev/null 2>&1; then
                 _agents_mem_record stop "$pid" "$name" "$label" "$proj" "$session" "$fp" "$rss" "$free" "$su"
                 _agents_mem_say "Stopped $what in $proj: it held $(_agents_mem_gb "$fp") $msg ($session)" "$pid" "$snap"
                 stopped=1
+                [[ ! "$tool" =~ ^[0-9]+$ ]] || _AGENTS_MEM_STOPS+="$now"$'\t'"$tool@$tstart"$'\t'"$what"$'\t'"$pid"$'\n'
             else
                 _agents_mem_record refused "$pid" "$name" "$label" "$proj" "$session" "$fp" "$rss" "$free" "$su"
                 _agents_mem_say "Could not stop $what in $proj ($(_agents_mem_gb "$fp")): agents kill $tok" "$pid" "$snap"
@@ -425,41 +485,102 @@ _agents_mem_next() {
     return 0
 }
 
+# _AGENTS_MEM_RESPAWN — seconds after a stop in which the same script
+# stopped again under the same tool command (pid and start) means its runner
+# started it again (a test runner respawns a crashed worker within seconds),
+# so the guard stops that command instead. Two minutes covers a respawned
+# worker regrowing to the stop size of a 48 GB Mac (24 GB) at about the
+# 200 MB/s of AGENTS_MEM_RATE; an agent running the command again starts a
+# new one (another pid), which is never matched, however soon.
+_AGENTS_MEM_RESPAWN=120
+
+# _agents_mem_respawned TOOL_TOKEN WHAT NOW — true, REPLY "EPOCH PID" (the
+# earlier stop), when the guard stopped WHAT under TOOL_TOKEN within
+# _AGENTS_MEM_RESPAWN seconds of NOW (_AGENTS_MEM_STOPS: "epoch<TAB>tool
+# token<TAB>what<TAB>pid" lines, the latest last).
+_agents_mem_respawned() {
+    local e t w p hit=""
+    while IFS=$'\t' read -r e t w p; do
+        [[ "$e" =~ ^[0-9]+$ && "$t" == "$1" && "$w" == "$2" ]] || continue
+        [[ $e -le $3 && $(($3 - e)) -le $_AGENTS_MEM_RESPAWN ]] && hit="$e $p"
+    done <<<"${_AGENTS_MEM_STOPS:-}"
+    [[ -n "$hit" ]] && REPLY="$hit"
+}
+
 # The guard's state, kept across its looks and restarts in the run dir:
-# "level LEVEL", "free FREE_PCT EPOCH" (the last look's), then one "TOKEN
-# step last_kib ts grew srss_kib" line per candidate.
+# "level LEVEL", "free FREE_PCT EPOCH" (the last look's), one "stop<TAB>EPOCH
+# <TAB>TOOL_TOKEN<TAB>WHAT<TAB>PID" line per stop of the last
+# _AGENTS_MEM_RESPAWN seconds, then one "TOKEN step last_kib ts grew srss_kib"
+# line per candidate.
 _agents_mem_state_load() {
     local line
-    _AGENTS_MEM_STATE="" _AGENTS_MEM_LEVEL=- _AGENTS_MEM_FREE=""
+    _AGENTS_MEM_STATE="" _AGENTS_MEM_LEVEL=- _AGENTS_MEM_FREE="" _AGENTS_MEM_STOPS=""
     while IFS= read -r line; do
         case "$line" in
             "level "*) _AGENTS_MEM_LEVEL="${line#level }" ;;
             "free "*) _AGENTS_MEM_FREE="${line#free }" ;;
+            stop$'\t'*) _AGENTS_MEM_STOPS+="${line#stop$'\t'}"$'\n' ;;
             *@*) _AGENTS_MEM_STATE+="$line"$'\n' ;;
         esac
     done < <(cat "$AGENTS_RUN_DIR/memguard.state" 2>/dev/null)
 }
 _agents_mem_state_save() {
+    local line e now keep=""
+    _agents_now now
+    while IFS= read -r line; do
+        e="${line%%$'\t'*}"
+        [[ "$e" =~ ^[0-9]+$ && $((now - e)) -le $_AGENTS_MEM_RESPAWN ]] && keep+="stop"$'\t'"$line"$'\n'
+    done <<<"${_AGENTS_MEM_STOPS:-}"
     { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$AGENTS_RUN_DIR/memguard.state" \
-        "level $_AGENTS_MEM_LEVEL"$'\n'"free ${_AGENTS_MEM_FREE:--}"$'\n'"${_AGENTS_MEM_STATE%$'\n'}"; } 2>/dev/null
+        "level $_AGENTS_MEM_LEVEL"$'\n'"free ${_AGENTS_MEM_FREE:--}"$'\n'"$keep${_AGENTS_MEM_STATE%$'\n'}"; } 2>/dev/null
     return 0
 }
 
-# _agents_mem_guard_state — on PID (a guard runs), stopped (the LaunchAgent is
-# installed but no guard runs), off (AGENTS_MEM_GUARD=off) or none (nothing
-# runs one: Linux, or no monitoring pack).
+# _agents_mem_beat — the guard's heartbeat, memguard.beat: "EPOCH NEXT_SECS",
+# written by its loop at the start and after every look, so `agents mem` can
+# tell a guard that looks from one stuck in a look while its pid lives on.
+_agents_mem_beat() {
+    local now
+    _agents_now now
+    { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$AGENTS_RUN_DIR/memguard.beat" "$now ${_AGENTS_MEM_NEXT:-$AGENTS_MEM_POLL}"; } 2>/dev/null
+    return 0
+}
+
+# _agents_mem_ps_ok — true when this shell can read the process table (ps
+# shows pid 1); false inside a sandbox that hides other processes or forbids
+# ps (the tests replace it).
+_agents_mem_ps_ok() { [[ -n "$(LC_ALL=C ps -o pid= -p 1 2>/dev/null)" ]]; }
+
+# _agents_mem_guard_state — "on PID" (a guard runs and looks), "stalled PID
+# AGE" (its pid lives, but its heartbeat is AGE seconds old: more than three
+# of its polls), unknown (the process table can't be read: inside a
+# sandbox), stopped (the LaunchAgent is installed but no guard runs), off
+# (AGENTS_MEM_GUARD=off) or none (nothing runs one: Linux, or no monitoring
+# pack).
 _agents_mem_guard_state() {
-    local h="" pid start
+    local h="" pid start b="" at next now rc=1
     [[ "$AGENTS_MEM_GUARD" != off ]] || { echo off; return; }
     { read -r h < "$AGENTS_RUN_DIR/memguard.lock/holder"; } 2>/dev/null
     read -r pid start _ <<<"$h"
-    if [[ "$pid" =~ ^[0-9]+$ ]] && _agents_holder_check "" "" "$pid" "${start:--}"; then echo "on $pid"; return; fi
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then _agents_holder_check "" "" "$pid" "${start:--}"; rc=$?; fi
+    if [[ $rc -eq 0 ]]; then
+        # No heartbeat is a guard from before it had one: on.
+        { read -r b < "$AGENTS_RUN_DIR/memguard.beat"; } 2>/dev/null
+        read -r at next _ <<<"$b"
+        [[ "$next" =~ ^[0-9]+$ && $next -ge $AGENTS_MEM_POLL ]] || next="$AGENTS_MEM_POLL"
+        _agents_now now
+        if [[ "$at" =~ ^[0-9]+$ && $((now - at)) -gt $((3 * next)) ]]; then echo "stalled $pid $((now - at))"; else echo "on $pid"; fi
+        return
+    fi
+    # The holder lives but ps can't say whose it is, or ps reads nothing.
+    if [[ $rc -eq 2 ]] || ! _agents_mem_ps_ok; then echo unknown; return; fi
     if [[ -f "$HOME/Library/LaunchAgents/$AGENTS_MEM_LABEL.plist" ]]; then echo stopped; else echo none; fi
 }
 
 # _agents_mem_guard_loop — `agents mem guard`: a look every AGENTS_MEM_POLL
 # seconds while something needs watching, every AGENTS_MEM_IDLE (a minute with
-# no agent session) otherwise (_agents_mem_next), for good (the LaunchAgent runs it, KeepAlive on failure). One
+# no agent session) otherwise (_agents_mem_next), for good (the LaunchAgent
+# runs it, KeepAlive on failure), a heartbeat after each (_agents_mem_beat). One
 # guard at a time (memguard.lock): a second one waits a minute and fails, so
 # launchd tries again later; with the guard off it exits 0 and stays down.
 _agents_mem_guard_loop() {
@@ -472,8 +593,10 @@ _agents_mem_guard_loop() {
         return 1
     fi
     trap '[[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null; _agents_unlock "$lock"; exit 0' TERM INT HUP
+    _agents_mem_beat
     while :; do
         agents_mem_tick >/dev/null 2>&1 || true
+        _agents_mem_beat
         sleep "${_AGENTS_MEM_NEXT:-$AGENTS_MEM_POLL}" &
         sleeper=$!
         wait "$sleeper"
@@ -483,29 +606,34 @@ _agents_mem_guard_loop() {
 
 # _agents_mem_tsv_row — the menu's "memg" row:
 #   memg STATE GUARD_PID WARN_KIB STOP_KIB LAST_EPOCH LAST_EVENT LAST_WHAT LAST_PROJECT LAST_FP_KIB
-# STATE as _agents_mem_guard_state (on, stopped, off, none); the last
+# STATE as _agents_mem_guard_state (on, stalled, unknown, stopped, off,
+# none); WARN_KIB the guard's warning (_agents_mem_warn_kib); the last
 # incident from memory.tsv ("-" and 0 when there is none).
 _agents_mem_tsv_row() {
-    local st gpid=- line e ev pid name label proj fp
-    read -r st gpid <<<"$(_agents_mem_guard_state)"
+    local st gpid=- line e ev pid name label proj fp stop
+    read -r st gpid _ <<<"$(_agents_mem_guard_state)"
     line="$(tail -n 1 "$AGENTS_DATA_DIR/memory.tsv" 2>/dev/null)"
     IFS=$'\t' read -r e ev pid name label proj _ fp _ <<<"$line"
     [[ "$e" =~ ^[0-9]+$ ]] || { e=0 ev=- name=- label=- proj=- fp=0; }
-    printf 'memg\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$st" "${gpid:--}" $((AGENTS_MEM_WARN * 1048576)) \
-        "$(_agents_mem_kill_kib "$(_agents_mem_total)")" "$e" "${ev:--}" "$(_agents_mem_what "${name:--}" "${label:--}")" "${proj:--}" "${fp:-0}"
+    stop="$(_agents_mem_kill_kib "$(_agents_mem_total)")"
+    printf 'memg\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$st" "${gpid:--}" "$(_agents_mem_warn_kib "$stop")" \
+        "$stop" "$e" "${ev:--}" "$(_agents_mem_what "${name:--}" "${label:--}")" "${proj:--}" "${fp:-0}"
 }
 
 # _agents_mem_show — `agents mem`: the machine's memory and swap as bars, the
 # guard, the processes holding the most (by footprint on macOS) on a bar to the
 # guard's stop size, with the session and project each runs in, and the last
-# incidents. The bars are awk/mem_view.awk's.
+# incidents (an escalation with why under it). The bars are awk/mem_view.awk's.
 _agents_mem_show() {
-    local total free level su stot st gpid top pids="" rows line pid fp cwds e ev name label proj session rss what n=0 stops=0 list=""
+    local total free level su stot st gpid gage top pids="" rows line pid fp cwds e ev name label proj session rss what n=0 stops="0 0" list=""
+    local stop note late=0
     IFS=$'\t' read -r total free level su stot <<<"$(agents_mem_machine)"
-    read -r st gpid <<<"$(_agents_mem_guard_state)"
+    read -r st gpid gage <<<"$(_agents_mem_guard_state)"
+    stop="$(_agents_mem_kill_kib "$total")"
     # The ten holding the most: top's own order on macOS, ps's RSS elsewhere.
     if [[ "$OSTYPE" == darwin* ]]; then
-        top="$(_agents_mem_top -o mem -n 10 -stats pid,mem | _agents_mem_parse_top)"
+        if top="$(_agents_mem_top -o mem -n 10 -stats pid,mem)"; then top="$(printf '%s\n' "$top" | _agents_mem_parse_top)"
+        else [[ $? -ne 124 ]] || late=1; top=""; fi
     else
         top="$(LC_ALL=C ps axo pid=,rss= 2>/dev/null | sort -k2,2nr | head -n 10 | awk '{ print $1 "\t" $2 }')"
     fi
@@ -522,7 +650,7 @@ _agents_mem_show() {
         [[ "$pid" =~ ^[0-9]+$ ]] || continue
         line="$(awk -F '\t' -v p="$pid" '$1 == p { print; exit }' <<< "$rows")"
         [[ -n "$line" ]] || continue
-        IFS=$'\t' read -r _ _ rss _ name label root rkind <<<"$line"
+        IFS=$'\t' read -r _ _ rss _ name label root rkind _ <<<"$line"
         [[ $rss -gt $fp ]] && fp="$rss"
         proj="$(awk -F '\t' -v p="$pid" '$1 == p { print $2; exit }' <<< "$cwds")"
         if [[ "$proj" == /* ]]; then proj="$(agents_project "$proj")"; else proj=-; fi
@@ -533,24 +661,29 @@ _agents_mem_show() {
     [[ ! -s "$AGENTS_DATA_DIR/memory.tsv" ]] || stops="$(_agents_mem_stops)"
     printf '%s' "$list" | W="${AGENTS_WIDTH:-120}" _agents_awk_colored "lib_fmt mem_view" -F '\t' \
         -v total="${total:--}" -v free="${free:--}" -v level="${level:--}" -v su="${su:--}" -v stot="${stot:--}" \
-        -v gstate="$st" -v gpid="${gpid:--}" -v gmode="$AGENTS_MEM_GUARD" -v stops="$stops" \
-        -v warn=$((AGENTS_MEM_WARN * 1048576)) -v stop="$(_agents_mem_kill_kib "$total")" -v high="$_AGENTS_SWAP_HIGH"
+        -v gstate="$st" -v gpid="${gpid:--}" -v gage="${gage:-0}" -v gmode="$AGENTS_MEM_GUARD" -v stops="${stops% *}" -v escal="${stops#* }" \
+        -v warn="$(_agents_mem_warn_kib "$stop")" -v stop="$stop" -v high="$_AGENTS_SWAP_HIGH" -v late="$late" -v wait="$_AGENTS_MEM_PROBE_WAIT"
     [[ -s "$AGENTS_DATA_DIR/memory.tsv" ]] || return 0
     echo
-    printf '%sINCIDENTS%s %s(%s)%s\n' "$C_B" "$C_0" "$C_DIM" "${AGENTS_DATA_DIR/#"$HOME"/\~}/memory.tsv" "$C_0"
-    while IFS=$'\t' read -r e ev pid name label proj session fp _; do
+    printf '%sINCIDENTS%s %s(%s; agents mem log)%s\n' "$C_B" "$C_0" "$C_DIM" "${AGENTS_DATA_DIR/#"$HOME"/\~}/memory.tsv" "$C_0"
+    while IFS=$'\t' read -r e ev pid name label proj session fp _ _ _ note; do
         [[ "$e" =~ ^[0-9]+$ ]] || continue
         n=$((n + 1))
         printf '  %s  %-8s %-38.38s %-18.18s %8s  %s\n' "$(date -r "$e" '+%b %d %H:%M' 2>/dev/null || date -d "@$e" '+%b %d %H:%M' 2>/dev/null)" \
             "$ev" "$(_agents_mem_what "$name" "$label")" "$proj" "$(_agents_mem_gb "${fp:-0}")" "$session"
+        [[ "$ev" != escalate || -z "$note" || "$note" == - ]] || printf '  %s%14s %s%s\n' "$C_DIM" "" "$note" "$C_0"
     done < <(tail -n 8 "$AGENTS_DATA_DIR/memory.tsv" 2>/dev/null)
 }
 
-# _agents_mem_stops — how many runaways the guard stopped in the last 7 days.
+# _agents_mem_stops — "STOPS ESCALATIONS": how many runaways the guard stopped
+# in the last 7 days (an escalation, which stopped the command that kept
+# starting one, counts as a stop), and how many of those were escalations.
 _agents_mem_stops() {
     local now
     _agents_now now
-    LC_ALL=C awk -F '\t' -v cut=$((now - 7 * 86400)) '$2 == "stop" && $1 + 0 >= cut { n++ } END { print n + 0 }' "$AGENTS_DATA_DIR/memory.tsv"
+    LC_ALL=C awk -F '\t' -v cut=$((now - 7 * 86400)) '
+        ($2 == "stop" || $2 == "escalate") && $1 + 0 >= cut { n++; if ($2 == "escalate") x++ }
+        END { print n + 0, x + 0 }' "$AGENTS_DATA_DIR/memory.tsv"
 }
 
 # agents_mem [show|check [-n]|guard|log [N]|restart] — `agents mem`.
