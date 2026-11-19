@@ -13,7 +13,8 @@ tuidev: an opinionated, agent-first terminal setup for macOS (and Linux). It is 
 - `configs/`: what gets installed into `$HOME`.
 - `bin/sbx`: the Seatbelt wrapper.
 - `bin/secret`: API tokens in the OS secret store, installed by the core pack ([docs/secrets.md](docs/secrets.md)).
-- `bin/agents` + `lib/agents/`: the agent process monitor the `monitoring` pack installs, a thin entrypoint and its modules (map in [docs/engineering.md](docs/engineering.md#the-agents-modules)).
+- `bin/agents` + `lib/agents/`: the agent process monitor the `monitoring` pack installs, a thin entrypoint and its modules (map in [docs/engineering.md](docs/engineering.md#the-agents-modules)), with `bin/mcp-lazy` (Perl), which starts an MCP server on its first tool call.
+- `lib/fan/`: the `cooling` pack's fan daemon, one Swift file built at install.
 
 It is a **public** repo that ships best practices only. The architecture map is in [docs/engineering.md](docs/engineering.md).
 
@@ -26,7 +27,7 @@ make lint              # shellcheck -x over every shell file (list: SHELL_FILES 
 make validate-configs  # JSON / TOML / Lua / shell syntax
 make test-lib          # scripts/lib/test_*.sh unit harnesses
 make check-links       # relative links in every tracked .md
-make check-paths       # no hardcoded user paths or personal hosts (CI's check-paths job)
+make check-paths       # no hardcoded user paths or personal hosts (CI runs it too)
 make ci-test           # all of the above: what CI gates on, minus the macOS and container jobs
 ```
 

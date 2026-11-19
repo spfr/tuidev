@@ -1,6 +1,6 @@
 # Contributing to tuidev
 
-Read this before you open an issue or a pull request. tuidev sets up a terminal for running Claude Code and Codex agents: a shell, agents sandboxed by default, a view of which agent needs you, and installs in layers you can undo. A good change makes it better at that without growing the core. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
+Read this before you open an issue or a pull request. tuidev lets you run Claude Code and Codex agents anywhere (any machine, VM or phone) and see everything they do, with agents sandboxed by default and an install you can undo. It is built on open tools and adds to them. A good change makes it better at that without growing the core. Read [VISION.md](VISION.md) before proposing anything directional, and [docs/engineering.md](docs/engineering.md) before touching `install.sh`, `scripts/`, `bin/` or `configs/`. It holds the architecture, shared libraries, pack contract and managed-block rules that this file only summarizes.
 
 ## Reporting issues
 
@@ -26,13 +26,13 @@ Search existing issues first, then use the issue template. Include your tuidev v
 | `make lint` | shellcheck over every shell file (the list is `SHELL_FILES` in the Makefile) |
 | `make validate-configs` | JSON, TOML, Lua and shell syntax of everything in `configs/` |
 | `make check-links` | Every relative link in every tracked Markdown file |
-| `make check-paths` | No hardcoded user paths or personal mDNS hosts (CI's check-paths job) |
+| `make check-paths` | No hardcoded user paths or personal mDNS hosts (CI runs it too) |
 | `make test-lib` | Every `scripts/lib/test_*.sh` unit harness, including `test_contract.sh` (cross-file names, documented packs) |
 | `make test` / `test-core` / `test-all` | `scripts/test_suite.sh`: tagged checks against the installed machine |
 | `make container-test` | `test_suite.sh --tag core` in an Alpine image. It tests the scripts, configs and tool contract on Linux, **not** the installer. The apt path is exercised on a real Debian box. |
 | `make sbx-test` | On macOS: `sbx` can read the project and cannot read `~/.ssh` |
 
-CI runs lint, validate-configs (`--strict`), check-links, check-paths, test-lib and the container core-tag test. On macOS it also parses the Seatbelt profiles, runs the lib tests under bash 3.2, and does a `desktop` install dry-run. On Linux it does `minimal` and `remote` dry-runs. The job list is in [docs/engineering.md](docs/engineering.md#verification).
+CI runs lint, validate-configs (`--strict`), check-links, check-paths, test-lib and the container core-tag test. On macOS it also parses the Seatbelt profiles, runs the lib tests under bash 3.2, and does `desktop` and `full` install dry-runs. On Linux it does `minimal` and `remote` dry-runs and checks the `agents` views under mawk. The job list is in [docs/engineering.md](docs/engineering.md#verification).
 
 ## Where changes go
 
@@ -41,12 +41,12 @@ CI runs lint, validate-configs (`--strict`), check-links, check-paths, test-lib 
 - **Removing something the installer used to place** needs a migration in `scripts/migrations/` (see [its README](scripts/migrations/README.md)).
 - **Optional tools like `nvim` and `tmux`** are packs like any other: follow the pack contract in [docs/engineering.md](docs/engineering.md#the-pack-contract), not a special case.
 - **Seatbelt profiles** go in `configs/sandbox/profiles/*.sb`. Every profile must parse under `sandbox-exec` (CI checks this on macOS).
-- **Themes** are one `configs/themes/<name>/palette.toml` with all 26 keys (see [docs/theming.md](docs/theming.md)).
+- **Themes** are one `configs/themes/<name>/palette.toml` with all 26 color keys (see [docs/theming.md](docs/theming.md)).
 - **README images** are rendered from VHS tapes over demo fixtures: change the tape or a fixture in `docs/assets/tapes/` and run `make screenshots` (see [docs/engineering.md](docs/engineering.md#screenshots)). Never commit a capture of your own machine.
 
 Good areas to contribute: new packs, tighter Seatbelt rules, Linux parity (a `bubblewrap` backend for `sbx`; wider dnf and pacman coverage), bug fixes with a test, and docs that gain clarity without gaining volume.
 
-Not wanted: GUI apps outside the `ui` pack; AI that runs in-editor by default; breaking public commands (`t`, `sbx`, `claude -w`, …) without a deprecation path; non-FOSS tools on default paths; third-party `curl | sh` installers run on the user's behalf (tuidev's own `get.sh` is the one script it asks users to pipe).
+Not wanted: GUI apps outside the `ui` pack; AI that runs in-editor by default; breaking public commands (`tuidev`, `agents`, `sbx`, `secret`, `t`, …) without a deprecation path; non-FOSS tools on default paths; third-party `curl | sh` installers run on the user's behalf (tuidev's own `get.sh` is the one script it asks users to pipe).
 
 ## Personal vs published
 
@@ -59,7 +59,7 @@ This repository is public, and cloning it should never leak anyone's setup.
 | Hardware *class* ("a Raspberry Pi or NUC") | Your board, services and network layout |
 | Generic agent guidance (`AGENTS.md`) | Machine notes and personal agent instructions (`.local/`, `CLAUDE.local.md`) |
 
-`.gitignore` excludes `*.local`, `.local/` and `CLAUDE.local.md`. The shipped SSH block includes `~/.ssh/config.local*`, and `.zshrc` sources `~/.zshrc.local` last. CI's `no hardcoded paths` job fails on `/Users/<name>/`, `/home/<name>/` and `user@host.local` forms. Placeholders like `/Users/NAME` pass.
+`.gitignore` excludes `*.local`, `.local/` and `CLAUDE.local.md`. The shipped SSH block includes `~/.ssh/config.local*`, and `.zshrc` sources `~/.zshrc.local` last. CI's check-paths step fails on `/Users/<name>/`, `/home/<name>/` and `user@host.local` forms. Placeholders like `/Users/NAME` pass.
 
 ## Getting help
 

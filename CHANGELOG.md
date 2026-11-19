@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Reference docs checked against the code**: module and lib tables complete, the sandbox settings and CI jobs current, each doc opens with what you get from it. [Engineering](docs/engineering.md)
+- **Docs: the README, vision, roadmap, FAQ, quick start and profiles tell one story and claim only what ships**; the roadmap says what is done, next and not planned, and the FAQ says how tuidev differs from Herdr, Rex and the CLIs' own features. [Roadmap](docs/roadmap.md) · [FAQ](docs/FAQ.md)
 
 ## [3.27.1] - 2026-11-19
 
