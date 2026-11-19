@@ -52,9 +52,9 @@ Report the commands you ran and their results. If you couldn't run something, sa
 
 ## Environment (tuidev)
 
-- **Sandbox:** you usually run under your CLI's own native sandbox now (Claude Code's `sandbox.enabled`, Codex's `sandbox_mode = "workspace-write"`), not a wrapper. You can write only to this project, `/tmp` and your CLI's own state dirs, and not to the settings, hooks, instructions, rules, memory or agents a later session loads from them. Credential stores (`~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.npmrc`, the Keychain, and others) are denied. Don't read or write secrets there. `sbx` (macOS Seatbelt) is also available as a general-purpose wrapper for anything else.
-- **Network:** outbound TCP 443 and DNS only. If a package install needs more, ask the human to run it with `sbx --profile standard -- <cmd>`. `gh` doesn't work inside the sandbox, so ask the human.
-- **Long-running processes** (dev servers, watchers, test loops) go in a tmux pane, where they survive disconnects. A backgrounded `&` job dies with your session.
+- **Sandbox:** you run under your CLI's own sandbox (Claude Code's `sandbox.enabled`, Codex's `sandbox_mode = "workspace-write"`). Writes are limited to this project, the temp dir and your CLI's own state, and credential stores (`~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.npmrc`, the Keychain, and others) are denied. When the sandbox refuses something the task needs, say what was refused and ask the human; don't look for another way in.
+- **Network** is restricted too. If an install can't reach a host, report the host; don't switch registries or ports to get around it.
+- **Long-running processes:** a dev server or watcher the human should keep goes in a tmux pane. Run tests and builds in the foreground or as a background task your CLI reports on, and stop whatever you started before you report done.
 - **Parallel work:** use your own git worktree. For Claude Code, `claude -w NAME` or `isolation: worktree`; with any other CLI, `git worktree add` by hand. Never share a dirty index with another agent.
 - **Scriptable tools to use:** `rg`, `fd`, `jq`, `yq`, `git`, `gh`, `delta`, `hyperfine`. The TUIs (`lazygit`, `btm`, `fzf`, `atuin`) are for the human. Don't drive them.
 - **Herdr:** if `HERDR_ENV=1`, you are in a Herdr pane. Use `herdr agent list` / `herdr status`, never the TUI, and don't launch `herdr` again.

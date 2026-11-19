@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`agents statusline`, `bar poke` and the wait hooks start about twice as fast** (17 ms, was 32 ms): they load only the modules they use. [Engineering](docs/engineering.md)
+- **`tuidev check` probes each pack for real.** A pack may define `<pack>_check`; `cooling` and `release-age` no longer warn forever. [Engineering](docs/engineering.md)
+- **`tuidev install --help` and `uninstall --help` read as help**, and hints name commands a one-line install has.
+
+### Fixed
+
+- **`tuidev update` no longer says "Update Complete" when the download or the pull failed**: it ends with "not updated" and exit 1. [Updating](docs/updating.md)
+- **A migration that fails mid-update says where the install stands and how to finish or roll back**; the next update finishes it. [Updating](docs/updating.md)
+- **One update or install at a time.** A second one, from the terminal, the menu bar or Herdr, says who holds the lock. [Updating](docs/updating.md)
+- **`tuidev check` no longer fails inside an agent's sandbox**: the Seatbelt probe is skipped there.
+- **A phone mirror keeps reporting after Herdr was slow or restarted**, and `agents hc up` brings the mirrors back with the core. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
+- **A burst of Herdr events runs the mirror sync at most twice**, with one snapshot.
+- **The link watcher is back within about a minute of the laptop waking**, not five. [Remote](docs/remote.md)
+- **The docs no longer say typing at the desk gives a mirrored pane its size back**: it comes back when the phone stops showing that session. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
+- **The `AGENTS.md` template matches the sandbox**: `gh` and background tasks were described wrongly.
+
 ## [3.25.0] - 2026-11-18
 
 ### Added
