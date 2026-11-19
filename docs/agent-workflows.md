@@ -977,7 +977,7 @@ The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf)
 | `AGENTS_HOG_NOW` | `90` | Current CPU% that makes a process outside any agent tree a hog |
 | `AGENTS_HOG_TOP` | `5` | Hogs listed |
 | `AGENTS_MEM_GUARD` | `kill` | The [memory guard](#memory-guard-agents-mem): `kill` warns, records and stops runaways in agent trees; `warn` only warns and records; `off` does neither |
-| `AGENTS_MEM_WARN` | `8` | GB of memory that gets a process a warning (and again at each doubling), and makes it a memory hog |
+| `AGENTS_MEM_WARN` | `8` | GB of memory that gets a process a warning (and again at each doubling), and makes it a memory hog. The guard warns at this or 60% of its stop size, the smaller |
 | `AGENTS_MEM_KILL` | `0` | GB at which the guard stops a process in an agent tree; `0` is half the RAM |
 | `AGENTS_MEM_RATE` | `200` | MB/s of growth that gets a process one warning |
 | `AGENTS_MEM_POLL` | `5` | Seconds between the guard's looks while something needs watching |
