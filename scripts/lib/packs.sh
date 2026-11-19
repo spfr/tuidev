@@ -77,7 +77,8 @@ pack_run() {
 # asks launchd or systemd about. KIND: launchd (a LaunchAgent in
 # ~/Library/LaunchAgents, loaded), launchd-system (a LaunchDaemon, loaded;
 # only where its plist is), systemd (a user unit, enabled and active) or
-# systemd-enabled (enabled; its process may end by choice). FN: the pack's
+# systemd-enabled (enabled; its process may end by choice) or systemd-file (a
+# timer's service: only the file, whose timer is the job). FN: the pack's
 # own function that installs and starts it again (none: a command for you).
 pack_array() {
     local name="$1" kind="$2" script var

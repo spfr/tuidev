@@ -4,7 +4,8 @@
 # and usage limits current. A sample `agents watch` took within 55 s stands
 # (the run then does nothing), and with AGENTS_AUTO_REAP=1 it runs auto-reap.
 # Off: AGENTS_SAMPLER=0 in ~/.config/agents.conf (no disable needed), or
-# systemctl --user disable --now tuidev-sample.timer until the next update.
+# systemctl --user disable --now tuidev-sample.timer until the next tuidev update
+# or tuidev check --fix; until then tuidev check warns that it is off.
 # Change it with a drop-in (systemctl --user edit tuidev-sample.service): the
 # pack writes this file again on every install and update.
 

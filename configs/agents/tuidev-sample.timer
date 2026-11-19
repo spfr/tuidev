@@ -4,7 +4,8 @@
 # (sudo loginctl enable-linger $USER) a user manager runs only while you are
 # logged in, and so does this.
 # Turn it off: AGENTS_SAMPLER=0 in ~/.config/agents.conf, or
-# systemctl --user disable --now tuidev-sample.timer until the next update.
+# systemctl --user disable --now tuidev-sample.timer until the next tuidev update
+# or tuidev check --fix; until then tuidev check warns that it is off.
 
 [Unit]
 Description=agents sample once a minute

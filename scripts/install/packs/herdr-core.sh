@@ -59,6 +59,7 @@ HERDR_CORE_REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 HERDR_CORE_JOBS=(
     "launchd $HERDR_CORE_LABEL _herdr_core_launchagent"
     "systemd $HERDR_CORE_UNIT.timer _herdr_core_systemd"
+    "systemd-file $HERDR_CORE_UNIT.service _herdr_core_systemd"
 )
 
 _herdr_core_bin() {
@@ -78,7 +79,7 @@ _herdr_core_systemd() {
         || { print_warning "$HERDR_CORE_UNIT.timer did not start: systemctl --user enable --now $HERDR_CORE_UNIT.timer (continuing)"
              print_todo "Start herdr-core: systemctl --user enable --now $HERDR_CORE_UNIT.timer"; return 0; }
     print_info "herdr-core starts with your user manager from now on, and again within 5 minutes if it stops."
-    print_info "  Off: AGENTS_HC_UP=0 in $MONITORING_CONF (a core you stop stays down), or systemctl --user disable --now $HERDR_CORE_UNIT.timer until the next tuidev update"
+    print_info "  Off: AGENTS_HC_UP=0 in $MONITORING_CONF (a core you stop stays down), or systemctl --user disable --now $HERDR_CORE_UNIT.timer until the next tuidev update or tuidev check --fix"
     _monitoring_linger_hint "this timer"
 }
 

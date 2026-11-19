@@ -3,7 +3,8 @@
 # by tuidev-hc.timer: shortly after your user manager starts (at boot, once
 # lingering is on) and every 5 minutes after that. A core that runs is left
 # alone; one that is gone is started again. Nothing here ever stops a core.
-# Turn it off: systemctl --user disable --now tuidev-hc.timer
+# Turn it off: systemctl --user disable --now tuidev-hc.timer (until the next
+# tuidev update or tuidev check --fix; tuidev check warns while it is off)
 # Change it with a drop-in (systemctl --user edit tuidev-hc.service): the
 # pack writes this file again on every install and update.
 

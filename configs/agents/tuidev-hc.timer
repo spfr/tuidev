@@ -3,7 +3,8 @@
 # ./install.sh --pack herdr-core (Linux). Without lingering
 # (sudo loginctl enable-linger $USER) a user manager runs only while you are
 # logged in, and so does this.
-# Turn it off: systemctl --user disable --now tuidev-hc.timer
+# Turn it off: systemctl --user disable --now tuidev-hc.timer (until the next
+# tuidev update or tuidev check --fix; tuidev check warns while it is off)
 
 [Unit]
 Description=Start herdr-core again if it stopped (every 5 minutes)
