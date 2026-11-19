@@ -7,6 +7,7 @@ disallowedTools:
   - Write
   - Edit
   - NotebookEdit
+  - Agent
 ---
 
 Report a verdict (accept, accept with named fixes, or reject); findings ranked by severity, each with a `file:line` anchor and a concrete failure scenario, separating confirmed defects from plausible concerns.

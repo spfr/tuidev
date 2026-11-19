@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Codex subagents no longer pin a model your plan may lack**: the complex and review tiers run on your session's model, the rest on GPT-6 Luna, and a new `explorer` puts search on Luna too. [Orchestration](docs/orchestration.md#tiers)
+- **Leaner agent instructions, checked by the tests**: `Explore`'s frontmatter is valid YAML now, Claude's read-only agents can't spawn editors, and every pin must be on one allow-list. [Orchestration](docs/orchestration.md#choosing-other-models)
+
 ## [3.26.0] - 2026-11-19
 
 ### Added

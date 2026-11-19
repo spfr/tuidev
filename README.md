@@ -117,7 +117,7 @@ Set up tuidev (https://github.com/spfr/tuidev) on this machine.
 ## Also included
 
 - **A modern shell.** Ghostty, zsh with autosuggestions, a Starship prompt, and `rg`, `fd`, `bat`, `eza`, `zoxide`, `fzf`, `delta`, `gh` and `jq`. An agent's `cat`, `ls` and `top` stay the real commands. [Toolbox](docs/toolbox.md) · [Theming](docs/theming.md)
-- **Cheaper subagents.** `--pack orchestration` pins Claude Code's subagents to tiers: Haiku for search and command runs, Sonnet for routine implementation, Opus for hard changes and review. Codex gets the same roles. [Orchestration](docs/orchestration.md)
+- **Cheaper subagents.** `--pack orchestration` pins Claude Code's subagents to tiers: Haiku for search and command runs, Sonnet for routine implementation, Opus for hard changes and review. Codex gets the same roles on GPT-6 Luna, with hard changes and review on your session's model. [Orchestration](docs/orchestration.md)
 - **A MacBook that stays cool.** `--pack cooling` adds a fan curve through a small Swift daemon you build from [one readable file](lib/fan/tuidev-fan.swift). It only adds air and hands the fans back on any error.
 - **New package versions wait 3 days.** `--pack release-age` makes npm, bun and uv outside projects wait until a version is 3 days old. Lockfiles still install as pinned.
 - **Two audits.** `tuidev perf` checks what the OS does behind your agents; `tuidev disk` shows what tools and agents left on disk. [Performance](docs/performance.md)

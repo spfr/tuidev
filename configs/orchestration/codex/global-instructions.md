@@ -1,3 +1,3 @@
 ## Codex agents
 
-Delegate explicitly when the work calls for it: the tiers are the custom agents in `~/.codex/agents/` (`implementor-complex`, `implementor-standard`, `executor`, `reviewer`), each with its own model and effort. Hand full test suites, long logs and multi-source research to `executor` or a subagent, so only a digest comes back. Use the built-in `explorer` for read-only discovery. Delegates don't spawn agents of their own. The `delegation` skill covers parallel work in worktrees.
+Delegate when the work calls for it, and set `agent_type` to the tuidev role that fits: `explorer`, `executor`, `implementor-standard`, `implementor-complex` or `reviewer` (each description says when). Send full test suites, builds and long logs to `executor`, so only a digest comes back. Delegates don't spawn agents of their own. The `delegation` skill covers parallel work in worktrees.
