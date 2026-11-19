@@ -28,7 +28,7 @@ pass() { echo "PASS: $1"; }
 # table together. A Codex agent may also leave `model` out to run on the
 # session's model.
 ORCH_CLAUDE_MODELS="haiku sonnet opus fable inherit"
-ORCH_CODEX_MODELS="gpt-6-luna"
+ORCH_CODEX_MODELS="gpt-6-luna gpt-6.2-sol gpt-6.2-astra"
 ORCH_EFFORTS="low medium high xhigh max"
 
 agents_src="$REPO_DIR/configs/orchestration"

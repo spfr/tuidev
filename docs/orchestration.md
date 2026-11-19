@@ -42,13 +42,13 @@ The gates also cover the one git write the `delegation` skill allows, a scratch 
 | Role | Claude Code | Codex | Definition |
 |---|---|---|---|
 | Orchestrator (main session) | your session model and effort | your session model and effort | — |
-| Complex implementor | `opus` · `high` | session model · `high` | `implementor-complex` |
-| Reviewer (independent, read-only) | `opus` · `high` | session model · `high` | `reviewer` |
-| Standard implementor | `sonnet` · `medium` | `gpt-6-luna` · `high` | `implementor-standard` |
+| Complex implementor | `opus` · `high` | `gpt-6.2-astra` · `high` | `implementor-complex` |
+| Reviewer (independent, read-only) | `opus` · `high` | `gpt-6.2-astra` · `high` | `reviewer` |
+| Standard implementor | `sonnet` · `medium` | `gpt-6.2-sol` · `medium` | `implementor-standard` |
 | Executor (builds, suites, logs, browser runs) | `haiku` · model default | `gpt-6-luna` · `low` | `executor` |
 | Explore (search fan-out) | `haiku` · model default | `gpt-6-luna` · `high` | `Explore` / `explorer` (each replaces its CLI's built-in) |
 
-Nothing names a dated or account-specific model. Claude definitions use family aliases, which follow each new generation; `haiku` without an `effort` runs at the model's default, `medium` on Haiku 5.5. Codex has no aliases, its model list differs by plan and workspace, and a role pinned to a model the account lacks can fail to spawn (`Unknown model … for spawn_agent`) instead of falling back. So the Codex complex and review tiers set no `model` and run on the session's (Codex's default or your pick); only `gpt-6-luna` is pinned, the model OpenAI recommends for narrow, high-volume subagents and one every Codex plan lists. In November 2026 that means: on a paid plan the session runs GPT-6.2 Sol (everyday work) or GPT-6.2 Astra (demanding work), and OpenAI's advice is to start subagents on the parent's model, which is what inheriting does; on the Free plan the account lists `gpt-6-luna`, `gpt-5.6-terra` and `gpt-5.6-luna`, so every tier runs on Luna (`codex debug models` shows your list). Efforts follow each vendor's guidance: `high` where edge cases and review matter, Sonnet at `medium` for well-specified agentic coding, Luna at `high` (OpenAI's starting point) except `low` for the executor's straightforward runs.
+Claude definitions use family aliases, which follow each new generation; `haiku` without an `effort` runs at the model's default, `medium` on Haiku 5.5. Codex has no aliases, so its tiers name OpenAI's current models (November 2026): `gpt-6.2-astra`, which OpenAI recommends "for demanding work across code", for complex changes and review; `gpt-6.2-sol`, its model for "everyday tasks like editing code", for routine implementation; and `gpt-6-luna`, for "fast, narrowly scoped agents", for command runs and search. These need a paid Codex plan that lists the 6.2 models (`codex debug models` shows yours). A role pinned to a model the account lacks can fail to spawn (`Unknown model … for spawn_agent`) instead of falling back: the Free plan lists only `gpt-6-luna`, `gpt-5.6-terra` and `gpt-5.6-luna`, so there, override the two upper tiers as below. Efforts follow each vendor's guidance: `high` where edge cases and review matter, `medium` for well-specified coding on Sonnet and Sol, Luna at `high` (OpenAI's starting point) except `low` for the executor's straightforward runs.
 
 The `Explore` and `explorer` agents exist because both built-ins run on the session model, and an agent of yours with the same name replaces the built-in. `Explore` sets `omitClaudeMd`, like the built-in. Read-only roles are enforced where the CLI allows it: Claude's `reviewer`, `executor` and `Explore` drop the edit tools and `Agent` (a nested subagent would get them back). A Codex agent file can't narrow the session's sandbox, so the Codex `reviewer` and `explorer` are read-only by instruction only.
 
@@ -58,10 +58,10 @@ The pack owns these files and rewrites them on `tuidev update --configs`, so ove
 
 - **Claude, every tier:** point the aliases with `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL` and `ANTHROPIC_DEFAULT_HAIKU_MODEL` (the `env` block of `~/.claude/settings.json`). On Amazon Bedrock, Google Cloud and Microsoft Foundry the aliases lag (`sonnet` is Sonnet 4.5 there), so set them to current ids. `ANTHROPIC_DEFAULT_OPUS_MODEL=claude-fable-5-2` runs the complex and review tiers on Fable, at twice Opus's price ($8/$40 per million input/output tokens against $4/$20).
 - **Claude, one tier:** a project agent of the same name (`.claude/agents/reviewer.md`) wins over the user-level one.
-- **Codex, the complex and review tiers:** they follow the session model, so pick it with `/model`, `-m` or a `--profile`; `default_subagent_model` under `[agents]` in `~/.codex/config.toml` sets it for every subagent that names none.
+- **Codex on a plan without the 6.2 models:** put project or user agents of the same names without a `model` line (they then run on your session's model), or name a model your plan lists.
 - **Codex, one tier:** a project agent of the same name (`.codex/agents/reviewer.toml`). `codex debug models` lists the ids your Codex knows.
 
-When either vendor ships a new family, re-read each agent's instructions. For Codex, check that `gpt-6-luna` is still listed, and put any new pin in the allow-list at the top of `scripts/lib/test_orchestration.sh`.
+When either vendor ships a new family, re-read each agent's instructions. For Codex, check that the three pinned models are still current and listed, and put any new pin in the allow-list at the top of `scripts/lib/test_orchestration.sh`.
 
 ## Why it looks like this
 

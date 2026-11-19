@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The palette always starts with the update**: "Check for a new release" asks now and offers it; the preview that changes nothing is "Preview an update". [Updating](docs/updating.md)
 - **A dry run of the installer ends with "Dry run complete: nothing was changed"**, not "Installation Complete".
 - **The install clip shows the one-line `curl … | bash` install**: both questions and the `p` preview, served offline from this checkout. [Tapes](docs/assets/tapes/README.md#the-clips)
-- **Codex subagents no longer pin a model your plan may lack**: the complex and review tiers run on your session's model, the rest on GPT-6 Luna, and a new `explorer` puts search on Luna too. [Orchestration](docs/orchestration.md#tiers)
+- **Codex tiers follow OpenAI's current models**: GPT-6.2 Astra for complex changes and review, GPT-6.2 Sol for routine implementation, GPT-6 Luna for command runs and a new `explorer`. They need a paid plan that lists the 6.2 models. [Orchestration](docs/orchestration.md#tiers)
 - **Leaner agent instructions, checked by the tests**: `Explore`'s frontmatter is valid YAML now, Claude's read-only agents can't spawn editors, and every pin must be on one allow-list. [Orchestration](docs/orchestration.md#choosing-other-models)
 
 ### Fixed

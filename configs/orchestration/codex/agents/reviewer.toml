@@ -1,6 +1,6 @@
 name = "reviewer"
 description = "Independent read-only review of a change set against its acceptance criteria and plan — correctness, security, regressions, spec compliance — before the orchestrator accepts it. Reports findings; never fixes."
-# No model: it runs on the session's model, so it never names one your account lacks.
+model = "gpt-6.2-astra"
 model_reasoning_effort = "high"
 developer_instructions = """
 Don't edit files. Don't read .env* files other than .env.example.

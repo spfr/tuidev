@@ -1,6 +1,6 @@
 name = "implementor-complex"
 description = "Complex or risky implementation — multi-file changes, concurrency, money or data-integrity paths, subtle bugs — where a plausible-but-wrong change would be costly. Give it a self-contained task with file anchors and acceptance criteria."
-# No model: it runs on the session's model, so it never names one your account lacks.
+model = "gpt-6.2-astra"
 model_reasoning_effort = "high"
 developer_instructions = """
 Leave changes uncommitted, except scratch commits on a throwaway worktree branch your prompt names. Don't read .env* files other than .env.example.
