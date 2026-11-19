@@ -467,6 +467,10 @@ psfix="$(worker 621 09:00:50 clientFuelToday.test.js)"; out="$(AGENTS_DRY_RUN=tr
 [[ "$out" == "would stop zsh (pid 610), the command running node (clientFuelToday.test.js) in cairn (claude:600): node (clientFuelToday.test.js) stopped again 20s after the guard stopped pid 620 under the same command" ]] || fail "dry run escalation: $out"
 [[ "$(killed)" == "620@Wed_Oct_14_09:00:05_2026 " ]] || fail "the dry run stopped something: $(killed)"
 psfix="$psfix_small"
+# Stops older than the window leave the state file and the loop's memory.
+out="$( _AGENTS_MEM_STATE="" _AGENTS_MEM_LEVEL=normal _AGENTS_MEM_STOPS=$'1000\t610@x\tnode\t620\n1100\t610@x\tnode\t621\n'
+    AGENTS_NOW=1150 _agents_mem_state_save; printf '%s|' "$_AGENTS_MEM_STOPS"; grep -c '^stop' "$AGENTS_RUN_DIR/memguard.state")"
+[[ "$out" == $'1100\t610@x\tnode\t621\n|1' ]] || fail "stops pruned to the window: $out"
 pass "a runaway started again under the same tool command within 120 s stops that command; never the agent; not outside the window or for another script"
 
 # 4f. A probe cut off is no reading: no stop, no new warning, the last

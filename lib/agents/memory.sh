@@ -525,14 +525,17 @@ _agents_mem_state_load() {
     done < <(cat "$AGENTS_RUN_DIR/memguard.state" 2>/dev/null)
 }
 _agents_mem_state_save() {
-    local line e now keep=""
+    local line e now keep="" out=""
     _agents_now now
+    # Only the stops still inside the window, in the file and in the loop's memory.
     while IFS= read -r line; do
         e="${line%%$'\t'*}"
-        [[ "$e" =~ ^[0-9]+$ && $((now - e)) -le $_AGENTS_MEM_RESPAWN ]] && keep+="stop"$'\t'"$line"$'\n'
+        [[ "$e" =~ ^[0-9]+$ && $((now - e)) -le $_AGENTS_MEM_RESPAWN ]] || continue
+        keep+="$line"$'\n' out+="stop"$'\t'"$line"$'\n'
     done <<<"${_AGENTS_MEM_STOPS:-}"
+    _AGENTS_MEM_STOPS="$keep"
     { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$AGENTS_RUN_DIR/memguard.state" \
-        "level $_AGENTS_MEM_LEVEL"$'\n'"free ${_AGENTS_MEM_FREE:--}"$'\n'"$keep${_AGENTS_MEM_STATE%$'\n'}"; } 2>/dev/null
+        "level $_AGENTS_MEM_LEVEL"$'\n'"free ${_AGENTS_MEM_FREE:--}"$'\n'"$out${_AGENTS_MEM_STATE%$'\n'}"; } 2>/dev/null
     return 0
 }
 
