@@ -1,31 +1,24 @@
 # Agent Workflows
 
-How to run AI coding agents with tuidev: one at a time, in parallel, across machines, and from your phone. The core install is CLI-agnostic. The CLI integrations are opt-in packs.
+See everything your agents do: which one needs you, what each one runs, what it left behind, what it costs, and whether it is safe to stop. This doc covers running Claude Code and Codex with tuidev, Herdr's sidebar, the `agents` command with its board and menu bar, cleanup, memory, history, hooks and notifications. It all reads files on your machine and sends nothing anywhere. Running agents on other machines and from your phone is the other half: [remote.md](remote.md).
 
-**Your editor is a GUI; the terminal runs agents.** Open a Ghostty tab, run `claude` or `codex` in it, and review the diff in VS Code or Cursor. tmux and Herdr are for sessions that must survive on an always-on node, not required for everyday work on your laptop.
+**Your editor is a GUI; the terminal runs agents.** Run `claude` or `codex` in a Herdr pane (the `full` profile, the default on a Mac) so one sidebar shows which agent needs you, or in a plain Ghostty tab, and review the diff in VS Code or Cursor. tmux is an optional pack for a box that stays on.
 
-## Control plane
+## At a glance
 
-A fleet of agents is an **attention queue**, not a wall of panes. Look at an agent only when it needs you.
+<a id="control-plane"></a><a id="remote-control-from-a-phone"></a>A fleet of agents is an attention queue, not a wall of panes. Look at an agent when it needs you.
 
 | Need | Tool |
 |------|------|
 | A quick local session | A Ghostty tab: `claude` or `codex` |
-| One durable task over SSH/mosh | **tmux** (`--pack tmux`): `t [NAME]` (prefix `Ctrl+a`) |
-| Parallel agents on one repo | **Worktrees**: `claude -w NAME`, or a subagent with `isolation: worktree` |
-| Sessions that keep running with the terminal closed | **Background sessions**: `claude --bg`, `claude agents` (see [below](#background-sessions)) |
-| Many agents: which one is blocked? | **Herdr** (`--pack herdr`, prefix `Ctrl+b`) |
-| Steer one agent from your phone | The CLI's native **remote control** |
-| What is running, what leaked, what keeps the Mac awake? | **`agents`** (`--pack monitoring`), plus a SwiftBar menu on macOS (see [below](#local-processes-agents---pack-monitoring)) |
+| One durable task over SSH or mosh | tmux (`--pack tmux`): `t [NAME]`, prefix `Ctrl+a` |
+| Parallel agents on one repo | [Worktrees](#worktree-per-agent): `claude -w NAME`, or a subagent with `isolation: worktree` |
+| Sessions that run with the terminal closed | [Background sessions](#background-sessions): `claude --bg`, `claude agents` |
+| Many agents: which one is blocked? | [Herdr](#herdr-which-agent-needs-you---pack-herdr) (`--pack herdr`, prefix `Ctrl+b`) |
+| What runs, what leaked, what it costs | [`agents`](#what-runs-agents---pack-monitoring) (`--pack monitoring`), its board and a menu bar on macOS |
+| Steer one agent from your phone | The CLI's own remote control, or Herdr's phone app: [remote.md](remote.md#steer-one-agent-from-your-phone) |
 
-These tools don't replace each other. tmux doesn't know agent state, and Herdr doesn't replace a Ghostty tab. Work that must survive a laptop lid belongs on an always-on node (see [remote.md](remote.md)).
-
-## Editor integration
-
-Run the agent in a terminal tab next to your editor, not inside it:
-
-- **Claude Code's `/ide` command** connects a running session to VS Code or Cursor: diffs and file selections show in the editor instead of the terminal. Run it from inside a `claude` session.
-- **Codex's `file_opener` setting** (`configs/codex/config.toml`, shipped as `vscode`) controls which editor Codex links to when it prints a file reference. Alternatives are commented in the shipped config: `cursor`, `vscode-insiders`, `windsurf`, `none`.
+These tools don't replace each other: tmux doesn't know agent state, and Herdr doesn't replace a Ghostty tab. Work that must outlive a laptop lid belongs on an always-on machine ([remote.md](remote.md)).
 
 ## AI CLIs
 
@@ -34,187 +27,163 @@ Run the agent in a terminal tab next to your editor, not inside it:
 | Claude Code (primary) | `ai-clis` | `configs/claude/settings.json` (Linux: `settings.linux.json`) → `~/.claude/settings.json` |
 | Codex (secondary) | `ai-clis` | `configs/codex/config.toml` → `~/.codex/config.toml` |
 
-The packs install configs, not the CLIs. The CLIs update themselves. Claude Code and Codex run as plain `claude` and `codex`, sandboxed by the native settings each CLI ships with — see [sandboxing.md](sandboxing.md). Gemini CLI is deprecated upstream (its successor is Antigravity, `agy`) and isn't shipped. To use it, add your own wrapper in `~/.zshrc.local`.
+The pack installs configs, not the CLIs, which update themselves. Both run as plain `claude` and `codex`, confined by each CLI's own sandbox settings ([sandboxing.md](sandboxing.md)). Gemini CLI is deprecated upstream (its successor is Antigravity, `agy`) and isn't shipped.
 
 **Shipped Claude Code policy:**
 
-- Permissions: read-only commands are allowed (`gh pr view/list`, `gh run view/list`, `rg`, `jq`, `shellcheck`). `git add`, `commit`, `push`, `merge` and `tag`, and `gh pr create`, `gh pr merge`, `gh release` and `gh api` always ask. Credential paths and `.env*` are denied.
-- `sandbox.enabled` is `true`: Claude Code's native sandbox confines the Bash tool and its children by default. See [sandboxing.md](sandboxing.md) for what it confines and how to adjust it. `sandbox.credentials.envVars` unsets common third-party tokens in those commands ([secrets.md](secrets.md#what-an-agent-can-reach)).
-- `attribution` is empty (no `Co-Authored-By`). Agent teams are off (see [Agent teams](#agent-teams)).
-- `env.NODE_OPTIONS` is `--max-old-space-size=4096`: a runaway Node test or build an agent starts fails with `JavaScript heap out of memory` at 4 GB of heap, whatever the machine or the `NODE_OPTIONS` in your shell. On a 16 GB+ machine that is about Node's own default (less on a smaller one); what the setting adds is the same limit everywhere. Memory outside the JavaScript heap (buffers, native code) is not capped. Raise it for one command (`NODE_OPTIONS=--max-old-space-size=8192 npm run build`); a project script that sets its own `NODE_OPTIONS` still wins. The [memory guard](#memory-guard-agents-mem) covers everything else.
-- Notification hooks cover permission prompts, idle prompts, idle teammates and auto-mode denials. With the `monitoring` pack, a `PermissionRequest` hook, a second Notification hook and `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure` and `Stop` hooks time how long a session outside Herdr waits on you (see `waits.tsv` below); they do nothing unless that session has a wait open.
-- Menu bar hooks: on macOS, the prompt, the turn's end and the session's end (`UserPromptSubmit`, `Stop`, and a `SessionEnd` hook for every reason) refresh the [menu bar](#menu-bar-swiftbar-macos) (`agents bar poke`), and so do the wait and cleanup hooks from inside `agents hook`. Their guard is two file tests in `sh`: it starts `agents` only while SwiftBar runs the plugin and no refresh went out in the last 2 s, and never on a tool call.
-- Cleanup hooks: `SubagentStop`, and `SessionEnd` on `/clear` and `/resume`, run `agents hook` to stop the background commands a finished subagent or a cleared session left running. They need the `monitoring` pack and do nothing without it. See [Cleanup hooks](#cleanup-hooks-claude-code).
+- **Permissions.** Read-only commands are allowed (`gh pr view|list`, `gh run view|list`, `rg`, `jq`, `shellcheck`). `git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api` and `rg --pre` (which runs a program) always ask. Credential paths and `.env*` are denied.
+- **Sandbox.** `sandbox.enabled` is `true`, and `sandbox.credentials.envVars` unsets common third-party tokens in sandboxed commands ([sandboxing.md](sandboxing.md), [secrets.md](secrets.md#what-an-agent-can-reach)).
+- **No attribution** (no `Co-Authored-By`), and [agent teams](#agent-teams) are off.
+- **A 4 GB Node heap.** `env.NODE_OPTIONS` is `--max-old-space-size=4096`, so a Node test or build that leaks fails with `JavaScript heap out of memory` at 4 GB of heap on every machine. It caps the heap only, not buffers or native memory, so it does not stop every runaway: the [memory guard](#memory-guard-agents-mem) does. Raise it for one command with `NODE_OPTIONS=--max-old-space-size=8192 npm run build`; a project script that sets its own `NODE_OPTIONS` wins.
+- **Hooks and a status line** for notifications, waits, cleanup and the menu bar: [Claude Code hooks](#claude-code-hooks).
 
-**Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off by default, `file_opener = "vscode"`, an unpinned model, the same 4 GB Node heap cap (`shell_environment_policy.set`), the same token names removed from its commands (`shell_environment_policy.filters`), and `~/.codex/rules/tuidev.rules`, which makes the same git and gh writes prompt. See [sandboxing.md](sandboxing.md) for how this native sandbox relates to `sbx`.
+**Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off, `file_opener = "vscode"`, an unpinned model, the same 4 GB Node heap (`shell_environment_policy.set`), the same token names removed from its commands (`shell_environment_policy.filters`), and `~/.codex/rules/tuidev.rules`, which makes the same git and gh writes prompt. Plain Codex can still read credential paths: `workspace-write` limits writes and network, not reads ([sandboxing.md](sandboxing.md)).
 
-**Multi-agent orchestration** (tiered subagents, a delegation skill, one policy for both CLIs) is its own pack: see [orchestration.md](orchestration.md).
+Tiered subagents, a delegation skill and one policy for both CLIs are the `orchestration` pack: [orchestration.md](orchestration.md).
+
+**Editors.** Claude Code's `/ide` connects a running session to VS Code or Cursor, so diffs and selections show in the editor. Codex's `file_opener` (shipped as `vscode`; `cursor`, `vscode-insiders`, `windsurf` and `none` are commented in the config) picks the editor its file links open in.
 
 ### Instruction files
 
 | CLI | Reads natively | To share one file |
 |-----|----------------|-------------------|
-| Claude Code | `CLAUDE.md` (managed → `~/.claude/CLAUDE.md` → project → `CLAUDE.local.md`) and `.claude/rules/*.md`. Reads `AGENTS.md` when the project has no `CLAUDE.md` (v2.1.277+). | Put `@AGENTS.md` on the first line of `CLAUDE.md` |
+| Claude Code | `CLAUDE.md` (managed → `~/.claude/CLAUDE.md` → project → `CLAUDE.local.md`) and `.claude/rules/*.md`; `AGENTS.md` when the project has no `CLAUDE.md` (v2.1.277+) | `@AGENTS.md` on the first line of `CLAUDE.md` |
 | Codex | `AGENTS.md` (`~/.codex/AGENTS.md`, then repo root down to the cwd; 32 KiB cap) | `project_doc_fallback_filenames = ["CLAUDE.md"]` |
 
-Start a project's instructions from [templates/AGENTS_TEMPLATE.md](../templates/AGENTS_TEMPLATE.md). Claude Code and Codex both read `AGENTS.md`; for Claude-specific notes, add a `CLAUDE.md` whose first line is `@AGENTS.md`. Keep each instruction file short, because every one loads into context at session start.
+Start a project's instructions from [templates/AGENTS_TEMPLATE.md](../templates/AGENTS_TEMPLATE.md). Keep each file short: every one loads into context at session start.
 
 ### Agent teams
 
-Claude Code's experimental agent teams are **off** in the shipped settings. While teams are enabled, every subagent Claude names launches as a teammate, without asking. That makes teams form during ordinary delegation, and each teammate is a full session with its own context and a 5-minute cache. Plain subagents cover focused work that only needs to return a result.
+Claude Code's experimental agent teams are off in the shipped settings. While they are on, every subagent Claude names launches as a teammate without asking, and each teammate is a full session with its own context. Plain subagents cover work that only returns a result.
 
-Turn teams on when teammates must talk to each other: `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` for a shell, or the same key under `env` in `~/.claude/settings.json`. The shipped `"teammateMode": "auto"` then picks the display:
-
-- **Inside tmux** (`--pack tmux`), each teammate gets its own tmux pane. Run `claude` from inside a tmux session.
-- **Elsewhere**, teammates run in-process. The agent panel below the prompt lists them: arrow keys select, Enter opens, `x` stops. Force this mode with `claude --teammate-mode in-process`.
-
-Split panes need tmux or iTerm2. Ghostty's native splits don't work for this.
+Turn teams on when teammates must talk to each other: `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, or the same key under `env` in `~/.claude/settings.json`. The shipped `"teammateMode": "auto"` then gives each teammate a tmux pane when `claude` runs inside tmux, and runs them in-process elsewhere (the agent panel below the prompt: arrows select, Enter opens, `x` stops; `claude --teammate-mode in-process` forces it). Split panes need tmux or iTerm2, not Ghostty's splits.
 
 ## Worktree-per-agent
 
-A terminal tab or pane per agent isolates the terminal. A **worktree** per agent isolates git state. Without one, parallel agents collide on the index, on each other's half-staged files, and on `HEAD`.
+A tab per agent isolates the terminal; a worktree per agent isolates git state. Without one, parallel agents collide on the index, on each other's half-staged files and on `HEAD`.
 
-**Claude Code does this natively. Reach for it first:**
-
-- `claude -w NAME` (`--worktree`) starts a session in a new worktree under `.claude/worktrees/NAME`.
-- A subagent with `isolation: worktree` in its frontmatter runs in its own worktree.
-
-Both keep the checkout inside the repo, which is where `sbx` and the native sandboxes allow writes.
-
-**For other CLIs**, there's no tuidev wrapper: use `git worktree add` directly.
+Claude Code does this itself: `claude -w NAME` starts a session in `.claude/worktrees/NAME`, and a subagent with `isolation: worktree` in its frontmatter runs in its own. Both stay inside the repo, where `sbx` and the native sandboxes allow writes. For other CLIs, use git directly:
 
 ```bash
 git worktree add ../repo-agent-1 -b agent/1   # one worktree, one branch
 git worktree list                             # path, branch, HEAD
-git worktree remove ../repo-agent-1            # after merging, once it's clean
+git worktree remove ../repo-agent-1           # after merging, once it's clean
 ```
 
-**A worktree isolates git state only.** Ports collide, so give each worktree its own `PORT`. `node_modules`, `.venv` and `target` are neither shared nor copied. Gitignored files such as `.env` don't follow the worktree. A shared dev database is still shared. Use worktrees for genuinely independent tasks. When tasks touch the same files, one worktree and sequential agents are faster than merging the collisions.
+A worktree isolates git state only. Ports collide (give each its own `PORT`), `node_modules`, `.venv` and `target` are not shared, gitignored files such as `.env` don't follow, and a shared dev database stays shared. When tasks touch the same files, one worktree and sequential agents beat merging the collisions.
 
 ## Background sessions
 
-Claude Code and Codex can run sessions without holding a terminal. Both put them in worktrees, so they combine with [Worktree-per-agent](#worktree-per-agent) rather than replace it.
+Claude Code and Codex can run sessions without holding a terminal, each in its own worktree.
 
-**Claude Code** ([agent view](https://code.claude.com/docs/en/agent-view)): a supervisor service runs background sessions so they survive closing agent view or the terminal.
+**Claude Code** ([agent view](https://code.claude.com/docs/en/agent-view)) runs background sessions under a supervisor, so they survive closing the terminal:
 
 ```bash
-claude agents                     # agent view: dispatch, list, reply
+claude agents                              # agent view: dispatch, list, reply
 claude --bg "investigate the flaky test"   # start one and return
-claude attach ID                  # open a session in this terminal
-claude logs ID                    # print recent output
-claude stop ID                    # stop it
-claude respawn ID                 # restart it
-claude rm ID                      # drop it from the list
+claude attach ID                           # open it in this terminal
+claude logs ID                             # recent output
+claude stop ID | respawn ID | rm ID        # stop, restart, drop from the list
 ```
 
-Inside a session, `/bg` moves the conversation to the background and `/fork` copies it into a new background session while you keep working. Every background session, and each `/fork` copy, moves into its own worktree under `.claude/worktrees/` before it edits files (`worktree.bgIsolation: "none"` turns that off).
+Inside a session, `/bg` moves it to the background and `/fork` copies it into a new background session. Each moves into its own worktree under `.claude/worktrees/` before it edits files (`worktree.bgIsolation: "none"` turns that off). Permission mode carries over from the session you backgrounded.
 
-**Codex**: 0.156.0 enabled worktrees by default and added worktree session creation to the agents overview. 0.156.0 also added `/daemon` (update the local background server) and `--no-daemon` (bypass it). 0.157.0 made automatic background-server startup the default for eligible interactive sessions, and since 0.163.0 `/daemon` can restart it. See [the daemon note](sandboxing.md#codex-background-server).
+**Codex** starts a local background server for interactive sessions and creates sessions in worktrees by default; `/daemon` updates or restarts the server and `--no-daemon` bypasses it ([the daemon note](sandboxing.md#codex-background-server)).
 
-**Git and the ask rules.** Claude Code tells a background session that changed files in a worktree to commit without asking, push the branch when there is a remote, and open a draft PR when the task calls for it. It never pushes to `main`/`master`, force-pushes or merges. The docs say your instructions win: if the task, `CLAUDE.md` or memory says you handle committing or pushing yourself, Claude leaves git to you. `--pack orchestration`'s rules file (`~/.claude/rules/tuidev-orchestration.md`) says to leave work uncommitted until you ask, which covers that. The shipped `ask` rules (`git add|commit|push|merge|tag`, `gh pr create|merge`) are permission decisions, and the docs say a background session waits under `Needs input` on "a permission decision"; answer it from the peek panel in `claude agents` (Space, type a reply, Enter) or after `claude attach ID`. Checked on v2.1.284: `ask` rules hold in a `claude --bg` session, which waits under `Needs input` on the `git commit` approval. They only gate what your settings still list: an `allow` rule such as `Bash(git *)` in your own `~/.claude/settings.json`, or `auto` mode, lets the session commit without asking.
+**Git and the ask rules.** Claude Code tells a background session to commit without asking, push the branch and open a draft PR when the task calls for it, never to push to `main`, force-push or merge, and lets your instructions win: `--pack orchestration`'s rules file says to leave work uncommitted until you ask. The shipped `ask` rules hold in a `claude --bg` session (checked on v2.1.284): it waits under `Needs input` on the `git commit` approval, which you answer from `claude agents` (Space, type, Enter) or after `claude attach ID`. An `allow` rule such as `Bash(git *)` of your own, or auto mode, lets it commit without asking.
 
-Permission mode carries over from the session you backgrounded. Sessions started with `claude --bg` or `claude agents` use the target directory's configuration, the same as plain `claude` there.
+`claude agents` is a queue for Claude sessions only. [Herdr](#herdr-which-agent-needs-you---pack-herdr) is the queue across CLIs and panes, and tmux keeps a terminal alive over SSH ([remote.md](remote.md)).
 
-**With tmux and Herdr.** Background sessions are supervised by Claude Code itself, not by a pane, so they don't need tmux to survive. `claude agents` is a per-CLI queue for Claude sessions. Herdr is the queue across CLIs and panes ([Fleet attention](#fleet-attention--herdr---pack-herdr)), and tmux keeps a terminal alive over SSH ([remote.md](remote.md)). Sandbox and login behavior is unchanged: see [sandboxing.md](sandboxing.md).
+## Herdr: which agent needs you (`--pack herdr`)
 
-## Remote control from a phone
-
-The CLIs now ship their own remote control, so you don't need SSH just to *steer* an agent.
-
-- **Claude Code Remote Control** connects `claude.ai/code` and the Claude mobile apps to a session running on your machine. Code stays local. See <https://code.claude.com/docs/en/remote-control> for plan requirements.
-- **Codex and others**: third-party layers such as [Tactic Remote](https://clauderc.com/).
-
-For a full terminal (editing files, non-agent work, a flaky network), use SSH or mosh plus tmux, covered in [remote.md](remote.md).
-
-## Fleet attention — Herdr (`--pack herdr`)
-
-[Herdr](https://herdr.dev/) is an agent runtime. A server owns the terminal processes, clients attach and detach, and each pane holding an agent is marked `working`, `blocked`, `done` or `idle`. The CLI and a local socket API are the same surface, so agents can split panes, start each other, and wait on a blocked peer instead of sending keystrokes.
+<a id="fleet-attention--herdr---pack-herdr"></a>[Herdr](https://herdr.dev/) is an agent runtime: a server owns the terminals, clients attach and detach, and each pane holding an agent is marked `working`, `blocked`, `done` or `idle`. Its sidebar lists every agent on this machine and on the machines you saved, the blocked one first. Its CLI and socket API are the same surface, so agents can split panes, start each other and wait on a blocked peer.
 
 ```bash
 tuidev install --pack herdr
-herdr                                         # attach; the first attach starts the server
-herdr machine add workbox                     # save an SSH node (interactive, once)
-herdr --machine workbox agent list            # scriptable, no TUI
+herdr                                 # attach; the first attach starts the server
+herdr machine add workbox             # save an SSH machine (interactive, once)
+herdr --machine workbox agent list    # scriptable, no TUI
 ```
 
 <img src="assets/herdr.png" width="800" alt="Herdr with three machines in its sidebar, Local, devbox and workbox, and six agents across them, each marked working, blocked or done. The view shows devbox's api workspace, where an agent asks to allow git push origin fix-404.">
 
 <sub>This Mac and two Linux containers saved as SSH machines, with scripted agent stand-ins that report their state through `herdr pane report-agent`. How it is made: [docs/assets/tapes/README.md](assets/tapes/README.md#the-herdr-fleet).</sub>
 
-Herdr is a second multiplexer. tmux (`--pack tmux`) is the default for a durable local session. Reach for Herdr when the question is *which agent needs me*, not *how do I keep this pane alive*. Its prefix is `Ctrl+b`, so it doesn't clash with tmux's `Ctrl+a`. A Ghostty keybind can send the prefix and a key in one press (Herdr ≥ 0.9.5): `keybind = cmd+shift+o=text:\x02o` runs `prefix+o`, which opens the pane the last notification came from.
+Herdr is in the `full` profile and is how you see which agent needs you; tmux (`--pack tmux`) is an optional pack for keeping a terminal alive over SSH on a box that stays on. Herdr's prefix is `Ctrl+b`, so it doesn't clash with tmux's `Ctrl+a`.
 
-**The palette and updates.** `--pack herdr` binds two more keys through the `tuidev.link` plugin. **prefix+a** opens the palette in a popup: a searchable list of what you can do from here (who needs you, the map, the ports, the reports, usage limits, memory, the fans, the audits, themes, the cheatsheet), each with the command it runs; Enter runs it, and output stays up until a key. It is `tuidev palette`, so `tuidev` on its own in any terminal opens the same list, with a numbered list where there is no `fzf`. The rows follow what is installed: no `agents` rows without `--pack monitoring`. **prefix+u** opens Updates: the installed release, the latest one, a link to what changed, and one question before it updates. When a newer release is out, Herdr shows one toast for it and the palette's first row is the update ([updating.md](updating.md#hearing-about-a-new-release)). From Ghostty, **Cmd+P** does this in one press: tuidev's config binds `cmd+p=text:\x02a`, which sends `ctrl+b a`. Outside Herdr the keys go to whatever is in front: a shell moves the cursor and types `a`, and Claude Code takes `ctrl+b` as "run this in the background". If you run agents outside Herdr, turn it off with `keybind = cmd+p=unbind` below tuidev's block in Ghostty's config.
+**tuidev's keys in Herdr** (the `tuidev.link` plugin; the bindings are a managed block in `~/.config/herdr/config.toml`, and a binding of your own outside it wins):
+
+| Keys | Opens |
+|------|-------|
+| prefix+space | [The board](#the-board-every-session-one-screen) as a popup; prefix+shift+space as a tab |
+| prefix+a | The palette: everything tuidev can do here, searchable (`tuidev palette`) |
+| prefix+u | Updates: the installed release, the latest one, and one question before it updates ([updating.md](updating.md#hearing-about-a-new-release)) |
+| prefix+m | [The map](remote.md#remote-feels-local-ports-links-and-files): what runs where, on every machine |
+| prefix+shift+o | The ports popup (`agents ports --pick`) |
+
+The palette's rows follow what is installed (no `agents` rows without `--pack monitoring`); outside Herdr, `tuidev` alone opens the same list. When a newer release is out, Herdr shows one toast and the palette's first row is the update. In Ghostty, tuidev's config binds `cmd+p=text:\x02a`, so **Cmd+P** opens the palette in one press. Outside Herdr that sends `ctrl+b a` to whatever is in front (Claude Code takes `ctrl+b` as "run in the background"), so if you run agents outside Herdr, add `keybind = cmd+p=unbind` below tuidev's block. The same trick binds any Herdr key: `keybind = cmd+shift+o=text:\x02o` runs prefix+o, which opens the pane the last notification came from.
 
 Practices:
 
-1. **Never nest.** When `HERDR_ENV=1`, you are inside a Herdr pane. Use `herdr agent list` or the socket API, never the TUI.
-2. **The sidebar is the queue.** Don't tab through panes looking for a prompt.
-3. **Detach, don't kill.** `Ctrl+b q` leaves agents running. `herdr server stop` ends the herd. Since Herdr 0.9.4, closing the shell that started the server no longer stops it, so a script that stopped Herdr with `SIGHUP` must use `herdr server stop` (or `SIGTERM`). A Mac restart keeps the agents' sessions: Herdr saves before macOS starts closing apps.
-4. **Sleep-proof work lives on an always-on node**, whether a saved machine (`herdr machine add`) or `herdr --remote NODE`.
-5. **Upgrade live, with handoff.** The pack installs Herdr's release binary in `~/.local/bin`, the install `herdr update` can update; Homebrew's refuses (`self-update is disabled for Homebrew installs`). `herdr update --handoff` (or `tuidev update --packages`, which runs it unless systemd runs the server) installs the new binary and asks the running server to hand its panes to a server started from it: the shells and agents keep running, only in-flight CLI calls and waits reconnect. Without a server, plain `herdr update` is enough. A newer client keeps using a compatible older server either way (`herdr status` reports `server_binary_stale`), and that server picks up the new binary whenever it next starts: a restart is never required. `herdr update` refuses to run inside a Herdr pane: detach (`Ctrl+b q`) and run it from a plain shell. Keep exactly one `herdr` binary on each node. `tuidev check` warns while a server still runs the old binary.
-   - **Coming from Homebrew:** `tuidev install --pack herdr` (or `tuidev update --packages`) installs the release binary beside it and prints the rest; if the download fails, run it again. Once no server runs Homebrew's binary (after its next start, or a handoff to the next release), `brew uninstall herdr`.
-   - **A LaunchAgent needs two settings first.** A handoff starts the new server on its own and then the old one exits, which a supervisor watching the old process acts on. A LaunchAgent with `KeepAlive` set to `true` (or a `KeepAlive` dictionary without `SuccessfulExit` false) starts `herdr server` again every 10 seconds (it fails: the new one holds the socket); use `<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>` and `<key>AbandonProcessGroup</key><true/>` (launchd reads them at your next login). `tuidev update --packages` checks for both and skips the handoff until they are set. launchd doesn't watch the new server; the job starts it again at your next login.
-   - **A systemd unit hands over through its own reload, never `herdr update --handoff`.** systemd keeps watching the old server. With the default `KillMode=control-group`, its exit stops the new server and every pane. With `KillMode=process`, the new server runs on unsupervised in the cgroup of a unit systemd thinks has stopped: `systemctl` can no longer stop or restart it, and the unit's next start fails (`herdr server is already running`). So `KillMode=process` is not the fix. Give the unit an `ExecReload` that runs a wrapper named `herdr-handoff`, plus `NotifyAccess=exec` (or `all`; the drop-in below). The wrapper hands the panes to a new server, reports that server with `systemd-notify MAINPID=<pid>`, and exits 0 only once systemd follows it; on failure the old server keeps running. tuidev doesn't ship the wrapper: its name is the contract. On such a host, `tuidev update --packages` puts the new release binary in place itself (sha256 checked, no `herdr update`), then runs `systemctl --user reload` for each running `herdr.service` and `herdr-session@*.service` (and any other unit a server runs in) whose server is on an older binary. A unit without the wrapper is skipped with a hint and keeps the old binary until its next start. A failed reload is a warning naming `journalctl --user -u UNIT`.
-   - **Herdr never hands over on its own.** Its background version check (`src/update.rs`, `auto_update`) only shows a "vX available" notice with the command to run. `herdr update` without `--handoff` never hands a server over: it asks to stop it, and with no terminal it installs nothing that would need a restart. The one other trigger is explicit: `herdr --remote HOST --handoff` hands over the server on HOST, so don't pass `--handoff` to a host whose server systemd runs. `[update] version_check = false` in `~/.config/herdr/config.toml` silences the notice; you don't need it for safety.
-6. **Links stay clickable.** Herdr ≥ 0.9.2 sets `TERM_PROGRAM=herdr`, which Claude Code doesn't recognize as hyperlink-capable, so the tuidev `.zshrc` exports `FORCE_HYPERLINK=1` inside Herdr panes (unless you set it). The variable comes from the pane's shell, so a pane opened before the change needs `exec zsh` (or a new pane) before its agent emits links; restarting only the agent isn't enough.
-   - **Ctrl-click, not Cmd-click.** Herdr captures the mouse and opens pane links itself on Ctrl-click: OSC 8 links and plain `http(s)://` URLs. Cmd-click never reaches it. In Ghostty, hovering doesn't underline a link, even with Ctrl held, but the click still works.
-   - **Shift-Cmd-click for file paths.** Shift bypasses Herdr's mouse capture, so Ghostty handles the click with its own link detection, which also matches file paths such as `/tmp/x.log`, `./src/main.rs` or `data/backups/x.db`. Herdr itself doesn't linkify plain paths (upstream treats that as a feature request).
-   - **Saved-machine panes:** Ctrl-click doesn't open OSC 8 links there yet ([herdr#4447](https://github.com/herdrdev/herdr/issues/4447)); plain `https://` URLs still open.
-7. **Reinstall integrations after upgrades.** Run `herdr integration install claude` (and `codex`) once. After every upgrade, `tuidev check` names the integrations `herdr integration status` reports `outdated`, with the commands that reinstall them. Herdr 0.9.5 is one such upgrade: it no longer installs Codex turn hooks (Codex state comes from screen detection again), and until you reinstall, Codex sessions start with a "clamping Interrupt hook timeout" warning.
-8. **Start the server from a login shell.** Integrations read the *server's* `PATH`. A server started by `brew services`, or by a non-interactive `ssh host herdr server`, gets a stripped `PATH` and reports the CLIs as `not found`. On Linux, use a systemd user unit with `ExecStart=/bin/bash -lc 'exec "$HOME/.local/bin/herdr" server'`; on a Mac, a LaunchAgent whose `ProgramArguments` are `/bin/zsh`, `-lc`, `exec "$HOME/.local/bin/herdr" server`. The full path keeps it on the release binary whatever the login `PATH` puts first.
-9. **Trim the logs when the server is down anyway.** Herdr writes `~/.config/herdr/herdr-server.log` and `herdr-client.log`, and 0.9.5 leaves no rotated copies; the server keeps its log open. `tuidev check` warns above 50 MB (`HERDR_LOG_WARN_MB` changes the bar). That is no reason to restart: the next time the server is stopped anyway, before it starts again, run `cd ~/.config/herdr && for f in herdr*.log; do tail -n 2000 "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done`.
+1. **Never nest.** When `HERDR_ENV=1` you are inside a Herdr pane: use `herdr agent list` or the socket API, never the TUI.
+2. **The sidebar is the queue.** Don't tab through panes looking for a prompt. `ui.agent_panel_sort = "priority"` in your `[ui]` table puts the agents that need you first.
+3. **Detach, don't kill.** `Ctrl+b q` leaves agents running; `herdr server stop` ends them. Closing the shell that started the server doesn't stop it, so a script must use `herdr server stop` (or `SIGTERM`). A Mac restart keeps the sessions: Herdr saves before macOS closes apps.
+4. **Sleep-proof work lives on an always-on machine**, saved with `herdr machine add` or reached with `herdr --remote NODE`.
+5. **Upgrade live, with handoff.** The pack installs Herdr's release binary in `~/.local/bin`, which `herdr update` can update (Homebrew's refuses). `herdr update --handoff`, from a plain shell outside Herdr, or `tuidev update --packages`, installs the new binary and hands the running server's panes to a new server: shells and agents keep running. A newer client keeps using a compatible older server (`herdr status` reports `server_binary_stale`), and `tuidev check` warns while one runs; a restart is never required. Keep one `herdr` binary per machine. Herdr never hands over on its own: its version check only shows a notice (`[update] version_check = false` silences it).
+   - **From Homebrew:** `tuidev install --pack herdr` installs the release binary beside it; once no server runs Homebrew's binary, `brew uninstall herdr`.
+   - **Under a LaunchAgent**, a handoff needs `<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>` and `<key>AbandonProcessGroup</key><true/>`, or launchd restarts the old server every 10 seconds. `tuidev update --packages` checks for both and skips the handoff until they are set.
+   - **Under systemd**, hand over through the unit's own reload, never `herdr update --handoff` or `herdr --remote HOST --handoff`: systemd would stop the new server with the old one (the default `KillMode`) or lose track of it (`KillMode=process`). Give the unit an `ExecReload` that runs a wrapper you write, named `herdr-handoff`, which hands the panes over and reports the new server with `systemd-notify MAINPID=<pid>`, plus `NotifyAccess=exec` ([drop-in below](#sessions-and-devices)). `tuidev update --packages` then installs the binary itself (sha256 checked) and runs `systemctl --user reload` for each `herdr.service` and `herdr-session@*.service` on an older binary; a unit without the wrapper is skipped with a hint, and a failed reload names `journalctl --user -u UNIT`.
+6. **Links stay clickable.** Inside Herdr panes, tuidev's `.zshrc` exports `FORCE_HYPERLINK=1` (unless you set it), because Claude Code doesn't treat `TERM_PROGRAM=herdr` as hyperlink-capable; a pane opened before needs `exec zsh`. Herdr opens links on **Ctrl-click** (OSC 8 links and plain URLs; Cmd-click never reaches it). **Shift-Cmd-click** lets Ghostty handle the click, which also opens file paths. In saved-machine panes Herdr doesn't open OSC 8 links yet ([herdr#4447](https://github.com/herdrdev/herdr/issues/4447)); plain URLs work.
+7. **Reinstall integrations after upgrades.** Run `herdr integration install claude` (and `codex`) once; after an upgrade, `tuidev check` names the integrations `herdr integration status` reports `outdated`, with the commands to reinstall them.
+8. **Start the server from a login shell.** Integrations read the server's `PATH`, and a server started by `brew services` or a non-interactive `ssh host herdr server` reports the CLIs as `not found`. On Linux use a systemd user unit with `ExecStart=/bin/bash -lc 'exec "$HOME/.local/bin/herdr" server'`; on a Mac, a LaunchAgent running `/bin/zsh -lc 'exec "$HOME/.local/bin/herdr" server'`.
+9. **Trim the logs when the server is down anyway.** `tuidev check` warns when `~/.config/herdr/herdr-*.log` passes 50 MB (`HERDR_LOG_WARN_MB`). Before the server's next start, run `cd ~/.config/herdr && for f in herdr*.log; do tail -n 2000 "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done`.
 
 ### Tabs named after what runs in them
 
-With `--pack monitoring` beside `--pack herdr`, Herdr's labels say what runs where, so a tab bar of `1 2 3 4` reads `✳ API docs`, `✳ Fix login redirect`, `❯ mactui_setup`:
+With `--pack monitoring` beside `--pack herdr`, a tab bar of `1 2 3` reads `✳ API docs`, `✳ Fix login redirect`, `❯ myapp`:
 
-- **A tab** is named with its kind's mark (`AGENTS_GLYPHS`: `✳` Claude Code, `⬡` Codex, `❯` a shell…), then the session's own task title (Herdr's `terminal_title`, without its status characters), else the pane's directory, cut at 20 characters with `…`. In a tab with several panes, an agent wins over shells, and of several agents the first one (in pane order, so moving focus never renames the tab) names it, with `+N` for the others. A title that is only the CLI's name (`Claude Code`), a command line or a shell prompt doesn't count as a task.
-- **The sidebar** gets two rows for each workspace and each agent, laid out for Herdr's default 26 columns. Herdr shortens every value on a line that runs over, so each line holds only what fits beside a name:
+- **A tab** is named with its kind's [mark](#marks-by-kind-of-session), then the session's task title (Herdr's `terminal_title`), else the pane's directory, cut at 20 characters. In a tab with several panes an agent wins over shells, and the first agent in pane order names it, with `+N` for the others. A title that is only the CLI's name, a command line or a prompt doesn't count as a task.
+- **The sidebar** gets two rows per workspace and per agent, sized for Herdr's default 26 columns:
 
   ```
   × api · 2 blocked                 ✳ Rate-limit the API · 16:32
     fix-404 · ✳2 ❯1                   blocked · api
   ```
 
-  - **A workspace row** keeps its name on the first line, followed in red by how many of its agents are blocked on you (`blocked`, `2 blocked`; nothing when none is). Below come the branch and what runs there, one mark and count per kind: `✳2 ❯1`.
-  - **An agent row** reads like a mail list. The first line is what the session does: the tab's name (the task title above, so `✳ Rate-limit the API` rather than `claude`), the machine only when it is not `Local`, and the time a state that waits on you began. The second line is the state in words (`blocked` in red, `done` in blue, the rest dim) and the workspace. When the tab's name doesn't describe the session (a tab you named `release`, or a second session in a tab another one leads), its own task title follows the tab's name: `release · ✳ Ship the release`. Herdr's own agent name (`claude`) shows only where no mark names the kind already: with `AGENTS_GLYPHS=off`, or without `--pack monitoring`.
-  - **The pane border** with `show_agent_labels_on_pane_borders` shows `✳ claude` (Herdr's display name for the pane, which applies only while that agent runs there).
+  A workspace row has its name and, in red, how many of its agents are blocked; below, the branch and a mark and count per kind. An agent row has the tab's name, the machine when it is not `Local`, and when a state that waits on you began; below, the state in words and the workspace. When the tab's name doesn't describe the session, its own task title follows (`release · ✳ Ship the release`).
 
-  | Token | Row | Shows | Set when |
-  |---|---|---|---|
-  | `$tuidev_agents` | workspace | what runs there, a mark and a count per kind: `✳2 ❯1` (`claude:2 shell:1` with `AGENTS_GLYPHS=off`) | a session comes or goes |
-  | `$tuidev_need` | workspace | how many agents there are blocked on you: `blocked`, `2 blocked`; cleared at none | an agent's state changes |
-  | `$tuidev_since` | agent | when the current state began, for the states that wait on you (blocked, done, idle; not working): `16:32` today, `Mon` this week, `Nov 3` before. A sync knows it only once it has seen the state change, so a session already running when tuidev first syncs shows none until then | the state changes, or once when the day turns |
-  | `$tuidev_session` | agent | the session's own task title, with its mark, only when its tab's name doesn't say it | the title or the tab's name changes |
+  | Token | Row | Shows |
+  |---|---|---|
+  | `$tuidev_agents` | workspace | what runs there: `✳2 ❯1` (`claude:2 shell:1` with `AGENTS_GLYPHS=off`) |
+  | `$tuidev_need` | workspace | how many agents are blocked: `blocked`, `2 blocked`; nothing at none |
+  | `$tuidev_since` | agent | when a waiting state (blocked, done, idle) began: `16:32` today, `Mon` this week, `Nov 3` before; none until a sync has seen the state change |
+  | `$tuidev_session` | agent | the session's own task title, only when its tab's name doesn't say it |
 
-  Each value is written only when it differs from what Herdr holds, and none of them ticks: `$tuidev_since` is a clock time, not an age, so a sync with nothing new still writes nothing.
-- **Restyle or drop a token in your own rows.** Copy the block (`configs/herdr/sidebar.toml` in the repo, or between the `tuidev-sidebar` markers in your config) above the markers, delete the block, and edit yours. Drop a token by deleting its entry, say `{ token = "$tuidev_since", dim = true }` for longer names on a 26-column sidebar. Restyle one with Herdr's inline styles: `{ token = "$tuidev_need", fg = "#f7768e", bold = true }`, or rules such as `{ token = "state_text", rules = [{ equals = "idle", hide = true }] }`. The two colours are mid-tone red and blue, readable on dark and light themes; the rest is bold and dim. A token nothing reports simply disappears, so rows that name all four work with or without `--pack monitoring`.
-- **Where the rows come from.** The pack adds both layouts as one `tuidev-sidebar` block in `~/.config/herdr/config.toml`, and `update --configs` keeps it current. If your config sets `[ui.sidebar.spaces]` or `[ui.sidebar.agents]` itself, the block is not added (a second table of either kind is a TOML error that stops Herdr reading the file), and an update leaves a block an older tuidev wrote as it is. To keep your own rows, write them in your config and add the tokens above you want; to go back, delete your tables.
-- **Tip:** `ui.agent_panel_sort = "priority"` puts the agents that need you first. tuidev does not set it, because it lives in your `[ui]` table.
+- **Your own rows.** The pack adds both layouts as a `tuidev-sidebar` block in `~/.config/herdr/config.toml`, kept current by `tuidev update --configs`. To restyle, copy the block (`configs/herdr/sidebar.toml`) above the markers, delete the block, and edit your copy: drop a token by deleting its entry, or style one with Herdr's inline styles (`{ token = "$tuidev_need", fg = "#f7768e", bold = true }`). If your config already sets `[ui.sidebar.spaces]` or `[ui.sidebar.agents]`, the block is not added, since a second table would stop Herdr reading the file. A token nothing reports disappears, so the rows work without `--pack monitoring` too.
 
-**Your names stay yours.** A sync renames only a tab whose label is still Herdr's number, or the one a sync gave it. Rename a tab and it is never touched again; a rename by another tool through Herdr's `tab.rename` (another tool, a script) counts as yours too. `agents herdr reset TAB_ID` hands a tab back: it is named again as a sync would name it now (or gets its number, when a sync has no name for it) and syncs keep it current from then on; take the id from `agents herdr`. `~/.config/tuidev/run/herdr-labels.tsv` remembers which tabs a sync named and the number each had, and when each agent's state began. A label is set only when it differs from what Herdr shows, so a sync with nothing new writes nothing.
+**Your names stay yours.** A sync renames only a tab still showing Herdr's number, or the name a sync gave it. A tab you (or a script, through `tab.rename`) renamed is never touched until `agents herdr reset TAB_ID` hands it back. `~/.config/tuidev/run/herdr-labels.tsv` remembers which tabs a sync named.
 
-**What keeps it current.** No daemon of its own: the `tuidev.link` plugin's event hooks run `agents herdr sync` when a tab, pane or agent comes or goes or moves, when an agent changes state, when you switch tabs, and when the server starts. Herdr has no hook for a title or directory change alone, so the next of those catches it, as does the menu bar's refresh on macOS while an agent runs in Herdr (`--throttle`: at most every 30 seconds). An agent's own events (detected, its state changing, its pane exiting or closing) also refresh the menu bar, in the same process (`--poke`, which reads Herdr's agents again first). Syncs never overlap: one that finds another running leaves a mark, and the running one goes again a second later, so a burst of events costs two passes. Each machine's server runs its own plugin, so each machine names its own tabs; the panes of a saved machine are named there.
+**What keeps it current.** The `tuidev.link` plugin's event hooks run `agents herdr sync` when a tab, pane or agent comes, goes or moves, when an agent changes state, when you switch tabs and when the server starts; no daemon of its own. Herdr has no event for a title change alone, so the next event catches it, as does the menu bar's refresh on macOS (at most every 30 seconds). Each machine's server runs its own plugin and names its own tabs.
 
 ```bash
-agents herdr              # each tab: its label, whose it is, what a sync would make it; each workspace's roll-up
-agents herdr sync -n      # what a sync would change, without changing it
-agents herdr reset        # every tab a sync named gets its number back; the sidebar tokens and marks are cleared
-agents herdr reset w1:t3  # that tab only, back to auto-naming (one you renamed too); nothing else changes
+agents herdr              # each tab's label, whose it is, what a sync would make it; each workspace's roll-up
+agents herdr sync -n      # what a sync would change
+agents herdr reset        # every tab a sync named gets its number back; tokens and marks cleared
+agents herdr reset w1:t3  # that tab only, back to auto-naming (one you renamed too)
 ```
 
-`AGENTS_HERDR_NAMES=0` in `agents.conf` turns it off; `agents herdr reset` then puts back what it set (with it on, the next sync names them again). `AGENTS_GLYPHS=off` keeps the names without the marks (`claude:2 shell:1` in the sidebar).
+`AGENTS_HERDR_NAMES=0` in `agents.conf` turns it off (`agents herdr reset` then puts back what it set). `AGENTS_GLYPHS=off` keeps the names without the marks.
 
 ### Sessions and devices
 
-A **session** is one Herdr server with its own workspaces, panes and socket. Plain `herdr` attaches to the `default` session; `herdr --session NAME` (or `herdr session attach NAME`) starts or attaches a named one, each with its own server.
+A Herdr **session** is one server with its own workspaces, panes and socket. Plain `herdr` attaches to `default`; `herdr --session NAME` (or `herdr session attach NAME`) starts or attaches a named one.
 
-- **Keep one session per machine** unless you need hard isolation (stopping or upgrading one project's server without touching the others). Split projects into *workspaces* inside it instead: every device then lands in the same sidebar.
-- **A saved machine points at one session on that host**, picked during `herdr machine add`, which lists the sessions already running there. To switch, run `machine add` again and `herdr machine remove` the old entry.
-- **Every device reaches the same session.** From a laptop, the node is a saved machine in the sidebar, or `herdr --remote workbox --session NAME`. From a phone, SSH in and run `herdr` (see [remote.md](remote.md#iphone-and-ipad)).
-- **Inside a pane, `HERDR_SOCKET_PATH` wins over `HERDR_SESSION`**, so `HERDR_SESSION=other herdr status` still reports the pane's own session. Target another one explicitly: `HERDR_SOCKET_PATH=~/.config/herdr/sessions/NAME/herdr.sock herdr status` (`~/.config/herdr/herdr.sock` for `default`).
-- **Manage them** with `herdr session list`, `herdr session stop NAME` (kills its panes) and `herdr session delete NAME`. Retiring a session means recreating its workspaces elsewhere; agents with native resume (`claude --resume`, `codex resume`) pick up their conversations.
-- **Supervise every session on an always-on node**, or it won't come back after a reboot. A systemd user unit for the default session:
+- **Keep one session per machine** and split projects into workspaces, so every device lands in the same sidebar. Use a second session only for hard isolation.
+- **A saved machine points at one session on that host**, picked during `herdr machine add`. To switch, add it again and `herdr machine remove` the old entry.
+- **Every device reaches the same session**: from a laptop as a saved machine or `herdr --remote workbox --session NAME`; from a phone, over SSH ([remote.md](remote.md#iphone-and-ipad)).
+- **Inside a pane, `HERDR_SOCKET_PATH` wins over `HERDR_SESSION`.** Target another session with `HERDR_SOCKET_PATH=~/.config/herdr/sessions/NAME/herdr.sock herdr status` (`~/.config/herdr/herdr.sock` for `default`).
+- **Manage them** with `herdr session list`, `herdr session stop NAME` (kills its panes) and `herdr session delete NAME`. Agents with native resume (`claude --resume`, `codex resume`) pick up their conversations elsewhere.
+- **Supervise every session on an always-on machine**, or it won't come back after a reboot:
 
   ```ini
   # ~/.config/systemd/user/herdr.service
@@ -229,7 +198,7 @@ A **session** is one Herdr server with its own workspaces, panes and socket. Pla
   WantedBy=default.target
   ```
 
-  For live upgrades, add a drop-in whose reload hands over (practice 5). Keep the default `KillMode`:
+  For live upgrades, add a drop-in whose reload hands over (practice 5), and keep the default `KillMode`:
 
   ```ini
   # ~/.config/systemd/user/herdr.service.d/handoff.conf
@@ -239,148 +208,100 @@ A **session** is one Herdr server with its own workspaces, panes and socket. Pla
   NotifyAccess=exec
   ```
 
-  Enable it with `systemctl --user enable --now herdr.service`, and run `sudo loginctl enable-linger $USER` once so user units run without a login. A named session needs the same unit with `Environment=HERDR_SESSION=NAME`. As a template, that is `herdr-session@.service` with `Environment=HERDR_SESSION=%i`, the name `tuidev update --packages` looks for.
+  Enable it with `systemctl --user enable --now herdr.service`, and run `sudo loginctl enable-linger $USER` once so user units run without a login. A named session is the template `herdr-session@.service` with `Environment=HERDR_SESSION=%i`, the name `tuidev update --packages` looks for.
 
-`herdr machine add` checks and, after asking, installs the remote server. It never copies your config or secrets. `herdr machine status` checks saved machines without prompting; `herdr machine reconnect` finishes SSH authentication (MFA included) in your terminal. Passphrase-protected keys need `ssh-add` first. Under `sbx --profile strict`, an agent reaches the Herdr socket only with `--allow-herdr` (see [sandboxing.md](sandboxing.md#profiles)). Inside a Herdr pane, `HERDR_ENV=1` is already set, and `sbx` hides the wrapped process from Herdr's detection unless you pass `--allow-herdr`. Herdr's docs: <https://herdr.dev/docs/>.
+`herdr machine add` installs the remote server after asking and never copies your config or secrets. `herdr machine status` checks saved machines without prompting; `herdr machine reconnect` finishes SSH authentication (MFA included); passphrase-protected keys need `ssh-add` first. Under `sbx --profile strict`, an agent reaches the Herdr socket, and Herdr sees the agent, only with `--allow-herdr` ([sandboxing.md](sandboxing.md#profiles)). Herdr's docs: <https://herdr.dev/docs/>.
 
-## Local processes: `agents` (`--pack monitoring`)
+## What runs: `agents` (`--pack monitoring`)
 
-Every `claude` session starts its own MCP servers (`npm exec chrome-devtools-mcp@latest`, `node …/some-mcp.cjs`), about 250 MB a session, and holds a rolling `caffeinate -i -t 300`. When a session dies badly, those children are reparented to launchd and keep running. `agents` (`~/.local/bin/agents`) shows what is running and cleans up what leaked. It reads one `ps` snapshot per run and never needs sudo.
+<a id="local-processes-agents---pack-monitoring"></a>Every `claude` session starts its own MCP servers and holds a rolling `caffeinate -i -t 300`, and when a session dies badly those children are reparented to pid 1 and keep running. `agents` (`~/.local/bin/agents`) shows who needs you, what each session runs, and what was left behind. It reads one `ps` snapshot per run and never needs sudo.
 
 <img src="assets/agents.png" width="800" alt="The agents command in a terminal. A summary line, one needs you, one to review, two running, and swap past its limit. Needs you: the api session, permission, 6 minutes, tinted. To review: web, done 12 minutes. Running: myapp with its tests, cores and memory, and under the flagged commands a polling loop stuck 5h10m, what it waits for already finished, safe to stop. Below them, one line for what is parked, stale processes and hogs, and one for CPU, memory, thermal pressure and keep-awake.">
 
 ```bash
 agents                    # who needs you: blocked, to review, running; parked and the system on a line each
-agents watch              # the same, redrawn every 2s (q quits)
-agents open-term watch    # the same in a new window of your terminal (AGENTS_TERMINAL)
+agents watch              # the same, redrawn every 2 s (q quits); open-term watch: in a new window
 agents ls                 # the full table: PIDs, ports, MCP servers, commands, stale processes, hogs
 agents ps 90419           # everything one session runs (all sessions without a pid)
-agents reap -n            # what `reap` would kill: each stale tree whose verdict is "safe to stop"
-agents reap -n --stuck    # the same, plus the polling loops flagged stuck that are safe to stop
-agents reap               # SIGTERM those, SIGKILL what's left after 3s (asks first)
-agents reap --all         # the "check first" ones too (a server left behind, a loop stuck by age only)
-agents reap --auto -n     # what auto-reap would stop on its own (see below)
-agents why                # every flagged item with its verdict, one line each
-agents why PID            # why an item is listed, the evidence, and whether it is safe to stop
-agents show PID           # one process in detail: session, what it is doing, where it lives, CPU, children
-agents show --watch PID   # the same, redrawn every 2s (q quits); --json for scripts
-agents jump PID           # go to where it runs: its Herdr or tmux pane, then the terminal tab
-agents peek PID 60        # the last 60 lines of its tmux or Herdr pane
-agents pick               # browse everything in fzf, agents show as the preview
-agents mcp                # the MCP servers Claude Code and Codex are configured with
-agents mcp lazy NAME      # start that server on its first tool call, not with every session
-agents kill PID           # one tree, descendants first
-agents term PID           # one process only (a hog), SIGTERM
-agents mem                # memory and swap as bars, the guard, the ten biggest by footprint on a bar to its stop size, incidents
-agents mem check -n       # what the memory guard would do right now
-agents awake on 2h        # keep the Mac and display awake (30m, 1h30m; no duration = until off)
-agents awake agents       # stay awake while any claude or codex runs, then release
-agents awake lid 3h       # macOS, opt-in: awake with the lid closed too (asks for your password)
-agents awake status       # our hold, plus who else holds the Mac awake (pmset -g assertions)
-agents json               # machine-readable; `agents tsv` feeds the menu-bar plugin
-agents report --since 7d  # where the CPU went: CPU-hours by job, project and session, and cleanups
-agents report --view tokens  # where the tokens went: by model, agent and project, cache hits, polling
-agents limits             # each CLI's usage limits: a gauge per window with the time gone marked, under or over pace, its reset
+agents why [PID]          # every flagged item's verdict, or one item's evidence and verdict
+agents show PID           # one process in detail (jump, peek and pick go with it)
+agents reap -n            # what reap would stop: the stale trees whose verdict is "safe to stop"
 ```
 
-- **Who needs you.** `agents` puts every session in one of four states, each with a shape of its own, so it reads the same under `NO_COLOR`:
+The board, the menu bar, `mem`, `report`, `limits`, `doctor` and `json` have sections of their own below. `agents --help` lists every command and option.
 
-  ```text
-   ▲ 1 needs you   ◆ 2 to review   ● 2 running   ○ 3 parked      ! swap 91%
+**Who needs you.** `agents` puts every session in one of five states, each with its own shape, so it reads the same under `NO_COLOR`:
 
-  NEEDS YOU
-   ▲ api        permission        6m   agents show 66498
-  TO REVIEW
-   ◆ web        done             12m   Fix the login flow
-   ◆ docs       done             41m
-  RUNNING
-   ● billing    tests 3m12s    2h21m   8.4 cores  7.6G
-   ● infra      working          47m   0.2 cores  294M
-     ! wait-loop stuck 5h10m · what it waits for already finished · safe to stop
+```text
+ ▲ 1 needs you   ◆ 2 to review   ● 2 running   ○ 2 parked      ! swap 91%
 
-  ○ 3 parked, oldest 39 h · no stale · no hogs
-  cpu 27% · mem 59% free · thermal nominal · awake while agents run
-  ```
+NEEDS YOU
+ ▲ api        permission        6m   agents show 66498
+TO REVIEW
+ ◆ web        done             12m   Fix the login flow
+ ◆ docs       done             41m
+RUNNING
+ ● billing    tests 3m12s    2h21m   8.4 cores  7.6G
+ ● infra      working          47m   0.2 cores  294M
+   ! wait-loop stuck 5h10m · what it waits for already finished · safe to stop
 
-  | State | Means | Comes from |
-  |-------|-------|------------|
-  | `▲` needs you | blocked: waiting for your answer | Herdr says `blocked`; outside Herdr, Claude Code's hooks. A notification that came with it names why (`permission`, `auto mode`) |
-  | `◆` to review | finished, not looked at, for under `AGENTS_PARKED_MIN` minutes (60) | Herdr says `done`; outside Herdr, the idle prompt's hook |
-  | `●` running | working | Herdr says `working`. With neither Herdr nor a hook, a session running a command or using 3% of a core |
-  | `○` parked | finished longer ago than that, or looked at and left | `done` past the threshold; Herdr's `idle`, at once, since it clears `done` once you look at the pane: nothing is left to review |
-  | `?` no signal | nothing says | Neither Herdr nor a hook has a word and it does nothing visible: Codex, `agy` or `grok` outside Herdr, Claude Code with `AGENTS_HISTORY=0` or no sample within the hour, or Herdr not answering. It may be finished, thinking or waiting for you, so it keeps a row of its own, and is counted as neither parked nor in the menu's title |
+○ 2 parked, oldest 39 h · no stale · no hogs
+cpu 27% · mem 59% free · thermal nominal · awake while agents run
+```
 
-  How long comes from each sample: `waits.now` in the data directory holds each session's status, since when, and Herdr's number for that state change; its first run reads `waits.tsv`, so sessions already parked are parked from the start. The number says for certain whether a record is still the session's latest stretch, across a Mac asleep or any gap, and however briefly it worked in between. Without one (outside Herdr, an older Herdr), a record over 3 minutes old says nothing. A session whose age can't be established shows none and stays to review: it never skips To review on a guess. Samples run a minute apart, so ages are good to about that. A flagged command shows under its session, or after the parked line when that session has no row. Empty groups disappear. Below 72 columns it folds to a narrow form with no headers or system line, and it never asks for more than 80 columns. Under a locale with no such glyphs (`LC_ALL`, then `LC_CTYPE`, then `LANG`, without UTF-8) the shapes are `^`, `*`, `o`, `.` and `?`.
-- **The full table.** `agents ls` is what `agents` was: one row per session with its PID, status, age, CPU, memory, children, ports, project and cwd, then its MCP servers and busiest commands; stale processes and hogs in full; and the longer status lines. `agents ps`, `stale` and `hogs` are its parts, and `agents json` and `tsv` carry everything.
-- **Agents** are processes named `claude`, `codex`, `agy`, `grok` or `cursor-agent` (`AGENTS_NAMES` changes the list): one row per tree, with its project (the directory's name, or `repo/name` for a worktree under `.claude/worktrees/`), tree CPU and memory, child count, cwd, listening ports and, when Herdr is running, its status and task title for the pane it runs in. That pane is exact: every process started in a Herdr pane has `HERDR_PANE_ID` in its environment, which `agents` reads for the sessions running under Herdr (one `ps -E` on macOS, `/proc/PID/environ` on Linux), so two sessions in one directory each get their own pane. The pane's status goes to the session there of the kind Herdr reports, so a second CLI started in the same pane (a `codex` beside `claude`) never takes it, and two of that kind in one pane get none. Without it, a session matches by kind and directory only when exactly one Herdr agent and one session share them. Sessions waiting for you (Herdr's `blocked`) come first, then `working`, then `idle` and `done`, then sessions without a status. Herdr's answer is cached for ten seconds in `~/.config/tuidev/run/`; once that is stale, it is asked again first (it answers in milliseconds), the menu bar waiting at most a second, and only when Herdr is slower does the menu show the cached answer (under a minute old) and refresh it in the background. The Codex app-server daemon (`codex app-server … --managed-daemon` and its `pid-update-loop`) is long-lived by design: it gets its own `daemon` row and is never stale. `claude --chrome-native-host`, the browser bridge Chrome starts, is not a session.
-- **What sessions run.** Under each session, `agents ls` lists its MCP servers on one line and its busiest commands (`AGENTS_LS_TOOLS`), and `agents ps PID` lists everything:
+| State | Means | Comes from |
+|-------|-------|------------|
+| `▲` needs you | blocked: waiting for your answer | Herdr says `blocked`; outside Herdr, Claude Code's hooks. A notification names why (`permission`, `auto mode`) |
+| `◆` to review | finished, not looked at, for under `AGENTS_PARKED_MIN` minutes (60) | Herdr says `done`; outside Herdr, the idle prompt's hook |
+| `●` running | working | Herdr says `working`; with neither Herdr nor a hook, a session running a command or using 3% of a core |
+| `○` parked | finished longer ago, or looked at and left | `done` past the threshold, or Herdr's `idle` |
+| `?` no signal | nothing says | No Herdr status and no hook, and nothing visible: Codex, `agy` or `grok` outside Herdr, Claude Code with `AGENTS_HISTORY=0` or no sample within the hour, or Herdr not answering. It keeps its own row, and counts as neither parked nor in the menu's title |
 
-  ```
-    90419   claude  working    3h30m  537.0   2.1G   33  64013  myapp        ~/code/myapp
-        mcp: 2 servers · 4 procs · 209M
-        └ go test -race ./internal/web · 2m08s · 100% · feat-a  x2 dup  hot
-        └ npm run dev · 1h00m · 0% · feat-b  long
-  ```
+Ages come from the once-a-minute samples (`waits.now` in the data directory), so they are good to about a minute; a session whose age can't be established stays to review rather than skip it on a guess. A flagged command shows under its session. Empty groups disappear. Below 72 columns the view folds to a narrow form without headers or the system line, and it never uses more than 80 columns. Without a UTF-8 locale the shapes are `^`, `*`, `o`, `.` and `?`.
 
-  Each child of a session is one unit, with its whole subtree's CPU and memory:
-  - **MCP servers**, grouped by name (`npm exec X-mcp@latest`, `node …/x-mcp.cjs`);
-  - **commands**: each tool shell, Claude Code's `zsh -c … eval '<command>'` or Codex's `bash -lc <command>` (on macOS wrapped in `sandbox-exec`), shown as the command itself, without its `cd`, `VAR=value` prefixes, `2>&1` and a trailing `| tail`;
-  - the session's own `caffeinate`, nested sessions (a `claude -p` a command started), and anything else.
+**Agents** are processes named `claude`, `codex`, `agy`, `grok` or `cursor-agent` (`AGENTS_NAMES`): one row per tree, with its project (the directory's name, or `repo/name` for a worktree under `.claude/worktrees/`), CPU, memory, children, cwd, listening ports and, under Herdr, its pane's status and task title. The pane is exact: `agents` reads `HERDR_PANE_ID` from each session's environment, so two sessions in one directory each get their own pane. Herdr's answer is cached for ten seconds in `~/.config/tuidev/run/`. The Codex app-server daemon (`codex app-server … --managed-daemon`) is long-lived by design: it gets a `daemon` row and is never stale.
 
-  A command's **origin** is the worktree subagent it runs for, from its directory (`<repo>/.claude/worktrees/<name>`), or `main`. Subagents run inside the session's own process, so the directory is the only reliable clue. Flags:
-  - `dup`: the same command runs more than once in the same directory, within a session or across sessions, and at least two copies have run for a minute. A command's directory is where it `cd`s first, so parallel worktree subagents running the same `go test` in their own worktrees are not duplicates;
-  - `long`: running longer than `AGENTS_TOOL_LONG` (20 minutes);
-  - `wait`: a polling loop the agent waits on (`until …; do sleep 5; done`). It is never `dup` or `long`; the menu marks it with a gray hourglass, and it can still be stopped;
-  - `stuck` (with `wait`): a polling loop that has run `AGENTS_WAIT_STUCK` (60 minutes) or longer, unless the file it watches changed within that time: then its producer is alive (a long build's log), and the loop stays a plain `wait`. The watched file is the first absolute path the loop's condition gives to `tail`, `head`, `grep`, `cat`, `test`, `[` or `[[`, directly (`until grep -q ok /tmp/x.log`) or through an assignment before the loop (`F=/tmp/x.output; until tail -1 $F | …`); paths other commands take (`docker exec db /usr/bin/pg_isready`, `curl --unix-socket …`) don't count. `agents` checks every such file with one `find -mmin`. A loop with no watched file, or whose file doesn't exist, is judged by its age alone. A stuck loop usually waits for a line that will never come: it needs you, and `agents why PID` shows the file's last line and how long it has been quiet ([Flagged](#flagged-is-it-safe-to-stop)). `agents reap --stuck` stops the stuck loops that are safe to stop along with the stale trees, and `--all` adds the "check first" ones;
-  - `hot`: its subtree uses `AGENTS_HOG_NOW` CPU or more.
+**What sessions run.** Under each session, `agents ls` lists its MCP servers on one line and its busiest commands (`AGENTS_LS_TOOLS`); `agents ps PID` lists them all:
 
-  For agent authors: Claude Code appends `[exited with code N]` as the last line of a background task's `.output` file, so a loop such as `until tail -1 "$F" | grep -qE '^(ok|FAIL)'` never ends once the task has finished. Match the exit line too (`grep -qE '^(ok|FAIL)|^\[exited with code'`), or cap the tries (`for i in $(seq 120); do …; sleep 5; done`).
+```
+  1000    claude  -          1h00m  107.0   1.4G   16  -           repo                   /Users/NAME/repo
+      mcp: 2 servers · 4 procs · 302M (chrome-devtools, example-agent)
+      └ go test -race ./internal/web · 2m00s · 100% · feat-a  x3 dup  hot
+      └ claude -p hello · 3m00s · 2% · -
+      └ until [ -s /nonexistent/x ]; do sleep 5; done · 52m00s · 0% · main  wait
+```
 
-  Stopping a command is an ordinary tree kill with every safety check: the session sees the command fail and carries on.
-- **Stale** means reparented to launchd (ppid 1), yours, and either matching an agent-helper pattern (MCP servers, `npm exec`/npx, `caffeinate`; the list is `AGENTS_ORPHAN_PATTERNS` in `lib/agents/config.sh`) or a dev server: a process that listens on a TCP port itself or through its children (an orphaned `npm run dev` whose vite listens), started from a directory under `$HOME` (not `~/Library`), `$TMPDIR` or Claude Code's `/private/tmp/claude-UID` scratchpads. Never flagged:
-  - a session, or anything that hosts one: a process whose tree holds an agent, an interactive or login shell, or a tmux, screen, zellij, Herdr or pm2 server (so a tmux server whose claude pane listens on a port is left alone);
-  - launchd jobs (`launchctl list`: LaunchAgents, Homebrew services) and, on Linux, processes in a systemd `.service` unit;
-  - the Codex daemon and `agents`' own keep-awake holder.
+Each child of a session is one unit with its whole subtree's CPU and memory: an MCP server (grouped by name), a command (the tool shell Claude Code or Codex runs, shown as the command itself, without its `cd`, `VAR=value` prefixes and trailing `| tail`), the session's `caffeinate`, a nested session (`claude -p`), or anything else. A command's **origin** is the worktree subagent it runs for, read from its directory, or `main`. Its flags:
 
-  Stale detection is mostly a macOS story: on Linux, orphans usually reparent to a `systemd --user` subreaper instead of pid 1, so they don't look orphaned.
-- **Hogs** are any process of any owner averaging at least 50% CPU over its lifetime after 30 minutes and still busy (a Messages.app stuck at 100% for days), or using at least 90% for 3 minutes outside an agent tree. That is checked from the CPU time it really used, every 30 seconds or so, so a daemon's spike during a build doesn't count, and a listed hog clears once it falls below half of that. The check runs across `agents` runs, which the menu's refresh provides; without it, a first `agents hogs` only starts the clock. A background system service in a hog's place gets no Terminate or `sudo kill` hint: stopping it would only restart it. `AGENTS_HOG_PCT`, `AGENTS_HOG_MIN`, `AGENTS_HOG_NOW`, `AGENTS_HOG_SUSTAIN` and `AGENTS_HOG_TOP` tune them. On Linux, `ps` reports only the lifetime average.
-- **Safety.** `kill`, `reap` and `term` refuse:
-  - pid 1, `agents` itself and its parents (so the session you run it from);
-  - other users' processes, for which they print the `sudo kill` to run yourself;
-  - system and session processes: anything under `/System/Library`, `/usr/libexec` or `/usr/sbin`, and `loginwindow`, Finder, Dock, WindowServer, SystemUIServer, ControlCenter and your terminal (Ghostty, Terminal, iTerm2, WezTerm, kitty, Alacritty). Apps in `/System/Applications`, such as a runaway Messages, stay allowed. Inside a tree, such members are skipped;
-  - any process hosting an interactive shell or an agent below it: a terminal app (Warp, Hyper, Tabby…), an editor's helper, a tmux or screen server. An agent root itself can still be killed, with its tree;
-  - running as root at all.
+- `dup`: the same command runs more than once in the same directory, and at least two copies have run for a minute. Parallel worktree subagents running the same test in their own worktrees are not duplicates.
+- `long`: running longer than `AGENTS_TOOL_LONG` (20 minutes).
+- `wait`: a polling loop the agent waits on (`until …; do sleep 5; done`). Never `dup` or `long`.
+- `stuck` (with `wait`): a polling loop that has run `AGENTS_WAIT_STUCK` (60 minutes) or longer while the file it watches stayed quiet. The watched file is the first absolute path the loop's condition reads with `tail`, `head`, `grep`, `cat`, `test`, `[` or `[[`, directly or through an assignment before the loop. A loop with no such file is judged by its age alone.
+- `hot`: its subtree uses `AGENTS_HOG_NOW` CPU or more.
 
-  Before every signal they re-check the process's start time, so a reused pid is never hit, and `PID@START` (from `json` or `tsv`) pins the exact process that was listed. A tree kill returns as soon as everything exited after SIGTERM; after the grace period it SIGKILLs the survivors, plus, if the tree's root is still running then, anything that root's tree spawned meanwhile. Without a terminal they need `-y`.
-- **Keep-awake** is `caffeinate -di` (system and display idle sleep). By default it never uses `pmset disablesleep` or sudo; `awake lid` (below) is the explicit opt-in. The holder's pid lives in `~/.config/tuidev/run/awake`, and `on`, `off` and `agents` take a lock (released on any exit), so two clicks never leave two holders. The record is dropped only when the holder is really gone; if its start time can't be checked (`ps` blocked, as in a sandbox), `awake off` refuses to signal the pid and tells you how to stop it yourself. Without `caffeinate` or `systemd-inhibit`, `awake on` fails with a message. `tuidev uninstall` runs `agents awake off` before it removes the helper. `awake agents` re-checks every minute, which also covers Claude Code's own gap between stopping one `caffeinate` and starting the next. A closed lid still sleeps the Mac unless it runs on power with an external display attached (Apple's closed-display mode). On Linux, `systemd-inhibit` holds the same locks.
-- **Keep awake with the lid closed** (`agents awake lid DURATION`, macOS only; Linux reports it as unsupported). For when you want an agent to keep working in a closed laptop for a few hours. If you can, use closed-display mode instead (power plus an external display), which needs no root. Otherwise:
-  - it runs `pmset -a disablesleep 1`, which needs root. It asks for your administrator password each time, in macOS's own dialog (`/usr/bin/osascript … with administrator privileges`, started with an empty environment, so nothing inherited reaches the root shell). No sudo rights or sudoers file are stored;
-  - it is always time-boxed: a duration is required, and one longer than `AGENTS_LID_MAX` (8h) is refused;
-  - the same root command starts a small root-owned guard in a session of its own (`perl -MPOSIX` `setsid`, then `exec`: macOS has no `setsid` command), so ending the privileged dialog can't take it along. The guard turns lid sleep back on (`pmset -a disablesleep 0`) when the time is up, when the battery falls below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or when thermal pressure reaches heavy (moderate is common in a closed Mac running a build, so it doesn't count). It checks once a minute. The guard is fixed text in `lib/agents/lid.sh`: only the checked duration in seconds and the battery number are added to the root command;
-  - it never leaves sleep disabled without a guard. Two seconds after starting it, the root command checks that the guard still runs as root under its name; if not, it turns lid sleep back on itself and fails ("lid mode failed to start; sleep restored"). `agents` checks once more after the dialog returns, and if the guard is gone by then, it restores sleep with one more dialog;
-  - the usual `caffeinate -di` holder runs for the same time, so the display and idle behaviour match `awake on`;
-  - `agents awake off` ends it early, which asks for your password once more: it restores the setting and retires the guard (after checking that the pid is still root's guard). Switching to `awake on` or `awake agents` replaces only the `caffeinate` holder: lid mode keeps running, with no dialog, until it times out or `awake off` / `awake restore` ends it. `agents awake restore` restores the setting whatever ran it, and so does `awake off` whenever sleep is disabled with no live guard.
+For agent authors: Claude Code appends `[exited with code N]` as the last line of a background task's `.output` file, so a loop such as `until tail -1 "$F" | grep -qE '^(ok|FAIL)'` never ends once the task has finished. Match the exit line too (`grep -qE '^(ok|FAIL)|^\[exited with code'`), or cap the tries (`for i in $(seq 120); do …; sleep 5; done`).
 
-  **Reboot caveat:** macOS keeps `disablesleep` across a reboot (it's a system-wide setting, stored in `/Library/Preferences/com.apple.PowerManagement.*.plist`; `man pmset` doesn't document it), but the reboot kills the guard. `agents`, `agents awake status`, the menu and `tuidev check` (`scripts/health_check.sh`) all notice sleep disabled with no live guard and call it a failure: `WARNING: lid sleep is disabled and nothing will restore it`. The fix is the menu's Restore lid sleep…, `agents awake restore`, or `sudo pmset -a disablesleep 0`.
-- **Thermal** shows the kernel's thermal pressure (`nominal`, `moderate`, `heavy`, `trapping`, `sleeping`, from `notifyutil -g com.apple.system.thermalpressurelevel`) and the energy mode (`automatic`, `low`, `high`). Both are read-only, and `agents` never changes the energy mode. macOS runs the fans unless the [cooling pack](#fans---pack-cooling) is installed.
+**Stale** means reparented to pid 1, yours, and either an agent helper (MCP servers, `npm exec` and npx, `caffeinate`: `AGENTS_ORPHAN_PATTERNS` in `lib/agents/config.sh`) or a dev server: a process that listens on a TCP port itself or through its children, started under `$HOME` (not `~/Library`), `$TMPDIR` or Claude Code's `/private/tmp/claude-UID` scratchpads. Never stale: anything that hosts a session (an agent, an interactive shell, a tmux, screen, zellij, Herdr or pm2 server), launchd jobs and systemd `.service` units, the Codex daemon and `agents`' own keep-awake holder. Stale detection works best on macOS: on Linux, orphans usually reparent to a `systemd --user` subreaper instead of pid 1, so they rarely look stale. `agents stale` lists only these.
+
+**Hogs** are processes of any owner that average at least 50% CPU over their lifetime after 30 minutes and are still busy, or that use at least 90% for 3 minutes outside an agent tree (`AGENTS_HOG_PCT`, `AGENTS_HOG_MIN`, `AGENTS_HOG_NOW`, `AGENTS_HOG_SUSTAIN`, `AGENTS_HOG_TOP`). The check uses the CPU time a process really used, across `agents` runs (the menu's refreshes provide them), and a hog clears once it falls below half its threshold. A process past `AGENTS_MEM_WARN` of memory leads the hogs. A background system service gets no stop hint: stopping it only restarts it. On Linux, `ps` reports only the lifetime average. `agents hogs` lists only these.
+
+**Safety.** `kill`, `reap` and `term` refuse pid 1, `agents` itself and its parents, other users' processes (they print the `sudo kill` instead), system and session processes (anything under `/System/Library`, `/usr/libexec` or `/usr/sbin`, `loginwindow`, Finder, Dock, WindowServer, your terminal), and any process hosting a shell or an agent below it; apps in `/System/Applications` stay allowed. They refuse to run as root. Before every signal they re-check the process's start time, so a reused pid is never hit, and `PID@START` (from `json` or `tsv`) pins the exact process listed. A tree kill sends SIGTERM, then SIGKILL to what is left after `AGENTS_GRACE` seconds (3). Without a terminal they need `-y`.
 
 ### The board: every session, one screen
 
-`agents` answers "who needs me" once. `agents board` is the same answer as a place: one list of every session on this machine and your others, to glance at from the pane you work in or to leave open in a tab. In Herdr it is **prefix+space**, a popup over whatever you are doing: enter goes to a session, esc puts you back where you were. **prefix+shift+space** opens it as a tab, and goes back to that tab while it is open: there is one board tab, not one a press.
+`agents` answers "who needs me" once. `agents board` is the same answer as a place: one list of every session on this machine and your others, to glance at from the pane you work in or to leave open. In Herdr it is **prefix+space**, a popup: enter goes to a session, esc puts you back. **prefix+shift+space** opens it as a tab, and returns to that tab while it is open.
 
 ```bash
-agents board              # every session, by what you would do about it (Herdr: prefix+space)
+agents board              # every session, by what you would do about it
 agents board workbox      # one machine's
-agents board | cat        # the list as text, with no fzf
+agents board | cat        # the list as text, without fzf
 ```
-
-The list is one line a session, in groups: **Needs you** (the longest wait first), **To review**, **Working**, and the parked ones folded into a line (`PARKED 2 · press . to show`). Each group's heading has its group's color, and an empty line stands between groups. A line is a name that stays (the session's own task title, else its project), a word or two for what it does now, since when, its machine when there is more than one, and a count of what runs under it (`+2 sub, 1 cmd`). With herdr-core installed, a session [Herdr's phone app](remote.md#herdrs-phone-app-agents-hc) reaches has a `☏` before its name (`@` without UTF-8), and its card says whether it is hosted in herdr-core or mirrored, and under which name; the column is there only while a listed session has the mark, from a cache rewritten in the background at most every 30 s. The header is the lens tabs (the active one filled in), the counts, each CLI's fullest [usage limit](#history-and-agents-report), and one line for what is wrong (a process past the memory warning, a hog, something left behind), there only while something is.
-
-The right-hand side takes 55% of the window and follows the cursor: why the session waits, the sub-agents and commands under it, the last lines of its pane (as many as fit), then its branch, model, tokens and cost. Those last lines are the session's output: the agent's own input box, prompt and status lines are left out, a long line breaks between words, and a rule is cut to the width. Its tabs (Card, Trace, Pane, Details) show which view is on. Everything else waits for a key.
 
 <img src="assets/board.gif" width="800" alt="agents board in a terminal: on the left the lens tabs, the counts, a warning line and three groups, Needs you, To review and Working, one session each; on the right the selected session's card with the last lines of its pane. The cursor moves through the three sessions, then tab switches the list to the Tree lens, with each session's commands under it.">
 
-`→` turns it to the **Trace**: what a Claude Code session did, in order, the newest at the bottom, one line an event, as many as fit (40 at most):
+The list has one line per session, grouped as **Needs you** (the longest wait first), **To review** and **Working**, with the parked folded into one line (`PARKED 2 · press . to show`). A line is the session's task title (else its project), what it does now, since when, its machine when there is more than one, and what runs under it (`+2 sub, 1 cmd`). With herdr-core installed, a session [Herdr's phone app](remote.md#herdrs-phone-app-agents-hc) reaches has a `☏` before its name (`@` without UTF-8). The header has the lens tabs, the counts, each CLI's fullest [usage limit](#usage-limits-agents-limits), and one line for what is wrong (a process past the memory warning, a hog, something left behind) while something is.
+
+The right-hand side (55% of the window) follows the cursor: why the session waits, its sub-agents and commands, the last lines of its pane (its output, without the agent's input box and status lines), then its branch, model, tokens and cost. `→` turns it to the **Trace**, what a Claude Code session did, newest at the bottom, up to 40 events:
 
 ```text
 14:02  you     fix the flaky cache test
@@ -392,55 +313,229 @@ The right-hand side takes 55% of the window and follows the cursor: why the sess
 14:09  run     rm -rf build                           denied
 ```
 
-A prompt shows its first line, a run of edits is one line of file names, a command its first words (and its exit code when it failed), a sub-agent its type and description, a question or a plan to approve is `ask`, and a tool call that was turned down says so. The same event twice in a row is one line with a count. It is read from the last 4 MB of the session's transcript, never the whole file, and every character a terminal could act on is taken out. A Codex session has no trace (its rollout format changes too often to read cheaply; Pane shows its screen), and a session on another machine is read there: enter looks at its pane.
+The trace reads the last 4 MB of the transcript, and every character a terminal could act on is taken out. A Codex session has no trace (Pane shows its screen), and a session on another machine is read there.
 
 | Key | What it does |
 |-----|--------------|
 | `↑` `↓`, `j` `k` | move |
-| `enter` | go to that session's pane (`agents jump`); on another machine, a look at its pane. On a sub-agent or command: its last lines or details, full screen |
-| `ctrl-p` | everything you can do: the row's own actions first (for a session of this machine in a Herdr pane, with mirrors on, also its pane's phone mirror off or on again: `agents hc mirror off` and `on`), then the map, ports, memory, limits, runs and reports |
-| `?` | the keys |
-| `tab`, `shift-tab`, `1` `2` `3` | the lens: Attention, Tree (each session with its sub-agents and commands under it), Machines (grouped by machine, with a roll-up each) |
-| `←` `→` | the right-hand side: Card, Trace (what the session did, in order), Pane (more of it), Details (`agents show`) |
+| `enter`, double click | go to that session's pane (`agents jump`); on another machine, a look at its pane; on a sub-agent or command, its last lines or details |
+| `ctrl-p` | everything you can do: the row's actions first (with phone mirrors on, also its pane's mirror off or on), then the map, ports, memory, limits, runs and reports |
+| `tab`, `shift-tab`, `1` `2` `3` | the lens: Attention, Tree (sub-agents and commands under each session), Machines (a roll-up each) |
+| `←` `→` | the right-hand side: Card, Trace, Pane, Details (`agents show`) |
 | `space` | hide or show the right-hand side |
 | `.` | show the parked sessions |
 | `/` | find by typing; `esc` ends it |
-| `-` | back to the pane the board was opened over, after an `enter` took you elsewhere, whatever runs in it (an agent, a shell, an editor) |
-| `ctrl-k` | stop the session or command under the cursor (`agents kill`: its refusals and its y/N question, on its machine); a sub-agent has no process of its own to stop |
-| `ctrl-r` | reload now |
-| `q` | leave; `esc` too, when it is the popup |
+| `-` | back to the pane the board was opened over |
+| `ctrl-k` | stop the session or command under the cursor (`agents kill`, with its refusals and y/N, on its machine) |
+| `ctrl-r` | reload |
+| `?` | the keys |
+| `q` | leave; `esc` too, in the popup |
 
-The mouse does the same: a click selects, a double click goes, the wheel scrolls either side, and each word of the footer is a button.
-
-A sub-agent is listed for 30 minutes after its last line, and counts as running while its transcript was written in the last 90 seconds (Claude Code sessions on that machine). The board reloads when Herdr says something changed: the plugin's event hooks (a tab, pane or agent coming, going or changing state) run `agents board --poke`, which tells each open board through its own Unix socket (mode 600, in tuidev's run directory; never a network port, which a sandboxed agent could reach). Its timer is then only a safety net, every 15 seconds; a board that can't listen (an fzf before 0.66, no curl) reloads every 5 seconds instead (`AGENTS_BOARD_EVERY` sets either). The other machines answer `agents board --rows` over ssh and are asked again in the background once their answer is 20 seconds old (`AGENTS_BOARD_REMOTE`), one ask at a time, so the list never waits for a machine twice. A machine that sends no rows says why on its card in the Machines lens: no agents there, a tuidev too old for the board, or no answer. What a machine sends is text: an id is used only when it has the shape of one, and no control character reaches your terminal.
+A click selects, the wheel scrolls either side, and each word of the footer is a button. A sub-agent stays listed for 30 minutes after its last line and counts as running while its transcript was written in the last 90 seconds. The board reloads when Herdr says something changed: the plugin's hooks run `agents board --poke`, which tells each open board through its own Unix socket (mode 600, never a network port); its timer is a safety net every 15 seconds, or every 5 where fzf can't listen (`AGENTS_BOARD_EVERY` in the environment sets either). Other machines answer `agents board --rows` over ssh and are asked again in the background once their answer is 20 seconds old (`AGENTS_BOARD_REMOTE`). A machine that sends no rows says why on its card in the Machines lens. What a machine sends is text: an id is used only in the shape of one, and no control character reaches your terminal.
 
 The board needs fzf 0.63 or later; with an older one, or none, it prints its list.
 
+### Menu bar (SwiftBar, macOS)
+
+On macOS the pack installs [SwiftBar](https://swiftbar.app) and its plugin (`agents.1m.sh`, named after `AGENTS_BAR_REFRESH`; `configs/swiftbar/agents.10s.sh` in the repo). If SwiftBar already has a plugin folder, the plugin goes there; otherwise the pack sets it to `~/.config/swiftbar/plugins`. Open SwiftBar once (`open -a SwiftBar`) and turn on **Launch at login** in its settings: the pack adds no login items. Uninstalling removes the plugin and leaves SwiftBar's settings alone.
+
+<img src="assets/menu.gif" width="680" alt="The agents menu under its menu-bar item, a red alert with 1 and a blue check with 1, opening four submenus in turn: a stuck polling loop's verdict, safe to stop because what it waits for already finished, with its evidence and Stop command…, Copy details and Show session; the Today row's breakdown of where the CPU goes, tokens and the report; the Awake choices with Lid closed too… and its 1, 3 and 8 hour options; and the load and busiest processes under the CPU row.">
+
+<sub>The plugin's real output over the screenshot fixtures, drawn as a macOS menu by `scripts/render_menu.sh` ([how](assets/tapes/README.md#the-swiftbar-menu)).</sub>
+
+**The title** counts only what needs you: a red alert and how many sessions are blocked, a blue check and how many are to review, then a cup while keep-awake is on. With nothing to do it is the icon alone. The icon turns yellow for memory pressure, a recent memory incident, a memory guard that should run but doesn't, or a usage limit at 95% or more, and red for heavy thermal pressure, critical memory pressure, or sleep disabled with nothing to restore it. `AGENTS_BAR_TITLE` picks other tokens.
+
+**The menu** answers "does anything need me, and is everything healthy?" in about ten rows, with the rest one hover away. Sections follow `AGENTS_BAR_SECTIONS` and appear only with something to show. The states are [those of `agents`](#what-runs-agents---pack-monitoring):
+
+- **Needs you** and **To review:** each blocked session with what it waits for and how long (`api · permission · 6m`), each finished one (`web · done 12m`).
+- **Running:** each working session with what it runs and uses (`billing · tests 3m12s · 8.4 cores · 7.6G`). A flagged command takes its session's row, with its verdict (`infra · wait-loop stuck 5h10m · safe to stop`; see [Flagged](#flagged-is-it-safe-to-stop)). More than four rows fold into `Running (7) · 2 flagged`.
+- **No signal** and **Parked:** one row each, the sessions in its submenu.
+- A session's row starts with its kind's [mark](#marks-by-kind-of-session), then its task title or project; clicking it shows the project in Finder. Its submenu starts with Jump to session, then its path, kind, pid, age, ports, status and where it lives, its commands with Stop command… (asks first), its MCP servers, Stop duplicates (keep newest)…, Peek, Details, Kill session…, Copy path, Open in Finder and Copy PID. A flagged command's submenu holds its verdict and evidence, Stop, Copy details, Show session, Peek and Details.
+- **Limits:** the [limit window](#usage-limits-agents-limits) closest to its limit as a gauge (`Claude wk ████▏░░░░│░░ 41% +2`), yellow from 80% or over pace, red from 95%; its submenu has every window that hasn't reset, then swap once it passes 80%. Each Claude Code account is its own CLI.
+- **Today:** `Today: 3.4 h blocked · 48 CPU-h · tests 64%`, which opens today's report. Its submenu has **Where the CPU goes** now by job type, each with the sessions behind it, and the [MCP servers](#mcp-servers-by-name) with their memory in use (RSS); then today's tokens, denials and compactions, today's top insight, and Open report.
+- **Stale (3) · web.test, vite, server-memory:** each with its verdict, evidence, Kill tree, Copy details and Details, then Reap all stale, which kills exactly the processes listed.
+- **Hogs (2) · Messages, yes:** each with Terminate (SIGTERM, your own processes only); a memory chip while a memory hog is among them.
+- **Machines (2) · 3 dev servers · 1 left behind:** what your other machines run and every dev server, this machine's too, each a click from your browser, and Open the map ([remote.md](remote.md#remote-feels-local-ports-links-and-files)). It appears once the menu has been opened with something to list.
+- **Awake:** the keep-awake state; its submenu has Until turned off, For 1 hour, For 3 hours, While agents run and Off, a Lid closed too… group (1, 3 and 8 hours; `AGENTS_LID=0` hides it), and who holds the Mac awake. When sleep is disabled with nothing to restore it, Restore lid sleep… leads Needs you.
+- **System:** CPU, memory used and thermal pressure, which opens `agents watch`. Its submenu has the load, the busiest processes (`AGENTS_BAR_TOP`), battery and energy mode, the Codex daemon, the memory guard (on with its stop size, not running with Start it, stalled, unknown inside a sandbox, or off) with its last incident, and, with the [cooling pack](#fans---pack-cooling), the fans with Cool, Balanced, Quiet, Max and Off.
+- With herdr-core installed, one line for [Herdr's phone app](remote.md#herdrs-phone-app-agents-hc): `Phone: herdr-core is up`, `Phone: 5 agents mirrored` with mirrors on, `Phone: herdr-core is not running`, or a warning when the core runs outside your desktop login. The menu never starts or restarts a core.
+- A gray **Maintenance** line when Herdr's server is older than its client or an integration is outdated, with what to run in a terminal outside Herdr. It offers a server restart only while no Herdr session is working or waiting for you, and restarts nothing itself.
+- Open agents watch (with the full table and Edit settings… in its submenu), and Refresh.
+
+Every action runs `agents` with the `PID@START` it listed, so a menu opened before a pid was reused can't stop the wrong process, and menu parameters never carry a path or a name a process controls. Killing a live session asks first in a dialog (Cancel is the default). Each action reports its result as a notification. Windows open in your terminal (`agents open-term`, `AGENTS_TERMINAL`): with Ghostty 1.3 or later, a new window of the Ghostty you run, through its AppleScript; the first time, macOS asks whether SwiftBar may control Ghostty. Status colors come from [your palette](theming.md#agents-and-its-menu) when it suits the menu's appearance; Option-click the item for SwiftBar's own menu.
+
+**When it refreshes.** At once when something changes (`agents bar poke`): Claude Code's hooks, Herdr's agent events (that is how it hears of Codex, `agy` and Grok sessions in Herdr), Codex's `notify` if you wire it, and the menu opening. A poke goes out at most once every 2 s, and the last of a burst is never lost. While a command runs, or a session nothing reports on works, it refreshes every 10 s. Otherwise its timer, `AGENTS_BAR_REFRESH` (1m), is a backstop, and when nothing is going on it skips its reading for up to 5 minutes. Opening the menu shows the last output at once and asks your other machines in the background (at most every 20 s). A poke does nothing where SwiftBar doesn't run the plugin (Linux, a box without SwiftBar); `agents bar` says what a poke would do now. One refresh runs `agents tsv` once: one `ps` snapshot, with Herdr and the MCP inventory from their caches.
+
+### One process in detail: `show`, `jump`, `peek`, `pick`
+
+`agents show PID` (or `PID@START`) is an inspector for any process: a session, an MCP server, a command, a stale helper, a hog.
+
+```
+$ agents show 1001
+MCP server chrome-devtools · repo  pid 1001 · me
+in claude 1000
+
+mcp       configured in claude (user, ~/.claude.json) · starts with chrome-devtools-mcp
+project   repo
+cwd       /Users/NAME/repo
+where     tmux pane work:1.0
+command   npm exec chrome-devtools-mcp@latest
+running   1h00m (since Wed Oct 14 08:00:01 2026)
+cpu       0.0% now · 0s CPU time · 0.0% average · 1 thread
+memory    87M · 253M with 2 child processes
+files     17 open
+verdict   informational — part of a live session; it ends with the session (high confidence)
+          owner: claude 1000 in repo
+          running 1h0m · 0% CPU
+
+children (2)
+  PID        CPU%    MEM  COMMAND
+  1002        0.0   107M  chrome-devtools-mcp
+  1003        0.0    58M    node /Users/NAME/.npm/_npx/abc/node_modules/chrome-devtools-mcp/build/index.js
+```
+
+For a process in a Claude Code or Codex session it also shows the session's name and id, model and version, what it is doing (the last tool call), the last line it wrote and, with the token history, its tokens and cost. Those come from `~/.claude/sessions/PID.json` (checked against the process's start) and the last 256 KiB of the transcript, or the rollout file a Codex process keeps open. The verdict is the one `agents why` prints. `--watch` redraws it every 2 s; `--json` gives a versioned object.
+
+`agents jump PID` goes to where a process runs, so you can answer it (a click on a [notification](#notifications) runs it too): its Herdr pane (`herdr agent focus`) or tmux pane, then the terminal tab that shows it. Ghostty 1.3 or later, iTerm2 and Terminal are asked for the tab through AppleScript; any other app is brought forward. `agents peek PID [LINES]` prints the last lines of its tmux or Herdr pane, and never guesses which pane.
+
+`agents pick` lists every session with what it runs, then stale processes and hogs, in [fzf](https://github.com/junegunn/fzf), with `agents show` as the preview: enter jumps, ctrl-p peeks, ctrl-d opens the details live, ctrl-k kills the tree (with `agents kill`'s refusals and question), ctrl-r reloads. With fzf 0.70 or later the list reloads every 2 s.
+
+### MCP servers by name
+
+`agents mcp [DIR]` lists the MCP servers your CLIs are configured with: Claude Code's from `~/.claude.json` (user and local scope), each project's `.mcp.json` and each enabled plugin; Codex's from `config.toml`'s `[mcp_servers.NAME]` tables. With `DIR`, only those a session started there loads. MCP processes go by these names everywhere `agents` lists them. Of a server's configuration, `agents` keeps only its name, scope, source, transport and the word its command starts with: never its args, env, headers or URL. Without jq only Codex's servers are known.
+
+Every session starts its own copy of each stdio server it loads: five sessions with `chrome-devtools` at user scope run five copies. So `agents mcp` also says what runs of each server now, and their memory in use (RSS), with a hint for a user-scope server running in several sessions:
+
+```
+NAME                   CLI    SCOPE    TYPE   RUNNING         STARTS WITH                        SOURCE
+chrome-devtools        claude user     stdio  4 copies, 874M  chrome-devtools-mcp                ~/.claude.json
+RUNNING: copies now (each session starts its own) and their memory in use (RSS), not data sent
+chrome-devtools: 2 copies · 454M — user scope starts one per session; scope it to the projects that use it, or agents mcp lazy chrome-devtools starts it on first use
+```
+
+To scope one, remove it at user scope and add it where it is used: `claude mcp remove chrome-devtools -s user`, then `claude mcp add -s project …` in each project. Or start it only when a session calls it:
+
+#### Start a server on its first tool call: `agents mcp lazy`
+
+```bash
+agents mcp lazy chrome-devtools     # Claude Code (user and local scope) and Codex
+agents mcp lazy --all               # every stdio server you configured
+agents mcp eager chrome-devtools    # back to starting with each session
+```
+
+A session then starts `mcp-lazy` (about 10 MB, installed beside `agents`) where the server was. It answers the session's first questions (`initialize`, the tool, prompt and resource lists, `ping`) from a cache of what the server answered before, so the session sees every tool and the server doesn't start. The first request it can't answer, usually a tool call, starts the server, replays `initialize`, and from then on passes every message through; that first call waits for the server to start.
+
+- **The cache** is one private file per server command line in `~/.cache/tuidev/mcp-lazy/`, keyed by a hash of the command, the program's size and modification time, and the server's env values (never stored in the name). It keeps answers per client, so Claude Code and Codex both stay lazy. A client's first session with a new server starts it and fills the cache. Changed tools update the cache and notify the session.
+- **Failures stay contained.** A server that exits fails only its open requests; the next request starts it again. When the session ends, the server's process group gets TERM after 3 seconds (`MCP_LAZY_GRACE`), then KILL.
+- **What is rewritten:** a stdio server's `command` becomes `mcp-lazy` and its args `["--name", NAME, "--", COMMAND, ARGS...]`, in `~/.claude.json` and Codex's `config.toml`; never a project's `.mcp.json` or a plugin's. Each file is backed up to `~/.local/state/tuidev/agents/backups/` first (the last 10 kept) and replaced in one rename, only if no session wrote it meanwhile. Sessions already running keep what they started with.
+- **Seeing it:** `agents mcp` marks such a server `(lazy)` and says how many copies have not started; the menu says `via mcp-lazy: not started`. `MCP_LAZY=0` in a server's env runs it directly; `MCP_LAZY_DEBUG=1` logs to the CLI's MCP log. `uninstall.sh` runs `agents mcp eager --all` first.
+
+## Flagged: is it safe to stop?
+
+A flag says why an item is listed, not that it should be killed:
+
+| Flag | Means | Trust | What to do |
+|------|-------|-------|------------|
+| `stale` | Reparented to pid 1: the session that started it ended | High, but a server it left may be the one open in your browser | Helpers (MCP, npx, `caffeinate`): stop them. A server: check its port first |
+| `stuck` | A polling loop that waited `AGENTS_WAIT_STUCK` (60 minutes) while its watched file stayed quiet | High with a watched file, higher when its last line says the work finished; medium on age alone | Read the file's last line, then stop the loop: the session sees the command fail and carries on |
+| `long` | A command running longer than `AGENTS_TOOL_LONG` (20 minutes) | Informational: builds, tests and dev servers run long on purpose | Nothing, unless you expected it to end |
+| `dup` | The same command runs more than once in one directory | Medium | Keep the newest (Stop duplicates) |
+| hog | Busy for a long time, or holding past `AGENTS_MEM_WARN` of memory | Medium | Quit it normally if you can |
+
+Every item gets a verdict, made by one function (`agents_assess`) for every surface: `agents why`, `json`, the menu, the board, `agents reap` and auto-reap. Its evidence is the owner (the session's kind, pid, project and Herdr status, or that its session ended), age and CPU, listening ports, directory and, for a polling loop, the file it watches, that file's last line and how long it has been quiet. The last line is read from the last 2 KB of a regular file, never a symlink or a file under the [credential paths](sandboxing.md), with control characters removed. The verdicts:
+
+- **safe to stop** (high confidence): a helper whose session ended and that a sample saw running under an agent (`safe to stop — its session ended`); medium when no sample saw that (`probably left by an agent session that ended`), since a `nohup npx …` of your own looks the same. A stuck loop whose watched file ends in a completion marker (`[exited with code N]`, `ok`, `PASS`, `FAIL`, `--- FAIL`, a pytest or cargo summary, `done`, `error`): `safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)`. A stuck loop whose file nothing has written to since.
+- **check first** (medium): anything listening on a port (`check first — dev server on :3000, its session is still active`; `a server on :5173, left behind when its session ended`); a stale tree whose ports couldn't be listed; a stuck loop judged by age alone, whose file is gone, or that only tests whether a file exists; duplicates; hogs (`check first — Messages holds 9.0G of memory` for a memory hog).
+- **leave it**: a loop whose watched file changed recently, so whatever writes it is alive.
+- **informational**: a long command that is none of the above (`informational — running 25m; its session is still active`), and a loop that has not waited `AGENTS_WAIT_STUCK` yet.
+
+```
+$ agents why 5010
+stuck polling loop · pid 5010@Wed_Oct_14_03:50:00_2026
+  until tail -1 $F | grep -qE "^(ok|FAIL)"; do sleep 5; done
+
+verdict: safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+confidence: high
+
+evidence:
+  owner: claude 5000 in myapp
+  waiting 5h10m · 0% CPU
+  watches /tmp/w/done.output
+  last line: [exited with code 0] (a completion marker)
+  file quiet for 5h0m
+
+next:
+  look at it: tail -5 /tmp/w/done.output
+  stopping it ends only the loop: the session sees the command fail and carries on
+  stop it: agents kill 5010@Wed_Oct_14_03:50:00_2026
+  auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
+```
+
+Without a PID, `agents why` lists every flagged item, one line each:
+
+```
+$ agents why
+19 flagged (agents why PID explains one):
+  1010    dup    go           check first — the same command runs 3× in this directory
+  5010    stuck  wait-loop    safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+  6100    stale  node         check first — a server on :5174, left behind when its session ended
+  …
+```
+
+`agents why --copy PID@START` puts the text on the clipboard. `why` refuses a `PID@START` whose pid now names another process.
+
+## Cleaning up: `agents reap`
+
+`agents reap` goes by the verdicts: it stops only the stale trees (and, with `--stuck`, the stuck loops) whose verdict is "safe to stop", and says how many "check first" ones it left out. `--all` takes those too. It asks before it signals anything; `-n` shows the plan:
+
+```
+$ agents reap -n --stuck
+  5011    sleep
+  5010    zsh · safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+  5020    zsh · safe to stop — nothing has written to the file it watches for 1h30m
+  60829   npm · safe to stop — probably left by an agent session that ended
+  27681   caffeinate · safe to stop — probably left by an agent session that ended
+  6001    chrome-devtools-mcp
+  6000    npm · safe to stop — its session ended
+left out: 5 flagged "check first" (agents reap --all includes them; agents why PID explains one)
+dry run: would send SIGTERM to 13 process(es), then SIGKILL to any left after 3s
+```
+
+When every item is "check first", it says so and asks nothing. To stop one item, use `agents kill PID@START` (a tree) or `agents term PID` (one process, for a hog).
+
+**Auto-reap** (`AGENTS_AUTO_REAP=1`, off by default) stops, without asking and at most once a minute, only the two high-trust cases:
+
+- stale trees that listen on no port and that a sample saw running under an agent before their session ended: the MCP servers, npx helpers and `caffeinate -t` of ended sessions. That record needs `AGENTS_HISTORY=1`. Never a stale server, a `caffeinate` without `-t`, or anything when the ports could not be listed;
+- stuck polling loops reading a watched file that has been quiet for twice `AGENTS_WAIT_STUCK` (two hours by default).
+
+Never a long or duplicate command, anything listening on a port, a loop stuck by age alone, or one that only tests whether a file exists. The menu bar runs `agents reap --auto --throttle --notify` in the background when a refresh shows something it may stop. Where no menu bar runs (Linux, a headless box, SwiftBar quit), the [sampler](#history-and-agents-report) runs the same command once a minute when a sample saw something under an agent; a shared throttle keeps it to once a minute whoever starts it. `agents reap --auto` by hand works whatever `AGENTS_AUTO_REAP` says, and `agents reap --auto -n` shows what it would stop. One notification sums up what it stopped.
+
+In Claude Code's auto mode, the [cleanup hooks](#cleanup-hooks-claude-code) also stop the background commands a finished subagent or a cleared session left running.
+
+Every cleanup is logged to `events.tsv` in the [history](#history-and-agents-report): `kill manual` for `agents kill`, `term` and the menu's Stop and Kill, `reap stale` or `reap stuck`, `auto stale` or `auto stuck`, `hook subagent-end` or `hook session-end`, and `guard memory` for the memory guard, each with the process name, project and owning session, never a command line.
+
+## Memory and heat
+
 ### Memory guard: `agents mem`
 
-A test that leaks, or loops while building an array, can take a Mac's memory in under a minute: one node process an agent started grew to 16 GB in 55 seconds, macOS killed dozens of its own daemons, and the "Your system has run out of application memory" dialog blamed Chrome, because it lists only apps. Two layers stop that now:
+A test that leaks can take a Mac's memory in under a minute: one node process an agent started grew to 16 GB in 55 seconds, and macOS's "out of application memory" dialog blamed Chrome, because it lists only apps. Two layers stop that:
 
-1. **The Node heap cap** in the shipped Claude Code and Codex settings (`NODE_OPTIONS=--max-old-space-size=4096`, [above](#ai-clis)) makes a JavaScript heap leak fail at 4 GB inside the agent's own command, on every machine (on a 16 GB+ one, Node's default is about the same).
-2. **The memory guard**, `agents mem guard`, which the pack runs as a LaunchAgent on macOS (`~/Library/LaunchAgents/dev.tuidev.memguard.plist`, loaded at login, restarted if it fails) and as a systemd user service on Linux (`~/.config/systemd/user/tuidev-memguard.service`, started with your user manager, `Restart=on-failure`), covers every language. Every `AGENTS_MEM_POLL` seconds (5) while anything needs watching (a process past half the warning, memory pressure warn or critical, or free memory falling at half `AGENTS_MEM_RATE` or faster), and every `AGENTS_MEM_IDLE` seconds (20) otherwise (a minute with no agent session running, since nothing is then stoppable), it reads one `ps` snapshot, and for the few processes past half the warning (or the largest few while memory pressure is up) samples their footprint, which keeps counting what the compressor squeezed and swap took, while RSS falls as a runaway grows (`ps` showed 10 GB for that node; Activity Monitor showed 29). Then:
-   - past the warning, and again at each doubling, a notification names the process, the script it runs, its project and session (`node (clientFuelToday.test.js) in cairn holds 16.6G; stopped at 24.0G`), and a click jumps to that session; growing faster than `AGENTS_MEM_RATE` (200 MB/s) gets one warning too. The warning is `AGENTS_MEM_WARN` (8 GB), or 60% of the stop size when that is smaller, so it always comes before the stop (table below);
-   - a process in an agent tree, below the agent and yours, past `AGENTS_MEM_KILL` (half the RAM), or the largest such past the warning while macOS reports critical memory pressure, is stopped, tree and all, through the same engine as `agents kill` (its refusals, a start-time check, SIGTERM, then SIGKILL after `AGENTS_GRACE`), and the notification says so. An agent session itself, your apps and other users' processes are only ever warned about;
-   - when the guard stops the same script again under the same tool command (the command the agent started: a test runner, the shell running it) within 120 seconds, that runner started it again, so the guard stops the tool command's tree instead, through the same engine and refusals. It is never the agent, and never anything outside the agent's tree. A runner that respawns its crashed worker would otherwise be stopped worker by worker (one log had the same test stopped twice in a minute); an agent running the command again starts a new tool command, which never matches;
-   - every warning and stop goes to `memory.tsv` in the data directory (`epoch event pid name label project session footprint rss free% swap`, names only, pruned with the history), stops to `events.tsv` as `guard`/`memory` too, and a turn to critical pressure is recorded with the biggest process at the time, so the next morning `agents mem` says what happened. An escalation is an `escalate` line with the tool command's pid and name, the runaway's script, and a twelfth field saying why (`node (x.test.js) stopped again 40s after the guard stopped pid 620 under the same command`).
+1. **The Node heap cap** in the shipped Claude Code and Codex settings ([above](#ai-clis)) makes a JavaScript heap leak fail at 4 GB inside the agent's own command.
+2. **The memory guard**, `agents mem guard`, covers every language. The pack runs it as a LaunchAgent on macOS (`dev.tuidev.memguard`) and as a systemd user service on Linux (`tuidev-memguard.service`, `Restart=on-failure`; from boot only with lingering on). It looks every `AGENTS_MEM_POLL` seconds (5) while something needs watching (a process past half the warning, memory pressure up, or free memory falling fast) and every `AGENTS_MEM_IDLE` seconds (20) otherwise. Each look is one `ps` snapshot; on macOS it then reads the footprint of the large processes, which keeps counting what the compressor squeezed and swap took, while RSS falls as a runaway grows.
 
-   | RAM | stop size (half the RAM) | warning | sampled from |
-   | --- | --- | --- | --- |
-   | 8 GB | 4 GB | 2.4 GB (60%) | 1.2 GB |
-   | 16 GB | 8 GB | 4.8 GB (60%) | 2.4 GB |
-   | 32 GB | 16 GB | 8 GB | 4 GB |
-   | 64 GB | 32 GB | 8 GB | 4 GB |
+What it does:
 
-   60% leaves 40% of the stop size between the two (1.6 GB on 8 GB, 3.2 GB on 16 GB): at least 8 s at `AGENTS_MEM_RATE`, more than one poll, so the warning lands before the stop; a lower share would warn about big but ordinary processes. Before, the 8 GB warning was the stop size on 16 GB and above it on 8 GB, so the first notice there was the stop.
+- **Warns** when a process passes the warning, and again at each doubling: a notification names the process, the script it runs, its project and session (`node (clientFuelToday.test.js) in cairn holds 16.6G; stopped at 24.0G`), and a click jumps to that session. A process growing faster than `AGENTS_MEM_RATE` (200 MB/s) gets one warning too. The warning is the smaller of `AGENTS_MEM_WARN` (8 GB) and 60% of the stop size, so it always comes before the stop.
+- **Stops** a process in an agent tree, below the agent and yours, past `AGENTS_MEM_KILL` (half the RAM), or the largest such past the warning while macOS reports critical memory pressure. It stops the tree through the same engine as `agents kill`: its refusals, a start-time check, SIGTERM, then SIGKILL after `AGENTS_GRACE`. An agent session itself, your apps and other users' processes are only ever warned about.
+- **Escalates to the tool command.** When it stops the same script again under the same tool command (the command the agent started, such as a test runner) within 120 seconds, that runner keeps restarting it, so the guard stops the tool command's tree instead. Never the agent, and never anything outside the agent's tree.
+- **Records** every warning, stop and escalation in `memory.tsv` in the data directory (`epoch event pid name label project session footprint rss free% swap`, then why for an escalation; names only), and stops in `events.tsv`. A turn to critical pressure is recorded with the biggest process at the time, so the next morning `agents mem` says what happened.
 
-   **A guard that hangs says so.** `footprint` and `top` each get 5 seconds; one that hangs is cut off, and the processes it did not answer for keep their last footprint for that look (never a zero, never a reason to stop anything). The guard writes a heartbeat (`memguard.beat` in the run directory) after every look, and `agents mem` and the menu say `stalled` when it is older than three of the guard's polls while its pid lives on; `agents mem restart` (the menu's Restart) starts it again.
-
-**What it costs.** A look with nothing large running is one `ps` snapshot: about 0.05 s of CPU. A footprint sample is what costs: `footprint` reads one of your processes for 0.02 to 0.09 s of CPU (more for a bigger one), and `top`, which the guard needs only for other users' processes, samples every process on the Mac for about half a second, however few it is asked about. So the guard samples a process it could stop (in an agent tree, below the agent, yours) on every look while it is past half the warning, and any other large process (an app, a VM, an agent session itself, another user's daemon) once, then again only when its RSS moves by an eighth (at least 512 MB) or after 5 minutes; in between, its last footprint stands. While memory pressure is warn or critical, or free memory falls faster than `AGENTS_MEM_RATE`, it samples them all on every look. On an M4 Pro with a 6 GB VM running, the guard used 13% of a core when it ran `top` on every look; it now uses about 2%, nearly all of it the `ps` snapshot, and about 4% with a 6 GB test in an agent tree beside it (12% before). Off macOS, RSS is the footprint and nothing is sampled.
-
-`AGENTS_MEM_GUARD=warn` keeps the warnings and the log but never stops anything; `off` turns it off (the LaunchAgent or the service then exits and stays down). After editing the settings, `agents mem restart` restarts it on macOS, `systemctl --user restart tuidev-memguard.service` on Linux. The guard runs with launchd's standard priority, not background, because macOS kills the background band first. On Linux it reads `/proc/meminfo`, and RSS stands in for the footprint; without systemd (a container), run `agents mem guard` in a tmux pane. Like the sampler's timer, the service runs from boot only with lingering on.
+| RAM | stop size (half the RAM) | warning |
+| --- | --- | --- |
+| 8 GB | 4 GB | 2.4 GB (60%) |
+| 16 GB | 8 GB | 4.8 GB (60%) |
+| 32 GB | 16 GB | 8 GB |
+| 64 GB | 32 GB | 8 GB |
 
 `agents mem` draws what the guard acts on:
 
@@ -454,11 +549,66 @@ PID     FOOTPRINT    warn 8G        stop 24G  PROCESS
 2141        10.0G  ████████│██░░░░░░░░░░░░░░  node · billing · claude:7 · rss 9.1G
 ```
 
-Each process's bar ends at the guard's stop size, with its warning marked, so it reads as how far from being stopped. A stalled guard reads `stalled (pid 42, no look for 2m; agents mem restart)`; inside an agent's sandbox, where the process table can't be read, the guard and the memory read as `unknown: ... from inside a sandbox`, not as a guard that is down. Swap fills up before a guard stop, so past 80% it shows in the summary of `agents` and in the menu too; below that, only here. The last incidents follow. Memory hogs (RSS past `AGENTS_MEM_WARN`) also lead the hogs in `agents hogs`, `agents ls` and the menu.
+Each bar ends at the stop size with the warning marked, so it reads as how far a process is from being stopped. The last incidents follow. Swap fills up before a guard stop, so past 80% it shows in `agents` and the menu too.
 
-### Is it running: `agents doctor`
+**The guard's state** is one of: `running`; `stalled` (its pid lives but it has not looked for three of its polls: `stalled (pid 42, no look for 2m; agents mem restart)`); `not running` (installed, but no guard runs); `off` (`AGENTS_MEM_GUARD=off`); or `unknown` inside an agent's sandbox, where the process table can't be read (`unknown: the process table can't be read from inside a sandbox`), which is not a guard that is down. A `footprint` or `top` probe that hangs is cut off after 5 seconds, and the processes it missed keep their last reading: never a zero, never a reason to stop anything. The guard runs at launchd's standard priority, since macOS kills the background band first.
 
-The sampler and the memory guard work in the background, so when one stops nothing says so until a report comes up empty or a runaway is not stopped. `agents doctor` asks:
+```bash
+agents mem                # the view above
+agents mem check -n       # what the guard would do right now
+agents mem log 20         # the last incidents
+agents mem restart        # after editing the settings (Linux: systemctl --user restart tuidev-memguard.service)
+```
+
+`AGENTS_MEM_GUARD=warn` keeps the warnings and the log but never stops anything; `off` turns the guard off. On Linux, RSS stands in for the footprint and `/proc/meminfo` for the machine; without systemd (a container), run `agents mem guard` in a tmux pane.
+
+**What it costs.** A look with nothing large running is one `ps` snapshot, about 0.05 s of CPU. A footprint sample costs more, so the guard samples a process it could stop on every look while it is past half the warning, and any other large process (an app, a VM, an agent session) only when its RSS moves by an eighth (at least 512 MB) or every 5 minutes, unless memory pressure is up.
+
+### Keep awake: `agents awake`
+
+```bash
+agents awake on 2h        # keep the Mac and display awake (30m, 1h30m; no duration: until off)
+agents awake agents       # stay awake while any agent session runs, then release
+agents awake lid 3h       # macOS, opt-in: awake with the lid closed too (asks for your password)
+agents awake status       # our hold, and who else holds the Mac awake
+agents awake off          # release (ends lid mode too)
+```
+
+Keep-awake is `caffeinate -di` on macOS and `systemd-inhibit` on Linux, never `pmset disablesleep` or sudo by default. One holder at a time; `awake agents` re-checks every `AGENTS_AWAKE_POLL` seconds (60). A closed lid still sleeps the Mac unless it is on power with an external display (closed-display mode). `tuidev uninstall` releases it first.
+
+**With the lid closed** (`agents awake lid DURATION`, macOS only), for an agent that should keep working in a closed laptop. Use closed-display mode instead when you can: it needs no root. Otherwise:
+
+- it runs `pmset -a disablesleep 1`, asking for your administrator password each time in macOS's own dialog; no sudo rights are stored;
+- it is always time-boxed: a duration is required, and one past `AGENTS_LID_MAX` (8h) is refused;
+- a small root-owned guard (fixed text in `lib/agents/lid.sh`) turns lid sleep back on when the time is up, when the battery falls below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or when thermal pressure reaches heavy. If the guard fails to start, sleep is restored at once;
+- `agents awake off` ends it early (one more password); `agents awake restore` restores the setting whatever set it.
+
+A reboot keeps `disablesleep` but kills the guard. `agents`, `agents awake status`, the menu and `tuidev check` then warn `lid sleep is disabled and nothing will restore it`; fix it with the menu's Restore lid sleep…, `agents awake restore`, or `sudo pmset -a disablesleep 0`.
+
+**Thermal.** `agents thermal` shows the kernel's thermal pressure (`nominal`, `moderate`, `heavy`, `trapping`, `sleeping`) and the energy mode, read-only. macOS runs the fans unless the cooling pack is installed.
+
+### Fans (`--pack cooling`)
+
+A MacBook under agent workloads runs its chip at 75–85 °C for hours, and macOS keeps the fans near their minimum until the chip is near its limit, so the chassis and the palm rest take the heat. The `cooling` pack adds a fan curve. Apple has no public fan API, so like every fan tool it writes the System Management Controller's fan keys as root; this one is a single readable Swift file, [`lib/fan/tuidev-fan.swift`](../lib/fan/tuidev-fan.swift), with no network and no third-party code.
+
+```bash
+tuidev install --pack cooling   # Apple Silicon; builds tuidev-fan, one sudo prompt
+agents cool                     # who runs the fans, their speed, the chip's temperature
+agents cool cool                # palms first: the fans rise from 55 °C, full speed at 85 °C
+agents cool auto                # balanced (the default): 60 °C to 95 °C
+agents cool quiet               # the chassis warms first: 70 °C to 100 °C
+agents cool max                 # full speed until you switch back
+agents cool off                 # macOS runs them
+```
+
+- **The curve** follows the hottest CPU or GPU core, averaged the way the chassis takes heat in (rising over about a minute, falling over three), so the fans settle at a steady speed instead of chasing each burst. When the chip itself needs air, a faster average takes over, and heavy thermal pressure means full speed at once. A fan's target changes only in steps of 150 rpm or more. `/Library/Application Support/tuidev/fan/fan.conf` can set `low` and `high` for balanced.
+- **Safety.** It only adds air: in auto, a fan is taken only when the curve asks for more than macOS runs it at, and never set below its minimum. Every error, a missing temperature, `SIGTERM`, uninstall and system sleep hand the fans back to macOS; after a crash, launchd restarts the daemon within seconds and it releases them first. The chip's own thermal protection keeps working underneath. Run one fan tool at a time: with TG Pro, Macs Fan Control or Stats also driving the fans, the two fight.
+- **What runs as root:** the pack builds `~/.local/lib/tuidev/fan/tuidev-fan`, copies it to `/Library/PrivilegedHelperTools/dev.tuidev.fan` (root-owned) and loads `/Library/LaunchDaemons/dev.tuidev.fan.plist`. `mode` and `fan.conf` in `/Library/Application Support/tuidev/fan/` are writable by admins, so `agents cool` and the menu switch modes without a password; the daemon clamps whatever they hold. Errors go to `/var/log/tuidev-fan.log`. `tuidev update --configs` rebuilds it only when the source changed. That one `sudo` runs a file you built, so run the pack when nothing untrusted runs as you.
+- **Check a new Mac by hand:** stop the daemon (`sudo launchctl bootout system/dev.tuidev.fan`), then `sudo /Library/PrivilegedHelperTools/dev.tuidev.fan try 3500 30` holds 3500 rpm for 30 s and releases the fans. Always run the root-owned copy. A fanless Mac has nothing to install: the pack says so.
+
+## Is it running: `agents doctor`
+
+The sampler and the memory guard work in the background, so when one stops nothing says so until a report comes up empty. `agents doctor` asks:
 
 ```text
 ✓ ps            the process table can be read
@@ -471,202 +621,40 @@ The sampler and the memory guard work in the background, so when one stops nothi
 
 | Row | Ok | Not ok |
 |-----|----|--------|
-| `ps` | the process table can be read | skipped inside a sandbox, with `agents mem`'s wording |
-| `sampler` | the newest sample is under 10 minutes old (the rule `agents` uses for its "no sampler has run" line) | fails, with the command that starts the sampler's job (the LaunchAgent, or `systemctl --user enable --now tuidev-sample.timer`); warns under `AGENTS_SAMPLER=0`; skipped under `AGENTS_HISTORY=0`, and on Linux without a systemd user manager (a container: `agents watch` samples while it runs) |
-| `memory guard` | `on` | `stalled` and `stopped` fail (`agents mem restart`); `none` warns (nothing installs one); `off` and `unknown` (a sandbox) are skipped, and so are `stopped` and `none` on Linux without a systemd user manager (run `agents mem guard` in a tmux pane) |
-| `hooks` | the hooks and status line in `~/.claude/settings.json` that call `~/.local/bin/agents` find this `agents` | warns when none calls it (with `--pack ai-clis`, which brings them; without it, skipped), or they call another copy; fails when `~/.local/bin/agents` is gone; skipped without `jq` or the file. Read only |
-| `dirs` | the data and run dirs can be written, or made | fails; skipped inside a sandbox, which refuses those writes |
+| `ps` | the process table can be read | skipped inside a sandbox |
+| `sampler` | the newest sample is under 10 minutes old | fails with the command that starts the sampler's job; warns under `AGENTS_SAMPLER=0`; skipped under `AGENTS_HISTORY=0`, and on Linux without a systemd user manager (`agents watch` samples while it runs) |
+| `memory guard` | `on` | `stalled` and `stopped` fail (`agents mem restart`); `none` warns; `off` and `unknown` are skipped, and so are `stopped` and `none` without a systemd user manager (run `agents mem guard` in a tmux pane) |
+| `hooks` | the hooks and status line in `~/.claude/settings.json` that call `~/.local/bin/agents` find this `agents` | warns when none calls it with `--pack ai-clis` installed, or they call another copy; fails when `~/.local/bin/agents` is gone; skipped without `jq`, the file or `--pack ai-clis` |
+| `dirs` | the data and run dirs can be written | fails; skipped inside a sandbox |
 
-`agents doctor --fix` restarts what failed through the commands that already do it: the sampler's job (`launchctl kickstart -k`, or the systemd timer), then one sample; the guard with `agents mem restart`, then up to 5 s for it to look. Then it probes again. `-n` prints what it would run. Exit codes: `0` nothing failed, `1` something still fails, `2` a bad argument. `--tsv` prints the rows (`STATUS NAME DETAIL FIX`, and `did`, `would` or `failed` for a repair), which is how [`tuidev check`](updating.md#checking-the-install-tuidev-check) shows them, so the two never disagree. It needs only the monitoring pack: it ships with `agents`.
+`agents doctor --fix` restarts what failed through the commands that already do it (the sampler's job, then one sample; the guard with `agents mem restart`), then probes again; `--fix -n` prints what it would run. Exit codes: `0` nothing failed, `1` something still fails, `2` a bad argument. [`tuidev check`](updating.md#checking-the-install-tuidev-check) shows the same rows (`agents doctor --tsv`), so the two never disagree.
 
-### Fans (`--pack cooling`)
+## History and `agents report`
 
-A MacBook under agent workloads runs its SoC at 75–85 °C for hours, and macOS keeps the fans near their minimum (about 1350 rpm on an M4 Pro, out of 5777) until the chip itself is near its limit: the chassis, and the palm rest, take the heat. The `cooling` pack adds the missing fan curve. Apple has no public fan API, so like every fan tool (TG Pro, Macs Fan Control, Stats) it writes the System Management Controller's fan keys as root; the difference is that it is one small, readable Swift file in this repo, [`lib/fan/tuidev-fan.swift`](../lib/fan/tuidev-fan.swift), with no network and no third-party code.
+With `AGENTS_HISTORY=1` (the default), `agents` keeps a local history in `~/.local/state/tuidev/agents` (`$XDG_STATE_HOME`), so you can see over days and weeks where agent work spends CPU, tokens and your time. It holds names and counts only, never command lines or messages, and nothing leaves the machine. The directory is private (mode 700, files 600). `tuidev uninstall` keeps it unless you answer yes or pass `--purge-history` ([Uninstall](updating.md#uninstall)). History, events and the rest are pruned after `AGENTS_HISTORY_DAYS` (30).
 
-```bash
-tuidev install --pack cooling   # Apple Silicon; builds tuidev-fan, one sudo prompt
-agents cool                   # who runs the fans, their speed, the SoC's temperature
-agents cool cool              # palms first: the fans start at 55 °C, full speed at 85 °C
-agents cool auto              # balanced (the default): 60 °C to 95 °C
-agents cool quiet             # the chassis warms first: 70 °C to 100 °C
-agents cool max               # full speed until you switch back
-agents cool off               # macOS runs them
+**Sampling.** `agents sample` takes one sample: one `ps` snapshot classified by [job](#where-the-cpu-goes-job-types), one row per job, project and session kind in `history.tsv` (`epoch job project session cpu_s rss_kib procs`; `cpu_s` is the CPU time used since the previous sample). It also reads the transcripts for [tokens](#tokens-and-denials), notes who [waits on you](#waits-how-long-agents-wait-on-you), and follows the [runs](#the-run-ledger). `sample.state` remembers which processes a sample saw under an agent: the record auto-reap needs before it stops a stale tree.
+
+**Who samples.** The pack's sampler runs `agents sample --scheduled` once a minute, with or without the menu bar: a LaunchAgent on macOS (`dev.tuidev.sample`), a systemd user timer on Linux (`tuidev-sample.timer`; from boot only with lingering on, `sudo loginctl enable-linger $USER`, which the pack prints when it is off; without systemd, as in a container, nothing samples on its own). The menu bar and `agents watch` also sample while they run, and no two samples overlap: a scheduled run does nothing when a sample ran within 55 s. With `AGENTS_AUTO_REAP=1`, the scheduled run also runs [auto-reap](#cleaning-up-agents-reap) where no menu bar does. `AGENTS_SAMPLER=0` makes each scheduled run do nothing.
+
+**When no sampler runs.** `agents`, `agents report` and `agents limits` end with one dim line once the newest sample is 10 minutes old, or none ran: `no sampler has run since 14:02: tuidev install --pack monitoring starts one` (on Linux with the timer installed, `systemctl --user enable --now tuidev-sample.timer starts one`; under `AGENTS_SAMPLER=0`, that `agents watch` samples while it runs). `agents report` ends with `data as of HH:MM`, the newest sample it read, and the JSON of `agents json`, `agents report` and `agents limits` carries it as `sampled_at` (epoch seconds, `null` when none ran). Nothing is said with `AGENTS_HISTORY=0`. [`agents doctor`](#is-it-running-agents-doctor) says why.
+
+**`agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]`** (default the summary, last 24h). The summary opens with the **top insights**, then CPU-hours by job, the top projects with their main job, CPU by session kind, the busiest hours, the cleanups by reason with the projects that leave things behind, and Tokens, Denials and Waits lines once there are such files:
+
+```text
+agents report · last 24h
+
+TOP INSIGHTS
+  1. api: 40 CPU-min in 24h, ↑200% on the 24h before (build +27 CPU-min) — see what changed: agents report --view trends
+  2. app: `go` test runs ×10 in 24h, 5m30s median, 3 duplicates (20 CPU-min) — consider a shared test cache or serializing them
+  3. Explore subagents left 3 polling loops running in 24h (2.1 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
+  more: agents report --view runs|waste|trends|agents|tokens|denials|waits
+
+CPU 2.14 CPU-h of agent work
+…
 ```
 
-- **The curve** follows the hottest CPU or GPU core (the `Tp*`, `Te*` and `Tg*` die sensors, the same key families on every M-series chip): in balanced (`auto`, the default) the fans are macOS's below 60 °C, and from 60 °C to 95 °C the daemon raises them from their minimum to their maximum (about 3250 rpm at 75 °C and 4500 at 85 °C on an M4 Pro). `cool` uses 55–85 °C (about 4300 rpm at 75 °C), for palms first; `quiet` 70–100 °C (about 2100 rpm at 75 °C), for the quietest Mac that still adds air before macOS would. On an M4 Pro the palm rest starts to feel warm from about 75 °C sustained.
-- **What your palms feel:** the palm rest and keyboard warm with the power the chip *sustains*, over minutes, not with its spikes, and no SMC sensor sits under your hands (with palms on the palm rest for two minutes, none of an M4 Pro's 300-odd sensors moved by more than 0.5 °C). So the curve reads the hottest core averaged the way the chassis takes it in: rising with a 60 s time constant and falling with a 180 s one. The fans settle at a steady speed instead of chasing each burst. When the chip itself needs air (moderate thermal pressure, or within 5 °C of `high`) a prompt average takes over (9 s up, 40 s down), so performance never throttles while the fans catch up. A raw reading at `high` two readings in a row, or heavy thermal pressure, means full speed at once, as macOS would. The status file's `input` line says which average drives (`sustained` or `prompt`).
-- **Quiet changes:** a fan's target changes only when the new one is 150 rpm or more away, and falls at most 150 rpm a step; it lets go only 5 °C below the start. On a recorded busy stretch of an M4 Pro, the first version (the hottest core with only a limit on falling) jumped by more than 300 rpm 8 times in three minutes; replayed over five busy minutes, the sustained average changes the fans about 7 times and never by that much. `/Library/Application Support/tuidev/fan/fan.conf` can set `low` and `high` (for balanced; 40–75 and `low`+5–105 °C; anything else falls back to 60 and 95). The fans can only move the heat out: under a sustained agent load they still have to work, and the quietest Mac is one that makes less heat.
-- **Events, not a busy loop:** the SMC can't announce a temperature, so the daemon reads one every 2 s while it holds the fans or the SoC is within 10 °C of the curve, and every 10 s otherwise (timers with leeway, which macOS coalesces). Everything else is an event: a change to `mode` or `fan.conf` (a kqueue watch: a menu click applies at once), the kernel's thermal pressure (`notify_register_dispatch`), system sleep and wake. Each reading is one pass over the die sensors and one over the fans: about 0.3% of one core while busy, and 7 MB of memory.
-- **How it takes the fans:** it sets a fan's mode key (`F0Md`) to manual, reads it back, and writes its target (`F0Tg`). Where the firmware refuses the mode write (some M1–M4 Macs), it sets the `Ftst` diagnostic flag first, after which macOS's `thermalmonitord` yields the fans; an M4 Pro on macOS 27 and M5 Macs accept it directly. The daemon re-takes a fan macOS takes back from it, and counts each time (`control` in its status file). After three failures in a row it stops trying for five minutes and says why (`error` in the status file).
-- **Safety:** in auto, a fan macOS runs is taken only when the curve asks for more than macOS runs it at (so switching to auto mid-build, or macOS raising the fans for the battery or the SSD, never slows them), and never set below its own minimum; heavy thermal pressure means full speed. `low` can't start the curve above 75 °C. A fan whose range reads as nonsense (0, NaN) is left to macOS. Every error, a missing temperature, `SIGTERM` (`launchctl bootout`, uninstall; a takeover finishes within seconds, well inside the plist's 60 s exit timeout) and system sleep hand the fans back to macOS (mode 0, `Ftst` cleared). A crash or a kill can't release: launchd restarts the daemon within about 10 s, and it releases them first thing. The SoC's own thermal protection keeps working underneath. One fan tool at a time: with TG Pro, Macs Fan Control or Stats also driving the fans, the two fight; `tuidev-fan try` refuses while the daemon runs.
-- **What runs as root:** the pack builds `~/.local/lib/tuidev/fan/tuidev-fan`, and its `install` (the one `sudo`) copies it to `/Library/PrivilegedHelperTools/dev.tuidev.fan` (root-owned, so nothing you can write runs as root) and loads `/Library/LaunchDaemons/dev.tuidev.fan.plist`. The daemon reads `mode` and `fan.conf` and writes `status` after each reading in `/Library/Application Support/tuidev/fan/`; `mode` and `fan.conf` are `root:admin 0664`, so `agents cool` and the menu switch modes without a password, and the daemon clamps whatever they hold. Its errors go to `/var/log/tuidev-fan.log`; a stopped daemon starts again with `sudo launchctl bootstrap system /Library/LaunchDaemons/dev.tuidev.fan.plist`. A standard (non-admin) user can read the fans but not switch modes. `tuidev update --configs` rebuilds and reinstalls it only when the source changed; `uninstall.sh` runs its `uninstall` (stop, release, remove). That one `sudo` runs a file in your home, as any local build must, so run the pack when nothing untrusted runs as you (an agent outside its sandbox, say).
-- **Check a new Mac by hand:** with the daemon stopped (`sudo launchctl bootout system/dev.tuidev.fan`), `sudo /Library/PrivilegedHelperTools/dev.tuidev.fan try 3500 30` holds 3500 rpm for 30 s, reports whether macOS took the fans back, and releases them (Ctrl-C too); always run the root-owned copy under `sudo`, never the one in your home folder, which any process of yours could replace. `dev.tuidev.fan status` reads the fans and the temperature without root. A fanless Mac (a MacBook Air) has nothing to install: the pack says so and stops.
-
-### One process in detail: `show`, `jump`, `peek`, `pick`
-
-`agents show PID` (or `PID@START`) is Activity Monitor's inspector for one process: an agent session, an MCP server, a command a session runs, a stale helper, a hog, or any process.
-
-```
-$ agents show 1001
-MCP server playwright · api  pid 1001 · me
-busy · in claude 1000
-
-session   api-3 · 5b1e…-…
-model     claude-opus-5-5 · claude 2.1.300
-mcp       configured in claude (plugin, playwright@claude-plugins-official) · starts with @playwright/mcp
-project   api · branch fix-404
-where     tmux pane work:1.2
-running   1h00m (since Wed Oct 14 08:00:01 2026)
-cpu       0.0% now · 4s CPU time · 0.1% average · 12 threads
-memory    87M · 253M with 2 child processes
-files     23 open
-doing     Bash: go test ./internal/... (40s ago)
-said      "The handler test fails on the 404 path; fixing the route."
-verdict   informational — part of a live session; it ends with the session (high confidence)
-```
-
-- **What and whose.** The verdict and evidence are the ones `agents why` prints. For a process deeper in a tree (a test binary under a command) it names the unit and session above it.
-- **The session.** Claude Code records each running session in `~/.claude/sessions/PID.json` (id, name, status, version, and the process's start, checked so a stale record never names a reused pid); the transcript is then `projects/*/ID.jsonl`. A Codex session keeps its rollout file open, which the process's open files name. What it is doing (the last tool call and what it was aimed at, the last line it wrote, the model) comes from the transcript's last 256 KiB, read with `tail -c` and jq, never the whole file. When the token scanner's session lookup is installed, its tokens, cost and origin are shown too.
-- **Where it lives:** the first of a tmux pane, a Herdr pane, an ssh session or a terminal app up its ancestry; the branch comes from `.git/HEAD`, with no git command. One `ps`, one collect, one `lsof` of the process (with a timeout) and one transcript read: about 0.2 s, so `--watch` redraws it every 2 s. `--json` gives a versioned object (`schema_version` 1).
-
-`agents jump PID` goes to where a process runs, so you can answer it there (a click on a [notification](#notifications) runs it too): in Herdr, the agent's pane (the one its environment names, `HERDR_PANE_ID`, when Herdr lists it; else by the Claude Code session id Herdr reports, else the pane whose processes include it, else, for a session whose id is known, the only agent of that kind in its directory; `herdr agent focus`), then the terminal tab its Herdr client runs in; in tmux, the pane (`select-window`, `select-pane`, `switch-client` of the client used last, targeting the pane's id, `%N`, which stays right when windows are renumbered; it is shown as `session:window.pane`), then that client's terminal tab; otherwise the terminal tab it runs in. Ghostty (1.3 or later), iTerm2 and Terminal are asked for the tab by its tty through AppleScript; any other app is just brought forward. `agents peek PID [LINES]` prints the last lines of its tmux pane (`capture-pane`) or Herdr pane (`herdr pane read`, found by `HERDR_PANE_ID`, session id or processes only: it never guesses which pane to print). Both resolve everything when you run them, never on a menu refresh.
-
-`agents pick` lists every session with what it runs (MCP servers by name, commands, nested sessions), then stale processes and hogs, in [fzf](https://github.com/junegunn/fzf), with `agents show` of the line under the cursor as the preview. Enter jumps, ctrl-p peeks, ctrl-d opens the details live, ctrl-k kills the tree (the same refusals and y/N question as `agents kill`), ctrl-r reloads. With fzf 0.70 or later the list reloads every 2 s and the cursor stays on its process. Without fzf it prints a hint and `agents ls`.
-
-### MCP servers by name
-
-`agents mcp [DIR]` lists the MCP servers your CLIs are configured with: Claude Code's from `~/.claude.json` (user scope, and each project's local scope), each project's `.mcp.json` and each enabled plugin's `.mcp.json` and `.claude-plugin/plugin.json` (its `mcpServers`, inline or in a file of the plugin); Codex's from `config.toml`'s `[mcp_servers.NAME]` tables. With `DIR`, only those a session started there loads. MCP-server processes go by these names everywhere: `agents ls` (`mcp: 2 servers · 4 procs · 449M (playwright, billing)`), `ps`, `json`, `tsv` and the menu. A process matches a server by the one word that starts it (an npx or uvx package without its version, a program's name, a script's path), as a whole word of its command line (or a path's tail, a package under `node_modules/`), never inside another. A flag's value is never that word, nor is one too common to name a server (a tool such as `ssh` or `cargo`, a word under five letters, `dist/index.js`); a process that matches none is named by its package (`@playwright/mcp` → `playwright`, `chrome-devtools-mcp` → `chrome-devtools`). A configured server whose command line does not say `mcp` (`node ~/srv/index.js`) is counted as an MCP server too. Of a server's configuration, agents keeps only its name, scope, source, transport and that word: never the rest of its args, its env, headers or URL. The inventory is cached in `~/.config/tuidev/run/mcp.tsv` (private) and rebuilt when a config file changes (even while it is being built), in the background for the menu (at most every 30 s). Without jq only Codex's servers are known.
-
-Every session starts its own copy of each server it loads: five Claude Code sessions with `chrome-devtools` at user scope run five copies, and one started as `npx chrome-devtools-mcp@latest` is three processes (the `npm exec` wrapper, the server and its node child, about 170 MB together). An http server runs no local process. So `agents mcp` also says what runs of each server now, from one `ps` and the classify pass: its copies (each session's, and any a stale tree left behind) and their memory in use (RSS, resident memory, not data sent). A Claude Code server at user scope that runs in more than one session gets a hint, since that scope starts it everywhere; stale copies get one too:
-
-```
-NAME                   CLI    SCOPE    TYPE   RUNNING         STARTS WITH                        SOURCE
-chrome-devtools        claude user     stdio  5 copies, 851M  chrome-devtools-mcp                ~/.claude.json
-playwright             claude project  stdio  1 copy, 166M    @playwright/mcp                    ~/work/app/.mcp.json
-docs                   claude user     http   -               (a URL)                            ~/.claude.json
-RUNNING: copies now (each session starts its own) and their memory in use (RSS), not data sent
-chrome-devtools: 5 copies · 851M — user scope starts one per session; scope it to the projects that use it, or agents mcp lazy chrome-devtools starts it on first use
-```
-
-To scope one, remove it at user scope and add it to the projects that use it: `claude mcp remove chrome-devtools -s user`, then `claude mcp add -s project …` (or `-s local`) in each. Or keep it everywhere and let each session start it only when it calls one of its tools:
-
-#### Start a server on its first tool call: `agents mcp lazy`
-
-Claude Code and Codex start every configured stdio MCP server with each session, used or not. Claude Code already keeps their tool definitions out of the context until needed (tool search); the process still runs, and a browser server holds 60 MB or more per session before it does anything. `agents mcp lazy NAME` puts `mcp-lazy` (installed beside `agents`) in front of that server, in each config that defines it:
-
-```bash
-agents mcp lazy chrome-devtools     # Claude Code (user and local scope) and Codex
-agents mcp lazy --all               # every stdio server you configured
-agents mcp eager chrome-devtools    # back to starting with each session
-```
-
-A session then starts `mcp-lazy` (about 10 MB) where the server was. It answers what every session asks first (`server/discover`, `initialize`, `tools/list`, prompts and resources lists, `ping`) from a cache of what the server answered before, so the session sees every tool and the server never starts. The first request it cannot answer, usually a tool call, starts the server, replays the session's `initialize` to it, and from then on passes every message through unchanged; that first call waits for the server to start (a quarter of a second for chrome-devtools). Nothing changes for you: no per-project switches, and the tools are always there.
-
-- **The cache** is one private file per server command line in `~/.cache/tuidev/mcp-lazy/` (`$XDG_CACHE_HOME` respected), named after the server and a hash of its command, never the command itself. In that hash too: the program's size and modification time (an upgraded server starts a new cache), the working directory when an arg is a relative path, and the values of the server's own env variables (`agents mcp lazy` names them with `--env` for a server whose config sets env; only names reach the command line). It keeps the server's answers for each kind of client, its MCP protocol version and capabilities (Claude Code and Codex ask for different ones), so both CLIs stay lazy side by side. A client's first session with a new server starts it at once and fills the cache for the next ones. Once a server starts, `mcp-lazy` compares its answers with the cache's: changed tools update it and the session gets `notifications/tools/list_changed`; a changed `initialize` answer (new instructions or capabilities) replaces the cache's for the next session. A server started through `npx pkg@latest` keeps one cache across versions, so a new version shows in the session after its first tool call, not before. Cached tool schemas keep their content but not their key order.
-- **Failures stay contained.** A server that exits fails only the requests it had, and the next request starts it again. One that refuses `initialize` or cannot start fails that call, not the session. When the session closes stdin, the answers to what it already asked still come back; then the server's stdin is closed and, after 3 seconds (`MCP_LAZY_GRACE`), its whole process group gets TERM, then KILL. A client stopping `mcp-lazy` with a signal skips the wait.
-- **What is rewritten:** a stdio server's `command` becomes `mcp-lazy` and its args `["--name", NAME, "--", COMMAND, ARGS...]`; env and every other key stay. `~/.claude.json` (user scope, and local scope in each project) and Codex's `config.toml`; never a project's `.mcp.json`, which goes with the repo, nor a plugin's. Each file is copied to `~/.local/state/tuidev/agents/backups/` first (the last 10 kept) and replaced in one rename (of the file a symlink leads to, so a dotfile manager's link stays one), and only if no session wrote to it meanwhile (if one did, run it again). A Codex table whose command or args hold escapes or quotes is left for you to edit, so `eager` can always undo what `lazy` did. Sessions already running keep the servers they started with.
-- **Seeing it:** `agents mcp` marks such a server `(lazy)` and says how many of its copies have not started (`chrome-devtools: 4 of 5 copies not started — mcp-lazy stands in until a tool call`); in the menu, its submenu says `via mcp-lazy: not started, starts on its first tool call`. `MCP_LAZY=0` in a server's env runs it directly; `MCP_LAZY_DEBUG=1` logs what `mcp-lazy` does to the CLI's MCP log. `uninstall.sh` runs `agents mcp eager --all` before it removes `mcp-lazy`.
-
-The menu's **Today › Where the CPU goes › MCP servers** says the same: its first line, in gray, says the number is memory in use now (RSS), not data sent; then one line per server, busiest first. A server in several sessions is one line (`chrome-devtools · 5 copies · 0% · 851M`, with `, 2 stale` when some outlived their session; `chrome-devtools · 4 lazy proxies · server not started · 0% · 48M` when every copy is an `mcp-lazy` stand-in whose server has not started) whose submenu says who configured it and what that means (`user scope (~/.claude.json) — starts in every session`, `project scope (~/work/app/.mcp.json) — starts in sessions in ~/work/app`, `local scope (…)`, `plugin NAME`, `Codex config (…)`), how it starts when its command line shows a launcher (`via npx (adds an npm wrapper process)`, `via mcp-lazy: not started, starts on its first tool call`, `via uvx`, `via docker run`), and then each copy (project, kind, CPU, memory) with its own submenu: Jump to session, what it is and where, Peek, Details, and Kill tree for a stale one. A server running once keeps one line (`playwright · app · 0% · 166M`) with those lines in its submenu. Only scopes and paths are shown, never a command line, args, env or URL.
-
-### Flagged: is it safe to stop?
-
-A flag says why an item is listed, not that it should be killed. Each one is a different kind of signal:
-
-| Flag | Means | Trust | What to do |
-|------|-------|-------|------------|
-| `stale` | Reparented to pid 1: the session that started it ended | High: no session will use it again. But a server it left behind may be the one open in your browser | Helpers (MCP, npx, `caffeinate`): stop them. A server: check its port first |
-| `stuck` | A polling loop that has waited `AGENTS_WAIT_STUCK` (60 minutes) while its watched file stayed quiet | High with a watched file, higher still when the file's last line says the work finished; medium when only its age counts | Read the file's last line, then stop the loop: the session sees the command fail and carries on |
-| `long` | A command running longer than `AGENTS_TOOL_LONG` (20 minutes) | Informational: builds, test suites and dev servers run long on purpose | Nothing, unless you expected it to end |
-| `dup` | The same command runs more than once in one directory | Medium | Keep the newest (Stop duplicates) |
-
-For each item, `agents why PID` (or `PID@START`) prints the evidence and a verdict, and the menu shows the same. One function (`agents_assess`) makes the verdict for every surface: `why`, `json`, the menu, `agents reap` and auto-reap. The evidence is the owner (the session's kind, pid, project and Herdr status, or that its session ended), age and CPU, listening ports and directory, and, for a polling loop, the file it watches, that file's last line and how long ago it changed. The last line comes from the last 2 KB of a regular file (never a symlink, never a file under the credential paths of [sandboxing.md](sandboxing.md), such as `~/.ssh` or `~/.netrc`, and not for a loop that only tests that the file exists), with control characters removed, cut to 80 characters. The verdicts:
-
-- **safe to stop** (high confidence): a helper whose session ended and that a sample saw running under an agent (`safe to stop — its session ended`); medium confidence when no sample saw that (`safe to stop — probably left by an agent session that ended`), because a `nohup npx …` or `caffeinate` of your own looks the same once it belongs to pid 1. A stuck loop whose watched file ends in a completion marker (`[exited with code N]`, `exit N`, `ok`, `PASS`, `FAIL`, `--- FAIL`, a pytest or cargo summary, `done`, `error`), so what it waits for already happened and its condition will never match: `safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)`. Or a stuck loop whose file nothing has written to since, when its condition reads the file (`tail`, `grep`, `cat`, `head`, `wc`, `jq`).
-- **check first** (medium): anything listening on a port, whether its session ended or not (`check first — dev server on :3000, its session is still active`); a stale tree when the listening ports could not be listed (no `lsof` or `ss`, or it failed: `check first — its session ended, but the port check was unavailable`); a stuck loop judged by its age alone, whose file is gone, or whose condition only tests that a file exists (`while [ -f lock ]`, `until test -s out`: how long such a file has been quiet says nothing); a young loop whose file already says it finished; duplicates; hogs.
-- **leave it**: a loop whose watched file changed recently, so whatever writes it is alive.
-- **informational**: a long command that is none of the above (`informational — running 25m; its session is still active`), and a loop that has not waited `AGENTS_WAIT_STUCK` yet.
-
-```
-$ agents why 5010
-stuck polling loop · pid 5010@Wed_Oct_14_05:33:00_2026
-  until tail -1 $F | grep -qE "^(ok|FAIL)"; do sleep 5; done
-
-verdict: safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
-confidence: high
-
-evidence:
-  owner: claude 5000 in myapp (working)
-  waiting 5h10m · 0% CPU
-  watches /…/tasks/b1.output
-  last line: [exited with code 0] (a completion marker)
-  file quiet for 5h0m
-
-next:
-  look at it: tail -5 /private/tmp/claude-UID/…/tasks/b1.output
-  stopping it ends only the loop: the session sees the command fail and carries on
-  stop it: agents kill 5010@Wed_Oct_14_05:33:00_2026
-  auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
-```
-
-`agents why --copy PID@START` puts that text on the clipboard instead. `why` refuses a `PID@START` whose pid now names another process. Without a PID, `agents why` lists every flagged item on one line: pid, flag, name and verdict.
-
-**`agents reap`** goes by the same verdicts: by hand it stops only the stale trees (and, with `--stuck`, the stuck loops) that are safe to stop. Its plan, under `-n` and before the y/N, shows each one's verdict, then how many it left out as "check first"; `agents reap --all` takes those too. When every item is "check first", it says so and asks nothing:
-
-```
-$ agents reap -n --stuck
-  5011    sleep
-  5010    zsh · safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
-  6000    npm · safe to stop — its session ended
-left out: 2 flagged "check first" (agents reap --all includes them; agents why PID explains one)
-dry run: would send SIGTERM to 3 process(es), then SIGKILL to any left after 3s
-```
-
-**Auto-reap** (`AGENTS_AUTO_REAP=1`, off by default) stops, without asking, only the two high-trust cases:
-
-- stale trees that listen on no port and that a sample (`agents sample`, once a minute, see [History](#history-and-agents-report)) saw running under an agent before their session ended: the MCP servers, npx helpers and `caffeinate -t` of ended sessions. That record lives in `sample.state`, so with `AGENTS_HISTORY=0` no stale tree is auto-reaped. A stale server is never auto-reaped: one an agent started for you may still be wanted. Nor is a `caffeinate` without `-t`, which keeps the Mac awake until stopped, or anything when the ports could not be listed in that run;
-- stuck polling loops whose condition reads a watched file that has been quiet for twice `AGENTS_WAIT_STUCK` (two hours by default).
-
-Never a long or duplicate command, anything listening on a port, a loop stuck by age alone or one that only tests that a file exists. The menu runs `agents reap --auto --throttle --notify` in the background, at most once a minute (a lock in `~/.config/tuidev/run/` keeps two overlapping refreshes from both starting one), when a refresh shows something it may stop; the menu never waits for it. Where no menu runs (Linux, a headless box, SwiftBar quit), the [sampler](#history-and-agents-report) runs the same command once a minute with `AGENTS_AUTO_REAP=1`, when a sample saw something under an agent; the shared throttle keeps it to once a minute whoever starts it. `agents reap --auto` run by hand is the opt-in too, whatever `AGENTS_AUTO_REAP` says, and `agents reap --auto -n` shows what it would stop. It uses the same `PID@START` kill and grace period as `agents kill`, and one notification sums up what it stopped.
-
-Every cleanup is logged to `~/.local/state/tuidev/agents/events.tsv` (`AGENTS_HISTORY=0` turns that off): `kill manual` for `agents kill` and `term` and the menu's Stop and Kill items, `reap stale` or `reap stuck` for `agents reap`, and `auto stale` or `auto stuck` for auto-reap, and `hook subagent-end` or `hook session-end` for the [cleanup hooks](#cleanup-hooks-claude-code), each with the process name, project and owning session (`claude:PID`, the pid of the session's `claude`; `-` for a stale tree), never a command line.
-
-### Cleanup hooks (Claude Code)
-
-A subagent often starts a command in the background (a test run, a dev server, an `until …; do sleep 5; done` loop), hands back its report and never stops it. The session stays open, so nothing cleans up, and the loop can run for hours. The shipped `~/.claude/settings.json` runs `agents hook` from two Claude Code hooks to stop those commands. Without the `monitoring` pack the hooks do nothing.
-
-- **`SubagentStop`** (`agents hook subagent-stop`): once a subagent has handed back its final report (its last tool call is a `SubagentHandback` that went through), every background command it started that still runs is stopped. A subagent that only ends a turn while its own commands run is waiting for them, because Claude Code resumes it when they end, so the hook leaves those commands alone. So does Claude Code itself, which stops a foreground subagent's commands when the subagent ends. `SubagentHandback` exists only in auto mode, so in other permission modes this hook stops nothing.
-- **`SessionEnd`**, on `/clear` and `/resume` only (`agents hook session-end`): the session's own polling loops, which only the cleared conversation was waiting for, and whatever its finished subagents left. Its other background commands, such as a dev server, keep running, as Claude Code intends across `/clear`. At exit, Claude Code stops all of them itself.
-
-A command is matched to its process only by the file the process writes to: the `tasks/<id>.output` file named in the transcript, read with `lsof` on macOS and `/proc` on Linux. When that can't be read, nothing is stopped: another subagent, or the main conversation, may run the very same command line. A process is a candidate only if it is a direct child of the `claude` that ran the hook. The hooks never touch:
-
-- another subagent's commands, the main conversation's (except its polling loops on `/clear`), or commands a fork inherited from the conversation it copied;
-- anything outside that `claude`'s tree, including another session's, and anything started under `tmux`, `screen` or Herdr, which detach from it. To leave a server running on purpose, start it in tmux;
-- tasks the transcript shows as ended or stopped, and processes that host a shell or an agent (a nested `claude -p`).
-
-Every stop goes through the same safe kill as `agents kill`: start-time pinned, SIGTERM, then SIGKILL after `AGENTS_GRACE` seconds. Each stopped command is logged as a `hook` event (with the session as `claude:PID`, like every other event), and you get one notification per hook run. The subagent receives Claude Code's usual "background command failed" notice. The hooks always exit 0 and print nothing. Turn them off with `AGENTS_HOOK_REAP=0`. To see what they would stop, run one by hand with a hook payload:
-
-```bash
-echo '{"session_id":"…","transcript_path":"…/SESSION.jsonl","agent_type":"Explore",
-       "agent_transcript_path":"…/SESSION/subagents/agent-ID.jsonl","cwd":"'"$PWD"'"}' \
-  | agents hook subagent-stop -n        # or AGENTS_DRY_RUN=true
-```
-
-Run it from inside the session, for example with Claude Code's `!` prefix, because it looks for the `claude` process above it.
-
-Transcripts grow to tens of megabytes, with dozens of subagents each. The hooks read each one with a fixed-string `grep` under `LC_ALL=C` (the main transcript once; all subagents in one pass), and run `jq` only on the lines it finds and only for tasks not yet shown as ended. On an Apple-silicon Mac, a `/clear` on an 82 MB session with 54 subagents takes about 2 seconds (9 before 3.5.0), and a 207 MB one about 3.5; the shipped `SessionEnd` hook allows 30.
-
-#### Verify the cleanup hooks
-
-Whether Claude Code has written a subagent's final `SubagentHandback` call to its transcript by the time `SubagentStop` fires has not been observed on every setup. If it hasn't, the hook sees no handback and, by design, stops nothing. To check on your machine, set `AGENTS_HOOK_LOG=1` (in `~/.config/agents.conf`; hooks read it on every run), run a session in auto mode with a subagent that starts a background command, then read the log:
-
-```bash
-cat ~/.local/state/tuidev/agents/hooks.log    # or $AGENTS_DATA_DIR/hooks.log
-```
-
-One line per hook run, tab-separated, never a command line: `epoch event agent_id handback tasks matched dry`. `handback` is `yes` when the subagent's transcript held a delivered final report at that moment, `no` when it didn't (or was unreadable), and `-` for `session-end`. `tasks` counts the background commands the hook found for that run (0 when the handback was missing, since they are only counted after it), `matched` how many of them it tied to a running process, and `dry` is `true` for `-n` runs. A subagent that did hand back and left a command running should log `yes` with `matched` of 1 or more; a steady `no` for such subagents means the line isn't flushed in time, so open an issue. The log is private (mode 600), is pruned with the history (`AGENTS_HISTORY_DAYS`, while `agents sample` runs), and is off by default: turn it off when you're done.
-
-Codex CLI has documented `SubagentStop` and `SessionEnd` hooks too, but it says its transcript format isn't a stable interface for hooks, and its hook input doesn't list the background (unified exec) commands still running. A command can't be tied to the agent that started it, so no Codex hook is shipped.
+The views: `runs`, `waste`, `trends` and `agents` read the [run ledger](#the-run-ledger); `tokens`, `denials`, `waits` and `context` are below. `--json` prints any view as one object (`schema_version` 1; fields are only ever added), each with `view`, `since`, `until`, `window`, `ledger` (false without a run ledger) and `sampled_at`, then the view's own fields; a part whose files don't exist yet is `null` or has `data` false. With no history yet the report says so: the first numbers arrive a minute or two after the first sample.
 
 ### Where the CPU goes: job types
 
@@ -675,54 +663,36 @@ Every process in an agent's tree, and in a stale tree, counts toward one **job**
 | Job | What | Built-in patterns (examples) |
 |-----|------|------------------------------|
 | `test` | test runners and the binaries they build | `go test`, `*.test`, `pytest`, `jest`, `vitest`, `npm/pnpm/yarn test`, `cargo test`/`nextest`, `make test`/`check`, `playwright test` |
-| `build` | compile, bundle, typecheck, lint | `go build`/`vet`, `cargo build`/`check`/`clippy`, `tsc`, `webpack`, `esbuild`, `vite/next build`, `npm run build`/`lint`, `make`, `make build`, `cc`/`ld`, `eslint`, `ruff` |
+| `build` | compile, bundle, typecheck, lint | `go build`/`vet`, `cargo build`/`check`/`clippy`, `tsc`, `webpack`, `esbuild`, `vite/next build`, `npm run build`/`lint`, `make`, `cc`/`ld`, `eslint`, `ruff` |
 | `server` | dev servers and watchers | `npm run dev`/`start`, `next dev`, `vite`, `nodemon`, `uvicorn`, `rails s`, `python -m http.server`, `node …/server.js`, `docker compose up`, `make serve` |
 | `browser` | headless and automation browsers | `chrome-headless-shell`, `--headless`, Chrome for Testing, `--remote-debugging-pipe`, Playwright's browsers |
-| `mcp` | MCP servers | what `agents ps` lists as MCP: `npm exec`, `npx`, the npx cache, `mcp` in the command line |
+| `mcp` | MCP servers | `npm exec`, `npx`, the npx cache, `mcp` in the command line |
 | `agent` | the agent CLIs themselves | `claude`, `codex`, the Codex daemon, nested `claude -p` |
 | `wait` | polling loops a session waits on | `until …; do sleep 5; done` |
 | `other` | everything else | `caffeinate`, `git`, `rg`, a helper |
 
-A command and everything it starts share its job, so a `go test` and the test binaries it compiles are `test`, and a `npm run dev` and its `esbuild` are `server`. Two exceptions: an agent is always `agent`, and a browser is always `browser`, whoever started it (an MCP server's Chrome is `browser`, not `mcp`). A session's command is matched as the command it runs (without its `cd` and `VAR=` prefixes), anything else by its command line; the first match among `test`, `build`, `server` wins (and `mcp`, for processes that aren't commands). Add your own patterns, as extended regexes appended to the built-in ones, with `AGENTS_JOB_TEST`, `AGENTS_JOB_BUILD`, `AGENTS_JOB_SERVER`, `AGENTS_JOB_BROWSER` and `AGENTS_JOB_MCP` in `agents.conf`, for example `AGENTS_JOB_TEST="(^| )just test( |$)"`.
+A command and everything it starts share its job (a `go test` and the binaries it compiles are `test`), except that an agent is always `agent` and a browser always `browser`, whoever started it. The first match among `test`, `build` and `server` wins. Add your own extended regexes with `AGENTS_JOB_TEST`, `AGENTS_JOB_BUILD`, `AGENTS_JOB_SERVER`, `AGENTS_JOB_BROWSER` and `AGENTS_JOB_MCP`, for example `AGENTS_JOB_TEST="(^| )just test( |$)"`. `agents json` gives everything its `job` and sums the moment's CPU per job under `jobs`; the menu's Today row shows the same.
 
-`agents json` gives each agent, tool command, MCP server, nested session and stale tree its `job`, and lists the current CPU per job, with the sessions behind it, under `jobs`. The menu's Today row holds the same.
+### The run ledger
 
-### History and `agents report`
+A **run** is one command a session started (a tool shell and everything under it) or one stale tree. Each sample follows the live runs and, when one ends, appends a line to `runs.tsv`:
 
-With `AGENTS_HISTORY=1` (the default), `agents` keeps a local history in `~/.local/state/tuidev/agents` (`$XDG_STATE_HOME`), so you can see over days and weeks where agent work spends CPU and tune the tooling (a test suite that dominates, a dev server that never stops, a project that leaves helpers behind). It holds names only, never command lines (the run ledger's short-lived working files also keep task output paths, below), and nothing leaves the machine. The directory is private to you (mode 700, its files 600; an older, more open one is fixed on the next write). `tuidev uninstall` keeps it unless you answer yes to its prompt or pass `--purge-history`, which deletes only that directory ([Uninstall](updating.md#uninstall)); to forget it earlier, delete the directory yourself.
+`end_epoch start_epoch job project session agent cmd duration_s cpu_s peak_rss_kib exit dup cleaned`
 
-- **Sampling.** `agents sample` takes one sample: one `ps` snapshot, classified by job, and one row per job, project and session kind in `history.tsv`: `epoch job project session cpu_s rss_kib procs` (`session` is `claude` or `codex`, `-` for a stale tree). `cpu_s` is the CPU time used since the previous sample, from each process's CPU time keyed by `pid@start` (so a reused pid starts afresh), not the moment's `%cpu`. A command's process that ends between two samples counts up to the last menu refresh that saw it (the run feed below, every 10 s while a command runs); any other process that ends between samples loses its last interval. Rows without CPU are left out. One sample runs at a time, and history and events older than `AGENTS_HISTORY_DAYS` (30) are dropped once a day (under the same lock every event is appended with, so a prune never loses one). `sample.state` keeps each process's CPU time and whether a sample saw it under an agent: the provenance auto-reap needs before it stops a stale tree. Each sample also notes the sessions Herdr shows waiting on you, in `waits.tsv` ([Waits](#waits-how-long-agents-wait-on-you)).
-- **Who samples.** The pack's sampler runs `agents sample --scheduled` once a minute, with or without the menu: a LaunchAgent on macOS (`~/Library/LaunchAgents/dev.tuidev.sample.plist`, loaded at login), a systemd user timer on Linux (`tuidev-sample.timer` and its one-shot `tuidev-sample.service` in `~/.config/systemd/user`, started with your user manager: at boot once lingering is on, `sudo loginctl enable-linger $USER`, which the pack prints when it is off; without systemd, as in a container, the pack says so and nothing samples on its own). The menu bar also starts `agents sample` in the background whenever the last sample is a minute old (55 s, so its 60 s timer never skips one), and so does `agents watch` while it runs; with nothing going on, the menu skips its readings for up to 5 minutes. They never sample twice: the scheduled run does nothing when a sample ran within 55 s (it reads `sample.stamp` and exits, loading four of `agents`' modules: about 25 ms of wall time and 22 ms of CPU under macOS's `/bin/bash` on an M4 Pro, 0.04% of a core), and `sample.lock` lets one sample run at a time. With `AGENTS_AUTO_REAP=1`, the scheduled run also starts [auto-reap](#flagged-is-it-safe-to-stop) where no menu runs it. `AGENTS_SAMPLER=0` in `agents.conf` makes each scheduled run do nothing, without unloading it.
-- **When no sampler runs.** `agents`, `agents report` and `agents limits` end with one dim line once the newest sample is 10 minutes old, or none ran: `no sampler has run since 14:02: tuidev install --pack monitoring starts one` (on Linux with the timer's file in place, `systemctl --user enable --now tuidev-sample.timer`; with `AGENTS_SAMPLER=0`, `agents watch`, which samples while it runs). `agents report` always ends with `data as of HH:MM`, the newest sample it read, and the JSON of `agents json`, `agents report` and `agents limits` carries it as `sampled_at` (epoch seconds, `null` when none ran). Nothing is said with `AGENTS_HISTORY=0`.
-- **Cleanups.** `events.tsv` holds one line per cleanup: `epoch kind reason pid name project session` (`session` is `claude:PID`, or `-` for a stale tree), written by `kill`, `reap`, auto-reap and the session hooks.
-- **Runs.** A *run* is one command a session started (a tool shell and everything under it) or one stale tree, named by its root's `pid@start` (a reused pid is a new run; a command that outlives its session and turns stale stays the same run). Each sample follows the live runs in `runs.state` and, when one is gone, appends one line to `runs.tsv`, tab-separated:
+- `session` is `claude:PID`, `codex:PID`, or `-` for a stale tree. `agent` is the subagent type that started it (`Explore`, `implementor-complex`, `fork`), `main`, or `-`: only a background task's output file or a subagent's worktree names the agent, so foreground commands and every Codex command are `-`.
+- `cmd` is the first word of the command (`go`, `pnpm`, `wait-loop`), never its arguments or a path.
+- `exit` is known for a Claude Code background task (its output file ends with `[exited with code N]`), else `-`. `dup` is 1 when the run was ever a duplicate, `cleaned` 1 when `agents` stopped it.
 
-  `end_epoch start_epoch job project session agent cmd duration_s cpu_s peak_rss_kib exit dup cleaned`
-
-  - `job` and `project` as in `history.tsv` (the project is the session's, or the stale tree's); `session` is `claude:PID`, `codex:PID`, or `-` for a stale tree.
-  - `agent` is the subagent type that started it (`Explore`, `implementor-complex`, a named agent's type, `fork`), `main` for the main conversation, `-` when unknown. A background task is attributed through its task id: Claude Code names it (`backgroundTaskId`) in the transcript of the agent that started it. The token scan, which reads every new transcript line anyway and runs just before the ledger, notes each id and whose transcript named it (`tasks.idx`), so finishing a run is a lookup, not a search of the session's transcripts (hundreds of megabytes in a long session). An id the scan has not reached (a run started before an upgrade, or while the scan works through a backlog) is searched for in the transcripts changed since the run started, in their last 8 MiB. A command running in a subagent's worktree (`.claude/worktrees/agent-ID`) is that subagent's. A foreground command outside a worktree, and every Codex command, is `-`.
-  - `cmd` is a name only, the first word of the command (`go`, `pnpm`, `make`; `wait-loop` for a polling loop), never its arguments or a path.
-  - `exit` is the exit code when it is knowable: a Claude Code background task's output file ends with `[exited with code N]`. Otherwise (a foreground command, whose output file is gone; Codex; a stale tree) it is `-`.
-  - `dup` is 1 when the same command ran in the same directory at the same time, with two copies past a minute (the `dup` flag of `agents ps`), at any point of the run.
-  - `cleaned` is 1 when the run ended because `agents` stopped it: `events.tsv` holds a `kill`, `reap`, `auto` or `hook` of its pid, or of its session's, within seconds of its end.
-  - `end_epoch` is the stop's time for a cleaned run, the output file's time for a background task, else the last snapshot that saw it; `cpu_s` sums every process ever seen in the run at its largest CPU time, and `peak_rss_kib` is the largest tree memory seen.
-
-  The menu feeds the ledger: each 10 s refresh of `agents tsv` leaves what its own snapshot saw in `$AGENTS_RUN_DIR/runs.feed/` (no extra `ps` or `lsof`: the tool shells' output files come from the `lsof` that already reads their directories), and the next sample folds it in and removes it. So runs shorter than a minute are recorded with their CPU, to within one refresh. A process that starts and ends between two snapshots is missed. `runs.tsv`, like `history.tsv`, `events.tsv` and `insight.txt`, holds names only. Two short-lived files hold more, to finish a run: `runs.state` (the runs alive at the last sample) and the feed files keep each live run's Claude Code task output path (`…/tasks/ID.output`, under a directory named after the project's path and the session) and the subagent worktree it runs in (`agent-ID`); both go when the run ends or the sample reads the feed, and both are private (`runs.state` 600 in the 700 data directory, the feed files in a 700 directory). The ledger is written by the sample alone (under its lock), and `runs.tsv` is pruned with the history. Nothing is recorded with `AGENTS_HISTORY=0`.
-- **`agents runs [--since 24h|7d|30d|today] [--json]`** (default `24h`) lists the runs that ended in the window, newest first: when, how long, CPU, peak memory, exit code, project, session, agent, command, job and the `dup`/`cleaned` flags. `--json` prints `{schema_version: 1, since, until, window, history, runs: [...]}`, each run with the columns above (`-` as `null`, `dup` and `cleaned` as booleans).
-- **`agents report [--view VIEW] [--since 24h|7d|30d|today] [--json]`** (default `--view summary`, `--since 24h`). The summary reads `history.tsv` and `events.tsv`: total CPU-hours, CPU-hours by job with their share, the top projects with their main job, CPU by session kind, the busiest hours of the day, and the cleanups by reason and kind with the projects that leave things behind most. It opens with **Top insights**, the three most actionable findings from the run ledger and the token files (below), and adds a Tokens and a Denials line once there are token files ([Tokens and denials](#tokens-and-denials)), and a Waits line once there are waits or notifications ([Waits](#waits-how-long-agents-wait-on-you)). With no history yet it says so: the first numbers arrive a minute or two after the first sample.
-
-#### The run ledger's views
-
-Four views read `runs.tsv` (the **Runs** above), each for `--since` (`trends` defaults to `7d`); a run counts in the window it ended in.
+The menu bar's 10 s refreshes feed the ledger, so runs shorter than a minute are recorded with their CPU. `agents runs [--since 24h|7d|30d|today] [--json]` lists the finished runs, newest first. Four report views read the ledger; a run counts in the window it ended in:
 
 | View | Shows |
 |------|-------|
-| `runs` | the most repeated commands per project (runs, CPU-h, median and p90 duration, failure rate), then the slowest tests and builds by median |
-| `waste` | duplicate runs and their CPU, runs left running until a cleanup stopped them (their hours and CPU, by agent type and job), polling loops' waiting time, and failed runs re-run at once |
-| `trends` | this window against the one before it (`7d`: this week against last; `today`: yesterday by this hour), per project and per job: CPU-h, runs and median duration, with ↑/↓ and the change in %, regressions flagged |
-| `agents` | runs, CPU, failure rate, duplicates, leaks and polling time per agent type (`main` and each subagent type), then which types leak and duplicate most. `(no agent)` is commands run in the foreground: only a background task's output, or a subagent's worktree, names the agent that ran a command, so a foreground one (most `git`, `sed` and polling loops) can't be told apart; an insight about them names the project where they ran, and `agents runs` lists them |
+| `runs` | the most repeated commands per project (runs, CPU-h, median and p90 duration, failure rate), then the slowest tests and builds |
+| `waste` | duplicate runs and their CPU, runs left running until a cleanup stopped them, polling loops' waiting time, and failed runs re-run at once |
+| `trends` | this window against the one before (default `7d`), per project and per job: CPU-h, runs and median duration, regressions flagged |
+| `agents` | runs, CPU, failure rate, duplicates, leaks and polling time per agent type; `(no agent)` is commands run in the foreground |
 
-The definitions are the same in every view. A run **failed** when its exit code is known and not 0; a run a cleanup stopped counts in no failure rate. A failed run is **re-run at once** when the same command (project, `cmd`, job) from the same session starts within 120 s of its end; the failed run's CPU counts as wasted. The **median** is the middle run (the mean of the two middle ones for an even count), **p90** the nearest rank. A **regression** in `trends` is more CPU (up by half and by 0.25 CPU-h or more) or slower runs (the median up by half and by 30 s or more, with 5 or more runs in each window).
+A run **failed** when its exit code is known and not 0; a run a cleanup stopped counts in no failure rate. A failed run is **re-run at once** when the same command from the same session starts within 120 s of its end. A **regression** in `trends` is more CPU (up by half and by 0.25 CPU-h or more) or slower runs (the median up by half and by 30 s or more, with 5 or more runs in each window).
 
 ```text
 $ agents report --view waste
@@ -742,69 +712,38 @@ POLLING LOOPS  5 · 4.1 h waiting
 FAILED, RE-RUN AT ONCE  2 runs · 0.11 CPU-h
   PROJECT              COMMAND      JOB      RUNS   CPU-h
   shop                 pytest       test        2    0.11
-
-$ agents report --view trends --since 24h
-agents report · trends · last 24h vs the 24h before
-
-  PROJECT                CPU-h  BEFORE  CHANGE   RUNS  CHANGE   MEDIAN  CHANGE
-  app                     1.11    0.83    ↑33%     12   ↑500%    6m30s    ↑30%
-  api                     0.67    0.22   ↑200%      5      0%    5m00s   ↑400%  more CPU, slower
-  shop                    0.28    0.00     new      8     new    3m20s     new
 ```
 
-#### Reading the insights
-
-Each finding gets an impact in CPU seconds, and the summary lists the three largest of 5 CPU-min or more, each with what to do:
+**Reading the insights.** Each finding gets an impact in CPU seconds, and the summary lists the three largest of 5 CPU-min or more, each with what to do. The menu shows today's top one under Today.
 
 | Finding | When | Impact |
 |---------|------|--------|
 | duplicates | a command ran as a duplicate twice or more | the duplicates' CPU |
 | re-runs | a command failed and was re-run at once twice or more | the failed runs' CPU |
-| leaks | an agent type's runs were stopped by a cleanup | their CPU, plus a tenth of the hours they ran (an hour left running counts as 6 CPU-min) |
-| polling | an agent type's polling loops (not cleaned up) waited an hour or more | a tenth of those hours |
-| regression | a project's CPU rose by half and by 0.25 CPU-h or more on the window before | the rise |
-| cache (`tokens`) | a CLI's cache hit rate is below 70%, on 1M input tokens or more | the tokens a 70% rate would have read from the cache |
-| token polling (`tokens`) | model calls that only waited are over 5% of all tokens, on 1M tokens or more | those tokens |
-| compactions (`tokens`) | a session's context filled up and compacted on its own (`auto`) 3 times or more; a `/compact` you ran doesn't count | the tokens before those compactions |
-| denials (`denials`) | you denied the same command or tool 3 times or more | a CPU-minute per denial |
-| waits (`waits`) | sessions waited on you (blocked or fresh, not parked) 30 minutes or more | a sixth of those seconds (an hour waited counts as 10 CPU-min) |
+| leaks | an agent type's runs were stopped by a cleanup | their CPU, plus a tenth of the hours they ran |
+| polling | an agent type's polling loops waited an hour or more | a tenth of those hours |
+| regression | a project's CPU rose by half and by 0.25 CPU-h or more | the rise |
+| cache | a CLI's cache hit rate is below 70%, on 1M input tokens or more | the tokens a 70% rate would have read from cache (1,000 tokens weigh as a CPU second) |
+| token polling | model calls that only waited are over 5% of all tokens, on 1M or more | those tokens |
+| compactions | a session's context compacted on its own 3 times or more | the tokens before them |
+| denials | you denied the same command or tool 3 times or more | a CPU-minute per denial |
+| waits | sessions waited on you (blocked or fresh) 30 minutes or more | a sixth of those seconds |
 
-Token, denial and wait findings are not CPU: each one counts once it passes its own threshold, and ranks by what is at stake (for tokens, 1,000 tokens weighing as a CPU second), never below the 5 CPU-min floor. Each names its view, which the menu opens.
+Read them as leads, not verdicts: a regression may be a bigger change landing, and duplicate test runs may be two worktrees on purpose. Without a ledger, nothing is guessed: the summary says so in one line.
 
-```text
-TOP INSIGHTS
-  1. api: 40 CPU-min in 24h, ↑200% on the 24h before (build +27 CPU-min) — see what changed: agents report --view trends
-  2. app: `go` test runs ×10 in 24h, 5m30s median, 3 duplicates (20 CPU-min) — consider a shared test cache or serializing them
-  3. Explore subagents left 3 polling loops running in 24h (2.1 h) — have them stop what they start, or set AGENTS_AUTO_REAP=1
-```
+### Tokens and denials
 
-Read them as leads, not verdicts: a regression may be a bigger change landing, and duplicates of a test suite may be two worktrees on purpose. The view named in each line holds the detail. Without a ledger (`runs.tsv` missing or empty), nothing is guessed: the summary says so in one line, and a ledger view shows the summary with that line.
+Each sample also reads what the Claude Code and Codex transcripts logged since the last one (`~/.claude/projects`, `~/.codex/sessions`), at most 64 MiB a sample, newest first: today's numbers arrive within a minute or two, and a heavy machine's 7d and 30d windows fill in over the next hour or two. Grok's per-session `usage.json` files are read too (never `~/.grok/auth.json`). The files it keeps beside the history, private and pruned with it:
 
-- **`--json`** prints any view as one object (`schema_version` 1; fields are only ever added). Every view has `view`, `since`, `until`, `window` and `ledger` (false without a ledger, its lists then empty). The summary adds `history`, `cpu_s`, `jobs`, `projects` with their `main_job` and `jobs`, `sessions`, `hours`, `cleanups` (`total`, `by_reason`, `by_kind`, `projects`), `runs` (the window's runs: `count`, `failed`, `dup`, `cleaned`) and `insights` (`kind`, `view`, `impact_s`, `project`, `agent`, `cmd`, `job`, `text`). `runs` has `runs`, `cpu_s`, `exit_known`, `failed`, `commands` (every command: `project`, `cmd`, `job`, `runs`, `cpu_s`, `median_s`, `p90_s`, `max_s`, `exit_known`, `failed`, `fail_pct`, `dups`, `dup_cpu_s`, `reruns`, `rerun_cpu_s`) and `slowest`; `waste` has `run_cpu_s`, `duplicates`, `cleaned` (with `agents` and `jobs`), `wait` and `reruns`; `trends` has `previous` (`since`, `until`), `projects` and `jobs` (`cpu_s`, `prev_cpu_s`, `runs`, `prev_runs`, `median_s`, `prev_median_s`, `more_cpu`, `slower`); `agents` has `runs`, `cpu_s` and `agents` (`agent`, `runs`, `cpu_s`, `pct`, `exit_known`, `failed`, `dups`, `dup_cpu_s`, `cleaned`, `cleaned_cpu_s`, `cleaned_s`, `wait_runs`, `wait_s`). The summary also has `tokens` (`calls`, `total`, `in`, `cache_write`, `cache_write_1h`, `cache_read`, `out`, `cache_hit_pct`, `poll_tokens`, `poll_pct`, `est_usd` (API-equivalent), `unpriced_tokens` (the tokens `est_usd` leaves out; `null` with `AGENTS_PRICES=off`), `compactions`) `denials` (`count`, `classifier`, `user`, `safety`) and `waits` (`waited_s`, `blocked_s`, `done_s`, `notifications`, `banners_skipped`), each `null` without its files; the `tokens`, `denials` and `waits` views are below.
-- **The menu's insight.** `agents_insight_write` (in `lib/agents/report.sh`) writes today's top insight to `insight.txt` (`epoch until view text`), at most every 5 minutes, at the end of each sample; `agents tsv` passes it on while it is current (an hour, and never past midnight), and the menu shows it under Today.
+- `tokens.tsv`: one row per API message or Codex turn, `epoch cli project session agent model in cache_write cache_read out poll cache_write_1h origin`. `agent` is `main` or the subagent type; `poll` is 1 when every tool call in that message only waited; `origin` is `you` (the CLI, desktop app or an IDE), `headless` (`claude -p`, `codex exec`, the Agent SDK), `subagent` or `fork`. A message written twice (a fork's inherited history, a resumed session) counts once. Rows older than yesterday are rolled up into one row per day.
+- `uses.tsv`: calls of each MCP server, skill and subagent type, and the tools each server lists in a session.
+- `compacts.tsv`, `denials.tsv` (who denied: the auto-mode `classifier` with its reason, a `safety` check, or `user`), `tasks.idx` (the run ledger's lookup) and `limits.tsv` ([usage limits](#usage-limits-agents-limits)).
 
-#### Tokens and denials
+**Privacy.** These files hold counts and names only: a model, a project, a subagent type, a tool. A denial's subject is a program and, from a fixed list, its subcommand (`git push`, `npm install`), else the tool's name (`Edit`), and for a web fetch only the host: never an argument, a quoted string, a file or anything you typed.
 
-Each `agents sample` also reads what the Claude Code and Codex transcripts on disk logged since the last one (`~/.claude/projects`, `~/.codex/sessions`), and keeps more files beside the history, private and pruned with it, tab-separated. A sample reads at most 64 MiB of transcripts, newest first, so on the first run today's numbers arrive within a minute or two, while a heavy machine's 7d and 30d windows fill in over the next hour or two as the samples work back through older transcripts. Where it got to in each transcript is in `tokens.state` and `tokens.hot`: a sample rewrites only `tokens.hot`, the few transcripts active within the hour, and only when something changed; the cold majority in `tokens.state` is rewritten when 64 lines have gone cold, and once a day. A sample also looks only at the transcripts changed since the last one began and those `tokens.hot` holds; every hour it looks at them all, and so does every sample while a catch-up still has transcripts to read, so it never waits an hour between budgets.
+**`agents report --view tokens`**: the total (input, cache writes with the 1-hour ones apart, cache reads, output), the cache hit rate, then the tokens by model, CLI and agent type, by project and session, and by origin, each with its share, hit rate and API-equivalent cost. Then the tokens of model calls that only waited, context compactions, and the Codex plan's headroom from its latest reading. A subagent's worktree counts as its repository.
 
-- `tokens.tsv`, one row per API message (Claude Code writes one message as several lines; each counts once, and so does a message written again: a fork's copy of the history it inherits, or the earlier messages a rewound or resumed session writes again) or Codex turn: `epoch cli project session agent model in cache_write cache_read out poll cache_write_1h origin`.
-  - `agent` is `main`, the subagent type, or `-`; `poll` is 1 when every tool call in that message only waited (a sleep loop, reading a background task's output). Codex's input counts its cached part as `cache_read`, so `in` is the uncached rest.
-  - `cache_write` counts every cache write, and `cache_write_1h` those of them cached for an hour (Claude Code's `usage.cache_creation`; the rest are 5-minute writes, which cost less).
-  - `origin` is who drove the session: `you` (Claude Code's CLI, desktop app or an IDE; Codex's TUI or an IDE), `headless` (the Agent SDK, `claude -p`, `codex exec`), `subagent` or `fork` (a subagent's own transcript; a Codex subagent), or `-` when unknown.
-  - Rows an older `agents` wrote have 11 columns: all their cache writes count as 5-minute ones, their origin is unknown.
-  - Once a day, the rows from before local midnight yesterday become one row per local day and `cli project session agent model poll origin`, the same columns summed and then `calls`, how many rows they sum (14 columns; the epoch is the day's local midnight). They stay at the top of the same file, so the rollup replaces it in one rename and no row ever counts twice or not at all. A month of rows shrinks some fortyfold, which keeps `--since 30d` fast.
-- `tokens.today` holds today's sums, for the menu.
-- `uses.tsv`: `epoch cli project session agent kind name count`, per transcript, hour and name. `kind` is `mcp` (calls of an MCP server's tools; `name` is the server as the tools name it, `mcp__NAME__TOOL`; Codex's MCP calls too), `skill` (Skill calls, by skill), `agent` (subagents started, by type), each counted only for a message that counts, or `listed` (the most tools of server `name` a deferred tool list of the session named: what a session loads whether it uses it or not). Names only, never a call's input.
-- `tasks.idx`: `epoch session task_id source type`, each background task a transcript names, with the transcript (`main` or the subagent's id) and its agent type: the run ledger's lookup.
-- `compacts.tsv`: `epoch cli project session agent trigger pre_tokens post_tokens` (`trigger` is `auto` or `manual`).
-- `denials.tsv`: `epoch cli project session agent tool by reason subject`. `by` is `classifier` (auto mode's classifier; `reason` is its tag, such as `Git Destructive`), `safety` (a built-in safety check) or `user` (you said no). For a shell command, `subject` is the program that acts: of `cd app && make deploy` or `cat k.yaml | kubectl apply -f -`, the last program that isn't `cd`, `echo` or a reader or filter (`cat`, `grep`, `sed`, `jq`, `ls`…), which count only when nothing else runs. What is quoted, in a heredoc or in a function the command defines is not read as commands. A multi-command tool adds its subcommand when it comes right after the tool and is one tuidev knows (`git push`, `kubectl delete`, `aws s3`); after an option (`kubectl -n prod delete`) or with a word it doesn't know (`make deploy-acme`), the subject is the bare tool (`git -C DIR` is passed over).
-- `limits.tsv`: each CLI's latest reading per limit window, `epoch cli used_percent window_minutes resets_at label`, one line per CLI and window (see [Usage limits](#usage-limits-agents-limits)).
-- Grok's tokens: Grok (`grok`) keeps no transcript to tail, but each session rewrites `~/.grok/sessions/<cwd>/<session>/usage.json` with every turn's tokens by model. A sample reads the ones changed since the last (one `jq` for all; without `jq` Grok isn't counted) and appends the turns it hasn't counted to `tokens.tsv` as cli `grok`, agent `main`, origin `-` (`grok.state` remembers the last turn counted per file). Grok's models have no list price in `prices.tsv`, so the report counts their tokens as unpriced. It never reads `~/.grok/auth.json`.
-
-**Privacy.** These files hold counts and names only: a model, a project, a subagent type, a tool. A denial's `subject` never includes arguments: a command and, from a fixed list, its subcommand (`git push`, `npm install`, `docker run`), never an option's value, anything quoted or in a heredoc, a file, a target, or a name you typed; else the tool's name (`Edit`), and for a web fetch only the host. Nothing is sent anywhere: the report reads the files on this machine, and `AGENTS_HISTORY=0` records none of them.
-
-- **`agents report --view tokens`** (default `--since 24h`): the total (input, cache writes with the 1-hour ones apart, cache reads and output, all counted), the cache hit rate (cache reads over the input side: `in + cache_write + cache_read`), then tables by model, CLI and agent type (the top 10), by project and by session (the top 8: a session shows as its project and the start of its id), and by origin (`you`, `headless`, `subagent`, `fork`, with how many sessions each), ties by name, each with its share, its split, its hit rate and its API-equivalent cost. Then the tokens of model calls that only waited, by agent type; context compactions (auto and manual, the average size before, the sessions that compacted most); and the Codex plan's headroom from its latest reading (the share of the window used, the window, and when it resets, in local time; a reading 6 days old or more shows its date). In this view, the denials view and the insights, a worktree Claude Code made for a subagent (`app/agent-a1b2c3`) counts as its repository (`app`); a worktree you named (`app/feat`) stays its own, and the files keep the name as `runs.tsv` does. A window that starts before local midnight yesterday (`7d`, `30d`) counts tokens from the local midnight of its first day, since rows that old are kept by day; it says so under the tables. Shorter windows (`24h`, `today`) count each row by its time.
-- **`agents report --view denials`**: the denials by who denied them, then by subject (with the classifier's most frequent reason), the classifier's reasons, agent types and projects, and a hint for each command or tool denied twice or more by you or the classifier:
+**`agents report --view denials`**: the denials by who denied them, then by subject, with a hint for each one denied twice or more:
 
 ```text
 $ agents report --view denials
@@ -815,133 +754,159 @@ DENIED 11 · 4 by the classifier · 6 by you · 1 by a safety check
   SUBJECT                TOOL        DENIED  CLASSIFIER   YOU SAFETY  REASON
   git push               Bash             4           4     0      0  Git Destructive
   npm install            Bash             3           0     3      0  -
-  Edit                   Edit             2           0     2      0  -
-  example.com            WebFetch         1           0     1      0  -
-  rm                     Bash             1           0     0      1  -
-
-REASONS      Git Destructive 4
-BY AGENT     main 7 · Explore 3 · (unknown) 1
-BY PROJECT   app 8 · shop 3
+  …
 
 REPEATED
   `git push` denied ×4 by the classifier [Git Destructive] — expected: auto mode holds it for you; run it yourself, or allow it if it is routine
   `npm install` denied ×3 by you — consider an allow rule, or an instruction not to try it
-  `Edit` denied ×2 by you — consider an allow rule, or an instruction not to try it
 ```
 
-  A command you keep denying is either one agents should be allowed to run (an `allow` rule in `~/.claude/settings.json`) or one they should stop proposing (a line in your instructions); either saves the round-trip. A classifier denial of a risky command is auto mode doing its job.
-- **API-equivalent cost.** The reports show what the tokens would cost at API list prices: on a subscription that is not what you pay, but it shows where the value goes and what a change saves. API list prices ship with `agents` ([`lib/agents/prices.tsv`](../lib/agents/prices.tsv), with the date they were checked and the vendors' pages they come from, replaced on every update). Claude Haiku 5.5 charges 5x for a request whose prompt is over 100,000 tokens; costs are summed per model, not per request, so its line is the lower price and its cost a floor. A model takes the longest prefix that names it up to a version boundary (the prefix itself, or followed by a date such as `-20251001`, a version tag such as `-v1` or `:0`, `[1m]` or `@...`, after routing prefixes such as `us.anthropic.` or `openai/` are dropped), so `claude-opus-4-8` never takes `claude-opus-4`'s price, nor `gpt-5.7` `gpt-5`'s. 1-hour cache writes cost their own price. A model no line names shows as `unpriced`, never `$0`, and is left out of the totals, which say so: a total that leaves tokens out gives their share (`$197 API-equivalent, 41% of tokens unpriced`, or `all tokens unpriced`), a row priced in part has a `*` after its cost, and the tokens view names the unpriced models and the file to price them in; one whose list price could not be checked (such as `gpt-5-codex`) has no line on purpose, so add it to your own file to price it. `agents show` gives a session's cost the same way, with `(part unpriced)` when some of its tokens have no price. To change a price or add a model, copy [`agents-prices.example.tsv`](../configs/agents/agents-prices.example.tsv) to `~/.config/tuidev/agents-prices.tsv` (or set `AGENTS_PRICES`): its lines, `MODEL_PREFIX IN CACHE_WRITE_5M CACHE_WRITE_1H CACHE_READ OUT` in US dollars per million tokens, are read after the shipped ones, and a prefix in both takes yours. A line in the older five-column form, `MODEL_PREFIX IN CACHE_WRITE CACHE_READ OUT`, prices both kinds of cache write at its one price. A malformed line is reported and ignored. `AGENTS_PRICES=off` shows no cost anywhere. Costs appear only in `agents report` (the summary's Tokens line, the tokens view and its JSON), never in the menu bar.
-- **`--json`.** `tokens` has `data` (false without `tokens.tsv`), `priced`, `prices` (`basis` `api_list`, `as_of`; `null` with `AGENTS_PRICES=off`), `tokens_since` (where the window's tokens start), `totals` and one array per breakdown, `models`, `clis`, `agents`, `projects`, `sessions` (with each one's `project`, `cli` and `origin`) and `origins` (with each one's `sessions`), each row with its name, `pct`, `calls`, `in`, `cache_write`, `cache_write_1h`, `cache_read`, `out`, `total`, `cache_hit_pct`, `est_usd` (the API-equivalent cost; `null` without a price) and `unpriced_tokens` (`null` with `AGENTS_PRICES=off`); then `polling` (`calls`, `tokens`, `pct`, `agents`), `compactions` (`count`, `auto`, `manual`, `avg_pre_tokens`, `sessions`) and `codex_limits` (`as_of`, `used_percent`, `window_minutes`, `resets_at`, or `null`). `denials` has `data`, `denials`, `by` (`classifier`, `user`, `safety`), `reasons`, `subjects` (`subject`, `tool`, `count`, `classifier`, `user`, `safety`, `reason`), `agents`, `projects` and `hints` (`subject`, `tool`, `by`, `count`, `reason`, `text`).
+A command you keep denying is one agents should be allowed to run (an `allow` rule) or should stop proposing (a line in your instructions).
 
-#### Waits: how long agents wait on you
+**API-equivalent cost.** The reports show what the tokens would cost at API list prices: on a subscription that is not what you pay, but it shows where the value goes and what a change saves. The list prices ship with `agents` in [`lib/agents/prices.tsv`](../lib/agents/prices.tsv), with the date they were checked and their sources. A model takes the longest prefix that names it up to a version boundary, so `claude-opus-4-8` never takes `claude-opus-4`'s price. A model no line names shows as `unpriced`, never `$0`, and totals say what share they leave out (`$197 API-equivalent, 41% of tokens unpriced`). Long-prompt surcharges are not applied, so such a cost is a floor. To change or add a price, copy [`agents-prices.example.tsv`](../configs/agents/agents-prices.example.tsv) to `~/.config/tuidev/agents-prices.tsv` (or set `AGENTS_PRICES`): its lines, `MODEL_PREFIX IN CACHE_WRITE_5M CACHE_WRITE_1H CACHE_READ OUT` in US dollars per million tokens, override the shipped ones. `AGENTS_PRICES=off` shows no cost anywhere. Costs appear only in `agents report` and `agents show`, never in the menu bar.
 
-An agent that stops to ask (a permission prompt, a question) or that has finished costs no CPU, but it costs your time: nothing moves until you look. Two files measure that, so `agents report` can say "Agents waited on you 47 min today (top: billing 20 min; 12 notifications, 9 banners skipped while you were at the Mac)". Not all of that time is waiting: most of the hours sessions sit finished are in stretches past an hour, sessions you parked, and summed over sessions they make a number larger than the day. So a stretch of `done` counts as **fresh** for its first `AGENTS_PARKED_MIN` minutes and as **parked** from then on, and the finding above counts only blocked and fresh.
+### Waits: how long agents wait on you
 
-- `waits.tsv` (`agents sample`, once a minute): `epoch project agent status session secs`, one row per session that [Herdr](#fleet-attention--herdr---pack-herdr) shows `blocked` (waiting for your answer) or `done` (finished, not yet looked at) at that sample. `session` is its `PID@START`; `secs` is the time since the previous sample, at most 5 minutes (60 s for the first), so a Mac that slept or a menu that wasn't running doesn't count as hours of waiting. Claude Code sessions outside Herdr (tmux, a plain tab) are counted from their hooks: a permission prompt is `blocked` until the tool runs, an idle prompt is `done` until your next prompt; a session Herdr already shows is counted once, by Herdr.
-- `notify.tsv` (`notify.sh`, at each notification): `epoch session project kind channels banner_skipped`. `session` is the agent session's `PID@START` (`-` when `agents` finds none), `project` the hook's directory as `agents` names it (`CLAUDE_PROJECT_DIR`, else the working directory), `kind` the hook's subtitle (`Permission`, `Idle`, `Agent Teams`, `Auto mode`; `-` for none), `channels` those that showed it (`herdr`, `tmux`, `banner`, `osascript`, `notify-send`, `ntfy`, or `none`), and `banner_skipped` `present` (you were at the Mac, in front of the session: [Notifications](#notifications)) or `remote` (a session reached over ssh), else `-`. Never the message. `notify.sh` appends only when the monitoring pack's data directory already exists, so without the pack it writes nothing anywhere.
+An agent that asks (a permission prompt, a question) or that has finished costs no CPU, but it costs your time. Two files measure that:
 
-Both live in the history directory, are private (600), hold names and counts only, and are pruned with the rest (`AGENTS_HISTORY_DAYS`). `AGENTS_HISTORY=0` records neither: `notify.sh` reads it from its environment, else from `~/.config/agents.conf` (or `AGENTS_CONF`).
+- `waits.tsv` (each sample): one row per session waiting on you, `epoch project agent status session secs`. Herdr's sessions are counted from Herdr's status; Claude Code sessions outside Herdr from their [hooks](#waits-outside-herdr). A stretch of `done` counts as **fresh** for its first `AGENTS_PARKED_MIN` minutes and as **parked** after.
+- `notify.tsv` (each notification): `epoch session project kind channels banner_skipped`, never the message. `notify.sh` writes it only when the monitoring pack's data directory exists.
 
-- **`agents report --view waits`** (default `--since 24h`): blocked, fresh and parked apart, the notifications, then for a window of 30 hours or less a lane per project (a subagent's worktree counts as its repository) with a cell per hour, the longest time blocked, a table by project, the time by agent, and the notifications by kind with the banners skipped:
+**`agents report --view waits`**: blocked, fresh and parked apart, a lane per project with a cell per hour (for windows of 30 hours or less), the longest time blocked, a table by project, and the notifications by kind:
 
 ```text
 $ agents report --view waits
 agents report · waits · last 24h
 
-▲ blocked 3.4 h   ◆ fresh 7.0 h   ○ parked 24.0 h      133 notifications, 113 idle
+▲ blocked 43 min   ◆ fresh 55 min   ○ parked 25 min      10 notifications, 1 idle
 
            10  14  18  22  02  06  now
-billing    ░░░░░░░░░···▒░░░░███▒░░·    ▲  2.9 h  ◆  4.1 h
-infra      ···▒▒░░░░░░░░░······▒▒░░    ▲   16 m  ◆  2.2 h
-api        ··············▒░░░·····▒    ▲   14 m  ◆  0.7 h
+billing    ·····················▒█·    ▲   25 m  ◆   55 m
+app        ······················█·    ▲   18 m  ◆      -
            █ blocked   ▒ done under 1 h   ░ parked   · working or closed
 
-Longest: billing blocked 2.9 h, 03:10 to 06:05.
-
-  PROJECT                   BLOCKED    FRESH   PARKED  NOTIFIED  SKIPPED
-  billing                     2.9 h    4.1 h   15.8 h        69        2
-  infra                      16 min    2.2 h    8.0 h        47        0
-
-BY AGENT       claude 7.0 h · codex 2.4 h
-NOTIFICATIONS  133 · Idle 113 · Auto mode 12 · Permission 8 · 2 banners skipped (2 while you were at the Mac)
+Longest: billing blocked 25 min, 08:34 to 08:59.
+…
+BY AGENT       claude 80 min · codex 18 min
+NOTIFICATIONS  10 · Permission 8 · other 1 · Idle 1 · 6 banners skipped (5 while you were at the Mac, 1 for ssh sessions)
 ```
 
-An hour's cell shows what took the most of it, with a blocked minute weighing six: a block of ten minutes matters more than an hour parked. A stretch ends at a gap of over 5 minutes between rows, so a stretch across a night asleep starts fresh again here; `agents` itself knows better, since every sample sees the session's status.
-Half an hour or more of waiting in the window is an insight (above), with a hint by what dominated: mostly blocked suggests allowing what you always approve, mostly fresh suggests queueing the next task.
-- **`--json`.** `waits` has `data` (false without either file), `waited_s`, `blocked_s`, `done_s`, `fresh_s` and `parked_s` (which split `done_s`), `longest_blocked` (`project`, `seconds`, `from`, `until`; absent with none), `sessions`, `notifications`, `banners_skipped` (`present`, `remote`), `kinds` (`kind`, `count`; `null` for none), `agents` (`agent`, `blocked_s`, `done_s`, `fresh_s`) and `projects` (`project`, `waited_s`, `blocked_s`, `done_s`, `fresh_s`, `parked_s`, `notifications`, `banners_skipped`).
+A cell shows what took most of its hour, with a blocked minute weighing six. Half an hour or more of waiting is an insight: mostly blocked suggests allowing what you always approve, mostly fresh suggests queueing the next task.
 
-#### Usage limits: `agents limits`
+### Usage limits: `agents limits`
 
-Subscription plans cap usage per window (Claude Code's 5-hour and weekly limits, Codex's plan windows, Antigravity's quotas per model group). `agents limits` lists the latest reading of each: the CLI and window, the share used on a gauge with `│` at the time gone in the window, when it resets, and how old the reading is once that is ten minutes; a window that has reset since is dimmed until the CLI reports it again.
+Subscription plans cap usage per window (Claude Code's 5-hour and weekly limits, Codex's plan windows, Antigravity's quotas per model group). `agents limits` shows the latest reading of each: the share used on a gauge with `│` at the time gone in the window, when it resets, whether you are under or over pace, and how old the reading is once that is ten minutes. A window that has reset since is dimmed.
 
 ```text
-Claude 5h  ██▎░░░░░░░░░│░░░░░░░   23%   resets 16:40          under pace
-Claude wk  ████████▏░░░░░░░│░░░   41%   resets Sun 17:26      under pace
-Codex 5h   ███████████████▌│░░░   78%   resets 14:10          ! over pace, 6 h left at this rate
+Claude 5h    ██▎░░░░░░░░░│░░░░░░░   23%   resets 16:40          under pace
+Claude week  ████████▏░░░░░░░│░░░   41%   resets Sun 17:26      under pace
+Codex 5h     ███████████████▌│░░░   78%   resets 14:10          ! over pace, 6 h left at this rate
 ```
 
-Pace compares the share used with the time gone at that reading, all from `limits.tsv`'s used, window and resets; the row keeps to your terminal's width, the projection shortening as it narrows (`! over, 6 h left`). It says nothing in a window's first 5% (3% used after 1% of the time means little), or for a window with no reset time. Over pace means 5 points past the time gone, and comes with how long the rest lasts at the rate so far. `--json` gives the same as `limits` rows (`cli`, `name`, `label`, `window_minutes`, `used_percent`, `resets_at`, `as_of`, `stale`), with the newest sample's time as `sampled_at`: Codex's and Antigravity's readings arrive with the samples. The menu's [Usage section](#menu-bar-swiftbar-macos) shows the windows that haven't reset. Each CLI reports its own, without a credential, a keychain or a call to its vendor:
+Over pace means more than 5 points past the time gone, with how long the rest lasts at the rate so far; a window's first 5% says nothing. `--json` gives each window's `cli`, `name`, `label`, `window_minutes`, `used_percent`, `resets_at`, `as_of`, `stale`, `elapsed_percent`, `pace` and `left_s`, with `sampled_at`. The menu's Limits row shows the windows that haven't reset. Each CLI reports its own, without a credential, a keychain or a call to its vendor:
 
 | CLI | Where the reading comes from | When |
 |-----|------------------------------|------|
-| Claude Code (Pro and Max) | its status line: `rate_limits.five_hour` and `rate_limits.seven_day` in the JSON Claude Code hands its `statusLine` command, the only place it tells them | after each assistant message, once the session has had its first response |
-| Codex | the `rate_limits` of the newest `token_count` event in its session logs (the primary window and, on plans that have one, the secondary) | each sample, by the token scan |
-| Antigravity (`agy`) | `agy -p /quota --output-format json`, which uses no tokens (one row per quota bucket: `agy:gemini`, `agy:3p`, labeled by its model group) | every 10 minutes, from a sample, at most 6 s, only when `agy` and `jq` are installed |
-| Grok, Cursor | not exposed locally (Grok's `/usage` and Cursor's are server-side); their sessions still count in `agents`, and Grok's tokens in the [token report](#tokens-and-denials) | |
+| Claude Code (Pro and Max) | its status line: the `rate_limits` in the JSON Claude Code hands its `statusLine` command | after each assistant message |
+| Codex | the `rate_limits` of the newest `token_count` event in its session logs | each sample |
+| Antigravity (`agy`) | `agy -p /quota --output-format json`, which uses no tokens | every 10 minutes, from a sample, when `agy` and `jq` are installed |
+| Grok, Cursor | not exposed locally; their sessions still count in `agents`, and Grok's tokens in the [token report](#tokens-and-denials) | |
 
-**Claude Code's status line.** The shipped `~/.claude/settings.json` (ai-clis pack) sets the `statusLine` command to `agents statusline`, run only when `agents` is installed (`[ -x ~/.local/bin/agents ] && exec ~/.local/bin/agents statusline`; without it, nothing is shown). It reads the JSON once, writes Claude's two windows to `limits.tsv` when a reading changed or is five minutes old (one rename, under a lock, never failing the status line), then prints `Opus · ctx 42% · 5h 23% · wk 41%` (the model, the context window used, the two limits; whatever the JSON has). To keep a status line of your own, set `AGENTS_STATUSLINE_CMD` in `agents.conf` to its command: `agents statusline` then pipes it the same JSON and shows what it prints, as it would have. The settings merge never replaces a `statusLine` you already had: it stays, the installer says so, and Claude's limits don't reach `agents` until you move your command into `AGENTS_STATUSLINE_CMD` and set `statusLine`'s command to the shipped one.
+**Claude Code's status line.** The shipped `statusLine` runs `agents statusline` when `agents` is installed. It records Claude's two windows in `limits.tsv`, then prints `Opus · ctx 42% · 5h 23% · wk 41%`. To keep a status line of your own, set `AGENTS_STATUSLINE_CMD` to its command: `agents statusline` pipes it the same JSON and shows what it prints. The settings merge never replaces a `statusLine` you already had, so Claude's limits reach `agents` only once you move your command into `AGENTS_STATUSLINE_CMD` and set `statusLine` to the shipped one.
 
-**Several Claude accounts.** Each `CLAUDE_CONFIG_DIR` keeps its own limits, named after the directory (`~/.claude-work` is `work`; `~/.claude` stays plain `Claude`), stored as `claude:work` in `limits.tsv`. A directory named just `claude` takes its parent's name and a short checksum of its path (`/work/.claude` is `work-87c58`), so it never shares a row with `.claude-work`. `agents limits` and the menu list the accounts side by side, the plain one first. The name comes from the directory alone, never from a credential or the Keychain.
+**Several Claude accounts.** Each `CLAUDE_CONFIG_DIR` keeps its own limits, named after the directory (`~/.claude-work` is `Claude · work`; `~/.claude` stays plain `Claude`), and `agents limits` lists them side by side, the plain one first. The name comes from the directory alone, never from a credential.
 
-#### Context: what sessions load and use
+### Context: what sessions load and use
 
-Every MCP server, plugin and skill a session loads takes context, used or not. **`agents report --view context`** (default `--since 7d`) puts what the sessions used (`uses.tsv`) beside what they load and what is configured:
+Every MCP server, plugin and skill a session loads takes context, used or not. **`agents report --view context`** (default `--since 7d`) puts what sessions used beside what they load and what is configured:
 
-- **MCP servers**: each server's calls, the sessions that called it, the sessions whose deferred tool list named it, and how many tools it lists in such a session on average (a proxy for the context it takes), and where it comes from (a plugin, claude.ai, your Claude Code `user`, `local` or `project` scope, Codex's config). Every server you have configured is listed (the inventory `agents mcp` shows), called or not; a Codex one set `enabled = false` shows as off. A plugin's server is named as its tools name it (`plugin_PLUGIN_SERVER`), a claude.ai connector `claude_ai_NAME`.
-- **Skills** by calls and sessions (`PLUGIN:SKILL` for a plugin's), and **subagent types** by how many were started and their tokens.
-- **Plugins**: those `~/.claude/settings.json` names in `enabledPlugins`, and for each enabled one what it brings (skills, agents, commands, MCP servers, hook events, counted in its directory under `~/.claude/plugins`) and how often its skills, agents and servers were called. Codex's servers are in the MCP table.
-- **Cleanup candidates**, heaviest first: an MCP server sessions list but never call, an enabled plugin none of whose skills, agents or servers was used (commands and hooks are not seen, so a plugin with only those is never one), a configured, enabled MCP server (Claude Code's user, local, project or plugin ones, or Codex's) never called, listed in a session or not. Each says where to remove it: `claude mcp remove NAME -s SCOPE`, the plugin, or `~/.codex/config.toml`.
+- **MCP servers**: calls, the sessions that called each one, the sessions that loaded it, how many tools it lists, and where it comes from (a plugin, claude.ai, a Claude Code scope, Codex's config). Every configured server is listed, called or not.
+- **Skills** by calls and sessions, and **subagent types** by how many were started and their tokens.
+- **Plugins** enabled in `~/.claude/settings.json`, what each brings, and how often its parts were called.
+- **Cleanup candidates**, heaviest first: a server sessions load but never call, an enabled plugin nothing of which was used, a configured server never called. Each says where to remove it (`claude mcp remove NAME -s SCOPE`, the plugin, or `~/.codex/config.toml`).
 
-Names and counts only: a config's values (an MCP server's command, arguments, environment or headers) can hold secrets, and are never printed, stored or even selected; the plugin list needs `jq` (without it, the view says so). `--json` has `mcp_servers` (`server`, `cli`, `source`, `plugin`, `configured`, `enabled`, `calls`, `sessions_used`, `sessions_listed`, `tools_listed`), `skills` (`skill`, `plugin`, `calls`, `sessions`), `subagents` (`agent`, `started`, `tokens`, `pct`), `plugins` (`plugin`, `marketplace`, `enabled`, `installed`, `skills`, `agents`, `commands`, `mcp_servers`, `hooks`, `calls`), `cleanup` (`kind`, `name`, `text`) and `note`.
+Names and counts only: a config's values (an MCP server's command, arguments, environment or headers) can hold secrets and are never printed or stored. The plugin list needs `jq`.
 
-### Menu bar (SwiftBar, macOS)
+## Claude Code hooks
 
-On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its plugin (`agents.1m.sh`, named after `AGENTS_BAR_REFRESH`; `configs/swiftbar/agents.10s.sh` in the repo), which also stands in for a system-stats menu bar app. If SwiftBar already has a plugin folder, the plugin goes there; otherwise the pack sets the folder to `~/.config/swiftbar/plugins`. Open SwiftBar once (`open -a SwiftBar`) and turn on **Launch at login** in its settings. The pack doesn't add login items. Uninstalling removes the plugin but leaves SwiftBar's plugin-folder setting as it is.
+The shipped `~/.claude/settings.json` (`--pack ai-clis`) runs these. Every `agents` hook needs `--pack monitoring` and does nothing without it.
 
-<img src="assets/menu.gif" width="680" alt="The agents menu under its menu-bar item, a red alert with 1 and a blue check with 1, opening four submenus in turn: a stuck polling loop's verdict, safe to stop because what it waits for already finished, with its evidence and Stop command…, Copy details and Show session; the Today row's breakdown of where the CPU goes, tokens and the report; the Awake choices with Lid closed too… and its 1, 3 and 8 hour options; and the load and busiest processes under the CPU row.">
+| Event | Runs | For |
+|-------|------|-----|
+| `Notification` (permission, idle, question), `TeammateIdle`, `PermissionDenied` | `notify.sh` | [Notifications](#notifications) |
+| `Notification`, `PermissionRequest` | `agents hook wait-start` | [Waits outside Herdr](#waits-outside-herdr) |
+| `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `Stop` | `agents hook wait-end`, only while this session has a wait open | the same |
+| `UserPromptSubmit`, `Stop`, `SessionEnd` | `agents bar poke`, only while SwiftBar runs the plugin and no refresh went out in the last 2 s | the [menu bar](#menu-bar-swiftbar-macos) |
+| `UserPromptSubmit` | `agents link drop`, only while a link watcher from another machine is attached | [a file dropped onto a remote session](remote.md#remote-feels-local-ports-links-and-files) |
+| `SubagentStop`; `SessionEnd` on `/clear` and `/resume` | `agents hook subagent-stop`, `agents hook session-end` | [Cleanup hooks](#cleanup-hooks-claude-code) |
+| `statusLine` | `agents statusline` | [usage limits](#usage-limits-agents-limits) |
 
-<sub>The plugin's real output over the screenshot fixtures, drawn as a macOS menu by `scripts/render_menu.sh` ([how](assets/tapes/README.md#the-swiftbar-menu)).</sub>
+The guards in front are shell tests, so a hook that has nothing to do costs milliseconds and starts no `agents`; none runs on every tool call except the wait-end check. [`agents doctor`](#is-it-running-agents-doctor) checks that they find this `agents`.
 
-- **Title:** by default it counts only what needs you: a red alert and how many sessions are blocked, then a blue check and how many are to review, then a cup while keep-awake is on. Nothing needs you: the icon alone, in the menu bar's colors. Stale processes, hogs and flagged commands wait in the menu. The icon comes back, tinted, for what the machine itself can't take much more of: yellow for memory pressure, a recent memory incident, a guard that should run but doesn't, or a usage limit at 95% or more; red for heavy thermal pressure, critical memory pressure, or sleep disabled with nothing to restore it. `AGENTS_BAR_TITLE="count awake"` keeps the older `3 · 1 blocked · 1 done`.
-- **Menu:** a glance. Its top level answers "does anything need me, and is everything healthy?" in about 10 rows, 15 on a day with several sessions blocked and finished at once; everything else is one hover away. What needs an action from you stays flat and first; what only informs is one row that says it out loud (`Stale (2) · web.test, vite`), its detail in its submenu; a section of one row has no header. Sections follow `AGENTS_BAR_SECTIONS` (sections with nothing to show are left out), in four blocks with a separator between them: the sessions; limits and today; what to keep an eye on (stale, hogs, machines); the machine itself (awake, system); then the footer. SwiftBar's own items (its menu, when the plugin last updated, Disable Plugin) are hidden; Option-click the menu-bar item to see them. The states are [those of `agents`](#local-processes-agents---pack-monitoring):
-  - **Needs you:** each blocked session, what it waits for and how long (`api · permission · 6m`), with the most visual weight here: a filled red symbol. It leads with Restore lid sleep… when sleep is disabled with nothing to restore it.
-  - **To review:** each finished session you have not looked at (`web · done 12m`), under a blue check.
-  - **Running:** each working session, what it runs and uses (`billing · tests 3m12s · 8.4 cores · 7.6G`), flat while there are four rows or fewer (no header over a single one). A flagged command takes over its session's row with its verdict (`infra · wait-loop stuck 5h10m · safe to stop`, a yellow hourglass; `myapp · 3× go test running`; `web · pnpm dev · running 45m · check first`; gray for informational; see [Flagged](#flagged-is-it-safe-to-stop)), and the session comes after the verdict in its submenu; a flagged command under a session in another state, or a second one, gets a row of its own here. A polling loop that is not stuck stays out of it. More than four rows fold into one, `Running (7) · 2 flagged`, the sessions in its submenu: one or two flagged commands stay flat above it, since they may want you; three or more lead its submenu instead, and the row's dot turns yellow while one of them is safe to stop or to check.
-  - **No signal (3):** one gray row for the sessions nothing says anything about (in its submenu: `codex · no signal · 0.0 cores · 294M`, a gray question mark), [as in `agents`](#local-processes-agents---pack-monitoring), just above Parked. Not in the title.
-  - **Parked (3) · oldest 39 h:** one row; the sessions in its submenu, each with all a session's row has.
-  - A session's row begins with its kind's mark (`✳ API docs · working · 0.0 cores · 784M`, `⬡ codex · no signal`: the one table [`AGENTS_GLYPHS`](#settings-configagentsconf) sets, the same marks as Herdr and `agents map`; `agents tsv` sends it as `glyph` rows, so an older `agents`, or `AGENTS_GLYPHS=off`, leaves the rows plain), then Herdr's task title for its pane when there is one, else its project. Clicking it shows the project in Finder. Its submenu starts with Jump to session (`agents jump`: the Herdr or tmux pane and terminal tab where you can answer it), then holds the full path, kind, pid, age, children and ports; its status and where it lives (`blocked: waiting for you · in tmux pane work:1.2`); its busiest command; Running (N), one line per command (command, age, CPU, origin, flags) with Stop command… (asks first); the MCP servers on one line; Stop duplicates (keep newest)… when a command runs twice; and Peek, Details, Kill session…, Copy path, Open in Finder and Copy PID. A flagged command's submenu holds the command, its verdict and evidence, Stop, Copy details, Show session, Peek and Details.
-  - **Limits:** one row, the [limit window](#usage-limits-agents-limits) closest to its limit (the highest share; on a tie, the one over pace) as a monospaced gauge, its `│` the time gone, and how many more rows its submenu holds (`Claude wk ████▏░░░░│░░ 41% +2`). The symbol is gray while nothing is used, yellow from 80% or over pace, red from 95%. Its submenu has a gauge per window that hasn't reset, shortest window first, then swap. Each Claude Code account is a CLI of its own (`Claude`, then `Claude (work)`), and a CLI whose quotas go by model shows each window's highest model. A row opens `agents limits`, and its own submenu says when it resets, its pace (`over pace, 6 h left at this rate`), each model, and how old the reading is. Swap joins them only past 80%, and opens `agents mem`. With a single window (or swap alone) that row is shown as it is.
-  - **Today:** one row, `Today: 3.4 h blocked · 48 CPU-h · tests 64%`, which opens today's report. Its submenu holds **Where the CPU goes**, the CPU of agent work right now by job type, busiest first (`tests · 412% · 1.1G`), each with a submenu of the sessions behind it (project, kind, CPU, memory; clicking one shows its project in Finder), and under MCP servers a gray line saying the size is memory in use now (RSS), not data sent, then one line per server: `playwright · api · 0% · 211M` for one running once, `chrome-devtools · 5 copies · 0% · 851M` for one running in several sessions, whose submenu lists each copy (see [MCP servers by name](#mcp-servers-by-name)). Each session's line has its own submenu: Jump to session, what it is and where (for an MCP server, also who configured it and how it starts), Peek, Details (of the MCP server itself, or the session), and Kill tree for a stale one. Then today's tokens, denials and compactions (`12.4M tokens · 94% read from the prompt cache`, `12 denials · top: Production Deploy`, `3 context compactions`), each opening its view of today's report; today's top insight (its finding as the label, the whole sentence with its advice as the tooltip, opening its view); and Open report.
-  - **Stale (3) · web.test, vite, server-memory:** one row naming them, each by what it is in a word (the command without its runner, path, `@version` or script extension), as many as fit. Its submenu lists each by what it is, not where it lives: the command with its paths cut to base names, then the project it started in when known (`web.test · agentic-vms`; a build's temp path such as `/var/folders/…/go-build315/b001/web.test` shows `web.test` only), the full command line in its own submenu when the row shortened it. Each has its verdict (a helper is safe to stop; a server is check first), the evidence, Kill tree, Copy details and Details; then, under a separator, Reap all stale, which kills exactly the processes listed, not whatever is stale when you click.
-  - **Hogs (2) · Messages, yes:** the same shape; a red memory chip on the row while a memory hog (RSS past `AGENTS_MEM_WARN`) is among them, a flame otherwise. In its submenu, each with Terminate (SIGTERM, your own processes only), a memory hog first, by its memory.
-  - **Machines (2) · 3 dev servers · 1 left behind:** one row for what your other machines run and every dev server and preview, this machine's too (`Dev servers (2)` when there is no other machine), its symbol yellow while something is left behind or a machine does not answer (`· 1 not answering`). Its submenu: each server a click from your browser (one elsewhere through a forward, `agents forward open`), a row a machine that opens [`agents map`](remote.md#remote-feels-local-ports-links-and-files) on it, the forwards open here, Open the map, and when it was checked. It appears once the menu has been opened with something to list.
-  - **Awake:** one row, the state (off, while agents run, time left, `lid closed · 2h41m left`). Its submenu: End lid mode now… first while lid mode is on (one dialog); a check mark on the active choice among Until turned off, For 1 hour, For 3 hours, While agents run and Off; a Lid closed too… group with 1, 3 and 8 hours (up to `AGENTS_LID_MAX`; `AGENTS_LID=0` hides it), each running `agents awake lid` and asking for your password; and who holds the Mac awake. When sleep is disabled with nothing to restore it, a red Restore lid sleep… leads Needs you, flat at the top, and the Awake row says so in red with Restore lid sleep… first in its submenu. A menu action has no terminal, so lid mode's results come back as macOS notifications: on, failed to start (and that sleep was restored), cancelled, restored.
-  - **System**, one row: CPU (the sum of `%cpu` over the `ps` snapshot, divided by the cores), memory used (`memory_pressure -Q`) and thermal pressure, which opens `agents watch`. A warning tints its symbol and says so on the row (`· memory pressure`, `· guard not running`, `· fan control stopped`). Its submenu holds the load; the busiest processes (each opens Activity Monitor); battery and charging (`pmset -g batt`) and energy mode, which opens System Settings › Battery, where Energy Mode lives; the Codex daemon, with what a session's row has; the **memory guard**, on, with the size it stops a runaway at, not running (with Start it) or off, its submenu the last incident (`Stopped node (clientFuelToday.test.js) in cairn · 29.1G · 12m ago`) and `agents mem`; and with the [cooling pack](#fans---pack-cooling), `Fans 3610 rpm · SoC 84 °C · balanced` (the fastest fan; `balanced (macOS below 60 °C)` while the curve leaves them to macOS), with Cool, Balanced, Quiet, Max and Off (checked: the current mode), the current range, and Fan status.
-  - Then, with herdr-core installed, one line for [Herdr's phone app](remote.md#herdrs-phone-app-agents-hc): `Phone: herdr-core is up`, which opens `agents hc`; with mirrors on (`AGENTS_HC_MIRROR=1`), `Phone: 5 agents mirrored` (`Phone: herdr-core is up, no agent panes` with none), which opens `agents hc mirror`; `Phone: herdr-core is not running`, which opens `agents hc up`; or, on a Mac whose core runs outside your desktop login, an orange warning that names `agents hc up --restart`. The restart ends the core's terminals, so the menu only names it and never runs it. Nothing without herdr-core, or with `AGENTS_HC_MIRROR=0` and no core. The answer comes from a cached check in the background, at most every 30 s, and a core that does not answer shows no line.
-  - Then, only when there is some, a small gray **Maintenance** line, never in Needs you, the icon's tint or the title, everything in its submenu. It comes from a background check of Herdr that never holds up the menu (and says nothing without Herdr), run hourly while all is current, every minute while it reports something, and at once after Herdr's server restarts, so a resolved item leaves within a minute: a server older than its client reads `Herdr server 0.9.4 → 0.9.5 on next restart` (`Herdr server update on next restart` when the check has no versions). The mismatch is fine (a newer client keeps using a compatible server), and restarting the server restarts every Herdr session, losing their context, so the menu never asks for it: only while no Herdr session is working or waiting for you (all idle or done, or none) does it offer the restart (`No agents running: restart now`, or `Its agents are idle: …`, noting that it also stops the shells and servers in Herdr's panes), with `herdr server stop`, then `herdr`, to run in a terminal outside Herdr. Nothing is restarted for you. Integrations `herdr integration status` reports outdated (`Herdr integrations outdated: claude codex`) list `herdr integration install NAME` for each.
-  - Then Open agents watch, with the full table (`agents ls`) and Edit settings (opens `~/.config/agents.conf`) in its submenu, and Refresh.
-- Every action runs `agents` with the `PID@START` it listed, so a menu opened before a pid was reused can't kill the wrong process. Menu parameters carry only fixed words and such tokens, never a path or a name a process controls: Copy path and Open in Finder run `agents copy-path|reveal PID@START`, which looks the directory up when you click (`agents cwd PID@START` prints it). Killing a live session asks first in a macOS dialog (`--confirm-gui`, Cancel is the default) naming the project, pid and child count; stale processes and hogs, already filtered, go in one click. Each action reports its result as a notification (`--notify`).
-- Windows open in your terminal (`agents open-term`, `AGENTS_TERMINAL`), not through SwiftBar's own terminal option, which always uses Terminal.app. For Ghostty 1.3 or later that is a new window of the Ghostty you run, through its AppleScript (`new window` with the command in its surface configuration), brought forward; a window rather than a tab, as with the other terminals, so a view never lands among your working tabs. It never starts a second instance, which would answer AppleScript in place of yours, so `agents jump` couldn't find your tab and a notification's click could raise the wrong Ghostty. When no Ghostty runs, with Ghostty 1.2, or when AppleScript fails (scripting turned off with `macos-applescript = false`, or the Automation permission refused), it is `open -na Ghostty --args -e …` (`auto` skips a Ghostty older than 1.2). The first time, macOS asks whether SwiftBar (or your terminal) may control Ghostty. Ghostty keeps a window its AppleScript opened until you press a key after the command ends, `agents watch` too. Elsewhere, one-shot views such as "Who holds the Mac awake?" wait for a key before the window closes.
-- Text uses the menu's own label color. Status colors are on the symbols only (SwiftBar colors an item's symbol through `sfconfig`, a title's through `sfcolor`), from [your palette](theming.md#agents-and-its-menu) when it suits the menu's appearance, else Apple's system hues; and lines that only inform, such as section headers and the details in a submenu, appear dimmed. The gauges ask for the `Menlo` font (`font=`), so they line up.
-- **It runs when it is needed, not all the time.** Three states:
-  - **Event.** What changes the title or the menu says so, and the menu refreshes at once (`agents bar poke`: `open -g swiftbar://refreshplugin`): Claude Code's hooks (a prompt, a turn's end, a permission or idle prompt, a wait that ended, a subagent's end, a session's end), Herdr's agent events (an agent detected, changing state, its pane exiting or closing: that is how it hears of Codex, `agy` and Grok sessions in Herdr panes), Codex's `notify` if you wire it ([config.toml](../configs/codex/config.toml)), and the menu opening. A poke goes out at most once every 2 s: one inside that window is held, and exactly one more follows at its end, so the last event is never lost and an agent firing `Stop` in a loop costs one refresh per 2 s. While a command runs (the run ledger records commands shorter than the minute between samples from these readings), or a session works that nothing reports on (Codex or `agy` outside Herdr), each refresh asks for the next one in 10 s itself; a keep-awake or lid countdown, at its end. One such early refresh is pending at a time.
-  - **Idle.** On its timer, `AGENTS_BAR_REFRESH` (1m), a backstop for what nothing announces (a hog building up, memory pressure). When the last full refresh found nothing going on (no session, command, stale process, hog, hot streak, warning, keep-awake or lid sleep) and nothing has poked since, a timed refresh up to 5 minutes later prints that output again without running `agents` at all; then it reads the machine again.
-  - **Open.** Its timer reads this machine only, and asks no other machine for anything. Opening the menu (`swiftbar.refreshOnOpen`) prints the last output at once, so the menu never waits, then loads the rest behind the open menu: `agents map --cache` asks your other machines what runs there (at most every 20 s; not while the machines section is off), and a poke puts that and a fresh reading of this machine into the menu a moment later.
+### Cleanup hooks (Claude Code)
 
-  A poke goes out only where SwiftBar runs the plugin: each run under SwiftBar leaves `bar.alive` in the run directory (`~/.config/tuidev/run`) with SwiftBar's pid, and a poke needs that process alive and that run recent, because `open` would launch a SwiftBar that is not running. Anywhere else (Linux, a Pi, a Mac without SwiftBar, the plugin turned off) a poke does nothing. `agents bar` says what a poke would do now. Measured on an M4 Pro: one full refresh is about 0.4 s of wall time and 0.3 s of CPU; idle, the menu now runs 12 of them an hour instead of 360, and the hooks' guard costs about 0.04 ms when it declines.
-- One refresh runs `agents tsv` once: one `ps` snapshot, with the slow probes (the listeners' `lsof`, `launchctl`, one `tmux list-panes` when tmux runs, the machine's state, and the cwd lookup for the processes the last refresh asked about) running alongside it, Herdr from its ten-second cache (asked again, for at most a second, once that is stale; then one `ps -E` for the sessions running in Herdr, for their panes) and the MCP inventory from its cache. The plugin itself forks four times (that `agents tsv`, one awk, one clock read, and the `mv` that keeps its output for the next open). On a Mac with 900 processes a refresh takes about 0.15 s. Once a minute it also starts `agents sample` in the background, which it never waits for (a sample is due 55 s after the last, so a 60 s timer takes one every minute), and while an agent runs in a Herdr pane, `agents herdr sync --throttle` at most every 30 s, for the titles Herdr has no event for.
+A subagent often starts a command in the background (a test run, a dev server, an `until …; do sleep 5; done` loop), hands back its report and never stops it. The session stays open, so nothing cleans up. Two hooks stop those commands:
 
-### Machine-readable output: `agents json`
+- **`SubagentStop`** (`agents hook subagent-stop`): once a subagent has handed back its final report (its last tool call is a `SubagentHandback` that went through), every background command it started that still runs is stopped. A subagent that only ends a turn while its commands run is waiting for them, so the hook leaves them alone. `SubagentHandback` exists only in Claude Code's auto mode, so in other permission modes this hook stops nothing.
+- **`SessionEnd`** on `/clear` and `/resume` (`agents hook session-end`): the session's own polling loops, which only the cleared conversation was waiting for, and whatever its finished subagents left. Its other background commands, such as a dev server, keep running, as Claude Code intends. At exit, Claude Code stops them all itself.
+
+A command is tied to its process only by the file it writes to (the `tasks/<id>.output` file named in the transcript, read with `lsof` on macOS and `/proc` on Linux); when that can't be read, nothing is stopped. Only direct children of the `claude` that ran the hook are candidates. The hooks never touch another subagent's commands, the main conversation's (except its polling loops on `/clear`), commands a fork inherited, anything outside that `claude`'s tree, anything started under tmux, screen or Herdr (start a server there to keep it on purpose), tasks the transcript shows as ended, or processes that host a shell or an agent.
+
+Every stop goes through `agents kill`'s engine (start-time pinned, SIGTERM, then SIGKILL after `AGENTS_GRACE`), is logged as a `hook` event, and gets one notification per hook run; the subagent receives Claude Code's usual "background command failed" notice. The hooks always exit 0 and print nothing. Turn them off with `AGENTS_HOOK_REAP=0`. To see what one would stop, run it by hand from inside the session (with Claude Code's `!` prefix) with a hook payload:
+
+```bash
+echo '{"session_id":"…","transcript_path":"…/SESSION.jsonl","agent_type":"Explore",
+       "agent_transcript_path":"…/SESSION/subagents/agent-ID.jsonl","cwd":"'"$PWD"'"}' \
+  | agents hook subagent-stop -n        # or AGENTS_DRY_RUN=true
+```
+
+Codex documents `SubagentStop` and `SessionEnd` hooks too, but its hook input doesn't list the background commands still running, so a command can't be tied to its agent and no Codex hook is shipped.
+
+#### Verify the cleanup hooks
+
+Whether Claude Code has written a subagent's final `SubagentHandback` to its transcript by the time `SubagentStop` fires has not been observed on every setup; if not, the hook sees no handback and, by design, stops nothing. To check on your machine, set `AGENTS_HOOK_LOG=1` in `~/.config/agents.conf`, run a session in auto mode with a subagent that starts a background command, then read the log:
+
+```bash
+cat ~/.local/state/tuidev/agents/hooks.log    # or $AGENTS_DATA_DIR/hooks.log
+```
+
+One tab-separated line per hook run, never a command line: `epoch event agent_id handback tasks matched dry`. `handback` is `yes` when the transcript held a delivered final report, `no` when it didn't, `-` for `session-end`; `tasks` counts the background commands found, `matched` those tied to a running process, and `dry` is `true` for `-n` runs. A subagent that handed back and left a command running should log `yes` with `matched` of 1 or more; a steady `no` means the line isn't written in time, so open an issue. The log is private, pruned with the history, and off by default.
+
+### Waits outside Herdr
+
+Herdr's status says when a session in one of its panes waits on you. For a Claude Code session anywhere else (tmux, a plain tab), the hooks do:
+
+- A permission dialog opens a `blocked` wait the moment it shows (`PermissionRequest`, which Claude Code runs only when it is about to ask you). An MCP question or a sandboxed command's network request opens one from the Notification hook instead. The idle prompt opens a `done` wait.
+- The session's next prompt, tool call or turn end closes it, as does `/clear` or `/resume`. No hook fires when you answer a prompt, so the approved tool dates the end: a 10-minute `make test` you approved after 30 s counts 30 s.
+- Each wait is a small file under the history directory, which `agents sample` counts into `waits.tsv` and then removes.
+
+The `PermissionRequest` hook prints nothing and exits 0, so it never answers the dialog. Nothing is recorded inside a Herdr pane (Herdr counts it), without the monitoring pack, with `AGENTS_HISTORY=0`, or when no sample ran within the hour. The count errs low: with several subagents at work, another one's tool call can end a wait early, and after you deny a call the wait runs on until the session's next prompt or turn end.
+
+## Notifications
+
+Don't watch panes. `~/.local/bin/notify.sh` (from `scripts/notify.sh`) is called by the Claude Code hooks, and optionally by Codex's `notify`. Its channels:
+
+1. A Herdr toast, inside a Herdr pane
+2. The tmux status line, inside tmux
+3. A macOS banner: [terminal-notifier](https://github.com/julienXX/terminal-notifier)'s, which a click takes to the session, else `osascript`'s
+4. `notify-send`, on a Linux desktop
+5. An [ntfy](https://ntfy.sh) push, when `NTFY_URL` is set (for example `export NTFY_URL=https://ntfy.sh/your-topic` in `~/.zshrc.local`), and only when none of 1 to 4 showed it
+6. Nothing: it stays silent and always exits 0
+
+The first of 1 and 2 that works shows it in your terminal. On a Mac the banner shows it too, because a toast or a status line can't be seen from another app, with two exceptions:
+
+- **You are at the Mac, looking at that Herdr pane**: the screen is unlocked, a key or the mouse moved in the last 2 minutes, the app in front is the one the session's Herdr client runs in, and Herdr's focused pane is the session's own. Then the toast is the one alert. The check is made once, when the hook fires (`ioreg`, `lsappinfo`, then `herdr pane get`, about 10 to 30 ms each, no permission prompt); one that fails counts as away. It knows the app in front, not the window, so if you keep other windows of the same terminal open, set `TUIDEV_NOTIFY_BANNER=always`. `TUIDEV_NOTIFY_PRESENT_IDLE` sets the idle limit in seconds (120).
+- **A session you reach over ssh** (its `SSH_CONNECTION` or `SSH_TTY`, unless `agents` finds it in a terminal app on this Mac), where the Mac's screen isn't yours to look at.
+
+Elsewhere, the first of 3 to 5 that works shows it. With `jq`, a Claude Code notification shows its own message ("Claude needs your permission to use Bash") instead of the hook's fixed text. ntfy is an escalation, for when nothing on the machine could show it; if another service already pushes to your phone, leave `NTFY_URL` unset. Each notification is logged for the [waits report](#waits-how-long-agents-wait-on-you), never its message.
+
+**Click to jump.** With the monitoring pack on a Mac (it installs terminal-notifier), clicking a banner takes you to the session that asked: its Herdr pane, its tmux pane, or its Ghostty tab or split, then brings that terminal forward. `notify.sh` asks `agents root-of` which session it runs under, pins it as `PID@START`, and the click runs `agents jump PID@START` ([One process in detail](#one-process-in-detail-show-jump-peek-pick)), which refuses a pid that now names another process. A newer notification from the same session replaces the older one. Ghostty 1.3 or later is the tested path; iTerm2 and Terminal are found the same way, and any other app is only brought forward.
+
+What a click runs is fixed: `agents` by its absolute path and the checked `PID@START` token, each quoted. A title or message never reaches a shell. `notify.sh` prefers Homebrew's terminal-notifier (`TUIDEV_TERMINAL_NOTIFIER` names another, empty for none). macOS asks once whether terminal-notifier may post notifications, and on the first click whether it may control Ghostty (or iTerm2, or Terminal), to find the tab. Decline the second, and a click still selects the Herdr or tmux pane but only brings the app forward. If banners never appear, `terminal-notifier -diagnose` says why; turn it on in System Settings › Notifications › terminal-notifier, and change the Automation answer in System Settings › Privacy & Security › Automation or with `tccutil reset AppleEvents fr.julienxx.oss.terminal-notifier`.
+
+The menu bar's own notifications (kills, reaps, lid mode, a failed jump) use terminal-notifier too, titled "agents". The cleanup hooks' "Stopped N background commands" jumps to its session and never replaces that session's "Needs your approval" banner. tmux also flags any window whose agent rings the bell.
+
+## Machine-readable output: `agents json`
 
 `agents json` is a contract other tools build on: fields are only added within a `schema_version`, and anything removed or changed bumps it. Version 1:
 
@@ -974,9 +939,9 @@ On macOS the pack also installs [SwiftBar](https://swiftbar.app) and its plugin 
 }
 ```
 
-`start` is the process start time as `ps` prints it (it is part of the `token`); `start_epoch` is the same moment in Unix seconds, derived from the elapsed time (±1 s). A tool's `cwd` is the directory its command `cd`s into, when it does. `flags` is an open set: a new flag value is added within a version (as `stuck` was, always alongside `wait`), so ignore values you don't know. A `token` is what `agents kill`, `term`, `why`, `cwd`, `copy-path` and `reveal` take: they refuse it once the pid names another process. `job` is one of the [job types](#where-the-cpu-goes-job-types) (`test`, `build`, `server`, `browser`, `mcp`, `agent`, `wait`, `other`); `jobs` sums the moment's CPU and memory of agent and stale trees per job, busiest first.
+`start` is the process start time as `ps` prints it (part of the `token`); `start_epoch` is the same moment in Unix seconds (±1 s). A tool's `cwd` is the directory its command `cd`s into. `flags` is an open set, so ignore values you don't know. A `token` is what `agents kill`, `term`, `why`, `cwd`, `copy-path` and `reveal` take: they refuse it once the pid names another process. `job` is one of the [job types](#where-the-cpu-goes-job-types).
 
-A stale tree, and a command flagged `stuck`, `long` or `dup`, also carry the [verdict](#flagged-is-it-safe-to-stop), the same one `agents why` prints:
+A stale tree, and a command flagged `stuck`, `long` or `dup`, also carry the [verdict](#flagged-is-it-safe-to-stop) `agents why` prints:
 
 ```
 "verdict":  {"action" ("stop"|"check"|"leave"|"info"), "short" ("safe to stop"|…), "text", "confidence" ("high"|"medium"|"low"),
@@ -987,75 +952,84 @@ A stale tree, and a command flagged `stuck`, `long` or `dup`, also carry the [ve
              "lines": [the evidence as text], "next": [what to do, as text]}
 ```
 
-`code` is an open set like `flags`.
+`code` is an open set like `flags`. `herdr_pane` and `session_id` join an agent with your own records: `pid` plus `start` names the process, these name its pane and its conversation. `session_id` is, for Claude Code, the id in `~/.claude/sessions/PID.json` (trusted only when its start matches this process), else the session Herdr reports, else a UUID the command line resumes; null when none says. `agents tsv` carries the same as one `ident PID PANE SESSION` record per agent.
 
-`herdr_pane` and `session_id` are the key to join an agent with your own records (a fleet runner's, say): `pid` plus `start` names the process, these name its pane and its conversation. `herdr_pane` is the pane its environment names (`HERDR_PANE_ID`) or the one Herdr reports for it. `session_id` is, for Claude Code, the id it records in `~/.claude/sessions/PID.json` (`$CLAUDE_CONFIG_DIR`; trusted only when its `procStart` is this process's start), else the session Herdr's integration reports for the agent, else a UUID the command line resumes (`claude --resume|-r|--session-id ID`, `codex resume ID`); null when none says. `agents tsv` carries the same as one `ident PID PANE SESSION` record per agent row (`-` for unknown).
+## Settings: `~/.config/agents.conf`
 
-### Settings: `~/.config/agents.conf`
-
-The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf) once (`--adopt-existing`) and never overwrites it. Uncomment a line to change it; `agents config` prints what is in effect. The file is read as `KEY=value` lines, never run as a script: unknown keys and malformed values are reported and ignored. The same names in the environment win, and `AGENTS_CONF` points at another file.
+The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf) once and never overwrites it. Uncomment a line to change it; `agents config` prints what is in effect, and `agents config --edit` opens the file. It is read as `KEY=value` lines, never run as a script: unknown keys and malformed values are reported and ignored. The same names in the environment win, and `AGENTS_CONF` points at another file.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
+| **Sessions and flags** | | |
+| `AGENTS_NAMES` | `claude codex agy grok cursor-agent` | Process names that count as agent sessions. Cursor's CLI also counts when it runs as `agent` from its own install; Antigravity's `agy --bg-updater` is not a session |
+| `AGENTS_PARKED_MIN` | `60` | Minutes a finished session stays to review before it counts as parked, in `agents`, the menu and the waits report |
+| `AGENTS_TOOL_LONG` | `20` | Minutes before a session's command is flagged `long` |
+| `AGENTS_LS_TOOLS` | `5` | Commands listed under each session in `agents ls`; `agents ps` lists all |
+| `AGENTS_WAIT_STUCK` | `60` | Minutes a polling loop runs, its watched file quiet, before it is flagged `stuck`; `0` never flags one |
 | `AGENTS_HOG_PCT` | `50` | Lifetime-average CPU% that makes a long-running process a hog |
 | `AGENTS_HOG_MIN` | `30` | Minutes a process must have run before its average counts |
 | `AGENTS_HOG_NOW` | `90` | Current CPU% that makes a process outside any agent tree a hog |
+| `AGENTS_HOG_SUSTAIN` | `3` | Minutes it must hold `AGENTS_HOG_NOW` (`0`: one reading) |
 | `AGENTS_HOG_TOP` | `5` | Hogs listed |
+| **Cleaning up** | | |
+| `AGENTS_GRACE` | `3` | Seconds between SIGTERM and SIGKILL when stopping a tree |
+| `AGENTS_AUTO_REAP` | `0` | `1` lets the menu bar (where none runs, the sampler) stop, without asking and at most once a minute, the leftovers of ended sessions a sample saw under an agent that listen on no port (needs `AGENTS_HISTORY=1`), and loops stuck twice `AGENTS_WAIT_STUCK` on a quiet file ([auto-reap](#cleaning-up-agents-reap)) |
+| `AGENTS_HOOK_REAP` | `1` | The [cleanup hooks](#cleanup-hooks-claude-code) stop what a finished subagent or a cleared session left running; `0` turns them off |
+| `AGENTS_HOOK_LOG` | `0` | `1` logs each hook run to `hooks.log` in the data directory, to [verify the hooks](#verify-the-cleanup-hooks) |
+| **Memory guard** | | |
 | `AGENTS_MEM_GUARD` | `kill` | The [memory guard](#memory-guard-agents-mem): `kill` warns, records and stops runaways in agent trees; `warn` only warns and records; `off` does neither |
-| `AGENTS_MEM_WARN` | `8` | GB of memory that gets a process a warning (and again at each doubling), and makes it a memory hog. The guard warns at this or 60% of its stop size, the smaller |
+| `AGENTS_MEM_WARN` | `8` | GB that gets a process a warning (again at each doubling) and makes it a memory hog. The guard warns at this or 60% of its stop size, the smaller |
 | `AGENTS_MEM_KILL` | `0` | GB at which the guard stops a process in an agent tree; `0` is half the RAM |
 | `AGENTS_MEM_RATE` | `200` | MB/s of growth that gets a process one warning |
 | `AGENTS_MEM_POLL` | `5` | Seconds between the guard's looks while something needs watching |
-| `AGENTS_MEM_IDLE` | `20` | Seconds between its looks when nothing does (a minute with no agent session); clamped so a runaway growing at 4x `AGENTS_MEM_RATE` cannot get from half the warning to the stop size between two looks |
-| `AGENTS_TOOL_LONG` | `20` | Minutes before a session's command (a tool shell) is flagged `long` |
-| `AGENTS_LS_TOOLS` | `5` | Commands listed under each session in `agents ls`; `agents ps` lists all |
-| `AGENTS_PARKED_MIN` | `60` | Minutes a finished session stays to review before it counts as [parked](#local-processes-agents---pack-monitoring), in `agents`, the menu and the waits report |
-| `AGENTS_THEME` | `auto` | Colors ([theming](theming.md#agents-and-its-menu)): `auto` (the palette `scripts/theme.sh` applied, else the terminal's 16 colors), `ansi` (those always), `none` (no color; the states keep their shapes), or a palette's name |
+| `AGENTS_MEM_IDLE` | `20` | Seconds between looks when nothing does (a minute with no agent session), clamped so a runaway at 4x `AGENTS_MEM_RATE` can't get from half the warning to the stop size between two looks |
+| **History** | | |
+| `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only; nothing leaves the machine). `0` records nothing |
+| `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |
+| `AGENTS_SAMPLER` | `1` | The pack's sampler takes a sample once a minute, with or without the menu ([Who samples](#history-and-agents-report)). `0` makes each of its runs do nothing; the menu and `agents watch` still sample while they run |
+| `AGENTS_PRICES` | `~/.config/tuidev/agents-prices.tsv` | Your prices for the [API-equivalent cost](#tokens-and-denials), read after the shipped ones; an absolute or `~/` path; `off` shows no cost |
+| `AGENTS_JOB_TEST` | empty | An extended regex added to the built-in `test` patterns ([job types](#where-the-cpu-goes-job-types)) |
+| `AGENTS_JOB_BUILD` | empty | The same for `build` |
+| `AGENTS_JOB_SERVER` | empty | The same for `server` |
+| `AGENTS_JOB_BROWSER` | empty | The same for `browser` |
+| `AGENTS_JOB_MCP` | empty | The same for `mcp` (never matched against a session's commands) |
+| **Keep awake** | | |
+| `AGENTS_AWAKE_POLL` | `60` | Seconds between checks in `agents awake agents` |
+| `AGENTS_LID` | `1` | `0` hides Lid closed too… in the menu; `agents awake lid` works either way |
+| `AGENTS_LID_MAX` | `8h` | The longest `agents awake lid` may run |
+| `AGENTS_LID_MIN_BATTERY` | `20` | Battery % (off AC) below which the lid guard turns lid sleep back on |
+| **Herdr, other machines and the phone** | | |
+| `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup and its hourly health check |
+| `AGENTS_HERDR_NAMES` | `1` | Herdr's [tabs and sidebar](#tabs-named-after-what-runs-in-them) say what runs where; `0` leaves Herdr's labels alone (`agents herdr reset` puts back what a sync set) |
+| `AGENTS_GLYPHS` | empty | The [mark](#marks-by-kind-of-session) in front of each kind of session: `KIND=GLYPH` words replace single ones (`AGENTS_GLYPHS="codex=C shell=$"`); `off` shows none |
+| `AGENTS_LINK` | `1` | `0` turns off the link watcher, which opens here what you Ctrl-click in a Herdr pane of another machine; `agents link restart` applies a change ([remote.md](remote.md#remote-feels-local-ports-links-and-files)) |
+| `AGENTS_REMOTE_HOSTS` | empty | ssh hosts that count as your machines besides the ones saved in Herdr; space-separated |
+| `AGENTS_HC_MIRROR` | `0` | Experimental. `1` mirrors every agent pane of this machine's Herdr into herdr-core, so Herdr's phone app lists them ([remote.md](remote.md#herdrs-phone-app-agents-hc)). Off by default: a pane takes the phone's size while the phone shows it. `0` ends the mirrors a sync started |
+| `AGENTS_HC_MIRROR_FIT` | `1` | With mirrors on, focusing a mirrored pane gives it its own size back while the phone still shows it ([remote.md](remote.md#a-phone-sized-pane-at-your-desk)); `0` leaves the size to the phone |
+| `AGENTS_HC_UP` | `1` | The herdr-core pack's job (at login and every 5 minutes) starts herdr-core when it is not running; `0` starts nothing |
+| `AGENTS_HC_AUTO` | `0` | `1` hosts a `claude` or `codex` typed in a Herdr pane in herdr-core, as `agents hc run` would, so the phone lists it; a new shell picks up a change |
+| **Menu bar and terminal** | | |
+| `AGENTS_BAR_TITLE` | `triage awake` | Title tokens, in order: `triage` (the blocked and to-review counts), `count`, `cpu`, `mem`, `load`, `battery`, `thermal` (above nominal only), `temp` (with `--pack cooling`), `awake`, `warn`, `limit`. Empty: the icon alone |
+| `AGENTS_BAR_SECTIONS` | `needs review running parked limits today stale hogs machines awake system` | Menu sections, in order. The older names `agents`, `usage` and `jobs` still work |
+| `AGENTS_BAR_ICON` | `terminal` | The title's SF Symbol |
+| `AGENTS_BAR_TOP` | `3` | Busiest processes in the System row's submenu (`0` for none) |
+| `AGENTS_BAR_REFRESH` | `1m` | The menu bar's backstop refresh when nothing asks for one. SwiftBar reads it from the plugin's file name, so re-run `tuidev install --pack monitoring` (or `tuidev update --configs`) after changing it |
+| `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
+| `AGENTS_STATUSLINE_CMD` | empty | Your own Claude Code status line command, run by `agents statusline` with the same JSON after it records Claude's [usage limits](#usage-limits-agents-limits). Empty: `Opus · ctx 42% · 5h 23% · wk 41%`. Quote it |
+| **Colors** | | |
+| `AGENTS_THEME` | `auto` | [Colors](theming.md#agents-and-its-menu): `auto` (the palette `scripts/theme.sh` applied, else the terminal's 16 colors), `ansi`, `none` (the states keep their shapes), or a palette's name |
 | `AGENTS_COLOR_NEED` | `ansi_red` | Blocked, or about to be stopped: a palette key or `#rrggbb` |
 | `AGENTS_COLOR_DONE` | `ansi_blue` | Finished, not yet reviewed |
 | `AGENTS_COLOR_RUN` | `ansi_green` | Working, healthy |
 | `AGENTS_COLOR_WARN` | `ansi_yellow` | Worth a look: stuck, long, high swap |
 | `AGENTS_COLOR_DIM` | SGR 2 | Parked, labels, an empty gauge |
 | `AGENTS_COLOR_ACCENT` | `accent` | The time marker on a gauge |
-| `AGENTS_WAIT_STUCK` | `60` | Minutes a polling loop (`wait`) runs before it is flagged `stuck`, unless the file it watches changed within that time. `0` never flags one |
-| `AGENTS_NAMES` | `claude codex agy grok cursor-agent` | Process names (argv[0] basenames) that count as agent sessions. Cursor's CLI also counts when it runs as `agent`, but only from its own install (`…/cursor-agent/…` in its command line): `agent` alone names other programs too (Grok installs one). Antigravity's `agy --bg-updater` is not a session |
-| `AGENTS_GRACE` | `3` | Seconds between SIGTERM and SIGKILL when killing a tree |
-| `AGENTS_AWAKE_POLL` | `60` | Seconds between checks in `agents awake agents` |
-| `AGENTS_LID` | `1` | `0` hides Lid closed too… in the menu. `agents awake lid` works either way |
-| `AGENTS_LID_MAX` | `8h` | The longest `agents awake lid` may run; longer requests are refused |
-| `AGENTS_LID_MIN_BATTERY` | `20` | Battery % (off AC) below which the lid guard turns lid sleep back on |
-| `AGENTS_NO_HERDR` | empty | `1` skips the Herdr status lookup and its hourly health check |
-| `AGENTS_LINK` | `1` | `0` turns off the link watcher (`agents link watch`), which opens here what you Ctrl-click in a Herdr pane of another machine; `agents link restart` applies a change ([remote.md](remote.md#remote-feels-local-ports-links-and-files)) |
-| `AGENTS_GLYPHS` | (empty) | The mark in front of each kind of session wherever one is listed (Herdr's tabs and sidebar, `agents map`, the menu bar): the [table of marks](#marks-by-kind-of-session) below. `KIND=GLYPH` words replace single ones (`AGENTS_GLYPHS="codex=C shell=$"`); `off` shows none. |
-| `AGENTS_HERDR_NAMES` | `1` | Herdr's labels say what runs where (`agents herdr`): each tab named after what runs in it, each workspace row's `$tuidev_agents` roll-up, the mark on agent rows. A tab you renamed is never touched (until `agents herdr reset TAB_ID`). `0` leaves Herdr's labels alone; `agents herdr reset` puts back what a sync set ([Herdr's labels](#tabs-named-after-what-runs-in-them)) |
-| `AGENTS_HC_MIRROR` | `0` | Experimental. `1` mirrors every agent pane of this machine's Herdr into herdr-core while one runs, so Herdr's phone app lists the agents you already have (`agents hc mirror`, [remote.md](remote.md#herdrs-phone-app-agents-hc)). Off by default: a pane has the phone's size while the phone shows it. `0` mirrors nothing and ends the mirrors a sync started. One pane stays off the phone with `agents hc mirror off` |
-| `AGENTS_HC_MIRROR_FIT` | `1` | With mirrors on, focusing a mirrored pane at the desk gives it its own size back while the phone still shows it (the tuidev.link plugin's `pane.focused` hook runs `agents hc mirror fit -q`; [remote.md](remote.md#a-phone-sized-pane-at-your-desk)). `0` leaves the size to the phone until it lets go; `agents hc mirror fit` still works by hand |
-| `AGENTS_HC_UP` | `1` | The herdr-core pack's job (`agents hc up -q`, at login and every 5 minutes) starts herdr-core when it is not running. `0` starts nothing, so a core you stopped stays down; `agents hc up` still works by hand ([remote.md](remote.md#herdrs-phone-app-agents-hc)) |
-| `AGENTS_HC_AUTO` | `0` | `1` hosts a `claude` or `codex` typed in a Herdr pane in herdr-core by itself, as `agents hc run` would, so Herdr's phone app lists it; a start it cannot host (no core running, `claude -p`, a prompt, a subcommand) runs as typed. Needs the herdr-core pack's shell fragment; a new shell picks up a change ([remote.md](remote.md#herdrs-phone-app-agents-hc)) |
-| `AGENTS_REMOTE_HOSTS` | empty | ssh hosts that count as your machines for `agents ports`, `forward`, `push`, `open` and the watcher, besides the ones saved in Herdr; space-separated |
-| `AGENTS_HISTORY` | `1` | Keep a local history under `~/.local/state/tuidev/agents` (names only, never command lines; nothing leaves the machine). `0` records nothing |
-| `AGENTS_HISTORY_DAYS` | `30` | Days of history kept |
-| `AGENTS_SAMPLER` | `1` | The pack's sampler (the `dev.tuidev.sample` LaunchAgent, `tuidev-sample.timer` on Linux) takes a sample once a minute, with or without the menu ([Who samples](#history-and-agents-report)). `0` makes each of its runs do nothing, without unloading it; the menu and `agents watch` still sample while they run |
-| `AGENTS_PRICES` | `~/.config/tuidev/agents-prices.tsv` | Your prices for the reports' [API-equivalent cost](#tokens-and-denials), read after the list prices that ship, an absolute or `~/` path; `off` shows no cost at all |
-| `AGENTS_JOB_TEST` | empty | An extended regex added to the built-in `test` patterns ([job types](#where-the-cpu-goes-job-types)) |
-| `AGENTS_JOB_BUILD` | empty | The same for `build` |
-| `AGENTS_JOB_SERVER` | empty | The same for `server` |
-| `AGENTS_JOB_BROWSER` | empty | The same for `browser` |
-| `AGENTS_JOB_MCP` | empty | The same for `mcp` (never matched against a session's commands) |
-| `AGENTS_AUTO_REAP` | `0` | `1` lets the menu (where no menu runs, the sampler) clean up, without asking and at most once a minute, only the leftovers of ended sessions that a sample saw under an agent and that listen on no port (needs `AGENTS_HISTORY=1`), and polling loops stuck twice as long as `AGENTS_WAIT_STUCK` reading a quiet file; each one is logged and notified ([auto-reap](#flagged-is-it-safe-to-stop)) |
-| `AGENTS_HOOK_REAP` | `1` | The Claude Code [cleanup hooks](#cleanup-hooks-claude-code) stop what a finished subagent or a cleared session left running; `0` turns them off |
-| `AGENTS_HOOK_LOG` | `0` | `1` appends one line per hook run (event, agent id, handback found, tasks, matches, dry run; no command lines) to `hooks.log` in the data directory, to [verify the hooks](#verify-the-cleanup-hooks) |
-| `AGENTS_TERMINAL` | `auto` | Where `agents open-term` and the menu open windows: `ghostty` (1.2 or later; from 1.3 a window of the running instance), `iterm`, `terminal`, `wezterm`, `kitty`, or `auto` (the first installed of Ghostty 1.2+, iTerm, WezTerm and kitty, else Terminal) |
-| `AGENTS_BAR_TITLE` | `triage awake` | Title tokens, in order: `triage` (what needs you: the blocked and to-review counts; the icon alone when nothing does), `count` (sessions, how many blocked and done, as before), `cpu`, `mem`, `load`, `battery`, `thermal` (above nominal only), `temp` (the SoC's, with `--pack cooling`), `awake`, `warn` (a triangle when the machine needs a look), `limit` (the highest usage limit). Empty: the icon alone |
-| `AGENTS_BAR_SECTIONS` | `needs review running parked limits today stale hogs machines awake system` | Menu sections, in order; a section with nothing to show is left out. The older names keep working: `agents` is running and parked, `usage` is limits, `jobs` is today; in a list of only those, `needs` holds the finished sessions too, and the old default reads as the new layout |
-| `AGENTS_STATUSLINE_CMD` | empty | Your own Claude Code status line command, run by `agents statusline` (the shipped `statusLine`) with the same JSON after it records Claude's [usage limits](#usage-limits-agents-limits); its output is shown as is. Empty: `Opus · ctx 42% · 5h 23% · wk 41%`. Quote it |
-| `AGENTS_BAR_ICON` | `terminal` | The title's SF Symbol |
-| `AGENTS_BAR_TOP` | `3` | Busiest processes in the system row's submenu (`0` for none) |
-| `AGENTS_BAR_REFRESH` | `1m` | The menu bar's backstop: how often it refreshes when nothing asks it to. Events refresh it anyway (hooks, Herdr, the menu opening), every 10 s while a command runs, and idle it skips its reading for up to 5 minutes ([Menu bar](#menu-bar-swiftbar-macos)). SwiftBar reads it from the plugin's file name: re-run `tuidev install --pack monitoring` (or `tuidev update --configs`) after changing it, and the pack renames the plugin (an install from before 3.22 has `agents.10s.sh`, replaced by `agents.1m.sh` on the next update). One refresh takes 0.2–0.6 s depending on load |
 
-#### Marks by kind of session
+The stale patterns are not a setting: extend `AGENTS_ORPHAN_PATTERNS` in `lib/agents/config.sh`, and send the change upstream if it's general.
 
-The one table. Herdr's tabs and sidebar, `agents map` and the menu bar show these marks and link here rather than list them.
+### Marks by kind of session
+
+The one table: Herdr's tabs and sidebar, the board, `agents map` and the menu bar show these marks.
 
 | Kind | Mark | What it is |
 |------|------|------------|
@@ -1067,44 +1041,4 @@ The one table. Herdr's tabs and sidebar, `agents map` and the menu bar show thes
 | `shell` | `❯` | A pane with no agent in it |
 | `agent` | `◆` | Any other agent CLI |
 
-`AGENTS_GLYPHS` replaces single marks or turns them all off, as in the table above. The board's mark for a session the phone reaches, `☏`, is not a kind, but `phone=` in `AGENTS_GLYPHS` replaces it too, and `off` leaves it on.
-
-The stale patterns are not a setting: extend `AGENTS_ORPHAN_PATTERNS` in `lib/agents/config.sh` and send the change upstream if it's general.
-
-## Desk and session tools
-
-**Superlogical** (<https://www.superlogical.com/>) is on the watch-list. There is no pack until a public release exists (see [roadmap.md](roadmap.md)).
-
-## Notifications
-
-Don't watch panes. `~/.local/bin/notify.sh` (from `scripts/notify.sh`) is called by the Claude Code hooks, and optionally by Codex's `notify`. Its channels:
-
-1. A Herdr toast, inside a Herdr pane
-2. The tmux status line, inside tmux
-3. A macOS banner: [terminal-notifier](https://github.com/julienXX/terminal-notifier)'s, which a click takes to the session, else `osascript`'s
-4. `notify-send`, on a Linux desktop
-5. An [ntfy](https://ntfy.sh) push, when `NTFY_URL` is set (for example `export NTFY_URL=https://ntfy.sh/your-topic` in `~/.zshrc.local`), and only when none of 1 to 4 showed it
-6. Nothing: it stays silent and always exits 0
-
-The first of 1 and 2 that works shows it in your terminal. On a Mac the banner shows it too, because a toast or a status line can't be seen from another app. There are two exceptions. The first is a Herdr session when you are at the Mac looking at its pane: the screen is unlocked, a key or the mouse moved in the last 2 minutes, the app in front is the one `agents` says the session's Herdr client runs in, and Herdr's focused pane is the session's own. Then the toast and Herdr's own sound are the one alert, not a toast and a banner that both chime. Looking at another Herdr pane or tab keeps the banner, and so do a detached session (no client shows it), tmux (its status-line message is silent and gone in under a second) and a plain terminal tab. The check knows the app in front and Herdr's focus, not the window: if you keep other windows of the same terminal app open that don't show Herdr, its toast can land where you aren't looking, so set `TUIDEV_NOTIFY_BANNER=always`. The second is a session you reach over ssh, where the Mac's screen isn't yours to look at. That is the session's `SSH_CONNECTION` or `SSH_TTY`, unless `agents root-of` finds it in a terminal app on this Mac: a tmux server started over ssh keeps those variables in every pane after you attach to it at the Mac, and the live answer wins. Anywhere else, the first of 3 to 5 that works shows it. Linux behaves as before: Herdr or tmux, else `notify-send`, else ntfy.
-
-- **Being at the Mac is checked once, when the hook fires.** `ioreg` gives the lock state and the time since the last input, `lsappinfo` the app in front, and `herdr pane get $HERDR_PANE_ID` (the pane Herdr started the session in) whether that pane has Herdr's focus, which is one pane across all its workspaces and tabs. Herdr is asked last, only when the others say you are there, and for at most a second. These take about 10 to 30 ms each, need no permission prompt, and run with no daemon and no state file. A check that fails, times out or can't tell (no `HERDR_PANE_ID`) counts as away, so you get the banner as before.
-- **Tune it:** `TUIDEV_NOTIFY_PRESENT_IDLE` sets the idle limit in seconds (default 120). `TUIDEV_NOTIFY_BANNER=always` (or an idle limit of `0`) shows the banner inside Herdr whether you are there or not. Export them where the CLI starts, or in Claude Code's `env` setting.
-- **The message says why.** Claude Code's Notification hook sends JSON on stdin, so with `jq` installed (and only under a Claude Code hook), the toast and banner show its `message` (for example "Claude needs your permission to use Bash") instead of the hook's fixed text.
-- **Each one is logged** for [`agents report --view waits`](#waits-how-long-agents-wait-on-you), with the monitoring pack: one line in `~/.local/state/tuidev/agents/notify.tsv` (the session, project, kind, the channels that showed it and why a banner was skipped, never the message). Without the pack's data directory, or with `AGENTS_HISTORY=0`, nothing is written.
-- **Waits outside Herdr come from the hooks.** Herdr's status says when a session in one of its panes waits on you; for a Claude Code session anywhere else (tmux, a plain tab), the shipped hooks do. A permission dialog opens a `blocked` wait the moment it shows (`agents hook wait-start`, on `PermissionRequest`, which Claude Code runs only when it is about to ask you: a call an allow rule, the permission mode or auto mode's classifier approves opens none). An MCP question or a sandboxed command's network request, which `PermissionRequest` doesn't cover, opens one from the same Notification; Claude Code sends that notification only after a prompt has waited about six seconds, so for a tool's dialog it finds the wait already open, and the earlier start stands. The idle prompt opens a `done` wait, and the session's next prompt, tool call or turn end (`agents hook wait-end`, on `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure` and `Stop`) closes it, as does `/clear` or `/resume`. No hook fires when you answer a prompt, so the approved tool dates the end: the hook's time less the tool's `duration_ms` (its run, which leaves out the prompt), the moment you approved. A 10-minute `make test` you approved after 30 s counts 30 s, not 10 minutes. Each is one small file under the history directory (`waiting/`, then `waited/`), keyed by the session's `session_id`; `agents sample` counts it into `waits.tsv` the way it counts Herdr's, and removes it once counted or once its session has exited. The wait-end hooks run on every tool call, so their command starts `agents` only while this session has a wait open: a shell glob, then, while any wait is open, the `session_id` read from the hook's first 8 KB with shell builtins (milliseconds, where starting `agents` costs tens of them). The `PermissionRequest` hook runs before the dialog shows, so it must never answer it: it prints nothing and exits 0, and Claude Code takes a decision only from a hook's JSON. Its command starts `agents` only when a wait could open (the pack installed, outside Herdr, history on, a sample within the hour, none open for this session), about 0.1 s before the dialog appears; otherwise it costs a few milliseconds. It records nothing where no dialog shows: Claude Code also runs it for a call it denies unasked (`dontAsk` mode, `claude -p`). Should a call be approved without you after it ran (another `PermissionRequest` hook's allow), the tool's start ends the wait at once and nothing counts. Nothing is recorded inside a Herdr pane (Herdr counts it, so nothing counts twice), without the monitoring pack, with `AGENTS_HISTORY=0`, or when no sample ran within the hour (no sampler runs: `agents` then says so, and how to start one). The count errs low. Waits are whole seconds, so a quick answer may count one second or none. With several subagents at work, another one's tool that starts and ends while the prompt is open ends the wait early (one that started before the wait doesn't). After you deny a call, the wait runs on as blocked until the session's next prompt or turn end.
-- **Phone pushes are an escalation.** ntfy fires only when nothing on the machine could show the notification, so on a Mac it is a fallback, not a second alert. If another service already pushes to your phone when an agent waits too long, leave `NTFY_URL` unset so you are not pushed twice.
-
-**Click to jump.** With the `monitoring` pack on a Mac (it installs terminal-notifier and `agents`), clicking a banner takes you to the session that asked: its Herdr pane, its tmux pane, or its Ghostty tab or split, then brings that terminal forward. When `notify.sh` runs, it asks `agents root-of` which session it runs under (the outermost `claude` or `codex` process above the hook, by one `ps`), which pins it as `PID@START` and hands back the command a click runs; the banner keeps it, and a click runs `agents jump PID@START`, which works out the pane and tab at that moment (see [One process in detail](#one-process-in-detail-show-jump-peek-pick)) and refuses a pid that now names another process. A failed jump (the session has ended) comes back as a notification. The banner also activates the terminal app the session runs in (Ghostty, iTerm2 or Terminal; in tmux or Herdr, the app their clients run in, when they all run in one), and a newer notification from the same session replaces the older one. Ghostty 1.3 or later is the tested path, through Herdr and tmux too; iTerm2 and Terminal are found by tty the same way, and any other app is only brought forward.
-
-What a click runs is fixed, and built in one place (`agents`, which `notify.sh` asks for it): `agents` by its absolute path, the hook's `PATH` (a click runs with a minimal one, without Homebrew's), and the `PID@START` token, checked to be digits, `@` and a start time, each quoted. A title or message never reaches a shell: both go to terminal-notifier as arguments, a leading `[`, `(`, `{`, `<` or quote escaped with a backslash (terminal-notifier would read the text as a property list and drop the banner) and a leading `-` with a space. Without terminal-notifier the banner is `osascript`'s, which a click can't take anywhere; without `agents` it is a plain banner. `notify.sh` prefers Homebrew's terminal-notifier over one earlier on `PATH` (an old Ruby gem of the same name), and `TUIDEV_TERMINAL_NOTIFIER` names another (empty for none). macOS asks once whether terminal-notifier may post notifications; allow it, or turn it on later in System Settings › Notifications › terminal-notifier. The banner waits for that answer, but `notify.sh` stops waiting after 5 s, so a first banner you answer slowly can be lost; it is not repeated through `osascript`, because a terminal-notifier cut off that late has usually posted and a second banner would be a duplicate (`osascript` stands in only when terminal-notifier is missing or fails outright). If its banners never appear, `terminal-notifier -diagnose` says why (`authorization denied` means the switch is off). Turn it on in System Settings › Notifications › terminal-notifier: on macOS 27, `tccutil reset UserNotification …` fails, so that switch is the way back after a "Don't Allow".
-
-The first click asks once more: macOS wants to know whether terminal-notifier may control Ghostty (or iTerm2, or Terminal), because the jump asks the terminal app, through AppleScript, which tab shows the session. Allow it, and a click lands on the tab or split (the click that asked may only bring the app forward: the jump waits 3 s for that answer). Decline, and a click still selects the Herdr or tmux pane, but only brings the terminal app forward, on whatever tab it shows. Change your mind in System Settings › Privacy & Security › Automation › terminal-notifier, or run `tccutil reset AppleEvents fr.julienxx.oss.terminal-notifier` to be asked again.
-
-The menu bar's own notifications (`--notify`: kills, reaps, lid mode, a failed jump) use terminal-notifier too, titled "agents". The cleanup hooks' "Stopped N background commands" notification jumps to the session it is about, and has a group of its own, so it never replaces that session's "Needs your approval" banner.
-
-tmux also flags any window whose agent rings the bell.
-
-## Done means verified
-
-An agent that says "done" isn't done until the checks pass. Verify the cheapest checks first: lint and syntax, then targeted tests, then health checks, then CI. For this repo, that is `make ci-test`, then `tuidev check` (see [engineering.md](engineering.md#verification)).
+`AGENTS_GLYPHS` replaces single marks or turns them all off. The board's `☏` for a session the phone reaches is not a kind, but `phone=` in `AGENTS_GLYPHS` replaces it too, and `off` leaves it on.
