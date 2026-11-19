@@ -30,9 +30,9 @@ Read this when something fails or surprises you: short answers to the questions 
 
 ## Shell and terminal
 
-**`work`, `dev`, `ai`, `ai-triple` and the other tmux layouts are gone.** 3.0 dropped every tmux-wrapper function and its ten layouts, along with `tk` and `tka`. tmux itself is now optional (`--pack tmux`), not baked into any profile except `remote`. `.zshrc` keeps only a small attach-or-create helper: `t [NAME]` (default session name `main`) and `tls` to list sessions. See [remote.md](remote.md#connect-and-re-attach).
+**`work`, `dev`, `ai` and the other tmux layouts are gone (since 3.0).** tmux is optional (`--pack tmux`); `t [NAME]` and `tls` attach, create and list sessions ([remote.md](remote.md#connect-and-re-attach)).
 
-**Where did Ruby, jenv, Yarn, RVM, the Android SDK, gcloud and iTerm2's integration go?** Out of the shipped `.zshrc`: they are personal toolchains, not part of an agent terminal, and Ruby's global `LDFLAGS`/`CPPFLAGS` leaked into unrelated native builds. On an existing machine, `tuidev update --configs` first moved the ones it found into a marked section of `~/.zshrc.local`, which is yours to keep or trim; Ruby keeps only its `PATH` line. On a new machine, set up the ones you use in `~/.zshrc.local`.
+**Where did Ruby, jenv, RVM and the Android SDK go (since 3.0)?** Out of the shipped `.zshrc`, as personal toolchains. `tuidev update --configs` moved the ones it found into a marked section of `~/.zshrc.local`; on a new machine, set up the ones you use there.
 
 **Up arrow doesn't open atuin.** By design: Up recalls history entries that start with what you have typed. `Ctrl+r` opens atuin.
 

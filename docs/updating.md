@@ -39,6 +39,26 @@ When `tuidev update` (or `--all`) cannot get the new files, because the release 
 
 One update or install runs at a time: started again from the terminal, the menu bar or Herdr's popup while one runs, it stops with `another tuidev update is running (pid N)`. The lock is `~/.config/tuidev/update.lock`; one whose holder is gone (killed, or the machine restarted) is taken over. `--check` and `--dry-run` take none.
 
+## Checking the install: `tuidev check`
+
+`tuidev check` runs `scripts/health_check.sh` against the profile in `~/.config/tuidev/profile` (without one: `desktop` on macOS, `minimal` on Linux; a `custom` profile is checked as `minimal`). `tuidev check --profile P` forces one. It prints a line per probe and ends with a summary.
+
+A probe is required or optional. A failed required probe counts toward the exit code; a failed optional one prints a warning and changes nothing.
+
+| Group | What it probes | Required in |
+|-------|----------------|-------------|
+| Core | every core tool on `PATH`, `compaudit` clean for zsh, `secret` and `tuidev` on `PATH`, no token-looking exports in shell startup files | every profile (on Linux without Homebrew, tools the distro doesn't package are optional) |
+| Remote | `tailscale` and `mosh` | `remote` |
+| Sandbox (macOS) | `sandbox-exec` runs, the strict profile and `sbx` are in place | `desktop`, `full`, `remote` |
+| UI (macOS) | Ghostty, its config and the GUI apps | `desktop`, `full` |
+| Extras | the extras tools | never |
+| Packs | each pack in `extra_packs`: its own `<pack>_check` if it defines one, else every command and (macOS) app it declares. With `monitoring`: `agents` loads its modules, the SwiftBar plugin and terminal-notifier. With `herdr`: outdated integrations, a server on an older binary, large logs | never |
+| Shell, power | `compinit` run more than once per shell; lid sleep disabled with nothing to restore it | never |
+
+**Skipped, already inside a sandbox.** Seatbelt doesn't nest. Run from inside an agent's sandbox, `sandbox-exec` is refused with `sandbox_apply: Operation not permitted`, which says nothing about Seatbelt itself. That one probe prints `skipped, already inside a sandbox` and counts as neither a pass nor a failure. Any other failure of it counts. Run `tuidev check` from your own shell for the full answer.
+
+**Exit codes.** `0`: every required probe passed, warnings or not. `1`: at least one required probe failed (the summary names the count; run the installer for the profile or install the missing tools). `2`: a bad `--profile` value or an unknown argument.
+
 ## Hearing about a new release
 
 Once a day, `tuidev latest --if-due` asks `https://github.com/spfr/tuidev/releases/latest` where it redirects to, which is the latest release's tag. It is one request with no body, no API call and no identifier beyond the request itself, and the answer goes into `~/.cache/tuidev/latest`. A check that fails is tried again an hour later, and checks that start together make one request. Nothing starts a timer for this: the menu bar's refresh, a Herdr event, Herdr starting and a run of `agents` each read when the next check is due from that file, and start it only then.
@@ -52,43 +72,9 @@ When the release is newer than the one installed:
 
 You are told once per release. Nothing is ever updated without you asking. `tuidev latest off` turns the check off for this machine (`tuidev latest on` back on); `tuidev update --check` and `--ask` still ask when you run them. `TUIDEV_UPDATE_CHECK=0` does the same for commands that inherit it, such as a CI job; the menu bar and Herdr don't see your shell's environment, so use `tuidev latest off` for those.
 
-## Upgrading to 3.0
+## Upgrading from 2.x
 
-3.0 made tmux and Neovim optional packs, dropped the `cc`/`cx` wrappers in
-favor of the CLIs' own native sandboxes, and removed the `bosun`, `yazi` and
-`nnn` packs. On an existing machine, upgrade with:
-
-```bash
-tuidev update               # a clone from before 3.23 has no tuidev command: git pull && ./scripts/update.sh --configs
-```
-
-That runs the three migrations below, then re-applies the configs of every
-pack your profile records, including one a migration just added: the
-`tuidev-tmux` block, the Neovim config and its `nvim.zsh` aliases, and an
-unmodified 2.x `~/.claude/settings.json` upgraded to the one with the
-`sandbox` block. `./install.sh` on its own is not enough: it runs the
-migrations too, but only installs the packs you name on that command line.
-
-The migrations, in order:
-
-- `202609231200_v3_optional_nvim_tmux.sh` — if tuidev already owns
-  `~/.config/nvim`, adds `nvim` to `extra_packs`; if the profile is `remote`
-  or `~/.config/tmux/tmux.conf` has the `tuidev-tmux` block, adds `tmux`. So
-  nothing you were using disappears. Prints what it carried over and how to
-  drop it by hand (edit `extra_packs` in `~/.config/tuidev/profile`). A
-  `tmux.conf` of your own never gains the `tuidev-tmux` block from an update;
-  `tuidev install --pack tmux` adds it.
-- `202609231210_v3_drop_tui_packs.sh` — removes `bosun`, `yazi` and `nnn` from
-  `extra_packs`. The tools themselves are left installed; only the pack
-  registration goes.
-- `202609231220_v3_drop_ai_wrappers.sh` — backs up and deletes the
-  tuidev-owned `ai-clis.zsh` shell fragment, so `cc`/`cx` disappear. It never
-  edits `~/.claude/settings.json`; it tells you where that file stands. With
-  a `sandbox` block, plain `claude` is sandboxed. An unmodified 2.x copy is
-  upgraded by `tuidev update --configs`, and one you edited gets the
-  `sandbox` block merged in by it (see
-  [Shipped configs you may have edited](#shipped-configs-you-may-have-edited)).
-  Until then, `claude` runs unsandboxed.
+3.0 made tmux and Neovim optional packs, dropped the `cc`/`cx` wrappers for the CLIs' own native sandboxes, and removed the `bosun`, `yazi` and `nnn` packs. Run `tuidev update`; a clone from before 3.23 has no `tuidev` command, so run `git pull && ./scripts/update.sh --configs`. It runs three migrations (they keep tmux and Neovim where you used them, drop the removed packs from `extra_packs`, and remove the `ai-clis.zsh` fragment) and re-applies the configs of every pack your profile records. `./install.sh` alone is not enough: it installs only the packs you name. An unmodified 2.x `~/.claude/settings.json` gets the `sandbox` block; one you edited gets it merged in ([Shipped configs you may have edited](#shipped-configs-you-may-have-edited)). Until then, `claude` runs unsandboxed. Details: the [3.0.0 entry in the CHANGELOG](../CHANGELOG.md).
 
 ## The three kinds of change
 

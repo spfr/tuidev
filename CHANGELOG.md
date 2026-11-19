@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The quick start is one path, install to a waiting agent**, and `tuidev check` has a reference: what it probes, what "skipped, already inside a sandbox" means, its exit codes. The roadmap is current as of 19 November 2026; the 3.0 upgrade notes and two FAQ entries are shortened. [Quick start](docs/QUICK_START_GUIDE.md) · [Updating](docs/updating.md#checking-the-install-tuidev-check)
 - **`agents statusline`, `bar poke` and the wait hooks start about twice as fast** (17 ms, was 32 ms): they load only the modules they use. [Engineering](docs/engineering.md)
 - **`tuidev check` probes each pack for real.** A pack may define `<pack>_check`; `cooling` and `release-age` no longer warn forever. [Engineering](docs/engineering.md)
 - **`tuidev install --help` and `uninstall --help` read as help**, and hints name commands a one-line install has.
