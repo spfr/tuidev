@@ -256,11 +256,21 @@ dead="$("$SH" -c 'echo $$')"
 setup; stub_release 2.0.0; printf '%s Thu Jan  1 00:00:00 1970\n' "$dead" > "$lockf"
 out="$(update --repo)" || fail "a dead holder's lock: $out"
 [[ "$(cur)" == versions/2.0.0 && ! -e "$lockf" ]] || fail "a dead holder's lock was not taken over and released: $(cur) $(cat "$lockf" 2>&1)"
+# Twelve at once over a dead holder's lock: never two holders (a takeover by rename let several in).
+setup; mkdir -p "$tmp/race/in"; : > "$tmp/race/seen"; printf '%s Thu Jan  1 00:00:00 1970\n' "$dead" > "$lockf"
+cat > "$tmp/race/c.sh" <<'RACE'
+. "$1/scripts/lib/lock.sh"
+tuidev_update_lock >/dev/null 2>&1 || exit 0
+: > "$2/in/$$"; ls "$2/in" | wc -l >> "$2/seen"; sleep 0.3; rm -f "$2/in/$$"; tuidev_update_unlock
+RACE
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do "$SH" "$tmp/race/c.sh" "$REPO_DIR" "$tmp/race" & done; wait
+most="$(sort -n "$tmp/race/seen" | tail -1 | tr -d ' ')"
+[[ "$most" == 1 && ! -e "$lockf" && ! -e "$lockf.claim" ]] || fail "twelve takers of a dead holder's lock: ${most:-0} held it at once; left: $(cd "$TUIDEV_STATE_DIR" && echo ./*)"
 # Handed over with exec (same pid): the new update.sh keeps the lock, and releases it at the end.
 setup; NEW="$tmp/build/tuidev-2.0.0"; rm -rf "$NEW"; real_tree "$NEW" 2.0.0; publish "$NEW"
 out="$(update --self)" || fail "a real hand-over with the lock: $(echo "$out" | tail -8)"
 [[ "$out" == *"Update Complete"* && "$out" != *"another tuidev update"* && ! -e "$lockf" ]] || fail "the hand-over and the lock: $(echo "$out" | tail -8)"
-pass "one update at a time: a live holder refuses update and install; dry runs take none; a dead one is taken over; an exec hand-over keeps it"
+pass "one update at a time: a live holder refuses update and install; dry runs take none; a dead one is taken over, by one of twelve; an exec hand-over keeps it"
 
 # --- 11. a clone whose pull fails -------------------------------------------------------------------------------
 setup

@@ -451,6 +451,11 @@ rm -f "$BIN/ln"
 : > "$CALLS"; out="$(tuidev update --rollback)"
 [[ "$(readlink "$TUIDEV_HOME/current")" == versions/1.1.0 ]] || fail "rolling back twice goes forward again"
 # no earlier release kept
+# An update that is running: current is not moved under it.
+was="$(readlink "$TUIDEV_HOME/current")"; mkdir -p "$TUIDEV_STATE_DIR"; echo "$$ -" > "$TUIDEV_STATE_DIR/update.lock"; rc=0
+err="$(tuidev update --rollback 2>&1)" || rc=$?
+[[ "$rc" == 1 && "$err" == *"another tuidev update is running (pid $$)"* && "$(readlink "$TUIDEV_HOME/current")" == "$was" ]] || fail "rollback during an update: rc=$rc $err"
+rm -f "$TUIDEV_STATE_DIR/update.lock"
 rm "$TUIDEV_HOME/previous"; rc=0; err="$(tuidev update --rollback 2>&1)" || rc=$?
 [[ "$rc" == 1 && "$err" == *"no earlier release"* && "$(readlink "$TUIDEV_HOME/current")" == versions/1.1.0 ]] || fail "no previous: $rc $err"
 echo 0.9.0 > "$TUIDEV_HOME/previous"; rc=0; err="$(tuidev update --rollback 2>&1)" || rc=$?

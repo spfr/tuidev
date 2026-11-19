@@ -17,7 +17,8 @@
 # process started, as ps prints it). Making it decides who holds it: mkdir
 # is not used, since the mkdir of uutils coreutils (Ubuntu from 25.10) can
 # succeed for two processes at once. A holder that is gone (no such pid, or
-# the pid is another process now) is taken over. Its own holder finds it
+# the pid is another process now) is taken over, by one process at a time
+# (update.lock.claim). Its own holder finds it
 # held by itself after update.sh hands over with exec (same pid, same
 # start), and keeps it.
 
@@ -59,7 +60,7 @@ _tuidev_holder_alive() {
 }
 
 tuidev_update_lock() {
-    local lock="$TUIDEV_STATE_DIR/update.lock" me h="" start moved _
+    local lock="$TUIDEV_STATE_DIR/update.lock" me h="" start claim now _
     start="$(_tuidev_proc_start $$)"
     me="$$ ${start:--}"
     mkdir -p "$TUIDEV_STATE_DIR" 2>/dev/null || true
@@ -75,18 +76,26 @@ tuidev_update_lock() {
         elif _tuidev_holder_alive "$h"; then
             break
         fi
-        # Gone: of several that saw it, the one whose rename moves the dead
-        # holder's file goes on; a live holder's file is given back.
-        moved="$lock.$$"
-        mv -f "$lock" "$moved" 2>/dev/null || continue
-        if [[ "$(cat "$moved" 2>/dev/null)" != "$h" ]]; then
-            mv -f "$moved" "$lock" 2>/dev/null || rm -f "$moved"
+        # Gone. One taker at a time: the claim is made like the lock, so of
+        # several that saw the dead holder only the claim's maker looks again,
+        # and removes the lock only while it still names that holder. (A
+        # rename could move a live holder's file away and put it back over a
+        # third process's lock.) A claim whose maker died goes after a minute.
+        claim="$lock.claim"
+        if ! tuidev_excl "$claim" "$me"; then
+            [[ -z "$(find "$claim" -maxdepth 0 -mmin +1 2>/dev/null)" ]] || rm -f "$claim"
+            sleep 0.2 2>/dev/null || sleep 1
             continue
         fi
-        rm -f "$moved"
+        now=""; { read -r now < "$lock"; } 2>/dev/null || true
+        [[ "$now" != "$h" ]] || rm -f "$lock"
+        rm -f "$claim"
     done
+    # The last go may have just cleared a dead holder's lock.
+    if tuidev_excl "$lock" "$me"; then _TUIDEV_LOCK_HELD="$me"; return 0; fi
     h="${h%% *}"
     print_error "another tuidev update is running (pid ${h:-?}); try again when it has finished"
+    print_info "The lock is $lock: remove it if no update is running."
     return 1
 }
 

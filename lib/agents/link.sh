@@ -512,7 +512,7 @@ _agents_link_session() {
 # that lasted a minute, else after twice the last wait, up to a minute. A
 # wait that took far longer than it was (the machine slept: a lid closed
 # for an hour) starts the doubling over, so the machines come back within
-# seconds of waking, not one at a time at the cap.
+# a minute of waking, not one at a time at the cap.
 _AGENTS_LINK_WAIT_MAX=60
 _agents_link_loop() {
     local wait=5 t0 t1

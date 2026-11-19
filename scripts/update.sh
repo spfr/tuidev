@@ -1088,7 +1088,7 @@ run_repo_mode() {
         # git said why above (offline, no upstream, local commits): the old
         # files' migrations and configs are not an update.
         run_cmd git -C "$target" pull --ff-only \
-            || _not_updated "could not reach or fast-forward the upstream of $target (still on $(cat "$target/VERSION" 2>/dev/null || echo "?") at ${before:0:7})"
+            || _not_updated "could not reach or fast-forward the upstream of $target (still on $(cat "$target/VERSION" 2>/dev/null || echo "?") at ${before:0:7}). On a detached HEAD or a branch of your own, 'tuidev update --configs' applies this checkout as it is"
         after="$(git -C "$target" rev-parse HEAD 2>/dev/null)" || true
         # --all pulls first, and a pull that brought new code hands over to it:
         # the migrations and configs applied next must be the ones just pulled,

@@ -308,8 +308,12 @@ _agents_hm_sync() {
         round=$((round + 1)) pass=0
         if ! _agents_lock "$lock" "$tries" 0.2; then
             : > "$dirty" 2>/dev/null
-            [[ "$quiet" == true ]] || echo "agents hc mirror: another sync is running; it goes again for this one"
-            return 0
+            # The running sync may have let go between that try and the mark,
+            # which nobody would read then: with the mark down, look once more.
+            if ! _agents_lock "$lock"; then
+                [[ "$quiet" == true ]] || echo "agents hc mirror: another sync is running; it goes again for this one"
+                return 0
+            fi
         fi
         while [[ $pass -lt 5 ]]; do
             pass=$((pass + 1))

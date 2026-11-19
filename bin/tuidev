@@ -408,6 +408,13 @@ _tuidev_rollback() {
     { _tuidev_is_version "$prev" && [[ -x "$home/versions/$prev/install.sh" ]]; } \
         || _tuidev_die "no earlier release is kept on this machine"
     [[ ! -r "$repo/VERSION" ]] || read -r have < "$repo/VERSION" || true
+    # update.sh takes the lock only after the flip: never move `current`
+    # under an update that is running.
+    local holder=""
+    [[ ! -r "$_TUIDEV_STATE/update.lock" ]] || read -r holder _ < "$_TUIDEV_STATE/update.lock" || true
+    if [[ "$holder" =~ ^[0-9]+$ ]] && kill -0 "$holder" 2>/dev/null; then
+        _tuidev_die "another tuidev update is running (pid $holder); try again when it has finished"
+    fi
     _tuidev_flip "$home" "$prev" || _tuidev_die "could not point $home/current at versions/$prev"
     if _tuidev_is_version "$have" && [[ "$have" != "$prev" ]]; then printf '%s\n' "$have" > "$home/previous"; fi
     echo "tuidev: back on $prev; re-applying its configs (migrations a newer release ran are not undone)"
