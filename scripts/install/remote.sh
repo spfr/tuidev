@@ -79,6 +79,7 @@ _install_sshd_snippets() {
             print_info "    sudo cp '$f' '$dest_dir/'"
         done
         print_info "    sudo systemctl reload ssh   # or: sudo launchctl kickstart -k system/com.openssh.sshd"
+        print_todo "Apply the sshd snippets: sudo cp '$src_dir'/*.conf '$dest_dir/', then sudo systemctl reload ssh (macOS: sudo launchctl kickstart -k system/com.openssh.sshd)"
         return 0
     fi
 
@@ -107,6 +108,7 @@ remote_install() {
         # Tailscale ships its own Linux repos and installer; we point at it
         # rather than pipe a remote script into a shell.
         print_info "Tailscale on Linux: use the official installer — https://tailscale.com/download/linux"
+        command_exists tailscale || print_todo "Install Tailscale: https://tailscale.com/download/linux"
     fi
     pkg_install "${REMOTE_FORMULAE[@]}" || print_warning "mosh not installed (continuing)"
 

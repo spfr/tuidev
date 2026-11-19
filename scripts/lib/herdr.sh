@@ -448,6 +448,7 @@ herdr_service_note() {
     done < <(grep -oE '/[^[:space:]<>"'"'"']*/herdr' "$f" 2>/dev/null | sort -u)
     if [[ -n "$brew" ]]; then
         print_warning "$short runs Homebrew's $brew: change it to $direct (it takes effect at the service's next start)"
+        print_todo "Point $short at $direct instead of Homebrew's herdr"
     elif grep -qE '(exec |>)herdr( |<)' "$f" 2>/dev/null; then
         print_info "$short finds herdr on its login shell's PATH; to pin the release binary: exec \"$direct\" server"
     fi
@@ -468,10 +469,12 @@ herdr_path_note() {
     found="$(command -v herdr 2>/dev/null)" || found=""
     [[ -z "$found" || "$found" == "$(herdr_direct_path)" ]] && return 0
     print_info "herdr on this PATH is $found; put $dir first (the tuidev .zshrc does: path=(\"\$HOME/.local/bin\" \$path))"
+    print_todo "Put $dir first on your PATH, so herdr is the release binary and not $found"
 }
 
 herdr_cutover_hint() {
     herdr_brew_installed || return 0
+    print_todo "Once no herdr server runs Homebrew's binary any more: brew uninstall herdr"
     if [[ "$DRY_RUN" == true ]]; then
         print_info "herdr: once no server runs Homebrew's binary any more: brew uninstall herdr"
     elif herdr_server_on_brew; then

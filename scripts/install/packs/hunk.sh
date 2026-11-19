@@ -31,6 +31,7 @@ hunk_install() {
     if ! pkg_install "${HUNK_FORMULAE[@]}"; then
         print_warning "hunk not installed (continuing)"
         print_info "Install it yourself: brew install hunk  |  npm i -g hunkdiff  (see https://github.com/modem-dev/hunk#install)"
+        print_todo "Install hunk: brew install hunk  or  npm i -g hunkdiff"
     fi
 
     print_info "Review changes:  hunk diff [--watch]   |   hunk show [REV]"

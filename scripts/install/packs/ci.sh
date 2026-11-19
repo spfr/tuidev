@@ -35,6 +35,7 @@ ci_install() {
 
     if ! pkg_install "${CI_FORMULAE[@]}"; then
         print_warning "some ci tools not installed (continuing)"
+        print_todo "Install the missing ci tools (actionlint, zizmor, betterleaks; the pointer is above), then: tuidev install --pack ci"
     fi
 
     print_info "Before a commit:  actionlint  |  zizmor .github/workflows  |  betterleaks git"

@@ -69,6 +69,7 @@ cooling_install() {
     fi
     if ! _cooling_have_swiftc; then
         print_warning "cooling: swiftc not found; install the Command Line Tools (xcode-select --install), then run tuidev install --pack cooling again"
+        print_todo "Install the Command Line Tools (xcode-select --install), then: tuidev install --pack cooling"
         return 0
     fi
 
@@ -115,7 +116,8 @@ cooling_install() {
             print_info "cooling: fans follow the SoC's temperature now; 'agents cool' shows them, 'agents cool cool|auto|quiet|max|off' switches"
             print_info "cooling: the curve lives in /Library/Application Support/tuidev/fan/fan.conf (balanced: low=60, high=95 °C)" ;;
         3)  print_info "cooling: this Mac has no fans; nothing to run" ;;
-        *)  if [[ -f "$COOLING_PLIST" ]]; then
+        *)  print_todo "Install the fan daemon as root: sudo '$bin' install"
+            if [[ -f "$COOLING_PLIST" ]]; then
                 print_warning "cooling: the new build is not installed; the fan daemon keeps running the previous one"
             else
                 print_warning "cooling: fan control is built but not running yet"

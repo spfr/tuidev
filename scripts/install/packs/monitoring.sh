@@ -109,6 +109,7 @@ _monitoring_swiftbar() {
         brew_install_casks "${MONITORING_CASKS[@]}" || print_warning "SwiftBar not installed (continuing)"
     else
         print_warning "Homebrew not found: skipping SwiftBar (install from https://brew.sh)"
+        print_todo "Install Homebrew (https://brew.sh), then SwiftBar: tuidev install --pack monitoring"
     fi
 
     # A plugin folder the user already chose wins; only an unset one is pointed
@@ -129,6 +130,8 @@ _monitoring_swiftbar() {
     _monitoring_prune_plugins "$dir" "$name"
 
     print_info "Open SwiftBar once (open -a SwiftBar) and turn on Launch at login in its settings."
+    print_todo "Open SwiftBar once (open -a SwiftBar) and turn on Launch at login in its settings"
+    print_todo "Allow terminal-notifier's notifications when macOS asks (System Settings > Notifications), and let it control your terminal app on the first click"
     print_info "terminal-notifier: allow its notifications when macOS asks (or in System Settings > Notifications), so a click on an agent's banner jumps to its session; 'terminal-notifier -diagnose' says why none appear."
     print_info "The first click asks to let terminal-notifier control your terminal app: allow it, so a click lands on the session's tab (declined, it only brings the app forward)."
 }
@@ -217,6 +220,7 @@ _monitoring_linger_hint() {
     [[ "$linger" != "Linger=yes" ]] || return 0
     print_warning "lingering is off: your user manager, and $1, run only while you are logged in."
     print_info "  So it runs from boot, with no login (needs root, once): sudo loginctl enable-linger $user"
+    print_todo "Keep your user services running without a login: sudo loginctl enable-linger $user"
 }
 
 # _monitoring_linux_units — the sampler (enabled timer) and the memory guard
@@ -228,12 +232,15 @@ _monitoring_linux_units() {
         print_warning "no systemd user manager here (a container?): nothing samples or guards memory on its own (continuing)."
         print_info "  Where systemd runs: systemctl --user enable --now $s.timer $m"
         print_info "  Else, in a tmux pane: agents watch (it samples while it runs) and agents mem guard"
+        print_todo "Start the sampler and memory guard where systemd runs: systemctl --user enable --now $s.timer $m (else, in a tmux pane: agents watch and agents mem guard)"
         return 0
     fi
     { run_cmd systemctl --user enable --now "$s.timer"; } \
-        || print_warning "$s.timer did not start: systemctl --user enable --now $s.timer (continuing)"
+        || { print_warning "$s.timer did not start: systemctl --user enable --now $s.timer (continuing)"
+             print_todo "Start the sampler: systemctl --user enable --now $s.timer"; }
     { run_cmd systemctl --user enable "$m" && run_cmd systemctl --user restart "$m"; } \
-        || print_warning "the memory guard did not start: systemctl --user enable --now $m (continuing)"
+        || { print_warning "the memory guard did not start: systemctl --user enable --now $m (continuing)"
+             print_todo "Start the memory guard: systemctl --user enable --now $m"; }
     print_info "sampler: agents sample once a minute ($s.timer); AGENTS_SAMPLER=0 in $MONITORING_CONF turns it off."
     print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM ($m); 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
     _monitoring_linger_hint "the sampler and the memory guard"

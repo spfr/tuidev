@@ -105,6 +105,7 @@ _orchestration_warn_plain_copy() {
         -e "Delegate for context isolation, independent parallel work" \
         -e "Leave finished work uncommitted for the user to review." <<<"$outside"; then
         print_warning "$file holds the orchestration policy as plain text (an agents-orchestration copy?): delete it there, or it loads twice"
+        print_todo "Delete the plain-text orchestration policy from $file, or it loads twice"
     fi
 }
 
@@ -158,6 +159,7 @@ _orchestration_check_codex_model() {
     [[ -f "$cfg" ]] || return 0
     if grep -qE '^[[:space:]]*model[[:space:]]*=[[:space:]]*"gpt-5\.6-' "$cfg"; then
         print_warning "$cfg pins a superseded gpt-5.6 model: delete the model line to follow Codex's default."
+        print_todo "Delete the pinned gpt-5.6 model line from $cfg to follow Codex's default"
     fi
 }
 

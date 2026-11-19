@@ -87,8 +87,10 @@ _herdr_install_plugin() {
     if [[ -n "${TUIDEV_PLUGIN_PANE:-}" && "$DRY_RUN" != true ]]; then
         if [[ "$changed" == true ]]; then
             print_warning "the tuidev.link plugin changed: run 'tuidev update --configs' from a shell outside this popup to load it"
+            print_todo "Load the tuidev.link plugin: run tuidev update --configs from a shell outside Herdr"
         else
             print_warning "the tuidev.link plugin is not linked: run 'tuidev update --configs' from a shell outside this popup to link it"
+            print_todo "Load the tuidev.link plugin: run tuidev update --configs from a shell outside Herdr"
         fi
         return 0
     fi
@@ -105,6 +107,7 @@ _herdr_install_plugin() {
     if ! "$herdr" plugin link "$dest" >/dev/null 2>&1; then
         [[ "$had" == false ]] || "$herdr" plugin link "$dest" >/dev/null 2>&1 || true
         print_warning "could not link the tuidev.link plugin: herdr plugin link $dest (continuing)"
+        print_todo "Link the tuidev.link plugin: herdr plugin link $dest"
         return 0
     fi
     # Its keys, as a managed block in your config (the plugin first: a key
@@ -132,6 +135,7 @@ herdr_install() {
         print_warning "herdr not installed (continuing)."
         print_info "Download $(herdr_asset 2>/dev/null || echo "your platform's binary") from https://github.com/herdrdev/herdr/releases,"
         print_info "  check it against the sha256 the release lists, put it at $(herdr_direct_path), then re-run this pack."
+        print_todo "Install herdr from https://github.com/herdrdev/herdr/releases (check its sha256) at $(herdr_direct_path), then: tuidev install --pack herdr"
         return 0
     fi
 
