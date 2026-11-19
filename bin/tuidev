@@ -31,12 +31,14 @@
 # ever updated without you asking. See docs/updating.md.
 #
 # Globals: a helper answers in REPLY. _tuidev_cache_read alone sets LATEST,
-# NEXT and CHECKED (the cache as last read), and _tuidev_update_available
-# alone sets INSTALLED.
+# NEXT and CHECKED (the cache as last read), _tuidev_update_available
+# alone sets INSTALLED, and _tuidev_check alone sets _TUIDEV_ANSWERED (a
+# request had an answer).
 #
 # Copies, since this file runs without the repo's libs: _tuidev_is_version,
 # _tuidev_newer, _tuidev_managed and _tuidev_release_home are
-# scripts/lib/version.sh's; _tuidev_flip is get.sh's _get_flip; the cache and
+# scripts/lib/version.sh's; _tuidev_excl is scripts/lib/lock.sh's
+# tuidev_excl; _tuidev_flip is get.sh's _get_flip; the cache and
 # state paths are spelled as lib/agents/release.sh and uninstall.sh spell
 # them. test_contract.sh fails when a copy and its twin disagree.
 
@@ -274,6 +276,7 @@ _tuidev_check() {
     _tuidev_cache_write "$LATEST" "$(( now + _TUIDEV_RETRY_AFTER ))" "$CHECKED" \
         || [[ "$1" == force ]] || return 1
     _tuidev_ask_latest || return 1
+    _TUIDEV_ANSWERED=true
     _tuidev_cache_write "$REPLY" "$(( now + _TUIDEV_CHECK_EVERY ))" "$now"
 }
 
@@ -347,7 +350,10 @@ cmd_latest() {
     [[ "$notify" == false ]] || { _tuidev_notify_once; return 0; }
     # --newer: no output; 0 a newer release is known, 1 this is the latest
     # one, 2 no release is known (update.sh asks this before it downloads).
+    # With --refresh, 3 when that asked and had no answer (offline, or the
+    # check is off): the cache may be old, so it says nothing about now.
     if [[ "$newer" == true ]]; then
+        [[ "$refresh" != force || "${_TUIDEV_ANSWERED:-}" == true ]] || return 3
         _tuidev_update_available && return 0
         [[ "$LATEST" != "-" && -n "$INSTALLED" ]] && return 1
         return 2
@@ -579,7 +585,7 @@ main() {
     case "$cmd" in
         "")        if [[ -t 0 && -t 1 ]]; then cmd_palette; else usage; fi ;;
         palette)   cmd_palette "$@" ;;
-        install)   _tuidev_repo || return 1; exec "$REPLY/install.sh" "$@" ;;
+        install)   _tuidev_repo || return 1; TUIDEV_VIA_CLI=1 exec "$REPLY/install.sh" "$@" ;;
         update)    cmd_update "$@" ;;
         latest)    cmd_latest "$@" ;;
         whatsnew)  cmd_whatsnew "$@" ;;
@@ -593,7 +599,7 @@ main() {
                        show|apply) exec "$repo/scripts/theme.sh" "$@" ;;
                        *) exec "$repo/scripts/theme.sh" apply "$@" ;;
                    esac ;;
-        uninstall) _tuidev_repo || return 1; exec "$REPLY/uninstall.sh" "$@" ;;
+        uninstall) _tuidev_repo || return 1; TUIDEV_VIA_CLI=1 exec "$REPLY/uninstall.sh" "$@" ;;
         version|--version|-V) cmd_version ;;
         home)      _tuidev_repo || return 1; printf '%s\n' "$REPLY" ;;
         help|-h|--help) usage ;;

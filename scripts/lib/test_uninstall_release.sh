@@ -84,5 +84,18 @@ bash "$TUIDEV_HOME/current/uninstall.sh" --all </dev/null > "$tmp/log" 2>&1 || f
 [[ ! -e "$HOME/.cache/tuidev/latest" ]] || fail "the cache stayed with a clone"
 pass "a git clone (current not a symlink) is left alone; the cache still goes"
 
+# --help: the header without `# ` markers or rules, every usage line (to
+# --purge-history), as `tuidev uninstall` in a release or through the CLI.
+help_ok() { ! grep -qE '^#|====' <<<"$1" && [[ "$1" == *"--purge-history"* ]]; }
+out="$(bash "$tree/uninstall.sh" --help)" || fail "--help in a release"
+help_ok "$out" && [[ "$out" == *"tuidev uninstall --dry-run"* && "$out" != *"./uninstall.sh"* ]] || fail "--help in a release: $out"
+out="$(TUIDEV_VIA_CLI=1 bash "$REPO_DIR/uninstall.sh" --help)" || fail "--help through tuidev"
+help_ok "$out" && [[ "$out" == *"tuidev uninstall --all"* ]] || fail "--help through tuidev uninstall: $out"
+if [[ -e "$REPO_DIR/.git" ]]; then
+    out="$(bash "$REPO_DIR/uninstall.sh" --help)" || fail "--help in a clone"
+    help_ok "$out" && [[ "$out" == *"./uninstall.sh --all"* ]] || fail "--help run directly in a clone: $out"
+fi
+pass "--help: the header without comment markers; tuidev uninstall through the CLI or a release, ./uninstall.sh in a clone"
+
 echo ""
 echo "All uninstall release tests passed."

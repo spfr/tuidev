@@ -2,7 +2,7 @@
 # Tests for install.sh's first-run question: `--choose` (asks, prints the flags,
 # installs nothing), the menu on stderr and the flags alone on stdout, the
 # no-terminal default, and that a choice made on a terminal gives the same
-# dry-run plan as the same flags typed.
+# dry-run plan as the same flags typed; and --help (the header as help).
 # Run: bash scripts/lib/test_install_choose.sh  -> exit 0 on pass (also under /bin/bash).
 #
 # shellcheck disable=SC2015,SC2016  # `a && b || fail` checks
@@ -143,6 +143,21 @@ $(plan "$tmp/flag.out")"
     done
     pass "any profile or pack flag skips the question, even on a terminal"
 fi
+
+# --- --help: the header as help, for a clone and for the one-line install -----------
+# No `# ` markers or `# ====` rules; `tuidev install` through the CLI or from a
+# release (no .git), `./install.sh` run directly in a clone.
+help_ok() { ! grep -qE '^#|====' <<<"$1" && [[ "$1" == *"--pack NAME"* && "$1" == *"preview the changes"* ]]; }
+rel="$tmp/rel"; mkdir -p "$rel"; cp -R "$REPO_DIR/scripts" "$REPO_DIR/install.sh" "$rel/"
+out="$("$SH" "$rel/install.sh" --help)" || fail "--help in a release"
+help_ok "$out" && [[ "$out" == *"tuidev install [--profile"* && "$out" != *"./install.sh"* ]] || fail "--help in a release: $out"
+if [[ -e "$REPO_DIR/.git" ]]; then
+    out="$("$SH" "$INSTALL" --help)" || fail "--help in a clone"
+    help_ok "$out" && [[ "$out" == *"./install.sh [--profile"* ]] || fail "--help run directly in a clone: $out"
+fi
+out="$(TUIDEV_VIA_CLI=1 "$SH" "$INSTALL" --help)" || fail "--help through tuidev"
+help_ok "$out" && [[ "$out" == *"tuidev install [--profile"* && "$out" != *"./install.sh"* ]] || fail "--help through tuidev install: $out"
+pass "--help: the header without comment markers; tuidev install through the CLI or a release, ./install.sh in a clone"
 
 echo ""
 echo "All install --choose tests passed."

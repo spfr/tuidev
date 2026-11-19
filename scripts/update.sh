@@ -56,6 +56,8 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 . "$SCRIPT_DIR/lib/perf.sh"
 # shellcheck source=lib/version.sh disable=SC1091
 . "$SCRIPT_DIR/lib/version.sh"
+# shellcheck source=lib/lock.sh disable=SC1091
+. "$SCRIPT_DIR/lib/lock.sh"
 
 # print_section is a variant not defined in ui.sh; add locally.
 print_section() { echo ""; echo -e "${CYAN}▶ $1${NC}"; }
@@ -300,12 +302,22 @@ clean_outside_duplication() {
 
 # Prints drift report for each entry in MANAGED_BLOCKS. Populates DRIFT_ITEMS
 # with entries that need re-applying and DRIFT_LEGACY with files that exist
-# but have no block (→ need `make adopt`). DRIFT_DUPLICATE catches the
+# but have no block (→ need an install run: _adopt_cmd). DRIFT_DUPLICATE catches the
 # harder case: block is present but source content is also duplicated outside
 # it (from a pre-managed-block install that was later upgraded).
 DRIFT_ITEMS=()
 DRIFT_LEGACY=()
 DRIFT_DUPLICATE=()
+
+# _adopt_cmd ID — the install run that writes block ID into a file that has
+# none: --configs only refreshes a block that is there. The installer writes
+# the shell's blocks on every run, tmux.conf's with its pack.
+_adopt_cmd() {
+    case "$1" in
+        tuidev-tmux) echo "tuidev install --pack tmux" ;;
+        *)           echo "tuidev install --core" ;;
+    esac
+}
 
 detect_drift() {
     DRIFT_ITEMS=()
@@ -330,7 +342,7 @@ detect_drift() {
 
         if ! grep -qxF "$(tuidev_block_begin "$id")" "$dest" 2>/dev/null; then
             print_warning "$dest — no managed block found (legacy install)"
-            print_info   "  run 'make adopt' to convert this file to a managed block"
+            print_info   "  to convert it: $(_adopt_cmd "$id") adds the block, then tuidev update --configs removes the copy outside it"
             DRIFT_LEGACY+=("$entry")
             continue
         fi
@@ -576,7 +588,8 @@ report_apple_container() {
     ver="$(container --version 2>/dev/null | awk '{print $4}')"
     echo ""
     echo -e "  ${BOLD}Apple container${NC} (${ver:-unknown}, pkg-installed, not tracked by brew):"
-    print_info "upgrade from a real terminal (needs sudo): container system stop && update-container.sh, then make sandbox-up"
+    # shellcheck disable=SC2016  # printed for you to run, not expanded here
+    print_info 'upgrade from a real terminal (needs sudo): container system stop && update-container.sh, then "$(tuidev home)/scripts/container.sh" up'
 }
 
 # Herdr updates itself (scripts/lib/herdr.sh): the release binary gets
@@ -819,12 +832,34 @@ run_migrations_mode() {
     fi
 
     if ! tuidev_run_migrations; then
-        print_error "Migration failed — stopping before any further changes."
+        _migration_failed
         exit 1
     fi
     # A migration may have edited the profile (e.g. added a pack); later
     # steps in this same run must see that, not the pre-migration copy.
     load_profile >/dev/null
+}
+
+# _migration_failed — what state a failed migration leaves, and the two ways
+# out. In a release install get.sh has already pointed `current` at the new
+# files when this runs, so the install is split between two versions.
+_migration_failed() {
+    local files installed
+    files="$(cat "$REPO_DIR/VERSION" 2>/dev/null)" || files=""
+    installed="$(_installed_version)"
+    print_error "Migration failed — stopping before any further changes."
+    if version_valid "$files" && version_valid "$installed" && [[ "$files" != "$installed" ]]; then
+        print_info "  State: the update from $installed to $files stopped partway. tuidev's files are $files ($REPO_DIR);"
+        print_info "  the migrations before this one ran, and the configs are still the ones $installed applied."
+    else
+        print_info "  State: the migrations before this one ran; configs were not re-applied."
+    fi
+    print_info "  Fix what the migration said, then run tuidev update again: it retries the migration and finishes."
+    if tuidev_is_release "$REPO_DIR"; then
+        print_info "  Or go back: tuidev update --rollback (the migrations that ran are not undone)."
+    else
+        print_info "  Or go back: check out the commit you were on in $REPO_DIR, then tuidev update --configs."
+    fi
 }
 
 # ----------------------------------------------------------------------------
@@ -847,7 +882,7 @@ run_configs_mode() {
 
     if [[ "$MODE" == "check" ]]; then
         if [[ ${#DRIFT_LEGACY[@]} -gt 0 ]]; then
-            print_warning "${#DRIFT_LEGACY[@]} file(s) need adoption (run 'make adopt')"
+            print_warning "${#DRIFT_LEGACY[@]} file(s) need adoption (the commands are above)"
         fi
         if [[ ${#DRIFT_ITEMS[@]} -gt 0 ]]; then
             print_info "${#DRIFT_ITEMS[@]} managed block(s) drifted — run without --check to re-apply"
@@ -947,7 +982,34 @@ _release_latest() { local dir="$1"; shift; TUIDEV_REPO="$dir" "$dir/bin/tuidev" 
 _release_is_latest() {
     local known=0
     _release_latest "$1" --refresh --newer >/dev/null 2>&1 || known=$?
-    [[ "$known" == 1 && "$(cat "$TUIDEV_STATE_DIR/version" 2>/dev/null)" == "$2" ]]
+    [[ "$known" == 1 && "$(_installed_version)" == "$2" ]]
+}
+
+# _installed_version — the version the last install or update that ran to
+# its end applied here ($TUIDEV_STATE_DIR/version, tuidev_install_cli); ""
+# when none is recorded.
+_installed_version() { cat "$TUIDEV_STATE_DIR/version" 2>/dev/null || true; }
+
+# _release_finishing FILES INSTALLED — when the files' version is not the one
+# last installed (an update stopped between get.sh moving `current` and its
+# configs, a migration failing, or a --repo run), say so and return true:
+# --self and --all finish it now, with these files' migrations and configs.
+_release_finishing() {
+    if ! version_valid "$1" || ! version_valid "$2" || [[ "$1" == "$2" ]]; then return 1; fi
+    if [[ "$MODE" == repo ]]; then
+        print_warning "the update to $1 is not finished (installed: $2): tuidev update finishes it"
+    else
+        print_info "finishing the update to $1 (installed: $2): its migrations and configs come next"
+    fi
+}
+
+# _not_updated WHAT — end the run: tuidev itself was not updated. A
+# --self or --all that cannot fetch or fast-forward stops here, rather than
+# apply the old files' migrations and configs and call that an update.
+_not_updated() {
+    echo ""
+    print_error "not updated: $1"
+    exit 1
 }
 
 # _run_release_mode DIR — run_repo_mode for an install without git. --check
@@ -956,9 +1018,15 @@ _release_is_latest() {
 # hand over to the new release's update.sh, as after a pull. The release this
 # process runs from stays on disk (get.sh keeps the one before it), so its
 # files stay readable until it exits.
+#
+# A download that fails ends the run (_not_updated), unless the files here
+# are a release whose update never finished (its VERSION is not the one
+# recorded as installed: a migration failed after get.sh moved `current`):
+# then their migrations and configs finish it, which needs no download.
 _run_release_mode() {
-    local dir="$1" before after latest home="${TUIDEV_HOME:-}"
+    local dir="$1" before after latest installed home="${TUIDEV_HOME:-}"
     before="$(cat "$dir/VERSION" 2>/dev/null)" || before=""
+    installed="$(_installed_version)"
     echo -e "  ${BLUE}Release:${NC} ${before:-unknown} in $dir"
     # The release that handed over to this process fetched it already.
     [[ -z "${TUIDEV_UPDATE_REEXEC:-}" ]] || return 0
@@ -974,12 +1042,15 @@ _run_release_mode() {
     # Into the home this install lives in, whatever TUIDEV_HOME says today.
     ! tuidev_release_home "$dir" || home="$REPLY"
     if ! TUIDEV_HOME="$home" bash "$dir/get.sh" --fetch >/dev/null; then
-        print_warning "could not fetch the latest release; tuidev stays on ${before:-this version}"
-        return 0
+        if [[ "$MODE" != repo ]] && _release_finishing "$before" "$installed"; then
+            print_warning "could not fetch a newer release; this run finishes the one on disk"
+            return 0
+        fi
+        _not_updated "could not reach or verify the latest release at ${TUIDEV_RELEASE_URL:-https://github.com/spfr/tuidev/releases} (still on ${before:-this version})"
     fi
     after="$(cat "$dir/VERSION" 2>/dev/null)" || after=""
     if [[ -z "$after" || "$before" == "$after" ]]; then
-        print_success "tuidev ${before:-?} is the latest release"
+        _release_finishing "$before" "$installed" || print_success "tuidev ${before:-?} is the latest release"
         return 0
     fi
     print_success "tuidev $before → $after (tuidev whatsnew $before lists what changed; tuidev update --rollback goes back)"
@@ -995,7 +1066,7 @@ run_repo_mode() {
     # A recorded path can go stale when the checkout moves; this one is real.
     if [[ ! -e "$target/.git" && "$target" != "$REPO_DIR" ]] && ! tuidev_is_release "$target" \
        && { [[ -e "$REPO_DIR/.git" ]] || tuidev_is_release "$REPO_DIR"; }; then
-        print_warning "Recorded repo $target is not a git checkout; using $REPO_DIR (re-run ./install.sh to update the record)"
+        print_warning "Recorded repo $target is not a git checkout; using $REPO_DIR (to update the record, run its installer once more: $REPO_DIR/install.sh with the flags you installed with)"
         target="$REPO_DIR"
     fi
     if tuidev_is_release "$target"; then
@@ -1014,7 +1085,10 @@ run_repo_mode() {
     else
         local before after
         before="$(git -C "$target" rev-parse HEAD 2>/dev/null)" || true
-        run_cmd git -C "$target" pull --ff-only || print_warning "Fast-forward failed — manual intervention needed"
+        # git said why above (offline, no upstream, local commits): the old
+        # files' migrations and configs are not an update.
+        run_cmd git -C "$target" pull --ff-only \
+            || _not_updated "could not reach or fast-forward the upstream of $target (still on $(cat "$target/VERSION" 2>/dev/null || echo "?") at ${before:0:7})"
         after="$(git -C "$target" rev-parse HEAD 2>/dev/null)" || true
         # --all pulls first, and a pull that brought new code hands over to it:
         # the migrations and configs applied next must be the ones just pulled,
@@ -1161,7 +1235,16 @@ EOF
 # Dispatch
 # ----------------------------------------------------------------------------
 
+# One update at a time (scripts/lib/lock.sh), held until this process exits;
+# an exec hand-over to a newer update.sh keeps it. A preview takes none.
+take_update_lock() {
+    [[ "$MODE" != check && "$DRY_RUN" != true ]] || return 0
+    tuidev_update_lock || exit 1
+    trap tuidev_update_unlock EXIT
+}
+
 run_mode() {
+    take_update_lock
     case "$MODE" in
         check)
             # In --check, we run everything in read-only mode.

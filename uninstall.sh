@@ -56,7 +56,7 @@ while [[ $# -gt 0 ]]; do
         --all)     ALL=true; shift ;;
         --dry-run) export DRY_RUN=true; shift ;;
         --purge-history) PURGE_HISTORY=true; shift ;;
-        -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+        -h|--help) print_usage "$SCRIPT_DIR/uninstall.sh" "tuidev uninstall"; exit 0 ;;
         *)         die "unknown flag: $1" ;;
     esac
 done
