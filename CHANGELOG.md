@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Codex subagents no longer pin a model your plan may lack**: the complex and review tiers run on your session's model, the rest on GPT-6 Luna, and a new `explorer` puts search on Luna too. [Orchestration](docs/orchestration.md#tiers)
 - **Leaner agent instructions, checked by the tests**: `Explore`'s frontmatter is valid YAML now, Claude's read-only agents can't spawn editors, and every pin must be on one allow-list. [Orchestration](docs/orchestration.md#choosing-other-models)
 
+### Fixed
+
+- **A pane the phone app still shows takes your desk's size back when you focus it** (`agents hc mirror fit`; `AGENTS_HC_MIRROR_FIT=0` turns it off). Tested with a stand-in viewer, not yet with the app. [Phone](docs/remote.md#herdrs-phone-app-agents-hc)
+
 ## [3.26.0] - 2026-11-19
 
 ### Added

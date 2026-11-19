@@ -423,8 +423,9 @@ evs="$(sed -n 's/^on = "\(.*\)"$/\1/p' "$plugin/herdr-plugin.toml")"
 [[ -n "$evs" ]] || fail "the plugin has no event hooks"
 for e in $evs; do [[ "$known" == *" $e "* ]] || fail "the plugin hooks $e, which Herdr does not run hooks for"; done
 [[ "$evs" != *tab.renamed* ]] || fail "hooking tab.renamed would answer the sync's own renames"
-[[ "$(grep -cE '^command = \["sh", "run.sh", "sync(-poke)?"\]$' "$plugin/herdr-plugin.toml")" -eq "$(printf '%s\n' "$evs" | wc -l)" ]] \
-    || fail "every event hook runs run.sh sync or sync-poke"
+# pane.focused runs the mirror fit (hcmirror.sh; tested in test_agents_hcmirror.sh).
+[[ "$(grep -cE '^command = \["sh", "run.sh", "(sync(-poke)?|fit)"\]$' "$plugin/herdr-plugin.toml")" -eq "$(printf '%s\n' "$evs" | wc -l)" ]] \
+    || fail "every event hook runs run.sh sync, sync-poke or fit"
 # The startup hook syncs too, after the update check when it is due.
 [[ "$(grep -A1 '^\[\[startup\]\]$' "$plugin/herdr-plugin.toml" | tail -1)" == 'command = ["sh", "run.sh", "startup"]' ]] \
     || fail "the startup hook runs run.sh startup"

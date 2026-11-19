@@ -193,11 +193,17 @@ FROM YOUR PHONE (herdr-core, the runtime Herdr's phone app talks to; --pack herd
                                pane of this machine's Herdr and its mirror in
                                herdr-core, a core terminal attached to the pane, so
                                the phone lists the agents you already run. A pane
-                               takes its mirror's size, which the phone app sets
+                               takes its mirror's size, which the phone app sets;
+                               a phone-sized pane is named
   agents hc mirror sync [-n] [-q]
                                start a mirror for each agent pane without one and end
                                those whose pane has no agent left. Herdr's events run
                                it (with agents herdr sync) while herdr-core is up
+  agents hc mirror fit [PANE]  give a mirrored pane (default: the focused one) its
+                               own size back while the phone still shows it; the
+                               phone sees its top left until it sets a size again.
+                               Focusing the pane at the desk does it
+                               (AGENTS_HC_MIRROR_FIT=0: not)
   agents hc mirror end         end every mirror; the agents stay in their panes
   agents hc mirror off [PANE]  no mirror for this pane (or PANE) from now on: its
                                mirror ends, and syncs leave it out until on, or

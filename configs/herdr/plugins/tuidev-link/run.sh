@@ -20,6 +20,10 @@
 #   sync-poke   an agent's event hook: the same, and the menu bar refreshes
 #               (macOS with SwiftBar; elsewhere the same as sync)
 #   Both reload an open board too (agents board --poke, in the background).
+#   fit         pane.focused: a pane mirrored to the phone takes its own size
+#               back (agents hc mirror fit -q). Nothing, and no agents
+#               started, unless the focused pane (HERDR_PANE_ID) has a mirror
+#               a sync started (its start time in the run dir).
 agents="${AGENTS_BIN:-$HOME/.local/bin/agents}"
 tuidev="${TUIDEV_BIN:-$HOME/.local/bin/tuidev}"
 herdr="${HERDR_BIN_PATH:-herdr}"
@@ -57,6 +61,13 @@ case "${1:-}" in
         done
         [ "$1" = sync ] || exec "$agents" herdr sync -q --poke </dev/null
         exec "$agents" herdr sync -q </dev/null ;;
+    fit)
+        # Every focus anywhere runs this: what decides is one file test.
+        case "${HERDR_PANE_ID:-}" in ""|*[!A-Za-z0-9:._-]*) exit 0 ;; esac
+        [ -x "$agents" ] || exit 0
+        f="$(printf '%s' "$HERDR_PANE_ID" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_')"
+        [ -e "${AGENTS_RUN_DIR:-${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/run}/hc-mirror.started/$f" ] || exit 0
+        exec "$agents" hc mirror fit -q </dev/null ;;
 esac
 if [ ! -x "$agents" ]; then
     echo "tuidev.link: $agents is missing (tuidev install --pack monitoring)" >&2
@@ -103,5 +114,5 @@ case "${1:-}" in
     ports-pane)
         exec "$agents" ports --pick ;;
     *)
-        echo "usage: run.sh click|board|board-tab|palette|update|map|ports|startup|sync|sync-poke" >&2; exit 2 ;;
+        echo "usage: run.sh click|board|board-tab|palette|update|map|ports|startup|sync|sync-poke|fit" >&2; exit 2 ;;
 esac
