@@ -56,9 +56,10 @@ herdr_ready() {
 # The remote clip is not a tape: it is cut from the screencast remote.tape
 # records, with the browser shot cut in (remote-cut.mp4, made by hand:
 # docs/assets/tapes/README.md), at these seconds: the three machines, the
-# map forwarding atlas's preview, the page, the review fetched and read.
+# map with atlas's preview selected, then Enter and the page atlas serves, in
+# the browser here, which the clip ends on.
 REMOTE_CUT="docs/assets/remote-cut.mp4"
-REMOTE_SEGMENTS="0-3 16-21 23.5-27 41-43 50.5-54"
+REMOTE_SEGMENTS="0-4 15.5-21 22.5-27"
 
 tapes=() menu=0 remote=0
 if [[ $# -gt 0 ]]; then

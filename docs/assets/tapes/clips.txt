@@ -3,7 +3,7 @@
 # into the bottom of its clip; reword them here, then re-render that clip
 # (make screenshots TAPES=clip-NAME). A clip without a line here, or
 # CLIP_CAPTIONS=0, is left uncaptioned.
-install    Every change is shown before it is made, and checked after.
+install    You see every change before it is made.
 needs-you  The agent that needs you is always first.
 leftovers  Only what is safe to stop gets stopped.
 cost       What your agents spent today, priced at API rates.
