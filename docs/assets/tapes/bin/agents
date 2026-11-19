@@ -39,9 +39,10 @@ AGENTS_PATH="$tapes/bin/agents"
 # read /proc/PID/cwd for the fixture's pids before asking lsof.
 _agents_cwds() {
     [[ $# -gt 0 ]] || return 0
-    local IFS=,
+    local want
+    want="$(printf ',%s' "$@"),"
     { cat "$DEMO_FIXTURES/cwds.tsv"; [[ -z "${DEMO_HOG:-}" ]] || cat "$DEMO_FIXTURES/hog/cwds.tsv"; } | sed "s|@HOME@|$HOME|g" \
-        | awk -F '\t' -v want=",$*," 'index(want, "," $1 ",") { print $1 "\t" $2 }'
+        | awk -F '\t' -v want="$want" 'index(want, "," $1 ",") { print $1 "\t" $2 }'
 }
 
 # kill -0 (is the keep-awake holder alive?) says yes; anything else is a no-op,
