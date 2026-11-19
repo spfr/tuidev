@@ -12,6 +12,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 export HOME="$tmp/home" NO_COLOR=1 AGENTS_TESTING=1
+unset XDG_CONFIG_HOME   # the guard's unit file is looked for under it: keep that inside $HOME
 export TUIDEV_TERMINAL_NOTIFIER=""
 export AGENTS_CONF="$tmp/none.conf" AGENTS_RUN_DIR="$tmp/run" AGENTS_DATA_DIR="$tmp/data"
 export AGENTS_UID=501 AGENTS_SELF=99999 AGENTS_MEM_QUIET=1
