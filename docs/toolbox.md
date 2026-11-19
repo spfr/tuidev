@@ -1,6 +1,6 @@
 # The Toolbox
 
-What tuidev installs, what each tool is for, why it was picked over the default, and how an agent ends up using it. For where each tool is installed from, see [profiles.md](profiles.md); for keys and aliases, the [cheatsheet](CHEATSHEET.md).
+Every tool tuidev installs, what it is for, why it beats the default, and how an agent ends up using the right one. For where each tool is installed from, see [profiles.md](profiles.md); for keys and aliases, the [cheatsheet](CHEATSHEET.md).
 
 ## At a glance
 
@@ -152,7 +152,7 @@ So every tool here is picked for one of three roles, and the setup keeps them ap
 
 Not by a long list of instructions. Every line in an instruction file is loaded into every session, and a model already knows `rg`, `jq` and `gh`. tuidev uses five layers, cheapest first.
 
-1. **The CLI does it already.** Claude Code's search tool is ripgrep, and inside its shell it replaces `grep` and `find` with versions that honor ignore files while taking the same flags (checked on Claude Code 2.1.322). tuidev adds nothing here, on purpose.
+1. **The CLI does it already.** Claude Code's search tool is ripgrep, and inside its shell it replaces `grep` and `find` with versions that honor ignore files while taking the same flags. tuidev adds nothing here, on purpose.
 
 2. **The shell stays honest.** Claude Code captures your aliases and functions into the shell its commands run in. An alias that changes a command's flags is then a trap: `ls -lt`, `cat -v` and `top -l 1` are all errors under `eza`, `bat` and `btm`. So the shipped `.zshrc` makes `cat`, `ls` and `top` functions that use the modern tool only when stdout is a terminal, and the real command otherwise (an agent, a pipe, a script). `procs` and `dust` are never aliased over `ps` and `du` for the same reason, and `cd` is zoxide only in an interactive shell.
 
@@ -164,7 +164,7 @@ Not by a long list of instructions. Every line in an instruction file is loaded 
 
 5. **The machine corrects what instructions miss.** Hooks stop the background commands a subagent left running. The memory guard stops a runaway test. And `agents report` reads what your agents did, not what they were told: `--view denials` lists the commands you or auto mode keep refusing, `--view context` the MCP servers and skills every session loads and never uses, `--view waste` the duplicate test runs and stuck loops, each with the one thing to change.
 
-That last layer is how the second one was found. A search of six weeks of local transcripts showed 46 sessions where an agent's `ls -t` had failed on eza's `--time <FIELD>`; each cost a turn. The fix was two functions in `.zshrc`, not a paragraph telling agents to avoid `ls -t`.
+That last layer is how the second one was found: transcripts showed agents' `ls -t` failing on eza's `--time <FIELD>`, a turn lost each time. The fix was two functions in `.zshrc`, not a paragraph telling agents to avoid `ls -t`.
 
 ## Engineering with agents, on a Mac and on Linux
 

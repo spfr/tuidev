@@ -1,9 +1,6 @@
 # Theming
 
-Read this to switch the color theme of your terminal, or to add a theme of your
-own. One palette file drives tmux, Ghostty, Starship and Herdr, so you don't
-copy the same hex codes between their configs: you pick or edit a palette and
-run one command. `agents` and its menu follow on their own.
+Switch the color theme of your whole terminal setup with one command, or add a theme of your own. One palette file drives tmux, Ghostty, Starship and Herdr, so you don't copy the same hex codes between their configs. `agents` and its menu follow on their own.
 
 ```bash
 tuidev theme                              # what's available (* = active)
@@ -72,15 +69,14 @@ tuidev theme apply gruvbox-dark --dry-run          # read the rendered snippets
 ```
 
 Take the hex values from the theme's upstream repo rather than sampling a
-screenshot, and record where you got them in a header comment — both shipped
-palettes do this, which is what makes them auditable.
+screenshot, and record where you got them in a header comment, as the shipped
+palettes do.
 
 ## How `apply` writes your configs
 
 1. **Render to a staging directory.** All four snippets are generated into a
    temp dir and sanity-checked before anything in `$HOME` is touched, so a
-   broken palette cannot leave you half-themed. (This is Omarchy's
-   stage-then-swap idea, scaled down to four files.)
+   broken palette cannot leave you half-themed.
 2. **Write managed blocks.** Each snippet is written as a fenced region, using
    the same writer as the rest of the installer
    (`scripts/lib/config_write.sh`):
@@ -256,14 +252,3 @@ hand-tuned upstream themes. Switch it yourself in
 { "catppuccin/nvim", name = "catppuccin", opts = { flavour = "mocha" } },
 { "LazyVim/LazyVim", opts = { colorscheme = "catppuccin" } },
 ```
-
-## Future
-
-Ideas that fit the same palette contract without changing it:
-
-- **More render targets** — btop, bat/delta, lazygit and fzf all take colors
-  and are currently unthemed; each is one more renderer function.
-- **OSC live reload** — emit OSC 4/10/11/12 sequences on apply so already-open
-  terminal panes recolor without a Ghostty restart.
-- **Theme drift detection** — teach `tuidev update --configs` about the
-  `tuidev-theme` block so a re-install does not silently revert a chosen theme.

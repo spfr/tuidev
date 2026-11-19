@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Reference docs checked against the code**: module and lib tables complete, the sandbox settings and CI jobs current, each doc opens with what you get from it. [Engineering](docs/engineering.md)
+
 ## [3.27.1] - 2026-11-19
 
 ### Changed

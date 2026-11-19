@@ -1,6 +1,6 @@
 # scripts/migrations/
 
-One-shot fixups for machines that were installed by an older tuidev.
+One-shot fixups, so a machine installed by an older tuidev ends up as clean as a fresh one.
 
 Managed blocks and idempotent packs converge *current* state — they cannot undo
 the past. When a release renames a path, drops a helper, or changes the shape of

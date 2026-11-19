@@ -1,6 +1,6 @@
 # Vim (`--pack vim`)
 
-`--pack vim` is the lightweight terminal editor: plain Vim 9 with a zero-plugin vimrc. It suits servers and small boxes (a Raspberry Pi, a VM, a CI runner you SSH into), where [`--pack nvim`](nvim.md) and LazyVim would bring hundreds of megabytes of plugins, parsers and language servers you don't need. It starts in milliseconds and has nothing to update.
+A terminal editor for the always-on box you reach over SSH. `--pack vim` is plain Vim 9 with a zero-plugin vimrc. It suits servers and small boxes (a Raspberry Pi, a VM, a CI runner you SSH into), where [`--pack nvim`](nvim.md) and LazyVim would bring hundreds of megabytes of plugins, parsers and language servers you don't need. It starts in milliseconds and has nothing to update.
 
 ```bash
 tuidev install --pack vim

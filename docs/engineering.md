@@ -1,6 +1,6 @@
 # Engineering
 
-How tuidev is put together, and the conventions for changing `install.sh`, `uninstall.sh`, `scripts/`, `bin/` and `configs/`. The bar is **small, composable and non-destructive**, whether a human or an agent is editing. The PR process is in [CONTRIBUTING.md](../CONTRIBUTING.md), and the reasons behind the design are in [VISION.md](../VISION.md).
+Read this before you change tuidev: how the installer, the packs and `agents` fit together, and the rules that keep every change small, composable and non-destructive, whether a human or an agent makes it. The PR process is in [CONTRIBUTING.md](../CONTRIBUTING.md), and the reasons behind the design are in [VISION.md](../VISION.md).
 
 ## Architecture
 
@@ -35,7 +35,7 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `bin/tuidev` | `~/.local/bin/tuidev`, and the installed version in `~/.config/tuidev/version` | overwrite (every install and `update --configs`: `tuidev_install_cli`) |
 | a release's `tuidev.tar.gz` | `~/.local/share/tuidev/versions/X.Y.Z`, `current` (a symlink to one) and `previous` (`TUIDEV_HOME`) | unpacked and switched by `get.sh`, which keeps the version before; removed by `uninstall.sh` |
 
-tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/tuidev`. It is defined once, in `scripts/lib/ui.sh`, and holds `profile`, `manifest`, `env`, `migrations`, `theme`, `version`, `update.lock`, `backups/`, `sandbox/` and `shell.d/`. Derive every state path from it.
+tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/tuidev`. It is defined once, in `scripts/lib/ui.sh`, and holds `profile`, `manifest`, `env`, `migrations`, `theme`, `version`, `update.lock`, `disk.log`, `backups/`, `shipped/`, `sandbox/`, `shell.d/` and `run/`. Derive every state path from it.
 
 ```
 get.sh                  the install without git: fetch a release, check its sha256 and layout, unpack, ask, run its install.sh (standalone)
@@ -50,9 +50,9 @@ configs/                everything installed into $HOME (table above)
 scripts/lib/            shared libraries + test_*.sh unit harnesses
 scripts/install/        built-in packs (core remote sandbox ui extras); packs/ = optional packs (includes nvim.sh, tmux.sh)
 scripts/migrations/     timestamped one-shot fixups
-scripts/*.sh            update, health_check, test_suite, theme, validate_configs,
+scripts/*.sh            update, health_check, test_suite, test_lib, theme, validate_configs,
                         check_links, check_paths, container, notify, fix_completions, screenshots,
-                        perf, render_menu; dist (a release's assets) and release (release.yml's steps)
+                        perf, disk, render_menu; dist (a release's assets) and release (release.yml's steps)
 templates/              AGENTS_TEMPLATE.md for downstream projects
 docs/assets/            README images; tapes/ holds their VHS sources and demo fixtures
 ```
@@ -82,6 +82,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `board.sh` | `agents board`: every session on every machine in one fzf list, by what you would do about it (Needs you, To review, Working, the parked folded), with a card that follows the cursor; this machine's rows are `awk/board_rows.awk` (`--rows` is what a machine answers over ssh, kept in the run dir's `board/` and asked again in the background), the list, header and card are `awk/board_view.awk`, the one place a row from another machine is checked; with herdr-core installed, a `phone` row after a session says whether the phone reaches it (`hcphone.sh`'s feed, read from its cache: no core call while drawing), a mark in a column there only while one listed session has it; each key prints its fzf actions (`--key`), a row's fields reaching the commands only as fzf's own placeholders; go and stop are `map.sh`'s actions; the Trace is one bounded `tail -c` of a Claude Code transcript through one jq, laid out by `awk/board_trace.awk`; a board listens on a Unix socket only (never a port) and `--poke`, which the Herdr plugin's event hooks run, reloads it; a board's state, rows and header are its own (`ui.PID.*`), and the start sweeps what gone boards left |
 | `map.sh` | `agents map`: every machine's sessions, leftovers and dev servers in one fzf list (`--rows` is what a machine answers over ssh), with go, stop, sweep and peek on the row's own machine; the list and the menu bar's board take a row from another machine only through `awk/lib_maprows.awk`, and the list puts each session's mark (`glyph.sh`'s table) in front of its kind |
 | `link.sh` | `agents link`: the fifo a watcher's ssh reads on the far machine (`serve`), what the Herdr plugin runs for a click (`click`), and the watcher that validates and acts on each request (`watch`) |
+| `glyph.sh` | the glyph table: one mark per kind of session (Claude, Codex, a plain shell…), the same in Herdr's tabs, the map and the menu bar; `AGENTS_GLYPHS` |
 | `herdrlabel.sh` | `agents herdr`: Herdr's labels say what runs where, from one `herdr api snapshot` and one jq that decides: tab names (mark, task title or directory), each workspace's `$tuidev_agents` roll-up, agent rows' display names; a write only for what differs, never a tab you renamed (`herdr-labels.tsv`), one sync at a time with a mark for the events that came in meanwhile (`herdr-labels.lock`, `.dirty`), and `reset` |
 | `hc.sh` | `agents hc`: an agent hosted in herdr-core (`run`, `attach`, and `auto`, the opt-in decision in front of a `claude` or `codex` typed in a Herdr pane, which hosts it or runs it as typed) so Herdr's phone app lists it, each status herdr-core has for it reported to Herdr for the pane it is attached in (one `herdr-core events` stream while attached, no daemon, and a mark in the run dir naming the pane, the terminal and its name), and the core kept in the desktop login (`status`, `up`, which syncs the mirrors once a core runs; `up -q` is the herdr-core pack's job, at login and every 5 minutes, which says a problem once) |
 | `hcmirror.sh` | `agents hc mirror`: one core terminal per agent pane of this machine's Herdr (`herdr agent attach`, sized to the pane, labelled `tuidev_mirror`), started and ended by `sync` from one `herdr api snapshot` and one `terminal.list` (every call has a time limit, a missing or invalid answer changes nothing, and a pane's mirror is not started again within 60 s); inside a mirror, Herdr's state for the pane is printed as OSC 7501 (`herdr agent wait`, no polling) by a follower in the background, and the attach takes the mirror's own process (`exec`): three processes a mirror; the follower ends with the terminal's hangup, or when the attach is gone or the terminal takes no report, and asks Herdr again (2 s doubling to 60 s) while the attach runs, its answer in one file a pane (`hc-mirror.wait/`, removed with the pane's start time); syncs coalesce as the label sync's do (`hc-mirror.dirty`), and `agents herdr sync` hands its snapshot to the mirror sync; `off`/`on` keep a pane out (`hc-mirror.off` in the run dir, under the sync's lock; a sync ends an opted-out pane's mirror and drops the ids its snapshot no longer has); `fit` sets a mirror's terminal (the attach's tty, from `terminal.list`'s pid) to the pane's layout rect less the border its `_mirror` argv recorded, the same `_agents_hm_set_size` the follower's WINCH uses, never to a size it has, so the follower (which acts only on the core's own size) never answers it; the plugin's `pane.focused` hook runs it after one file test, and fits coalesce as syncs do (`hc-mirror-fit.dirty`) |
@@ -264,14 +265,10 @@ make container-test    # core-tagged tests in an Alpine container (tests scripts
 
 CI (`.github/workflows/ci.yml`, with actions pinned to a SHA and updated by Dependabot) runs these jobs:
 
-- **shellcheck** (`make lint`)
-- **validate configs** (`--strict`)
-- **no hardcoded paths** (`scripts/check_paths.sh`, also `make check-paths`)
-- **required files**
-- **macOS**: Seatbelt profiles parse, the `sbx` smoke test, the lib tests under bash 3.2, and a `desktop` dry-run
-- **unit tests**, plus `minimal` and `remote` dry-runs
+- **checks**: shellcheck (`make lint`), `validate_configs.sh --strict`, `check_paths.sh`, required files and `check_links.sh`
+- **macOS**: Seatbelt profiles parse, the `sbx` smoke test, the lib tests under bash 3.2, and `desktop` and `full` dry-runs
+- **unit tests**: the `scripts/lib` harnesses, the agents views under mawk, and `minimal` and `remote` dry-runs
 - **docker core-tag test**
-- **documentation links** (`scripts/check_links.sh`)
 - **summary**, which fails if any job failed
 
 ## Screenshots
@@ -290,4 +287,4 @@ make screenshots                 # every tape, then the menu (scripts/screenshot
 make screenshots TAPES=sbx       # just one; TAPES=menu for the menu picture
 ```
 
-The tapes run in a throwaway home with made-up projects, `agents` reads fixture process tables and a made-up history, and the Herdr tape runs a real Herdr against two throwaway Linux containers with scripted agent stand-ins, so nothing from your machine reaches an image. Look at every image before you commit it (for a GIF, pull frames out with `ffmpeg -ss SECONDS -i docs/assets/tour.gif -frames:v 1 frame.png`), and keep each still under about 500 KB and each GIF under 2 MB (with `gifsicle` installed, the script optimizes them). End a tape with a `Sleep` after its last `Screenshot`: VHS can drop one that is the final command, and the script fails when a tape's file is missing. `make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. The Herdr tape also needs Apple's `container` CLI (without it, the tape is skipped), and the menu needs Chrome or Chromium and Swift. If VHS fails, the script prints the end of its log. VHS listens on a local port, so it fails inside a sandbox that doesn't allow binding one, such as Claude Code's native sandbox unless `sandbox.network.allowLocalBinding` is on; run `make screenshots` outside it. The fixtures, the demo wrappers, the Herdr fleet and the menu renderer are described in [docs/assets/tapes/README.md](assets/tapes/README.md).
+The tapes run against made-up data, so nothing from your machine reaches an image ([how](assets/tapes/README.md#the-demo-environment)). Look at every image before you commit it (for a GIF, pull frames out with `ffmpeg -ss SECONDS -i docs/assets/tour.gif -frames:v 1 frame.png`), and keep each still under about 500 KB and each GIF under 2 MB (with `gifsicle` installed, the script optimizes them). End a tape with a `Sleep` after its last `Screenshot`: VHS can drop one that is the final command, and the script fails when a tape's file is missing. `make screenshots` runs on macOS only: the `sbx` shot needs Seatbelt, and the demo is only checked there. The Herdr tape also needs Apple's `container` CLI (without it, the tape is skipped), and the menu needs Chrome or Chromium and Swift. If VHS fails, the script prints the end of its log. VHS listens on a local port, so it fails inside a sandbox that doesn't allow binding one, such as Claude Code's native sandbox unless `sandbox.network.allowLocalBinding` is on; run `make screenshots` outside it. The fixtures, the demo wrappers, the Herdr fleet and the menu renderer are in [docs/assets/tapes/README.md](assets/tapes/README.md).

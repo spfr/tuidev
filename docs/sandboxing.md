@@ -1,6 +1,8 @@
 # Sandboxing
 
-An AI coding agent is a non-deterministic process with a shell. Permission prompts help, but a confused or prompt-injected agent can still read `~/.ssh`, copy a token out of `~/.aws`, or reach a host you never meant it to. tuidev ships sandboxed by default, and gives you a general-purpose tool for everything the default doesn't cover.
+Run agents anywhere without handing them your keys. This page says what each sandbox confines, which credentials stay out of reach, and how to use `sbx`, the Seatbelt wrapper, for anything the CLIs' own sandboxes don't cover.
+
+An AI coding agent is a non-deterministic process with a shell. Permission prompts help, but a confused or prompt-injected agent can still read `~/.ssh`, copy a token out of `~/.aws`, or reach a host you never meant it to. tuidev ships sandboxed by default.
 
 ## Native sandboxes: the default
 
@@ -11,12 +13,16 @@ Plain `claude` and plain `codex` run inside their own native sandboxes, with no 
   "enabled": true,
   "autoAllowBashIfSandboxed": true,
   "allowUnsandboxedCommands": false,
+  "failIfUnavailable": true,
   "excludedCommands": ["docker *", "docker-compose *", "gh *"],
   "filesystem": {
     "denyRead": ["~/.claude/.credentials.json", "~/.codex/auth.json"]
-  }
+  },
+  "credentials": { "envVars": [{ "name": "GITHUB_TOKEN", "mode": "deny" }, "…"] }
 }
 ```
+
+`failIfUnavailable` makes Claude Code exit at startup when the sandbox can't start (on Linux that needs `bubblewrap` and `socat`), instead of running commands unsandboxed. `credentials.envVars` lists the token variables its commands never see ([secrets.md](secrets.md#what-an-agent-can-reach)).
 
 in `~/.claude/settings.json`, and `sandbox_mode = "workspace-write"` plus `approval_policy = "on-request"` in `~/.codex/config.toml`, with network off by default.
 
@@ -27,7 +33,7 @@ in `~/.claude/settings.json`, and `sandbox_mode = "workspace-write"` plus `appro
 - **Project settings can widen this:** arrays merge across scopes, so a repo's `filesystem.allowRead` of `~/.ssh` re-opens your keys to Bash, and a project's `sandbox.enabled: false` wins over your user setting. Check `.claude/settings*.json` in repos you clone.
 - **A hand-edited `~/.claude/settings.json` is never overwritten.** An unmodified shipped copy is replaced by `tuidev update --configs`; one you edited gets the shipped changes merged in, the `sandbox` block included, and keeps your own values (see [updating.md](updating.md#shipped-configs-you-may-have-edited)). If the merge can't run (the file isn't valid JSON, or `jq` is missing), add the `sandbox` block yourself. Until then, plain `claude` runs unsandboxed.
 
-**Recent Claude Code sandbox behavior worth knowing** (each checked against the [sandboxing docs](https://code.claude.com/docs/en/sandboxing) and the Claude Code changelog):
+**Claude Code sandbox behavior worth knowing** (each checked against the [sandboxing docs](https://code.claude.com/docs/en/sandboxing) and the Claude Code changelog):
 
 - **`!` shell-mode commands run outside the sandbox.** The sandbox covers what Claude runs, not what you type after `!`, so `! cmd` has your full terminal access even with `sandbox.enabled`. Exceptions where strict sandbox mode (`allowUnsandboxedCommands: false`, as shipped) also sandboxes them: a background session, and a Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set. Before v2.1.260 strict mode sandboxed them everywhere.
 - **`sandbox.network.strictAllowlist`** (v2.1.219+, user, managed or `--settings` only; a project file's value does nothing). When `true`, a sandboxed command that reaches a host outside the allowlist (`allowedDomains` plus `WebFetch(domain:...)` allow rules) is denied instead of prompting. It covers sandboxed commands only; `WebFetch` still follows its permission rules. tuidev doesn't set it, so new hosts still prompt. Add it to your own `~/.claude/settings.json` for unattended or background runs, where a network prompt would otherwise leave the session waiting.
@@ -38,7 +44,7 @@ in `~/.claude/settings.json`, and `sandbox_mode = "workspace-write"` plus `appro
 
 **Codex's native sandbox** (`workspace-write`) restricts writes and network, **not reads**: writes are limited to the workspace, network is off unless you widen it, and `approval_policy = "on-request"` means Codex asks before anything outside that boundary. Codex and the commands it runs can still read `~/.ssh`, `~/.aws` and the rest of your home directory. For credential-sensitive Codex work, run it under `sbx` instead: `sbx -- codex -s danger-full-access -a on-request` denies the credential paths at the kernel level (see below).
 
-<a id="codex-background-server"></a>**Codex's background server.** Since 0.156.0 Codex has a local background server, managed with `/daemon` and bypassed with `--no-daemon`, and 0.157.0 starts it automatically for eligible interactive sessions. The release notes don't say how it interacts with `sandbox_mode` or `sbx`, so this is inference: Seatbelt applies to a process tree, so a server that an earlier unwrapped `codex` started isn't confined by a later `sbx -- codex`, and one started inside `sbx` runs under that profile. Checked on 0.158.0 with the server running: `workspace-write` still refused a write to `~`, so Codex's own sandbox applies to server-backed sessions. If you rely on `sbx` as the boundary for Codex, pass `--no-daemon`, so the whole session runs inside the profile.
+<a id="codex-background-server"></a>**Codex's background server.** Codex starts a local background server for eligible interactive sessions (`/daemon` manages it, `--no-daemon` bypasses it). Seatbelt applies to a process tree, so a server that an earlier unwrapped `codex` started isn't confined by a later `sbx -- codex`, and one started inside `sbx` runs under that profile. `workspace-write` still refused a write to `~` with the server running, so Codex's own sandbox applies to server-backed sessions. If you rely on `sbx` as the boundary for Codex, pass `--no-daemon`, so the whole session runs inside the profile.
 
 **These are also Seatbelt on macOS, so they don't nest with `sbx`.** A process already under `sandbox-exec` can't apply a second profile (`sandbox_apply: Operation not permitted`), so pick one boundary per process tree. (`tuidev check` run from inside a sandbox, an agent's included, reports its Seatbelt smoke probe as skipped for this reason, not failed.) With the shipped settings, a bare `sbx -- claude` breaks Claude Code's Bash tool: every command fails to start its own sandbox. To run Claude Code under `sbx`, turn its native sandbox off for that run:
 

@@ -1,6 +1,6 @@
 # Secrets
 
-API tokens belong in an encrypted store, typed once, never in a dotfile or your shell history, and handed only to the commands that need them. `secret` (in `~/.local/bin`, installed by the core pack on every profile) does that with the store your OS already has. This page is the practice; the sandbox side is in [sandboxing.md](sandboxing.md).
+Keep your API tokens where agents can't read them. They belong in an encrypted store, typed once, never in a dotfile or your shell history, and handed only to the commands that need them. `secret` (in `~/.local/bin`, installed by the core pack on every profile) does that with the store your OS already has. This page is the practice; the sandbox side is in [sandboxing.md](sandboxing.md).
 
 ## Why not in `.zshrc`
 
@@ -59,7 +59,7 @@ It costs one store call per name at every shell start. `secret` itself adds abou
 A variable exported in the shell you start `claude` or `codex` from is in the agent's environment and in every command it runs. `secret run` never puts anything there. So level 1 keeps values away from agents and level 2 hands them over, unless you also strip them:
 
 - **Claude Code** unsets the variables listed in `sandbox.credentials.envVars` before each sandboxed command and the processes it starts. The shipped settings list publish and cloud tokens (`GITHUB_TOKEN`, `NPM_TOKEN`, `GITLAB_TOKEN`, `HF_TOKEN`, `CLOUDFLARE_API_TOKEN`, `VERCEL_TOKEN`, `STRIPE_API_KEY` and others); add your level-2 names in your own `~/.claude/settings.json` (`{ "name": "BUILD_CACHE_TOKEN", "mode": "deny" }`). Names are exact: no wildcards. Claude Code itself, hooks, MCP servers and the unsandboxed `gh` still have them.
-- **Codex** removes the same names, plus `TF_TOKEN_*`, from every command it runs, inside its sandbox or not (`[shell_environment_policy.filters]` in `~/.codex/config.toml`; patterns take `*` and `?`). Add yours there as `NAME = "exclude"`. Checked on Codex 0.170 with `codex sandbox -- env`.
+- **Codex** removes the same names, plus `TF_TOKEN_*`, from every command it runs, inside its sandbox or not (`[shell_environment_policy.filters]` in `~/.codex/config.toml`; patterns take `*` and `?`). Add yours there as `NAME = "exclude"`.
 - **The model providers' own keys are on the list** (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `OPENAI_API_KEY`): the CLI keeps its login, the commands it runs don't get the key. A test or eval that calls the model API, or a nested `claude -p` or `codex exec` that logs in by key, then needs the key in its own command (`secret run -n ANTHROPIC_API_KEY -- npm run eval`, run by you) or that name removed from your copy of the settings.
 - **Not on the list:** `DATABASE_URL` and `PGPASSWORD` (tests often need a local one). Add them the same way if your shell exports production values.
 

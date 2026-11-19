@@ -1,15 +1,13 @@
-# Updating an Installed tuidev
+# Updating an installed tuidev
 
-Read this to update tuidev, roll an update back, understand migrations, or remove
-tuidev again: how an existing install moves forward, and what the installer records so it can
-be undone. For what each profile installs see
-[profiles.md](profiles.md).
+Keep every machine current with one command, check that what is installed actually runs, roll an update back, or remove tuidev again. This page covers how an existing install moves forward and what the installer records so it can be undone. For what each profile installs, see [profiles.md](profiles.md).
 
 ## The short version
 
 ```bash
 tuidev update              # tuidev itself: the latest release, its migrations, its configs
-tuidev update --check      # preview: packages, migrations, config drift, the latest release
+tuidev update --check      # preview: packages, migrations, config drift, the latest release, performance
+tuidev update --ask        # say what is installed and what is out, then ask
 tuidev update --packages   # the packages of your active packs
 tuidev update --all        # all of it, non-interactive
 tuidev update --rollback   # back to the release before this one
@@ -31,7 +29,7 @@ Both run the same `install.sh`. They differ in where tuidev's files live and how
 | Version | A tagged release | Whatever you checked out |
 | Rollback | `tuidev update --rollback` | `git checkout` a tag, then `./install.sh` |
 
-[`get.sh`](../get.sh) is about 230 lines and is the only code that fetches tuidev. It downloads `tuidev.tar.gz` and `tuidev.tar.gz.sha256` from the release, refuses the archive unless the sha256 matches, every path in it sits under one `tuidev-X.Y.Z/` directory and none is a symlink or a hard link, unpacks it, asks what this machine should get when you named no flags (the installer's own four choices), and asks before it runs `install.sh` (answer `p` for a `--dry-run` first; with no terminal, as in CI or a container build, it installs only with `--yes`). `TUIDEV_VERSION=v3.23.0` picks a release other than the latest, and `bash get.sh --fetch` only downloads. The checksum guards against a truncated or mismatched download; that the files are tuidev's rests on HTTPS to github.com and on who can publish a release. The archive is `git archive` of the tagged commit. Each download is capped at 5 minutes and 64 MB. `current` switches with one rename, so it never points nowhere, and a re-download that is interrupted puts the earlier files back. If the installer stops partway, `get.sh` says the install is not complete and names `tuidev update --rollback` when an earlier release is kept. The release before the current one stays on disk, both for `--rollback` and because an update in progress still reads its files from there. Releases before 3.23.0 have no archive: clone the repo for those.
+[`get.sh`](../get.sh) is short, standalone and the only code that fetches tuidev. It downloads `tuidev.tar.gz` and `tuidev.tar.gz.sha256` from the release, refuses the archive unless the sha256 matches, every path in it sits under one `tuidev-X.Y.Z/` directory and none is a symlink or a hard link, unpacks it, asks what this machine should get when you named no flags (the installer's own four choices), and asks before it runs `install.sh` (answer `p` for a `--dry-run` first; with no terminal, as in CI or a container build, it installs only with `--yes`). `TUIDEV_VERSION=v3.23.0` picks a release other than the latest, and `bash get.sh --fetch` only downloads. The checksum guards against a truncated or mismatched download; that the files are tuidev's rests on HTTPS to github.com and on who can publish a release. The archive is `git archive` of the tagged commit. Each download is capped at 5 minutes and 64 MB. `current` switches with one rename, so it never points nowhere, and a re-download that is interrupted puts the earlier files back. If the installer stops partway, `get.sh` says the install is not complete and names `tuidev update --rollback` when an earlier release is kept. The release before the current one stays on disk, both for `--rollback` and because an update in progress still reads its files from there. Releases before 3.23.0 have no archive: clone the repo for those.
 
 An update hands over to the new release's own `update.sh` before it runs migrations or writes configs, so those always come from the version you are moving to.
 
@@ -95,8 +93,7 @@ You are told once per release. Nothing is ever updated without you asking. `tuid
 
 ## The three kinds of change
 
-An update has to handle three different things, and they need different
-machinery:
+An update handles three different things with different machinery:
 
 | Change | Handled by | Runs |
 |--------|-----------|------|
@@ -271,8 +268,7 @@ runs a bare `pacman -Sy`.
 
 ### Node (fnm)
 
-Homebrew upgrades fnm itself, never the Node versions it installed, so a Node
-security release used to reach them only by hand. Whenever fnm is installed,
+Homebrew upgrades fnm itself, never the Node versions it installed. Whenever fnm is installed,
 `--packages` lists Node releases from nodejs.org and, for each major you have,
 installs its latest patch when yours is behind (after asking). It then offers
 to move fnm's `default` to the newest patch of the default's major. It never

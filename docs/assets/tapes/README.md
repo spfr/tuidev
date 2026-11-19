@@ -1,6 +1,6 @@
 # Screenshot tapes
 
-The images in [docs/assets/](..) are rendered from the [VHS](https://github.com/charmbracelet/vhs) tapes here, and the menu-bar picture from the SwiftBar plugin's own output, all against made-up data, so they can be re-made after a UI change and never show anything from the machine that rendered them. How to run them, and when, is in [engineering.md](../../engineering.md#screenshots).
+Every picture and clip of tuidev is rendered, never hand-edited, so it shows what the code does today and nothing from the machine that made it. The images in [docs/assets/](..) are rendered from the [VHS](https://github.com/charmbracelet/vhs) tapes here, and the menu-bar picture from the SwiftBar plugin's own output, all against made-up data, so they can be re-made after a UI change and never show anything from the machine that rendered them. How to run them, and when, is in [engineering.md](../../engineering.md#screenshots).
 
 ```bash
 make screenshots                         # every tape, then the menu picture
@@ -27,6 +27,7 @@ make screenshots TAPES=clips             # every clip (clip-*.tape, clip-menu, c
 | `clip-cost.tape` | `clips/cost.mp4`, `.gif` | `agents limits`, then `agents report`: CPU by job and project, tokens and their API-equivalent cost |
 | `clip-keys.tape` | `clips/keys.mp4`, `.gif` | `sbx` refusing the fake key while `make test` runs, then `secret scan` naming the demo's `DEMO_TOKEN` without printing it |
 | `clip-hog.tape` | `clips/hog.mp4`, `.gif` | With `DEMO_HOG=1`: `agents hogs`, `agents why 1311` and `agents mem`, a test run past the guard's warning size |
+| `remote.tape` | `remote.mp4` (not tracked) | "Remote feels local" on the remote fleet: it needs that fleet running first ([below](#the-remote-screencasts-fleet)); it feeds `remote-cut.mp4` and `remote.gif` |
 | `clip-remote` (no tape) | `clips/remote.mp4`, `.gif` | A cut from `remote-cut.mp4` ([below](#the-remote-screencasts-fleet)) at the seconds `REMOTE_SEGMENTS` in `scripts/screenshots.sh` lists: three machines, the map, then the checkout page served from atlas in a browser here, held at the end |
 
 Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https://github.com/ryanoasis/nerd-fonts) (`brew install --cask font-symbols-only-nerd-font`): `theme.tape` lists it after JetBrains Mono as a fallback, so the file icons `eza` draws render as they do in Ghostty. Without it they show as blanks, and `make screenshots` warns. The `herdr` tape also needs Herdr and a container runtime: Apple's [`container`](https://github.com/apple/container) CLI (`container system start`) or podman. `herdr-demo.sh` reads `TUIDEV_CONTAINER_RUNTIME=container|podman` (see [The Herdr fleet](#the-herdr-fleet)). `make screenshots` skips the tape unless Herdr is installed and the runtime is running (Apple's `container system start`, or `podman machine start`). The menu needs Google Chrome or Chromium and Swift (the Xcode command-line tools). With `gifsicle` installed, the GIFs are optimized after rendering.

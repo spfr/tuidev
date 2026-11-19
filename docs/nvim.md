@@ -1,6 +1,6 @@
 # Neovim (`--pack nvim`)
 
-`--pack nvim` installs Neovim and deploys a [LazyVim](https://www.lazyvim.org/) config — a full IDE experience for the sessions where a terminal editor, not a GUI one, is what you want. It's optional: see [VISION.md](../VISION.md) for why the GUI editor is the default now.
+A full terminal IDE for the sessions where you want a terminal editor next to your agents. `--pack nvim` installs Neovim and deploys a [LazyVim](https://www.lazyvim.org/) config. It's optional: see [VISION.md](../VISION.md) for why the GUI editor is the default.
 
 > **AI tools run in separate panes, not as in-editor plugins.** Claude Code and Codex (`--pack ai-clis`). Copilot, CopilotChat, CodeCompanion and Avante are explicitly disabled in `configs/nvim/init.lua`.
 
