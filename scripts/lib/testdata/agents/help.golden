@@ -301,22 +301,11 @@ SETTINGS
                                Claude Code's hooks calling this agents, the data and
                                run dirs writable; --fix restarts the sampler's job
                                and the guard (-n: says what it would run)
-  @TMP@/none.conf (KEY=value; AGENTS_CONF picks another file). Keys: AGENTS_HOG_PCT
-  AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_SUSTAIN AGENTS_HOG_TOP AGENTS_GRACE
-  AGENTS_AWAKE_POLL
-  AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK AGENTS_NAMES AGENTS_NO_HERDR
-  AGENTS_TERMINAL AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY, and the menu
-  bar's AGENTS_BAR_TITLE
-  AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_BAR_REFRESH. Memory guard:
-  AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL
-  AGENTS_MEM_IDLE. The same names in the environment win. NO_COLOR=1 turns colors
-  off. Stale patterns: AGENTS_ORPHAN_PATTERNS in @REPO@/lib/agents/config.sh. History: AGENTS_HISTORY
-  AGENTS_HISTORY_DAYS AGENTS_PRICES; extra job patterns (EREs): AGENTS_JOB_TEST
-  AGENTS_JOB_BUILD AGENTS_JOB_SERVER AGENTS_JOB_BROWSER AGENTS_JOB_MCP. Your status line:
-  AGENTS_STATUSLINE_CMD. How long a finished session stays to review: AGENTS_PARKED_MIN.
-  Colors: AGENTS_THEME (auto, ansi, none or a palette's name) and AGENTS_COLOR_NEED
-  AGENTS_COLOR_DONE AGENTS_COLOR_RUN AGENTS_COLOR_WARN AGENTS_COLOR_DIM AGENTS_COLOR_ACCENT
-  (a palette key or #rrggbb). Data: @TMP@/data
+  @TMP@/none.conf (KEY=value; AGENTS_CONF picks another file).
+  'agents config' prints every key with its value, and the file documents each
+  one. The same names in the environment win. NO_COLOR=1 turns colors off.
+  Stale patterns: AGENTS_ORPHAN_PATTERNS in @REPO@/lib/agents/config.sh.
+  Data: @TMP@/data
 
 SAFETY
   Never signals pid 1, this shell or its parents, another user's process

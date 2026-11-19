@@ -157,14 +157,14 @@ Every key binding and command is in [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
 | Doc | Covers |
 |-----|--------|
 | [Quick start](docs/QUICK_START_GUIDE.md) | One path, about ten minutes: install, two agents, the one that needs you, what they left behind, the sandbox |
-| [Cheatsheet](docs/CHEATSHEET.md) | Every key binding and command: tmux, Herdr, the shell, `sbx`, `secret`, `tuidev`, the Makefile |
+| [Cheatsheet](docs/CHEATSHEET.md) | Every command and key binding: `tuidev`, `agents`, other machines, the phone, Herdr, tmux, the shell, `sbx`, `secret` |
 | [FAQ](docs/FAQ.md) | How it differs from Herdr, Rex and the CLIs' own features, then troubleshooting |
 | [Profiles and packs](docs/profiles.md) | What each profile and pack installs |
 | [Toolbox](docs/toolbox.md) | Every tool: what it replaces, why, who uses it, and how agents come to use the right one |
 | [Performance](docs/performance.md) | What macOS and Linux do behind your agents, measured, and what to change; the disk audit; what tuidev runs in the background |
 | [Sandboxing](docs/sandboxing.md) | Native CLI sandboxes, `sbx`, Seatbelt profiles, credential deny list |
 | [Secrets](docs/secrets.md) | API tokens in the Keychain, libsecret or `pass` with `secret`, not in dotfiles; what agents can reach |
-| [Agent workflows](docs/agent-workflows.md) | AI CLIs, worktrees, Herdr, `agents`, the board, the memory guard, reports, the menu bar, notifications |
+| [Agent workflows](docs/agent-workflows.md) | Which agent needs you (Herdr, the board, the menu bar), what runs, cleanup, the memory guard, history and reports, hooks, notifications, settings |
 | [Orchestration](docs/orchestration.md) | The `orchestration` pack: subagent tiers, skills, git gates, CI runners |
 | [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, another machine's ports and links here, Herdr's phone app, iOS clients |
 | [Neovim](docs/nvim.md) | The `nvim` pack: LazyVim essentials |

@@ -470,7 +470,7 @@ printf '%b\n' "${CYAN}Docs:${NC}
   docs/profiles.md         what each profile and pack installs
   docs/sandboxing.md       native sandboxes, sbx, escape hatches
   docs/remote.md           other machines, links that open here, the phone
-  docs/agent-workflows.md  AI CLIs, editors, worktrees, Herdr
+  docs/agent-workflows.md  who needs you, what runs, cleanup, memory, history
   docs/performance.md      what the OS does behind your agents, and what to change
 "
 # A dry run wrote neither file.
