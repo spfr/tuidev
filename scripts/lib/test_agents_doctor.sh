@@ -15,7 +15,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"
 tmp="$(cd "$tmp" && pwd)"
 trap 'rm -rf "$tmp"' EXIT
-for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_SANDBOX; do unset "$v"; done
+for v in $(compgen -v AGENTS_) XDG_CONFIG_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_SANDBOX TUIDEV_STATE_DIR; do unset "$v"; done
 export HOME="$tmp/home" NO_COLOR=1 AGENTS_TESTING=1
 export AGENTS_CONF="$tmp/none.conf" AGENTS_RUN_DIR="$tmp/run" AGENTS_DATA_DIR="$tmp/data"
 mkdir -p "$HOME/.local/bin" "$HOME/.claude" "$HOME/Library/LaunchAgents" "$HOME/.config/systemd/user" "$tmp/run" "$tmp/data" "$tmp/stub"
@@ -35,8 +35,10 @@ echo "launchctl $*" >> "$CALLS"
 case "$*" in *kickstart*dev.tuidev.memguard*) echo on > "$GUARD" ;; esac
 exit 0
 EOF
+# SD_DOWN=1: no systemd user manager answers (a container).
 cat > "$tmp/stub/systemctl" <<'EOF'
 #!/bin/bash
+[[ "$*" != "--user show-environment" ]] || exit "${SD_DOWN:-0}"
 echo "systemctl $*" >> "$CALLS"
 case "$*" in *restart*tuidev-memguard*) echo on > "$GUARD" ;; esac
 exit 0
@@ -80,7 +82,13 @@ AGENTS_HISTORY=0 probe; [[ "$(row sampler)" == skip$'\t'sampler$'\t'"history is 
 OSTYPE=linux-gnu probe; [[ "$(row sampler)" == fail$'\t'*$'\t'"tuidev install --pack monitoring" ]] || fail "Linux without the timer: $(row sampler)"
 : > "$HOME/.config/systemd/user/tuidev-sample.timer"
 OSTYPE=linux-gnu probe; [[ "$(row sampler)" == fail$'\t'*$'\t'"systemctl --user enable --now tuidev-sample.timer" ]] || fail "Linux with the timer: $(row sampler)"
-pass "sampler: fresh is ok, stale or none fails with the command that starts its job, AGENTS_SAMPLER=0 warns, AGENTS_HISTORY=0 skips"
+SD_DOWN=1 OSTYPE=linux-gnu probe
+[[ "$(row sampler)" == skip$'\t'sampler$'\t'"nothing here can run one on a schedule: no systemd user manager answers here (a container, or a sandbox)"* ]] \
+    || fail "Linux without a systemd user manager must skip the sampler: $(row sampler)"
+echo $((now - 30)) > "$tmp/data/sample.stamp"
+SD_DOWN=1 OSTYPE=linux-gnu probe; [[ "$(row sampler)" == ok$'\t'* ]] || fail "a fresh sample without systemd (agents watch): $(row sampler)"
+rm -f "$tmp/data/sample.stamp"
+pass "sampler: fresh is ok, stale or none fails with the command that starts its job, AGENTS_SAMPLER=0 warns, AGENTS_HISTORY=0 skips, no systemd skips"
 
 # 3. The memory guard, every state.
 for s in "on 42|ok|on (pid 42)" "stalled 42 900|fail|stalled: pid 42 has not looked for 900s" "stopped|fail|installed, but no guard runs" \
@@ -91,13 +99,22 @@ for s in "on 42|ok|on (pid 42)" "stalled 42 900|fail|stalled: pid 42 has not loo
 done
 echo "stalled 42 900" > "$GUARD"; probe
 [[ "$(row "memory guard")" == *$'\t'"agents mem restart" ]] || fail "a stalled guard's fix: $(row "memory guard")"
-pass "memory guard: on ok; stalled and stopped fail (agents mem restart); off and unknown skip; none warns"
+for s in "stopped|skip|nothing here can run one: no systemd user manager" "none|skip|nothing here can run one: no systemd user manager" \
+         "on 42|ok|on (pid 42)" "stalled 42 900|fail|stalled: pid 42 has not looked for 900s"; do
+    IFS='|' read -r st want detail <<<"$s"
+    echo "$st" > "$GUARD"; SD_DOWN=1 OSTYPE=linux-gnu probe
+    [[ "$(row "memory guard")" == "$want"$'\t'"memory guard"$'\t'"$detail"* ]] || fail "no systemd, guard $st: $(row "memory guard")"
+done
+[[ "$(row "memory guard")" != *$'\t'"agents mem restart" ]] || fail "without systemd, agents mem restart can't be the fix"
+pass "memory guard: on ok; stalled and stopped fail (agents mem restart); off and unknown skip; none warns; without systemd stopped and none skip"
 
 # 4. Claude Code's hooks call this agents.
 S="$HOME/.claude/settings.json"
 probe; [[ "$(row hooks)" == skip$'\t'hooks$'\t'"no ~/.claude/settings.json"$'\t' ]] || fail "no settings: $(row hooks)"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$S"
-probe; [[ "$(row hooks)" == warn$'\t'hooks$'\t'"no hook or status line"* ]] || fail "no agents hook: $(row hooks)"
+probe; [[ "$(row hooks)" == skip$'\t'hooks$'\t'"Claude Code's hooks come with --pack ai-clis"* ]] || fail "no agents hook, no ai-clis pack: $(row hooks)"
+mkdir -p "$HOME/.config/tuidev"; printf 'profile=custom\nextra_packs=monitoring ai-clis\n' > "$HOME/.config/tuidev/profile"
+probe; [[ "$(row hooks)" == warn$'\t'hooks$'\t'"no hook or status line"* ]] || fail "no agents hook with ai-clis: $(row hooks)"
 printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -x \"$HOME/.local/bin/agents\" ] && \"$HOME/.local/bin/agents\" hook x"}]}]},' \
     '"statusLine":{"type":"command","command":"exec \"$HOME/.local/bin/agents\" statusline"}}' > "$S"
 probe; [[ "$(row hooks)" == fail$'\t'hooks$'\t'"2 command(s) in ~/.claude/settings.json call ~/.local/bin/agents, which is not there"* ]] || fail "agents missing: $(row hooks)"
@@ -108,7 +125,7 @@ probe; [[ "$(row hooks)" == warn$'\t'*"not this one ($AGENTS_PATH)"* ]] || fail 
 before="$(cksum < "$S")"
 ( _AGENTS_DOCTOR_ROWS=""; PATH="$tmp/empty" _agents_doctor_hooks; printf "%s" "$_AGENTS_DOCTOR_ROWS" ) | grep -q $'^skip\thooks\tjq is not installed\t$' || fail "no jq: not skipped"
 [[ "$(cksum < "$S")" == "$before" ]] || fail "the doctor changed settings.json"
-pass "hooks: none, missing, this agents, another agents; no jq or no settings.json is a skip; the file is only read"
+pass "hooks: none (warns with ai-clis, else skipped), missing, this agents, another agents; no jq or no settings.json is a skip; the file is only read"
 
 # 5. The data and run dirs.
 probe; [[ "$(row dirs)" == ok$'\t'* ]] || fail "writable dirs: $(row dirs)"
@@ -147,8 +164,15 @@ echo $((now - 700)) > "$tmp/data/sample.stamp"; echo stopped > "$GUARD"; rm -f "
 rc=0; out="$(agents_main doctor --fix --tsv)" || rc=$?
 [[ $rc -eq 0 ]] && grep -q "systemctl --user enable --now tuidev-sample.timer" "$CALLS" && grep -q "systemctl --user restart tuidev-memguard.service" "$CALLS" \
     || fail "Linux --fix (rc $rc): $out / $(cat "$CALLS")"
+echo $((now - 700)) > "$tmp/data/sample.stamp"; echo stopped > "$GUARD"; rm -f "$CALLS"
+rc=0; out="$(SD_DOWN=1 agents_main doctor --fix --tsv)" || rc=$?
+[[ $rc -eq 0 && ! -e "$CALLS" && "$out" != *did$'\t'* && "$out" == *$'skip\tsampler\t'* && "$out" == *$'skip\tmemory guard\t'* ]] \
+    || fail "no systemd: --fix must do nothing and exit 0 (rc $rc): $out / $(cat "$CALLS" 2>/dev/null)"
+echo "stalled 42 900" > "$GUARD"
+rc=0; out="$(SD_DOWN=1 agents_main doctor --fix --tsv)" || rc=$?
+[[ $rc -eq 1 && ! -e "$CALLS" ]] || fail "no systemd: a stalled guard by hand is not restarted (rc $rc): $(cat "$CALLS" 2>/dev/null)"
 OSTYPE=darwin25
-pass "Linux: --fix enables the sampler's timer and restarts the guard's service"
+pass "Linux: --fix enables the sampler's timer and restarts the guard's service; without systemd it skips both and runs nothing"
 
 # Nothing to repair automatically: no job installed, the guard nowhere.
 rm -f "$HOME/Library/LaunchAgents/dev.tuidev.sample.plist" "$CALLS"; echo $((now - 700)) > "$tmp/data/sample.stamp"; echo none > "$GUARD"
