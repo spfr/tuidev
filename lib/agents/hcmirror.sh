@@ -48,7 +48,8 @@
 #   _agents_hl_ready), util.sh (_agents_lock, _agents_unlock, _agents_timeout,
 #   _agents_now, _agents_stamp_age, _agents_replace).
 # Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_end,
-#   agents_hc_mirror_off, agents_hc_mirror_on, and for hcphone.sh
+#   agents_hc_mirror_off, agents_hc_mirror_on, _agents_hm_sync for
+#   herdrlabel.sh (a sync from the snapshot it has), and for hcphone.sh
 #   _agents_hm_on, _agents_hm_list, _agents_hm_have_of, _agents_hm_want,
 #   _agents_hm_off_read, _agents_hm_is_off.
 

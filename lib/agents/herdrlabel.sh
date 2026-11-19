@@ -26,7 +26,8 @@
 # Uses: config.sh (AGENTS_HERDR_NAMES, AGENTS_NO_HERDR, AGENTS_RUN_DIR),
 #   snapshot.sh (_agents_herdr_refresh), bar.sh (_agents_bar_target,
 #   agents_bar_poke),
-#   glyph.sh (_agents_glyph_map), util.sh (locks, timeouts, atomic replace).
+#   glyph.sh (_agents_glyph_map), util.sh (locks, timeouts, atomic replace),
+#   hcmirror.sh (_agents_hm_sync: the mirrors, after `agents herdr sync`).
 # Public: agents_herdr, agents_herdr_sync, agents_herdr_reset.
 
 _AGENTS_HL_SOURCE="tuidev"   # our metadata's source: what a reset clears
