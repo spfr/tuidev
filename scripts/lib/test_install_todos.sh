@@ -66,10 +66,10 @@ tail_of() {  # tail_of ARGS... -> the text after "Installation Complete"
 
 min="$(tail_of --profile minimal)"
 printf '%s\n' "$min" | grep -q 'Restart your shell' || fail "minimal: the always-steps are gone"
-printf '%s\n' "$min" | grep -q 'Would need doing by hand (dry run):' || fail "minimal: no todo heading in a dry run"
-printf '%s\n' "$min" | grep -qE '^  1\. Install the agent CLI configs.*tuidev install --pack ai-clis' \
-    || fail "minimal: the ai-clis step is missing: $min"
-pass "minimal dry run lists the ai-clis step"
+printf '%s\n' "$min" | grep -qE '^  - Agents, sandboxed: +tuidev install --pack ai-clis' \
+    || fail "minimal: the ai-clis offer is missing: $min"
+printf '%s\n' "$min" | grep -qE '^ +[0-9]+\. .*--pack ai-clis' && fail "minimal: the ai-clis offer is a numbered step: $min"
+pass "minimal dry run offers ai-clis, outside the numbered steps"
 
 with="$(tail_of --profile minimal --pack ai-clis)"
 printf '%s\n' "$with" | grep -q 'tuidev install --pack ai-clis' && fail "ai-clis installed, but still asked for: $with"

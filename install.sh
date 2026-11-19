@@ -448,16 +448,17 @@ print_step "Performance check (changes nothing; 'tuidev perf --fix' offers the f
 # ----------------------------------------------------------------------------
 
 print_header "Installation Complete"
-printf '%b\n' "${GREEN}Always:${NC}
+printf '%b\n' "${GREEN}Next:${NC}
   - Restart your shell:  ${YELLOW}exec zsh -l${NC}
   - Verify health:       ${YELLOW}tuidev check${NC}   and   ${YELLOW}tuidev perf${NC}  (Spotlight, backups, limits)
-  - Everything else:     ${YELLOW}tuidev${NC}  lists what you can do; ${YELLOW}tuidev update${NC} gets the next release
-"
-# What this run's packs asked of the human (print_todo), then the warnings count.
+  - Everything else:     ${YELLOW}tuidev${NC}  lists what you can do; ${YELLOW}tuidev update${NC} gets the next release"
+# An offer, not a step this run left undone: it stays out of the numbered list.
 case " ${EXTRA_PACKS[*]-} " in
     *" ai-clis "*) ;;
-    *) print_todo "Install the agent CLI configs (Claude Code + Codex, native sandboxes on): tuidev install --pack ai-clis" ;;
+    *) printf '%b\n' "  - Agents, sandboxed:   ${YELLOW}tuidev install --pack ai-clis${NC}  adds the Claude Code and Codex configs" ;;
 esac
+# What this run's packs asked of the human (print_todo), then the warnings count.
+[[ -z "$TUIDEV_TODOS" ]] || echo ""
 print_todos
 if (( TUIDEV_WARNINGS > 0 )); then
     echo ""
