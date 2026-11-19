@@ -9,6 +9,7 @@
   - a read-only `allow` list;
   - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`;
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
+  - `sandbox.credentials.envVars`, which unsets publish, cloud and model-provider tokens (`GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, …) in sandboxed commands (Codex: `shell_environment_policy.filters`);
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
   - `env.NODE_OPTIONS=--max-old-space-size=4096`, which pins Node's heap limit to 4 GB on every machine (about Node's own default on a 16 GB+ one); the memory guard, not this, is what stops a runaway (Codex: `shell_environment_policy.set`);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`;

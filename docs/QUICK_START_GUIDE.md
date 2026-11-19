@@ -1,6 +1,6 @@
-# Quick Start
+# Quick start
 
-Read this once after installing tuidev. It takes about ten minutes: install, run two agents, see which one needs you, clean up what they leave behind, and know what the sandbox does. For what each installed tool replaces, see [toolbox.md](toolbox.md); for keys and commands, [CHEATSHEET.md](CHEATSHEET.md).
+One path, about ten minutes, from install to a waiting agent: install, run two agents, see which one needs you, clean up what they leave behind, and know what the sandbox does. Running agents on another machine or picking them up from your phone comes after, in [remote.md](remote.md). For keys and commands, see [CHEATSHEET.md](CHEATSHEET.md).
 
 ## 1. Install
 
@@ -21,7 +21,7 @@ exec zsh -l
 tuidev check     # health check against what you installed
 ```
 
-`tuidev check` is explained [below](#8-stay-current-and-leave). The installer ends with a numbered list of the steps its packs left to you (log in, grant a permission, a command that needs root) and the number of warnings it printed; `tuidev check` shows what still needs attention.
+The installer ends with "Next:", then a numbered list of the steps its packs left to you (log in, grant a permission, a command that needs root) and the number of warnings it printed. `tuidev check` shows what still needs attention, and `tuidev check --fix` repairs what it safely can ([below](#8-stay-current-and-leave)).
 
 ## 3. Two steps only you can do (macOS)
 
@@ -64,26 +64,28 @@ agents hogs         # what burns memory or CPU
 agents why PID      # why an item is listed, the evidence and a verdict
 ```
 
-`agents why` ends in a verdict: safe to stop, check first, leave it or informational. Act on it, not on the flag alone: a stale dev server may be the one open in your browser. `agents --help` lists the rest (`agents reap` stops what is safe). [Flagged: is it safe to stop?](agent-workflows.md#flagged-is-it-safe-to-stop)
+`agents why` ends in a verdict: safe to stop, check first, leave it or informational. Act on it, not on the flag alone: a stale dev server may be the one open in your browser. `agents reap` stops only what is safe to stop and lists what it left for you to check. [Flagged: is it safe to stop?](agent-workflows.md#flagged-is-it-safe-to-stop)
+
+Stale-process detection is best on macOS; on Linux, orphans rarely look stale. In Claude Code's auto mode, hooks also stop the background commands a finished subagent left running ([cleanup hooks](agent-workflows.md#cleanup-hooks-claude-code)).
 
 ## 7. The sandbox, in one paragraph
 
-`--pack ai-clis` turns on each CLI's own sandbox. Claude Code's commands can't read `~/.ssh`, `~/.aws`, `~/.gnupg`, the Keychain, or the other credential paths; they can write only to the project, `/tmp` and the CLI's own state. Plain `codex` is different: its `workspace-write` mode limits writes and network, not reads, so it can still read `~/.ssh`. On macOS, run Codex under `sbx` when that matters. Never wrap a CLI whose native sandbox is on in `sbx`; Seatbelt doesn't nest. The profiles, the deny list and the trade-offs are in [sandboxing.md](sandboxing.md). To move API tokens out of your shell startup files, see [secrets.md](secrets.md).
+`--pack ai-clis` turns on each CLI's own sandbox. Claude Code's commands can't read `~/.ssh`, `~/.aws`, `~/.gnupg`, the Keychain or the other credential paths, and token variables exported in your shell (`GITHUB_TOKEN`, `ANTHROPIC_API_KEY` and others) are unset in Claude Code's sandboxed commands and in every command Codex runs. Plain `codex` is different: its `workspace-write` mode limits writes and network, not reads, so it can still read `~/.ssh`. On macOS, run Codex under `sbx` when that matters. Never wrap a CLI whose native sandbox is on in `sbx`; Seatbelt doesn't nest. The profiles, the deny list and the trade-offs are in [sandboxing.md](sandboxing.md). To move API tokens out of your shell startup files, see [secrets.md](secrets.md).
 
 ## 8. Stay current and leave
 
 ```bash
 tuidev update      # the latest release, its migrations and configs
-tuidev check       # health check against the installed profile
+tuidev check       # health check: what is installed, and whether its jobs and hooks run
 tuidev uninstall   # remove what the manifest records (--dry-run previews)
 ```
 
-Nothing updates unless you ask: `tuidev update --check` previews, `--rollback` goes back one release. What `tuidev check` tests and what its exit code means is in [updating.md](updating.md#checking-the-install-tuidev-check).
+Nothing updates unless you ask: `tuidev update --check` previews, `--rollback` goes back one release. When a new release is out, the menu bar, Herdr and `agents` say so once. What `tuidev check` tests and what its exit code means is in [updating.md](updating.md#checking-the-install-tuidev-check).
 
 ## Where next
 
 - [agent-workflows.md](agent-workflows.md): parallel agents, worktrees, notifications, the menu bar, `agents report`.
-- [remote.md](remote.md): agents on another machine, previews in your browser, Herdr's phone app.
+- [remote.md](remote.md): agents on another machine, their previews in your browser, and your agents on your phone.
 - [CHEATSHEET.md](CHEATSHEET.md): keys and commands, including tmux (`--pack tmux`).
 - [nvim.md](nvim.md) and [vim.md](vim.md): the editor packs, with their keys.
 - [profiles.md](profiles.md) and [toolbox.md](toolbox.md): what is installed, and what each tool replaces.

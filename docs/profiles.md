@@ -1,6 +1,6 @@
-# Profiles and Packs
+# Profiles and packs
 
-A **pack** is one install script; a **profile** is a named set of packs. Read this page to see what each profile and pack installs, or to choose packs yourself. There are five built-in packs, each selected by its own flag (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`), and a set of optional packs, each selected with `--pack NAME`. Profiles are shortcuts, not walls: combine a profile with more flags, or skip profiles and compose packs directly.
+Give each machine what it needs: the whole agent setup on the Mac you sit at, sandboxed agents that keep running on a headless box, or just the shell on a server. A **pack** is one install script; a **profile** is a named set of packs. This page says what each one installs. There are five built-in packs, each selected by its own flag (`--core`, `--remote`, `--sandbox`, `--ui`, `--extras`), and a set of optional packs, each selected with `--pack NAME`. Profiles are shortcuts, not walls: combine a profile with more flags, or skip profiles and compose packs directly.
 
 The one-line install asks what the machine should get. Each answer is a set of flags:
 
@@ -29,7 +29,7 @@ With no flags on a terminal, the installer asks the question above. With no flag
 | Profile   | Equivalent to                              | For |
 |-----------|---------------------------------------------|-----|
 | `minimal` | `--core`                                    | Servers, VMs, CI runners, anyone who wants only the terminal layer |
-| `desktop` | `--core --ui --sandbox`                     | A Mac with a display: the daily driver |
+| `desktop` | `--core --ui --sandbox`                     | A Mac with a display, without the agent packs (add `--pack ai-clis` for sandboxed agents) |
 | `remote`  | `--core --remote --sandbox --pack tmux`     | A headless machine or Tailscale node you SSH into |
 | `full`    | `--core --ui --sandbox --extras --pack ai-clis --pack orchestration --pack monitoring --pack cooling --pack herdr --pack tmux --pack release-age --pack ci` | The whole agent setup on a Mac, in one command |
 
@@ -99,9 +99,9 @@ When `git` is installed, the installer sets these global keys, but only the ones
 
 ## Picking a profile
 
-- A Mac you work at: `desktop`.
-- A machine you only SSH into: `remote`.
+- A Mac you run agents on: `full`.
+- A Mac where you want the shell and sandboxed agents, without the rest: `desktop --pack ai-clis`.
+- A machine you only SSH into, where agents keep running: `remote --pack ai-clis`; add `--pack monitoring --pack herdr-core` to pick its agents up from your phone.
 - A constrained server, VM or CI runner: `minimal`.
-- Running AI agents: add `--pack ai-clis`, and `--pack orchestration` for tiered subagents.
+- Many agents across machines, or tiered subagents, without `full`: add `--pack herdr` / `--pack orchestration`.
 - A terminal editor or a durable local tmux session: add `--pack nvim` / `--pack tmux`.
-- Many agents across machines: add `--pack herdr`.

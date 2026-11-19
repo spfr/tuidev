@@ -2,7 +2,7 @@
 
 **Run your agents anywhere. See everything they do.**
 
-Run Claude Code and Codex on your laptop, on a VM or an always-on box, and pick them up from your phone. tuidev shows which agent needs you, what each one runs and costs, and keeps them away from your keys. It is the setup one team works in every day, shared in the open. It is built on open tools and names them below; it adds to them and replaces none.
+Run Claude Code and Codex on your laptop, on a VM or an always-on box, and pick them up from your phone. tuidev shows which agent needs you and what each one runs, costs and leaves behind, and keeps them away from your keys. It is the setup one team works in every day, shared in the open. It is built on open tools and names them below; it adds to them and replaces none.
 
 ```bash
 curl -fsSL https://github.com/spfr/tuidev/releases/latest/download/get.sh | bash
@@ -45,13 +45,13 @@ One sidebar lists every agent on every machine, the blocked one first, and tabs 
 
 ### See what agents run and what it costs
 
-`agents` (`--pack monitoring`) lists each session with what it runs, its ports and what was left behind. Every flagged process gets a verdict with its evidence (`agents why PID`), so you stop the right thing: "safe to stop: what it waits for already finished", or "check first: dev server on :5173, its session is still active". `agents reap` stops what is safe to stop and leaves the rest for you to check. A memory guard warns about a runaway process and stops one in an agent tree at half the RAM, and hogs are named in the menu bar while they last. `agents limits` shows each CLI's usage limits, and `agents report` shows CPU by project and job and the tokens, with what they would cost at API list prices. It all reads local files; nothing is sent anywhere. Stale-process detection is best on macOS: on Linux, orphans rarely look stale. In Claude Code's auto mode, hooks also stop the background commands a subagent left behind. [Local processes](docs/agent-workflows.md#local-processes-agents---pack-monitoring) · [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem) · [Tokens](docs/agent-workflows.md#tokens-and-denials) · [Fans](docs/agent-workflows.md#fans---pack-cooling)
+`agents` (`--pack monitoring`) lists each session with what it runs, its ports and what was left behind. Every flagged process gets a verdict with its evidence (`agents why PID`), so you stop the right thing: "safe to stop: what it waits for already finished", or "check first: dev server on :5173, its session is still active". `agents reap` stops only what is safe to stop; `--all` takes the rest. A memory guard, on macOS and Linux, warns about a runaway process and stops one in an agent tree at half the RAM, and hogs are named in the menu bar while they last. `agents limits` shows each CLI's usage limits, and `agents report` shows CPU by project and job and the tokens, with what they would cost at API list prices. A sampler keeps that history once a minute, with or without the menu bar, and `agents doctor` says whether it, the guard and the hooks are working. It all reads local files; nothing is sent anywhere. Stale-process detection is best on macOS: on Linux, orphans rarely look stale. In Claude Code's auto mode, hooks also stop the background commands a subagent left behind. [Local processes](docs/agent-workflows.md#local-processes-agents---pack-monitoring) · [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem) · [Tokens](docs/agent-workflows.md#tokens-and-denials) · [Is it running](docs/agent-workflows.md#is-it-running-agents-doctor)
 
 <img src="docs/assets/cleanup.gif" width="800" alt="Three commands in a terminal. agents says who needs you; under the Claude Code session in api, a polling loop has waited 5h10m and is flagged stuck, safe to stop. agents why 2120 explains it: verdict, safe to stop, because what it waits for already finished ([exited with code 0], 5h0m ago), with high confidence; the evidence is its owner, its age, the file it watches, that file's last line and how long it has been quiet, then how to look and how to stop it. agents report opens with its top insights (Explore subagents left 3 polling loops running for 7.7 hours; api's CPU is up 147 percent on the day before, mostly its build; myapp's tests ran 4 duplicates), then shows the CPU-hours of agent work in the last 24 hours by job, with tests first, by project and session, the busiest hours, the tokens (17.6M, 94% cache hits, 2% polling), one denial, and the cleanups by reason.">
 
 ### Keep agents away from your keys
 
-`--pack ai-clis` turns on Claude Code's and Codex's own sandbox settings and gates git and gh writes behind a prompt. Claude Code's commands and `Read` tool are denied `~/.ssh`, `~/.aws` and the rest of one [credential list](configs/sandbox/credential-paths.txt): CLI tokens, shell history and browser profiles. A list of publish and cloud tokens exported in your shell is unset in Claude Code's sandboxed commands and in every command Codex runs. Plain Codex's `workspace-write` limits writes and network but not reads, so it can still read those paths; run it under `sbx` (macOS Seatbelt) for the same protection. `secret` keeps API tokens in your OS keychain, out of every agent's environment, and hands one to one command with `secret run -n NAME -- CMD`. [Sandboxing](docs/sandboxing.md) · [Secrets](docs/secrets.md#what-an-agent-can-reach)
+`--pack ai-clis` turns on Claude Code's and Codex's own sandbox settings and gates git and gh writes behind a prompt. Claude Code's commands and `Read` tool are denied `~/.ssh`, `~/.aws` and the rest of one [credential list](configs/sandbox/credential-paths.txt): CLI tokens, shell history and browser profiles. Publish, cloud and model-provider tokens exported in your shell (`GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY`, `ANTHROPIC_API_KEY` and others) are unset in Claude Code's sandboxed commands and in every command Codex runs; the CLIs keep their own login. Plain Codex's `workspace-write` limits writes and network but not reads, so it can still read those paths; run it under `sbx` (macOS Seatbelt) for the same protection. `secret` keeps API tokens in your OS keychain, out of every agent's environment, and hands one to one command with `secret run -n NAME -- CMD`. [Sandboxing](docs/sandboxing.md) · [Secrets](docs/secrets.md#what-an-agent-can-reach)
 
 <img src="docs/assets/clips/keys.gif" width="800" alt="Three commands in a terminal, captioned: Agents run your tests, never read your keys. Under sbx, cat of the demo ssh key fails with Operation not permitted; sbx -- make test still runs and 12 tests pass; secret scan names a DEMO_TOKEN exported on line 3 of ~/.zshrc without printing its value, and says secret import --remove moves it into the store.">
 
@@ -118,7 +118,7 @@ Set up tuidev (https://github.com/spfr/tuidev) on this machine.
 
 - **A modern shell.** Ghostty, zsh with autosuggestions, a Starship prompt, and `rg`, `fd`, `bat`, `eza`, `zoxide`, `fzf`, `delta`, `gh` and `jq`. An agent's `cat`, `ls` and `top` stay the real commands. [Toolbox](docs/toolbox.md) · [Theming](docs/theming.md)
 - **Cheaper subagents.** `--pack orchestration` pins Claude Code's subagents to tiers: Haiku for search and command runs, Sonnet for routine implementation, Fable for hard changes, Opus for review. Codex gets the same roles on OpenAI's current models: GPT-6 Luna, GPT-6.2 Sol and GPT-6.2 Astra (a paid plan). [Orchestration](docs/orchestration.md)
-- **A MacBook that stays cool.** `--pack cooling` adds a fan curve through a small Swift daemon you build from [one readable file](lib/fan/tuidev-fan.swift). It only adds air and hands the fans back on any error.
+- **A MacBook that stays cool.** `--pack cooling` adds a fan curve through a small Swift daemon you build from [one readable file](lib/fan/tuidev-fan.swift). It only adds air and hands the fans back on any error. [Fans](docs/agent-workflows.md#fans---pack-cooling)
 - **New package versions wait 3 days.** `--pack release-age` makes npm, bun and uv outside projects wait until a version is 3 days old. Lockfiles still install as pinned.
 - **Two audits.** `tuidev perf` checks what the OS does behind your agents; `tuidev disk` shows what tools and agents left on disk. [Performance](docs/performance.md)
 
@@ -134,7 +134,7 @@ Set up tuidev (https://github.com/spfr/tuidev) on this machine.
 
 ## Who it's for
 
-**For you if** you run Claude Code or Codex from a terminal, mostly on a Mac, maybe with a Linux box that stays on, and you want agents confined by default and a setup you can preview, read and remove cleanly.
+**For you if** you run Claude Code or Codex from a terminal, on a Mac, a Linux box that stays on or both, and you want to reach them from anywhere, see what they run, cost and leave behind, keep them confined by default, and have a setup you can preview, read and remove cleanly.
 
 **Not for you if** you want a terminal IDE, a personal dotfiles dump or a showcase of every modern CLI, agents running unsandboxed by default, Docker Desktop or OrbStack (never installed), or third-party installers piped into a shell for you. The reasoning is in [VISION.md](VISION.md).
 
@@ -157,23 +157,23 @@ Every key binding and command is in [docs/CHEATSHEET.md](docs/CHEATSHEET.md).
 | Doc | Covers |
 |-----|--------|
 | [Quick start](docs/QUICK_START_GUIDE.md) | One path, about ten minutes: install, two agents, the one that needs you, what they left behind, the sandbox |
-| [Cheatsheet](docs/CHEATSHEET.md) | Session commands, tmux keys, aliases, Makefile |
-| [FAQ](docs/FAQ.md) | Troubleshooting |
+| [Cheatsheet](docs/CHEATSHEET.md) | Every key binding and command: tmux, Herdr, the shell, `sbx`, `secret`, `tuidev`, the Makefile |
+| [FAQ](docs/FAQ.md) | How it differs from Herdr, Rex and the CLIs' own features, then troubleshooting |
 | [Profiles and packs](docs/profiles.md) | What each profile and pack installs |
 | [Toolbox](docs/toolbox.md) | Every tool: what it replaces, why, who uses it, and how agents come to use the right one |
-| [Performance](docs/performance.md) | What macOS and Linux do in the background that competes with agents, measured, and what to change |
+| [Performance](docs/performance.md) | What macOS and Linux do behind your agents, measured, and what to change; the disk audit; what tuidev runs in the background |
 | [Sandboxing](docs/sandboxing.md) | Native CLI sandboxes, `sbx`, Seatbelt profiles, credential deny list |
 | [Secrets](docs/secrets.md) | API tokens in the Keychain, libsecret or `pass` with `secret`, not in dotfiles; what agents can reach |
-| [Agent workflows](docs/agent-workflows.md) | AI CLIs, editor integration, agent teams, worktrees, Herdr, `agents` and the menu bar, notifications |
+| [Agent workflows](docs/agent-workflows.md) | AI CLIs, worktrees, Herdr, `agents`, the board, the memory guard, reports, the menu bar, notifications |
 | [Orchestration](docs/orchestration.md) | The `orchestration` pack: subagent tiers, skills, git gates, CI runners |
-| [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, Herdr's phone app, iOS clients |
+| [Remote and mobile](docs/remote.md) | Tailscale, SSH, mosh, always-on nodes, another machine's ports and links here, Herdr's phone app, iOS clients |
 | [Neovim](docs/nvim.md) | The `nvim` pack: LazyVim essentials |
 | [Vim](docs/vim.md) | The `vim` pack: a zero-plugin vimrc for servers |
 | [Theming](docs/theming.md) | Palette contract and `theme.sh` |
 | [Updating](docs/updating.md) | Updates, migrations, the install manifest, uninstall |
 | [Engineering](docs/engineering.md) | Architecture, shared libs, pack contract, verification, screenshots |
-| [Roadmap](docs/roadmap.md) | Watch-list and adopt/hold criteria |
-| [VISION.md](VISION.md) | Principles and non-goals |
+| [Roadmap](docs/roadmap.md) | What is done, what is next, what is not planned, and the watch-list |
+| [VISION.md](VISION.md) | Why tuidev exists, its principles, and what it will not become |
 | [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | Instructions for AI agents working on this repo |
 | [AGENTS template](templates/AGENTS_TEMPLATE.md) | Starter `AGENTS.md` for your own projects |
 | [Migrations](scripts/migrations/README.md) | Script-level contract for one-shot migrations |
