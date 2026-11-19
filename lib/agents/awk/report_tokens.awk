@@ -22,7 +22,8 @@
 # is cache_read over the input side (in + cache_write + cache_read). Costs
 # are API-equivalent: what the tokens would cost at the price files' list
 # prices (lib_price), never what a subscription charges; a model without a
-# price is unpriced, never $0. A subagent's worktree counts as its
+# price is unpriced, never $0, and a cost that leaves tokens out says so
+# (pfmine: the file to price them in). A subagent's worktree counts as its
 # repository (pfold); the files keep the name as runs.tsv does.
 
 # --- Reading ----------------------------------------------------------------------
@@ -182,19 +183,37 @@ function tsorted(d,   i, n) {
     sortk(TSV, TS, n)
     return n
 }
-# dusd K — a row's cost: "unpriced" when none of its tokens has a price.
-function dusd(k) { return Dtot[k] > Dunp[k] ? usd(Dusd[k]) : "unpriced" }
+# dusd K — a row's cost: "unpriced" when none of its tokens has a price, a
+# * after it when some have none (TMIX then 1, for the note).
+function dusd(k) {
+    if (Dtot[k] <= Dunp[k]) return "unpriced"
+    if (Dunp[k] > 0) { TMIX = 1; return usd(Dusd[k]) "*" }
+    return usd(Dusd[k])
+}
+# costnote — after the window's total: its API-equivalent cost, with the
+# share of its tokens that has no price ("" without prices or tokens).
+function costnote() {
+    if (!PRICED || Ttot <= 0) return ""
+    if (Tunp >= Ttot) return " \302\267 all tokens unpriced"
+    return " \302\267 " usd(Tusd) " API-equivalent" (Tunp > 0 ? ", " unpshare(Tunp, Ttot) " of tokens unpriced" : "")
+}
+# unpshare U T — U's share of T, never 0% or 100% when it is neither.
+function unpshare(u, t,   p) { p = 100 * u / t; return p < 0.5 ? "<1%" : p >= 99.5 ? ">99%" : pct(u, t) }
 # tname D NAME — a name as the tables show it: a session as its project
 # and the start of its id.
 function tname(d, s) {
     if (d == "session") return (s in SPj ? proj(SPj[s]) " " : "") substr(s, 1, 8)
     return d == "project" ? proj(s) : d == "agent" ? agentn(s) : d == "origin" ? (s == "-" ? "(unknown)" : s) : s
 }
-# unpriced_models — how many models have no price at all.
-function unpriced_models(   i, k, n) {
-    n = 0
-    for (i = 1; i <= DKN["model"]; i++) { k = "model" SUBSEP DK["model", i]; if (Dtot[k] == Dunp[k]) n++ }
-    return n
+# unpriced_names LIM — the models without a price, the most tokens first:
+# at most LIM by name, then how many more.
+function unpriced_names(lim,   i, n, c, o) {
+    n = tsorted("model"); c = 0; o = ""
+    for (i = 1; i <= n; i++) {
+        if (Dunp["model" SUBSEP TS[i]] <= 0) continue
+        if (++c <= lim) o = o (c > 1 ? ", " : "") TS[i]
+    }
+    return o (c > lim ? " and " (c - lim) " more" : "")
 }
 # costed — show costs: there are prices, and some of this window's tokens have one.
 function costed() { return PRICED && Ttot > Tunp }
@@ -203,7 +222,7 @@ function costed() { return PRICED && Ttot > Tunp }
 
 # view_tokens — totals, then by model, CLI, agent type, project, session and
 # origin; polling, compactions and the Codex plan's headroom.
-function view_tokens(   o, d, i, n, s, a, w) {
+function view_tokens(   o, d, i, n, s, a, w, note) {
     if (json) {
         o = jhead("tokens") ",\"data\":" jb(TL) ",\"priced\":" jb(PRICED) ",\"tokens_since\":" TSTART \
             ",\"prices\":" (PRICED ? "{\"basis\":\"api_list\",\"as_of\":" opt(PASOF) "}" : "null") \
@@ -233,8 +252,7 @@ function view_tokens(   o, d, i, n, s, a, w) {
     }
     if (!TN) print "no tokens in this window"
     else {
-        printf "%sTOKENS%s %s in %d model %s \302\267 %s cache hits%s\n", b, e, tk(Ttot), TN, nouns(TN, "call"), hitp(Tcr, Tin, Tcw), \
-            (costed() ? " \302\267 " usd(Tusd) " API-equivalent" : "")
+        printf "%sTOKENS%s %s in %d model %s \302\267 %s cache hits%s\n", b, e, tk(Ttot), TN, nouns(TN, "call"), hitp(Tcr, Tin, Tcw), costnote()
         printf "  in %s \302\267 cache write %s%s \302\267 cache read %s \302\267 out %s\n\n", tk(Tin), tk(Tcw), (Tcw1 > 0 ? " (1h " tk(Tcw1) ")" : ""), tk(Tcr), tk(Tout)
         ttable_tokens("model", "MODEL", 10)
         ttable_tokens("cli", "CLI", 10)
@@ -257,12 +275,13 @@ function view_tokens(   o, d, i, n, s, a, w) {
         print "  most        " s
     }
     if (LIM) codex_plan()
-    if (TN && (costed() || TSTART < start)) print ""
-    if (TN && costed()) {
-        n = unpriced_models()
-        th("API $: what these tokens would cost at API list prices" (PASOF != "" ? " (as of " PASOF ")" : "") \
-            ", not what a subscription charges" (n ? "; " n " " nouns(n, "model") " unpriced, left out" : ""))
-    }
+    note = TN && PRICED && Ttot > 0
+    if (note || (TN && TSTART < start)) print ""
+    if (note && costed())
+        th("API $: what these tokens would cost at API list prices" (PASOF != "" ? " (as of " PASOF ")" : "") ", not what a subscription charges")
+    if (note && Tunp > 0)
+        th("unpriced, left out of API $" (TMIX ? " (* marks a row with some)" : "") ": " unpriced_names(3) \
+            " \302\267 to price one, add its line to " (pfmine != "" ? pfmine : "your AGENTS_PRICES file"))
     if (TN && TSTART < start) th("tokens before yesterday are kept by day: this window counts them from " dayhm(TSTART))
 }
 # codex_plan — the Codex plan's headroom, from its latest reading.
@@ -332,7 +351,7 @@ function jtdim(d,   n, i, k, o, r, x) {
 function tokens_text() {
     if (!TL) return
     printf "%sTOKENS%s  %s", b, e, (TN ? tk(Ttot) " \302\267 " hitp(Tcr, Tin, Tcw) " cache hits \302\267 " pct(Tpoll, Ttot) " polling" : "none in this window")
-    if (TN && costed()) printf " \302\267 %s API-equivalent", usd(Tusd)
+    if (TN) printf "%s", costnote()
     if (CN) printf " \302\267 %d %s", CN, nouns(CN, "compaction")
     printf "\n%s  by model, agent, session and origin: agents report --view tokens%s\n\n", dim, e
 }
@@ -340,5 +359,5 @@ function tokens_json() {
     if (!TL) return "null"
     return "{\"calls\":" TN ",\"total\":" jbig(Ttot) ",\"in\":" jbig(Tin) ",\"cache_write\":" jbig(Tcw) ",\"cache_write_1h\":" jbig(Tcw1) ",\"cache_read\":" jbig(Tcr) ",\"out\":" jbig(Tout) \
         ",\"cache_hit_pct\":" pc1(Tcr, Tin + Tcw + Tcr) ",\"poll_tokens\":" jbig(Tpoll) ",\"poll_pct\":" pc1(Tpoll, Ttot) \
-        ",\"est_usd\":" (costed() ? jusd(Tusd) : "null") ",\"compactions\":" CN "}"
+        ",\"est_usd\":" (costed() ? jusd(Tusd) : "null") ",\"unpriced_tokens\":" (PRICED ? jbig(Tunp) : "null") ",\"compactions\":" CN "}"
 }

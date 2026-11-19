@@ -1,5 +1,5 @@
 # prices.tsv — API list prices for `agents report`'s API-equivalent cost.
-# as of 2026-10-15
+# as of 2026-11-19
 #
 # US dollars per million tokens, from the vendors' own pages:
 #   Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
@@ -17,9 +17,10 @@
 # version tag (-v1, :0), [1m] or @...; routing prefixes (us.anthropic.,
 # openai/) are dropped first. So claude-opus-4-8 never takes claude-opus-4's
 # price, nor gpt-5.7 gpt-5's. A prefix ending in - or . names a family
-# (claude-opus- would take any opus without a closer line). OpenAI has no
-# one-hour cache tier: its CACHE_WRITE_1H repeats its 5-minute price. A
-# model without a line shows as unpriced, never $0.
+# (claude-opus- would take any opus without a closer line). OpenAI's
+# cache-write tiers are 30 minutes and 12 hours: both its columns hold the
+# 30-minute price (Codex transcripts log no cache writes, so neither is
+# used today). A model without a line shows as unpriced, never $0.
 #
 # Claude Haiku 5.5 has two tiers by prompt length (a request whose prompt,
 # cache reads and writes included, is over 100,000 tokens pays 5x). Costs
@@ -31,6 +32,8 @@
 # purpose. To price one, add its line to your own AGENTS_PRICES file.
 
 # Anthropic                    in     w5m    w1h    read   out
+claude-fable-5-2               8      10     16     0.20   40
+claude-mythos-5-2              8      10     16     0.20   40
 claude-fable-5-1               10     12.50  20     0.25   50
 claude-mythos-5-1              10     12.50  20     0.25   50
 claude-fable-5                 10     12.50  20     1      50
@@ -53,8 +56,11 @@ claude-haiku-4-5               1      1.25   2      0.10   5
 claude-3-5-haiku               0.80   1      1.60   0.08   4
 
 # OpenAI                       in     w5m    w1h    read   out
+gpt-6.2-astra                  8      10     10     0.40   40
+gpt-6.2-sol                    2      2.50   2.50   0.10   10
 gpt-6-astra                    10     12.50  12.50  1      50
 gpt-6.1-sol                    2      2.50   2.50   0.10   10
+gpt-6.1-terra                  1      1.25   1.25   0.05   5
 gpt-6-sol                      2      2.50   2.50   0.20   10
 gpt-6-luna                     0.10   0.125  0.125  0.01   0.50
 gpt-5.6-sol                    4      5      5      0.40   20

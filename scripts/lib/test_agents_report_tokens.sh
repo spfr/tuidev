@@ -198,27 +198,42 @@ pass "tokens: --since 24h (default), 7d, today, 1h; an empty window says so"
 # price; a 5-column line prices them as its one cache-write price.
 shipped="$(AGENTS_PRICES="" rep --view tokens 2>"$tmp/err")"
 [[ ! -s "$tmp/err" ]] || fail "the shipped prices: $(cat "$tmp/err")"
-[[ "$shipped" == *"TOKENS 2.6M in 8 model calls · 91% cache hits · \$1.46 API-equivalent"$'\n'* ]] || fail "shipped prices: the total:"$'\n'"$shipped"
+[[ "$shipped" == *"TOKENS 2.6M in 8 model calls · 91% cache hits · \$1.46 API-equivalent, 4% of tokens unpriced"$'\n'* ]] || fail "shipped prices: the total:"$'\n'"$shipped"
 [[ "$shipped" == *"   HIT     API \$"$'\n'"  claude-opus-5-5 "*" 96%     \$1.42"$'\n'"  gpt-6-luna "*" 80%     \$0.02"$'\n'"  claude-haiku-5 "*" 50%  unpriced"$'\n'"  claude-sonnet-5 "*"  0%     \$0.02"$'\n'* ]] \
     || fail "shipped prices: per model (opus 1h writes at 8, 5m at 5):"$'\n'"$shipped"
-[[ "$shipped" == *$'\n\n'"API \$: what these tokens would cost at API list prices (as of 2026-10-15), not what a subscription charges; 1 model unpriced, left out" ]] \
-    || fail "shipped prices: the note:"$'\n'"$shipped"
+# A row with priced and unpriced tokens (app: opus and haiku-5) is marked, in
+# the same column width; a row with none priced (Explore, subagent) says so.
+[[ "$shipped" == *$'\n'"  claude                    2.1M   80%     29k     110k    1.9M     28k   93%    \$1.44*"$'\n'* \
+   && "$shipped" == *$'\n'"  app                         2M   76%     22k     110k    1.9M     23k   93%    \$1.31*"$'\n'* \
+   && "$shipped" == *$'\n'"  app S1 "*"   \$1.31*"$'\n'* && "$shipped" == *$'\n'"  main "*" 93%     \$1.44"$'\n'* \
+   && "$shipped" == *$'\n'"  Explore "*" 50%  unpriced"$'\n'* && "$shipped" == *$'\n'"  subagent                      1    105k    4%  unpriced"$'\n'* ]] \
+    || fail "shipped prices: rows priced in part, whole and not at all:"$'\n'"$shipped"
+[[ "$shipped" == *$'\n\n'"API \$: what these tokens would cost at API list prices (as of 2026-11-19), not what a subscription charges"$'\n'"unpriced, left out of API \$ (* marks a row with some): claude-haiku-5 · to price one, add its line to ~/.config/tuidev/agents-prices.tsv" ]] \
+    || fail "shipped prices: the notes:"$'\n'"$shipped"
 json="$(AGENTS_PRICES="" rep --view tokens --json)"
-jqt "$json" '.priced and .prices == {"basis":"api_list","as_of":"2026-10-15"} and .totals.est_usd == 1.46 and .totals.unpriced_tokens == 105000 and ([.models[] | .est_usd] == [1.42, 0.02, null, 0.02])' \
+jqt "$json" '.priced and .prices == {"basis":"api_list","as_of":"2026-11-19"} and .totals.est_usd == 1.46 and .totals.unpriced_tokens == 105000 and ([.models[] | .est_usd] == [1.42, 0.02, null, 0.02])' \
     "shipped prices json" '[.prices, .totals, [.models[] | .est_usd]]'
+jqt "$json" '(.projects[] | select(.project == "app") | [.est_usd, .unpriced_tokens]) == [1.31, 105000] and (.clis[] | select(.cli == "codex") | .unpriced_tokens) == 0' \
+    "shipped prices json: a row priced in part keeps its cost and counts its unpriced tokens" '[.projects, .clis]'
 jqt "$json" '(.projects[] | select(.project == "app") | .est_usd) == 1.31 and (.sessions[] | select(.session == "S1") | .est_usd) == 1.31 and ([.origins[] | .est_usd] == [1.33, 0.09, null, 0.04])' \
     "shipped prices json: projects, sessions and origins" '[.projects, .sessions, .origins]'
 out="$(AGENTS_PRICES="$prices" rep --view tokens 2>"$tmp/err")"
 [[ "$out" == *"· \$1.68 API-equivalent"$'\n'* && "$out" == *"  claude-opus-5-5 "*" 96%     \$1.42"$'\n'"  gpt-6-luna "*" 80%     \$0.02"$'\n'"  claude-haiku-5 "*" 50%     \$0.21"$'\n'"  claude-sonnet-5 "*"  0%     \$0.03"$'\n'* ]] \
     || fail "your prices: opus-5-5 not at claude-opus-5's, haiku-5 at the claude- family's, sonnet-5 at your later line's:"$'\n'"$out"
+[[ "$out" != *unpriced* && "$out" != *'*'* && "$out" == *$'\n\n'"API \$: what these tokens would cost at API list prices (as of 2026-11-19), not what a subscription charges" ]] \
+    || fail "every token priced: still an unpriced note or mark:"$'\n'"$out"
 err="$(sed 's|.*/||' "$tmp/err")"
 [[ "$err" == "agents-prices.tsv:6: not MODEL_PREFIX IN CACHE_WRITE_5M CACHE_WRITE_1H CACHE_READ OUT (USD per million tokens), ignored"$'\n'"agents-prices.tsv:7: not MODEL_PREFIX"* \
    && "$(wc -l < "$tmp/err")" -eq 2 ]] || fail "prices: bad lines: $(cat "$tmp/err")"
 ( HOME="$tmp/ph"; mkdir -p "$HOME"; cp "$prices" "$HOME/p.tsv"; AGENTS_PRICES="~/p.tsv"
   [[ "$(rep --view tokens 2>/dev/null)" == *"\$1.68 API-equivalent"* ]] ) || fail "prices: a ~/ path"
-[[ "$(AGENTS_PRICES="$tmp/nonexistent.tsv" rep --view tokens)" == "$shipped" ]] || fail "a missing price file of yours changes the report"
+# Yours, missing or empty, changes nothing but the file the note names.
+out="$(AGENTS_PRICES="$tmp/nonexistent.tsv" rep --view tokens)"
+[[ "${out% to price one*}" == "${shipped% to price one*}" && "$out" == *"add its line to $tmp/nonexistent.tsv" ]] || fail "a missing price file of yours changes the report"
 printf '# only comments\n' > "$tmp/empty-prices.tsv"
-[[ "$(AGENTS_PRICES="$tmp/empty-prices.tsv" rep --view tokens)" == "$shipped" ]] || fail "a price file of yours without prices changes the report"
+out="$(AGENTS_PRICES="$tmp/empty-prices.tsv" rep --view tokens)"
+[[ "${out% to price one*}" == "${shipped% to price one*}" ]] || fail "a price file of yours without prices changes the report"
+( AGENTS_PRICES="~/p.tsv"; [[ "$(rep --view tokens 2>/dev/null)" == *"add its line to ~/p.tsv" ]] ) || fail "the note: a ~/ price file"
 out="$(AGENTS_PRICES=off rep --view tokens)"
 [[ "$out" != *'$'* && "$out" != *"API"* && "$out" != *unpriced* ]] || fail "AGENTS_PRICES=off, still a cost:"$'\n'"$out"
 jqt "$(AGENTS_PRICES=off rep --view tokens --json)" '(.priced | not) and .prices == null and .totals.est_usd == null and ([.models[] | .est_usd] | unique) == [null]' "off json" '.totals'
@@ -244,8 +259,13 @@ claude-haiku-4-5-20251001%claude-haiku-4-5 1 1.25 2 0.1 5
 claude-haiku-5-5%claude-haiku-5-5 0.1 0.125 0.2 0.01 0.5
 claude-haiku-5%-
 claude-sonnet-5-5%claude-sonnet-5-5 2 2.5 4 0.1 10
+claude-fable-5-2%claude-fable-5-2 8 10 16 0.2 40
+claude-mythos-5-2%claude-mythos-5-2 8 10 16 0.2 40
 claude-fable-5-1%claude-fable-5-1 10 12.5 20 0.25 50
 claude-fable-5%claude-fable-5 10 12.5 20 1 50
+gpt-6.2-astra%gpt-6.2-astra 8 10 10 0.4 40
+gpt-6.2-sol%gpt-6.2-sol 2 2.5 2.5 0.1 10
+gpt-6.1-terra%gpt-6.1-terra 1 1.25 1.25 0.05 5
 gpt-5%gpt-5 1.25 1.25 1.25 0.125 10
 gpt-5-2025-08-07%gpt-5 1.25 1.25 1.25 0.125 10
 gpt-5.7%-
@@ -257,7 +277,35 @@ gpt-6-luna%gpt-6-luna 0.1 0.125 0.125 0.01 0.5
 CASES
 [[ "$(_agents_awk_eval "lib_price" 'BEGIN { prices_load(pfs); printf "%.4f", usd_of(price_of("claude-opus-5-5"), 1000000, 1000000, 600000, 1000000, 1000000) }' \
     -v pfs="$(AGENTS_PRICES="" _agents_prices_files)" < /dev/null)" == 31.0000 ]] || fail "a million of each: 4 + 0.4 x 5 + 0.6 x 8 + 0.2 + 20 = 31"
-pass "costs: API list prices ship; yours change or add them; the longest prefix up to a version boundary (opus-4-8 never at opus-4's, gpt-5.7 never at gpt-5's); 1h writes at their price; unpriced, never \$0; off: no cost"
+# The current models, each priced by the shipped table: a new flagship
+# without a line fails here, not silently in everyone's totals. Add the
+# vendors' current models when they ship (prices.tsv names the pages).
+for m in claude-fable-5-2 claude-mythos-5-2 claude-opus-5-5 claude-sonnet-5-5 claude-haiku-5-5 \
+         gpt-6.2-astra gpt-6.2-sol gpt-6-astra gpt-6.1-sol gpt-6.1-terra gpt-6-sol gpt-6-luna; do
+    [[ "$(price "$m")" == "$m "* ]] || fail "a current model without its own shipped price: $m ($(price "$m"))"
+done
+# A window none of whose tokens is priced, and one whose unpriced share
+# rounds to 0: the share never reads 0% or 100% while it is neither.
+u="$tmp/unpriced"
+rows "$u" tokens.tsv <<EOF
+600${T}grok${T}app${T}G1${T}main${T}grok-a${T}5000${T}0${T}0${T}0${T}0${T}0${T}-
+590${T}grok${T}app${T}G1${T}main${T}grok-b${T}4000${T}0${T}0${T}0${T}0${T}0${T}-
+580${T}grok${T}app${T}G1${T}main${T}grok-c${T}3000${T}0${T}0${T}0${T}0${T}0${T}-
+570${T}grok${T}app${T}G1${T}main${T}grok-d${T}2000${T}0${T}0${T}0${T}0${T}0${T}-
+560${T}grok${T}app${T}G1${T}main${T}grok-e${T}1000${T}0${T}0${T}0${T}0${T}0${T}-
+EOF
+out="$(AGENTS_PRICES="" AGENTS_DATA_DIR="$u" agents_report --view tokens)"
+[[ "$out" == *"TOKENS 15k in 5 model calls · 0% cache hits · all tokens unpriced"$'\n'* && "$out" != *'$'[0-9]* && "$out" != *"API \$: what"* \
+   && "$out" == *$'\n\n'"unpriced, left out of API \$: grok-a, grok-b, grok-c and 2 more · to price one, add its line to ~/.config/tuidev/agents-prices.tsv" ]] \
+    || fail "nothing priced:"$'\n'"$out"
+[[ "$(AGENTS_PRICES="" AGENTS_DATA_DIR="$u" agents_report)" == *$'\n'"TOKENS  15k · 0% cache hits · 0% polling · all tokens unpriced"$'\n'* ]] || fail "summary: nothing priced"
+jqt "$(AGENTS_PRICES="" AGENTS_DATA_DIR="$u" agents_report --json)" '.tokens.est_usd == null and .tokens.unpriced_tokens == 15000' "summary json: nothing priced" '.tokens'
+rows "$u" tokens.tsv <<EOF
+600${T}claude${T}app${T}S1${T}main${T}claude-opus-5-5${T}0${T}0${T}0${T}1000000${T}0${T}0${T}you
+590${T}grok${T}app${T}G1${T}main${T}grok-a${T}1000${T}0${T}0${T}0${T}0${T}0${T}-
+EOF
+[[ "$(AGENTS_PRICES="" AGENTS_DATA_DIR="$u" agents_report --view tokens)" == *"· \$20.00 API-equivalent, <1% of tokens unpriced"$'\n'* ]] || fail "a small unpriced share reads 0%"
+pass "costs: API list prices ship; yours change or add them; the longest prefix up to a version boundary (opus-4-8 never at opus-4's, gpt-5.7 never at gpt-5's); 1h writes at their price; unpriced, never \$0, and every total, row and note that leaves tokens out says so; off: no cost; every current model priced"
 
 # AGENTS_PRICES is a setting: a path (absolute or ~/) or off, checked like the others.
 for good in /x/p.tsv '~/p.tsv' '' off; do _agents_conf_valid AGENTS_PRICES "$good" || fail "AGENTS_PRICES '$good' refused"; done
@@ -316,9 +364,12 @@ out="$(rep)"
 [[ "$out" == *$'\n'"TOKENS  2.6M · 91% cache hits · 4% polling · 3 compactions"$'\n'"  by model, agent, session and origin: agents report --view tokens"$'\n\n'"DENIALS  11 · 4 by the classifier · 6 by you · 1 by a safety check"$'\n'"  by command and what to try: agents report --view denials"$'\n\n'"CLEANUPS (0)"* ]] \
     || fail "summary: tokens and denials:"$'\n'"$out"
 [[ "$(AGENTS_PRICES="$prices" rep 2>/dev/null)" == *"TOKENS  2.6M · 91% cache hits · 4% polling · \$1.68 API-equivalent · 3 compactions"$'\n'* ]] || fail "summary: API-equivalent \$"
+[[ "$(AGENTS_PRICES="" rep)" == *"TOKENS  2.6M · 91% cache hits · 4% polling · \$1.46 API-equivalent, 4% of tokens unpriced · 3 compactions"$'\n'* ]] || fail "summary: the unpriced share"
+jqt "$(AGENTS_PRICES="" rep --json)" '.tokens.est_usd == 1.46 and .tokens.unpriced_tokens == 105000' "summary json: unpriced tokens" '.tokens'
+jqt "$(AGENTS_PRICES="$prices" rep --json 2>/dev/null)" '.tokens.unpriced_tokens == 0' "summary json: every token priced" '.tokens'
 [[ "$(AGENTS_DATA_DIR="$e" agents_report)" != *TOKENS* ]] || fail "summary: a Tokens line without token data"
-jqt "$(rep --json)" '.tokens == {"calls":8,"total":2637000,"in":129000,"cache_write":110000,"cache_write_1h":60000,"cache_read":2350000,"out":48000,"cache_hit_pct":90.8,"poll_tokens":105000,"poll_pct":4.0,"est_usd":null,"compactions":3} and .denials == {"count":11,"classifier":4,"user":6,"safety":1}' "summary json tokens" '[.tokens, .denials]'
-pass "summary: Tokens (total, cache hits, polling, API-equivalent \$ when priced, compactions) and Denials lines"
+jqt "$(rep --json)" '.tokens == {"calls":8,"total":2637000,"in":129000,"cache_write":110000,"cache_write_1h":60000,"cache_read":2350000,"out":48000,"cache_hit_pct":90.8,"poll_tokens":105000,"poll_pct":4.0,"est_usd":null,"unpriced_tokens":null,"compactions":3} and .denials == {"count":11,"classifier":4,"user":6,"safety":1}' "summary json tokens" '[.tokens, .denials]'
+pass "summary: Tokens (total, cache hits, polling, API-equivalent \$ when priced and the share unpriced, compactions) and Denials lines"
 
 # 7. The insights: past their thresholds, each naming its view; not below.
 ins="$(printf '%s\n' "$out" | sed -n '/^TOP INSIGHTS$/,/^$/p')"

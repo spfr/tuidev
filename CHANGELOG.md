@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The link watcher is back within about a minute of the laptop waking**, not five. [Remote](docs/remote.md)
 - **The docs no longer say typing at the desk gives a mirrored pane its size back**: it comes back when the phone stops showing that session. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
 - **The `AGENTS.md` template matches the sandbox**: `gh` and background tasks were described wrongly.
+- **`agents report` prices Claude Fable 5.2, Mythos 5.2 and the new GPT-6 Codex models**, and a cost that leaves tokens out says so: the share unpriced, a `*` on a row priced in part, the models to price. [API-equivalent cost](docs/agent-workflows.md#tokens-and-denials)
 
 ## [3.25.0] - 2026-11-18
 

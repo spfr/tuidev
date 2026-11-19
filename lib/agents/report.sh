@@ -68,7 +68,16 @@ _agents_report_awk() {
         -v hf="$d/history.tsv" -v ef="$d/events.tsv" -v rf="$d/runs.tsv" \
         -v tf="$d/tokens.tsv" -v cf="$d/compacts.tsv" -v df="$d/denials.tsv" -v lf="$d/limits.tsv" -v uf="$d/uses.tsv" \
         -v waf="$d/waits.tsv" -v ntf="$d/notify.tsv" -v PARKED_S=$((AGENTS_PARKED_MIN * 60)) \
-        -v pfs="$(_agents_prices_files)" -v invf=/dev/fd/3 3<<<"$inv"
+        -v pfs="$(_agents_prices_files)" -v pfmine="$(_agents_prices_mine)" -v invf=/dev/fd/3 3<<<"$inv"
+}
+
+# _agents_prices_mine — your price file as the reports name it (~/ for
+# $HOME), the one to add a missing price to; nothing with AGENTS_PRICES=off.
+_agents_prices_mine() {
+    local f="${AGENTS_PRICES:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev/agents-prices.tsv}" t='~'
+    [[ "$f" != off ]] || return 0
+    [[ "$f" != "$HOME"/* ]] || f="$t/${f#"$HOME"/}"
+    printf '%s' "$f"
 }
 
 # _agents_prices_files — the price files a report reads, "|"-separated, in
