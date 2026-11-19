@@ -577,7 +577,14 @@ _agents_mem_guard_state() {
     fi
     # The holder lives but ps can't say whose it is, or ps reads nothing.
     if [[ $rc -eq 2 ]] || ! _agents_mem_ps_ok; then echo unknown; return; fi
-    if [[ -f "$HOME/Library/LaunchAgents/$AGENTS_MEM_LABEL.plist" ]]; then echo stopped; else echo none; fi
+    if [[ -f "$(_agents_mem_unit)" ]]; then echo stopped; else echo none; fi
+}
+
+# The file that runs the guard at login: the LaunchAgent on macOS, the systemd
+# user service on Linux.
+_agents_mem_unit() {
+    if [[ "$OSTYPE" == darwin* ]]; then echo "$HOME/Library/LaunchAgents/$AGENTS_MEM_LABEL.plist"
+    else echo "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/tuidev-memguard.service"; fi
 }
 
 # _agents_mem_guard_loop — `agents mem guard`: a look every AGENTS_MEM_POLL
@@ -709,9 +716,13 @@ agents_mem() {
                 [[ -s "$AGENTS_DATA_DIR/memory.tsv" ]] || { echo "no memory incidents recorded"; return 0; }
                 tail -n "${2:-20}" "$AGENTS_DATA_DIR/memory.tsv" ;;
         restart)
-                [[ "$OSTYPE" == darwin* ]] || { echo "agents: restart is for the macOS LaunchAgent; run 'agents mem guard' in a tmux pane" >&2; return 2; }
-                [[ -f "$HOME/Library/LaunchAgents/$AGENTS_MEM_LABEL.plist" ]] \
-                    || { echo "agents: no LaunchAgent ($AGENTS_MEM_LABEL): tuidev install --pack monitoring" >&2; return 1; }
+                [[ -f "$(_agents_mem_unit)" ]] \
+                    || { echo "agents: the memory guard is not installed: tuidev install --pack monitoring" >&2; return 1; }
+                if [[ "$OSTYPE" != darwin* ]]; then
+                    systemctl --user restart tuidev-memguard.service \
+                        || { echo "agents: systemd did not restart it; run 'agents mem guard' in a tmux pane" >&2; return 1; }
+                    return 0
+                fi
                 launchctl bootstrap "gui/$UID" "$HOME/Library/LaunchAgents/$AGENTS_MEM_LABEL.plist" 2>/dev/null || true
                 launchctl kickstart -k "gui/$UID/$AGENTS_MEM_LABEL" ;;
         *)      echo "usage: agents mem [show|check [-n]|guard|log [N]|restart]" >&2; return 2 ;;
