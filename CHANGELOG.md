@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.27.0] - 2026-11-19
+
 ### Changed
 
 - **Agents' sandboxed commands (on Codex, every command) no longer see `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or `OPENAI_API_KEY`**; the CLIs keep their own login. [Secrets](docs/secrets.md#what-an-agent-can-reach)
