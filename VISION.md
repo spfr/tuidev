@@ -1,62 +1,51 @@
 # Vision
 
-tuidev is an opinionated terminal dev environment for AI coding agents: modern CLI tools, Claude Code and Codex sandboxed by default and orchestrated, easy to watch, and installed in layers you can undo. macOS is the daily driver, and Linux nodes are first-class for the remote path. It is a sharp system with a small core, not a kitchen-sink bootstrapper.
+tuidev is for running coding agents anywhere and seeing everything they do: start them on a laptop, a VM or a box that stays on, pick them up from your phone, and know at any moment which one needs you and what each one runs, costs and leaves behind. It is how one team runs agents every day, shared in the open. What it does today and what comes next are in [docs/roadmap.md](docs/roadmap.md).
+
+## Why it exists
+
+Agents now run for hours, several at a time, on more than one machine. The tools that run them are good and keep getting better: Claude Code and Codex, Herdr, tmux, Ghostty. Each does its own part well. What none of them is meant to do is the setup around all of them: one view of every session on every machine, an account of what agents leave running and what they cost, one credential policy across both CLIs, and an install you can preview and undo. tuidev is that setup, as shell scripts and configs. It installs those tools and adds to them; it replaces none of them.
 
 Priorities, in order:
 
-1. A fast, clean terminal for running AI coding agents next to a GUI editor.
-2. Safe-by-default execution for those agents, and a clear view of what they run.
-3. Remote and mobile continuity, on the machines that need it, without making that the whole product.
-
-The forward-looking view (fleet-scale agents, sandbox succession, watch-list criteria) is in [docs/roadmap.md](docs/roadmap.md).
+1. **Work from anywhere.** Any machine, VM or phone, over plain ssh, with agents that keep running when you leave.
+2. **See everything.** Which agent needs you, what it runs, what it costs, what it left behind.
+3. **Safe by default.** Agents confined and kept away from your keys, without getting in the way of their work.
+4. **Reversible.** Every change previewed, recorded and removable.
 
 ## Principles
 
-**Your editor is a GUI; the terminal runs agents.** VS Code and Cursor do code review, debugging and navigation better than a terminal editor does. The terminal's job is a fast shell and an agent CLI, side by side. Neovim still ships, as an optional `nvim` pack, for when a terminal editor is genuinely what you want — not because every session needs one.
+**Built on open tools, replacing none.** Herdr owns the panes and the phone app, tmux keeps sessions alive, Ghostty is the terminal, SwiftBar draws the menu, and the CLIs bring their own sandboxes and background sessions. tuidev configures them and connects them. Host integrations stay thin: `agents` holds the logic, and a host supplies panes and a place to show state, so when a host does something better, tuidev's version can go.
 
-**Native sandboxes first, `sbx` for everything else.** Claude Code and Codex each ship their own sandbox now, good enough to run unwrapped. tuidev turns those on by default (`sandbox.enabled` in Claude's settings, `sandbox_mode = "workspace-write"` in Codex's) instead of routing every invocation through a shell wrapper. `sbx`, a thin `sandbox-exec` wrapper, stays as a general-purpose tool: sandbox any command, or give Codex an optional kernel-level boundary (`sbx -- codex -s danger-full-access -a on-request`). The two never nest — pick one per process tree.
+**Local, and plain ssh.** Everything `agents` shows comes from local files and from your own machines over ssh; tuidev runs no service for anything to connect to, and sends nothing to a server you did not name (an [ntfy](https://ntfy.sh) topic for phone pushes is yours to set). No telemetry, ever: the one request tuidev makes of its own is a daily look at which release is the latest, and `tuidev latest off` stops it.
 
-**Durability where it matters.** A laptop session survives a reboot because the CLIs save their own state, and because you reopen the editor and the terminal tab. Durability earns its keep on a machine that has to outlive your laptop lid: an always-on Linux node you reach over Tailscale or SSH, where tmux (or Herdr) keeps an agent running while you're away. tmux is an optional `tmux` pack, not baked into every profile.
+**Native sandboxes first, `sbx` for everything else.** Claude Code and Codex each ship a sandbox good enough to run unwrapped, so tuidev turns those on (`sandbox.enabled`, `sandbox_mode = "workspace-write"`) instead of routing every run through a wrapper. Where one falls short, tuidev says so: Codex's `workspace-write` does not block reads, so for credential-sensitive work Codex runs under `sbx`, a thin `sandbox-exec` wrapper that also confines any other command. The two never nest.
 
-**Layered and reversible.** Profiles are shortcuts over packs, and every optional tool — including tmux and Neovim now — is a pack. Config is written as managed blocks or adopted, never clobbered. Every install is recorded so uninstall removes exactly that. Migrations repair the past once per machine.
+**Your editor is a GUI; the terminal runs agents.** VS Code and Cursor do review, debugging and navigation better than a terminal editor. The terminal's job is a fast shell and an agent CLI, side by side. Neovim ships as an optional pack for when a terminal editor is what you want.
 
-**CLI-agnostic core.** The terminal layer doesn't depend on any AI CLI. Claude Code (primary) and Codex (secondary) are one opt-in pack. When a CLI is deprecated or a new one appears, the core doesn't move.
+**Durability where it matters.** A laptop session survives a reboot because the CLIs save their own state. Durability earns its keep on a machine that has to outlive your laptop lid, an always-on node you reach over Tailscale or SSH, where tmux, Herdr or herdr-core keep an agent running while you are away. So tmux is a pack, included by the `remote` profile, not baked into every install.
 
-**Public means generic.** The repo ships best practices only. Hosts, IPs, usernames and hardware stay in gitignored `*.local` files. No telemetry, ever: the one request tuidev makes of its own is a daily look at which release is the latest, and `tuidev latest off` stops it.
+**Layered and reversible.** Profiles are shortcuts over packs, and every optional tool is a pack. Config is written as managed blocks or adopted, never clobbered. Every install is recorded, so uninstall removes exactly that, and migrations repair the past once per machine. A first install looks small; depth is there when you look for it.
+
+**CLI-agnostic core.** The terminal layer doesn't depend on any AI CLI. Claude Code and Codex are one opt-in pack, so when a CLI is deprecated or a new one appears, the core doesn't move.
+
+**Public means generic.** The repo ships best practices only. Hosts, IPs, usernames and hardware stay in gitignored `*.local` files.
 
 ## What we take, and what we refuse
 
-From [Omarchy](https://omarchy.org) and [Omacosy](https://github.com/paulsp94/omacosy), we take:
+From [Omarchy](https://omarchy.org) and [Omacosy](https://github.com/paulsp94/omacosy) we take a small core with explicit packs, one palette applied everywhere (one `palette.toml` renders tmux, Ghostty and Starship: [docs/theming.md](docs/theming.md)), no telemetry, and idempotent installs with a manifest-driven uninstall.
 
-- **A small core with explicit packs.** A tool that isn't essential is `--pack NAME` or `--extras` — that now includes tmux and Neovim.
-- **One palette, applied everywhere.** One `palette.toml` renders tmux, Ghostty and Starship (see [docs/theming.md](docs/theming.md)).
-- **No telemetry.** Nothing reports on you. The daily update check asks github.com for a release tag and sends nothing else.
-- **Idempotent installs and manifest-driven uninstall.**
+We refuse Omarchy as a product (Hyprland, an Arch desktop and a distro installer are the wrong OS and the wrong layer), desktop-environment experiments (tiling window managers, Super-key remaps, Karabiner as root; the `ui` pack stays Ghostty and Rectangle), and executable theme or plugin systems: code that runs at theme-switch time is a supply-chain surface ([basecamp/omarchy#5946](https://github.com/basecamp/omarchy/discussions/5946)). Themes here are static files that ship with the repo.
 
-From OpenClaw's 2.0 rework, we take three lessons: complexity should be progressive (a first install looks small, and depth is discoverable); CI scales with pack count (every pack gets lint, validation and contract tests); and agents orchestrate existing tools through their CLIs and sockets rather than reimplementing them, which is why `sbx` wraps `sandbox-exec` instead of replacing it.
+## What tuidev will not become
 
-We refuse:
-
-- **Omarchy as a product.** Hyprland, an Arch desktop and a distro installer are the wrong OS and the wrong layer.
-- **Desktop-environment experiments:** tiling window managers, Super-key remaps, Karabiner-as-root. The `ui` pack stays lean: Ghostty and Rectangle.
-- **Executable theme and plugin systems.** Code that runs at theme-switch time is a supply-chain surface (see [basecamp/omarchy#5946](https://github.com/basecamp/omarchy/discussions/5946)). Themes here are static files that ship with the repo.
-- **Kitchen-sink CLI lists.** Speed comes from a short core and a runtime that knows agent state, not from another `ls` replacement.
-
-## Non-goals
-
-- A terminal IDE. Ten prebuilt tmux splits and a heavier Neovim config were the most expensive thing this repo maintained, and the maintainer's own shell history shows they went unused: the terminal's job is a shell and an agent, and the editor's job is everything else.
-- A giant personal dotfiles repo, or a kitchen-sink Homebrew installer.
-- A showcase for every modern CLI.
-- AI agents running unsandboxed on the host by default.
-- In-editor ACP agents. Users can add them, but the repo won't ship them.
-- A team or deployment secret manager. `secret` is one person's tokens on one machine ([docs/secrets.md](docs/secrets.md#when-to-use-something-else)).
-- Non-FOSS defaults. Docker Desktop and OrbStack are never installed.
-- Piping third-party install scripts into a shell for you. When a package manager can't supply a tool, the installer prints the official command instead. tuidev's own `get.sh` is the one script it asks you to pipe, and it is short enough to read first.
-
-## Sources
-
-- tmux sessions and re-attach: <https://github.com/tmux/tmux/wiki/Getting-Started>
-- Ghostty features: <https://ghostty.org/docs/features>
-- Tailscale SSH and check mode: <https://tailscale.com/docs/features/tailscale-ssh>
-- mosh: <https://mosh.org/>
-- Apple containerization: <https://github.com/apple/container>
+- **A terminal, a multiplexer or a phone app.** Ghostty, tmux and Herdr do that.
+- **An agent, or an installer for one.** Claude Code and Codex update themselves.
+- **A hosted service.** No accounts, no server, no telemetry.
+- **A terminal IDE.** Prebuilt tmux layouts and a heavy Neovim config were once the most expensive thing this repo maintained, and they went unused.
+- **A dotfiles dump, a kitchen-sink installer or a showcase of every modern CLI.** Speed comes from a short core and a runtime that knows agent state, not from another `ls` replacement.
+- **Agents unsandboxed by default.**
+- **In-editor agents (ACP) shipped by default.** You can add them; the repo won't ship them.
+- **A team or deployment secret manager.** `secret` is one person's tokens on one machine ([docs/secrets.md](docs/secrets.md#when-to-use-something-else)).
+- **Non-FOSS defaults.** Docker Desktop and OrbStack are never installed.
+- **Third-party install scripts piped into a shell for you.** When a package manager can't supply a tool, the installer prints the official command. tuidev's own `get.sh` is the one script it asks you to pipe, and it is short enough to read first.
