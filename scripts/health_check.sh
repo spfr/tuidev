@@ -1135,7 +1135,7 @@ check_doctor() {
         print_info "agents doctor: skipped: this agents has no doctor (tuidev update --configs brings it)"
         return 0
     elif [[ -z "$out" ]]; then
-        print_warning "agents doctor did not run (exit $rc; agents --help says why)"
+        print_warning "agents doctor gave no answer (exit $rc; agents --help says why)"
         OPT_WARN=$((OPT_WARN + 1))
         return 0
     fi

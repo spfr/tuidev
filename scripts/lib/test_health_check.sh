@@ -382,7 +382,7 @@ out="$(PRE="$tmp/dr" hc --fix)"; has "--fix: agents mem restart (memory guard)";
 grep -q "agents doctor --tsv --fix$" "$RT.calls" || fail "doctor --fix: $(cat "$RT.calls")"
 out="$(PRE="$tmp/dr" hc --fix --dry-run)"; grep -q "agents doctor --tsv --fix -n$" "$RT.calls" || fail "doctor --fix -n: $(cat "$RT.calls")"
 out="$(DOCTOR_RC=2 PRE="$tmp/dr" hc)"; has "agents doctor: skipped: this agents has no doctor"
-out="$(DOCTOR_RC=1 PRE="$tmp/dr" hc)"; has "⚠ agents doctor did not run (exit 1; agents --help says why)"
+out="$(DOCTOR_RC=1 PRE="$tmp/dr" hc)"; has "⚠ agents doctor gave no answer (exit 1; agents --help says why)"
 pass "agents doctor's rows: counted as the check's own, --fix and -n passed on, an agents without doctor is a skip"
 
 echo
