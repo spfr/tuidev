@@ -69,7 +69,7 @@ _agents_why_text() {
         keepawake) what="keep-awake helper" ;;
         session) what="nested agent session" ;;
         agent) what="agent session" ;;
-        hog)   what="CPU hog" ;;
+        hog)   what="hog" ;;
         *)     what="process" ;;
     esac
     [[ ${#cmd} -le 200 ]] || cmd="${cmd:0:197}..."

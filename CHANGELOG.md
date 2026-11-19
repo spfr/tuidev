@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`agents why` on a process flagged for its memory says how much it holds**, not only its CPU. [Agent workflows](docs/agent-workflows.md#flagged-is-it-safe-to-stop)
 - **`tuidev update` no longer says "Update Complete" when the download or the pull failed**: it ends with "not updated" and exit 1. [Updating](docs/updating.md)
 - **A migration that fails mid-update says where the install stands and how to finish or roll back**; the next update finishes it. [Updating](docs/updating.md)
 - **One update or install at a time.** A second one, from the terminal, the menu bar or Herdr, says who holds the lock. [Updating](docs/updating.md)

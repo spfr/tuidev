@@ -416,6 +416,8 @@ for p in 6000 6100 60829 5010 5020 5030 5040 5050 5060 5070 5080 5090 1010 1030 
     case_ "why-$p" why "$p"
 done
 case_ why-token why 6000@Wed_Oct_14_08:10:00_2026
+# Flagged for its memory, not its CPU: the verdict says how much it holds.
+( FIX_PS="$(printf '%s\n' "$FIX_PS" | sed '/Messages.app/s/ 39248 / 9437184 /')"; case_ why-memory-41198 why 41198 )
 case_ why-moved why 6000@Mon_Jan_01_00:00:00_2024
 case_ why-none why 900
 case_ why-copy why --copy 5010

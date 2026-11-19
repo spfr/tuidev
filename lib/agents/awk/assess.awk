@@ -169,7 +169,12 @@ function judge(f,   t, cls, fl, ports, root, cwd, w, have, rd, hv, quiet, last, 
             hint("leave it: stopping it only restarts it. If it stays busy for hours, restart the machine")
             nope = "it is a system service"
         } else {
-            verdict("check", "medium", "hog", "check first \342\200\224 " f[3] " uses " int(f[5] + 0.5) "% CPU")
+            # Flagged for its memory: say so, the CPU figure is beside the point.
+            if (ENVIRON["AGENTS_MEM_WARN_KIB"] + 0 > 0 && f[7] + 0 >= ENVIRON["AGENTS_MEM_WARN_KIB"] + 0) {
+                fact("holds " sprintf("%.1f", f[7] / 1048576) "G of memory (agents mem shows the guard's warning and stop sizes)")
+                verdict("check", "medium", "hog", "check first \342\200\224 " f[3] " holds " sprintf("%.1f", f[7] / 1048576) "G of memory")
+            } else
+                verdict("check", "medium", "hog", "check first \342\200\224 " f[3] " uses " int(f[5] + 0.5) "% CPU")
             hint("quit it normally if you can; agents term " tok " sends it SIGTERM")
             nope = "it is not an agent leftover"
         }

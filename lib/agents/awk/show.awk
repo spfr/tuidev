@@ -81,7 +81,7 @@ function title(   s, c) {
     else if (cls == "session") s = "nested " rkind " session · " dash(proj)
     else if (cls == "keepawake") s = "keep-awake · " c
     else if (cls == "stale") s = "stale " (kind == "server" ? "dev server" : "helper") " · " c
-    else if (cls == "hog") s = label " · CPU hog"
+    else if (cls == "hog") s = label " · hog"
     else if (cls == "child") s = c
     else s = c
     return s
