@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A sampler of its own, once a minute, with or without the menu bar**: a LaunchAgent on macOS, a systemd user timer on Linux, a 25 ms no-op when the menu just sampled; history, tokens, waits and limits stay current, and auto-reap runs where no menu does. `AGENTS_SAMPLER=0` turns it off. [History](docs/agent-workflows.md#history-and-agents-report)
+- **The memory guard runs on Linux too**, as a systemd user service. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
+- **`agents`, `agents report` and `agents limits` say when no sampler has run**, and how to start one; `agents report` ends with "data as of", and the JSON carries `sampled_at`. [History](docs/agent-workflows.md#history-and-agents-report)
+
 ### Changed
 
 - **`agents statusline`, `bar poke` and the wait hooks start about twice as fast** (17 ms, was 32 ms): they load only the modules they use. [Engineering](docs/engineering.md)
@@ -25,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The docs no longer say typing at the desk gives a mirrored pane its size back**: it comes back when the phone stops showing that session. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
 - **The `AGENTS.md` template matches the sandbox**: `gh` and background tasks were described wrongly.
 - **`agents report` prices Claude Fable 5.2, Mythos 5.2 and the new GPT-6 Codex models**, and a cost that leaves tokens out says so: the share unpriced, a `*` on a row priced in part, the models to price. [API-equivalent cost](docs/agent-workflows.md#tokens-and-denials)
-- **The README claims only what ships**: plain Codex can read `~/.ssh` (`sbx` closes it), the cleanup hooks act in auto mode, Linux has no memory-guard service, the Node heap limit is about Node's own default. [Agent workflows](docs/agent-workflows.md#cleanup-hooks-claude-code)
+- **The README claims only what ships**: plain Codex can read `~/.ssh` (`sbx` closes it), the cleanup hooks act in auto mode, the Node heap limit is about Node's own default. [Agent workflows](docs/agent-workflows.md#cleanup-hooks-claude-code)
 
 ## [3.25.0] - 2026-11-18
 
