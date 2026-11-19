@@ -118,7 +118,11 @@ agents_main() {
         runs)     agents_runs "$@" ;;
         limits)   agents_limits "$@" ;;
         statusline) agents_statusline ;;   # Claude Code's statusLine: JSON on stdin
-        sample)   agents_sample ;;
+        sample)   case "${1:-}" in
+                      "")          agents_sample ;;
+                      --scheduled) agents_sample_scheduled ;;
+                      *)           echo "usage: agents sample [--scheduled]" >&2; return 2 ;;
+                  esac ;;
         config)   agents_config "$@" ;;
         cwd)      agents_token_cwd "$@" ;;
         copy-path) local c; c="$(agents_token_cwd "$@")" || return 1

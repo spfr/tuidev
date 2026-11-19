@@ -74,7 +74,8 @@ _AGENTS_MODULES="config palette glyph util release snapshot classify mcp lazy wh
 # (config first), and the function it calls with the words after those (a
 # word after the function's name is given first). `hc auto` sits in front of
 # every agent typed in a Herdr pane, `statusline` runs after each message of
-# Claude Code's, `bar poke` and the wait hooks at its tool calls.
+# Claude Code's, `bar poke` and the wait hooks at its tool calls, `sample
+# --scheduled` every minute (and mostly finds nothing due).
 # test_agents_install.sh checks that each list defines every function and
 # setting its call can reach.
 _AGENTS_FAST_PATHS=(
@@ -83,6 +84,7 @@ _AGENTS_FAST_PATHS=(
     "bar poke|config util bar|agents_bar_poke"
     "hook wait-start|config util events snapshot classify where notify bar hooks|_agents_hook_wait wait-start"
     "hook wait-end|config util events snapshot classify where notify bar hooks|_agents_hook_wait wait-end"
+    "sample --scheduled|config util bar history|agents_sample_scheduled"
 )
 # The awk programs the modules run (awk/NAME.awk; test_agents_install.sh keeps
 # this list and the directory in step).

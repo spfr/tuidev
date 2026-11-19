@@ -221,8 +221,10 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
                                Antigravity): used % per window on a gauge marking the
                                time gone, under or over pace (with the time left at
                                this rate), when it resets, how old the reading is
-  agents sample                record one sample; the menu bar and 'agents watch'
-                               do it every minute (cron it where neither runs)
+  agents sample [--scheduled]  record one sample; the monitoring pack's sampler
+                               runs --scheduled every minute: a sample unless one
+                               ran within 55 s, then (AGENTS_AUTO_REAP=1, no menu
+                               running) agents reap --auto
 
 ACT
   agents kill [OPTS] PID...    SIGTERM the whole tree, descendants first, then
@@ -231,8 +233,8 @@ ACT
     --stuck                    reap: also stop polling loops flagged stuck
     --auto                     reap without asking only what is safe to: stale
                                trees that listen on no port, loops stuck on a file
-                               quiet for 2 x AGENTS_WAIT_STUCK (cron; the menu runs
-                               it with AGENTS_AUTO_REAP=1)
+                               quiet for 2 x AGENTS_WAIT_STUCK (with
+                               AGENTS_AUTO_REAP=1 the menu or the sampler runs it)
   agents term [OPTS] PID...    SIGTERM one process (for hogs), not its tree
     -n, --dry-run              show what would be signalled
     -y, --yes                  don't ask (required when stdin is not a terminal)

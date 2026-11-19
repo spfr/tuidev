@@ -11,8 +11,8 @@
 # idle (it clears done once you look at the pane, so idle is parked at once:
 # nothing is left to review). Claude Code's hooks say it for a session outside
 # Herdr (waiting/, hooks.sh): blocked or done, from the moment it began. With
-# neither (Codex in a plain tab, history off, no sample in the last hour, or
-# Herdr not answering), all that can be known is whether it does anything:
+# neither (Codex in a plain tab, history off, no sample in the last hour, which
+# `agents` then says, or Herdr not answering), all that can be known is whether it does anything:
 # running while it runs a command or uses _AGENTS_BUSY_CPU% of a core. Otherwise
 # it could as well be blocked as finished, so it gets a row of its own: parked
 # means we know.
@@ -34,13 +34,14 @@
 #   (awk/triage_view.awk) and `agents watch`.
 # Uses: config.sh, util.sh, palette.sh, snapshot.sh (agents_collect), assess.sh
 #   (_agents_with_needs), system.sh, awake.sh, lid.sh (_agents_lid_warning),
-#   memory.sh (_agents_swap_high), history.sh (_agents_sample_kick).
+#   memory.sh (_agents_swap_high), history.sh (_agents_sample_kick,
+#   _agents_sampler_say).
 # Public: agents_triage, agents_watch, _agents_triage_rows, _agents_waits_state,
 #   _agents_waitsum_line.
 
 _AGENTS_BUSY_CPU=3
-# _AGENTS_SAMPLE_FRESH — samples run a minute apart while the menu or `agents
-# watch` does: an older record has missed whatever happened since.
+# _AGENTS_SAMPLE_FRESH — samples run a minute apart (the pack's sampler, the
+# menu, `agents watch`): an older record has missed whatever happened since.
 _AGENTS_SAMPLE_FRESH=180
 
 # _agents_triage_rows RECORDS — the triage rows (awk/triage.awk). No fork but
@@ -118,12 +119,16 @@ _agents_triage_render() {
     _agents_lid_warning
 }
 
-# agents_triage — `agents`.
+# agents_triage — `agents`. A dim line says so when no sampler has run for
+# a while (history.sh: waits, tokens and the history are behind); `agents
+# watch` takes its own samples and needs none.
 agents_triage() {
-    local r
+    local r now
     _agents_awake_prime
     r="$(agents_collect)" || return 1
     _agents_triage_render "$r"
+    _agents_now now
+    _agents_sampler_say "$now"
     # Last, and only while a newer tuidev is out (release.sh).
     ! _agents_release || printf '%stuidev %s is out (you have %s): tuidev update%s\n' "$C_DIM" "$REPLY" "$REPLY_HAVE" "$C_0"
 }

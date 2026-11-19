@@ -348,6 +348,11 @@ case_ triage
 # A narrow pane: agents_main takes the width from a terminal, and here is none.
 { ( AGENTS_WIDTH=52; agents_triage ) 2>&1 < /dev/null; echo "[rc=0]"; } | norm > "$tmp/out/triage-narrow"
 ( _agents_utf8() { return 1; }; case_ triage-ascii )
+# No sample for half an hour: one dim line at the end says so, and what starts
+# a sampler (the same words on macOS and Linux without the timer's file).
+cp "$AGENTS_DATA_DIR/sample.stamp" "$tmp/stamp.keep"; echo $((FAKE_NOW - 1800)) > "$AGENTS_DATA_DIR/sample.stamp"
+case_ triage-stale
+mv "$tmp/stamp.keep" "$AGENTS_DATA_DIR/sample.stamp"
 case_ ls ls
 case_ ls-list list
 case_ ps ps
@@ -418,10 +423,11 @@ case_ report-today report --since today
 case_ report-json report --json
 case_ report-bad report --since yesterday
 # The run ledger's views: the same history and events, without a ledger and
-# with scripts/lib/testdata/agents-runs.tsv counted back from now.
+# with scripts/lib/testdata/agents-runs.tsv counted back from now. Without
+# a ledger, no sample ran either: the report says no sampler has.
 mkdir -p "$tmp/noledger" "$tmp/runs"
 cp "$AGENTS_DATA_DIR/history.tsv" "$AGENTS_DATA_DIR/events.tsv" "$tmp/noledger/"
-cp "$AGENTS_DATA_DIR/history.tsv" "$AGENTS_DATA_DIR/events.tsv" "$tmp/runs/"
+cp "$AGENTS_DATA_DIR/history.tsv" "$AGENTS_DATA_DIR/events.tsv" "$AGENTS_DATA_DIR/sample.stamp" "$tmp/runs/"
 ( AGENTS_DATA_DIR="$tmp/noledger" case_ report-runs-noledger report --view runs )
 awk -F '\t' -v OFS='\t' -v n="$FAKE_NOW" '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { $1 = n - $1; $2 = n - $2 } { print }' \
     "$SCRIPT_DIR/testdata/agents-runs.tsv" > "$tmp/runs/runs.tsv"
@@ -438,6 +444,7 @@ awk -F '\t' -v OFS='\t' -v n="$FAKE_NOW" '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ { $
 # The waits view: sessions Herdr showed blocked or done (waits.tsv) and the
 # notifications notify.sh logged (notify.tsv), counted back from now.
 mkdir -p "$tmp/waits"
+cp "$AGENTS_DATA_DIR/sample.stamp" "$tmp/waits/"
 # Oldest first, as a sample appends them. billing was blocked for the last 25
 # minutes, after 80 minutes done: one stretch that turns parked past its hour.
 awk -v n="$FAKE_NOW" 'BEGIN {

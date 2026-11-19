@@ -8,8 +8,10 @@ function vhead(v) {
 }
 # jhead VIEW — the start of a view's JSON object (the caller closes it).
 function jhead(v) {
-    return sprintf("{\"schema_version\":1,\"view\":%s,\"since\":%d,\"until\":%d,\"window\":%s,\"ledger\":%s", js(v), start, now, js(label), jb(RL))
+    return sprintf("{\"schema_version\":1,\"view\":%s,\"since\":%d,\"until\":%d,\"window\":%s,\"ledger\":%s,\"sampled_at\":%s", js(v), start, now, js(label), jb(RL), jsampled())
 }
+# jsampled — the newest sample's epoch (sample.stamp), null when none ran.
+function jsampled() { return (sampled ~ /^[0-9]+$/) ? sampled : "null" }
 # th / tr: a dimmed header row and a row of the command tables.
 function th(s) { printf "%s%s%s\n", dim, s, e }
 function cmdcells(k) { gsplit(k); return "  " lc(cut(proj(G_P), 20), 20) " " lc(cut(G_C, 12), 12) " " lc(G_J, 7) }

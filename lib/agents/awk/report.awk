@@ -5,7 +5,8 @@
 # price files (pfs, "|"-separated, "" for none; pfmine, yours as the notes
 # name it) and, for the context view,
 # the configured inventory (invf); rawb: where tokens.tsv's rows stop being
-# kept by day. Runs in BEGIN: it reads no input. Needs lib_json, lib_sort,
+# kept by day; sampled: the newest sample's epoch (empty: none), each JSON
+# object's sampled_at. Runs in BEGIN: it reads no input. Needs lib_json, lib_sort,
 # lib_fmt, lib_price, lib_waits, report_fmt, report_runs, report_tokens,
 # report_denials, report_context, report_waits, report_insights and
 # report_views.
@@ -80,7 +81,7 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
     for (i = 0; i < 24; i++) if (hc[i] > 0) ho[++nh] = i
     insights()
     if (json) {
-        o = sprintf("{\"schema_version\":1,\"since\":%d,\"until\":%d,\"window\":%s,\"history\":%s,\"cpu_s\":%d,\"jobs\":[", start, now, js(label), (hist == 1 ? "true" : "false"), tot)
+        o = sprintf("{\"schema_version\":1,\"since\":%d,\"until\":%d,\"window\":%s,\"history\":%s,\"sampled_at\":%s,\"cpu_s\":%d,\"jobs\":[", start, now, js(label), (hist == 1 ? "true" : "false"), jsampled(), tot)
         for (i = 1; i <= nj; i++) o = o (i > 1 ? "," : "") sprintf("{\"job\":%s,\"cpu_s\":%d,\"pct\":%s}", js(jo[i]), jc[jo[i]], pc1(jc[jo[i]], tot))
         o = o "],\"projects\":["
         for (i = 1; i <= np; i++) {
@@ -101,7 +102,7 @@ function summary(   ln, f, t, c, i, k, p, o, s, nm) {
     }
     if (!any && !RL && !TL && !DL && !WaL) {
         if (hist != 1) print "agents report: history is off (AGENTS_HISTORY=0 in agents.conf); nothing is recorded"
-        else print "agents report: no history yet; it starts within a minute of the menu running (or of agents watch; agents sample takes one now)"
+        else print "agents report: no history yet; it starts with the first sample, once a minute (agents sample takes one now)"
         return
     }
     printf "%sagents report%s %s\302\267 %s%s\n", b, e, dim, when, e

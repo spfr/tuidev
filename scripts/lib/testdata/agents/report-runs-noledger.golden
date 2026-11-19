@@ -27,4 +27,5 @@ CLEANUPS (4)
   why          manual 1 · stale 1 · stuck 1 · subagent-end 1
   how          auto 1 · hook 1 · kill 1 · reap 1
   left behind  myapp 2 · app 1
+no sampler has run yet: tuidev install --pack monitoring starts one
 [rc=0]

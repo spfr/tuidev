@@ -108,5 +108,6 @@ END {
     }
     # Lists are joined, not passed through %s: mawk caps one sprintf/printf at 8 KiB.
     print "{\"schema_version\":1,\"agents\":[" o["agent"] "],\"stale\":[" o["stale"] "],\"hogs\":[" o["hog"] "],\"top\":[" o["top"] "],\"jobs\":[" jobs_json() "],\"system\":" sys ",\"awake\":" aw ",\"lid\":" ENVIRON["LID"] \
-        sprintf(",\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s}", (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"]))
+        sprintf(",\"thermal\":{\"level\":%s,\"name\":%s},\"powermode\":%s,\"sampled_at\":%s}", (ENVIRON["TH"] == "" ? "null" : ENVIRON["TH"] + 0), js(ENVIRON["TH_NAME"]), js(ENVIRON["PM"]),
+            (ENVIRON["SAMPLED"] ~ /^[0-9]+$/ ? ENVIRON["SAMPLED"] : "null"))
 }
