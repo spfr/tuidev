@@ -26,7 +26,8 @@
 # Uses: config.sh (AGENTS_HERDR_NAMES, AGENTS_NO_HERDR, AGENTS_RUN_DIR),
 #   snapshot.sh (_agents_herdr_refresh), bar.sh (_agents_bar_target,
 #   agents_bar_poke),
-#   glyph.sh (_agents_glyph_map), util.sh (locks, timeouts, atomic replace).
+#   glyph.sh (_agents_glyph_map), util.sh (locks, timeouts, atomic replace),
+#   hcmirror.sh (_agents_hm_sync: the mirrors, after `agents herdr sync`).
 # Public: agents_herdr, agents_herdr_sync, agents_herdr_reset.
 
 _AGENTS_HL_SOURCE="tuidev"   # our metadata's source: what a reset clears
@@ -235,12 +236,13 @@ def us: map(tostring | gsub("[\\r\\n\\x1f]"; "")) | join("\u001f");
   ($pick - [($s.tabs // [])[] | .tab_id // "" | id] | .[] | ["U", .] | us)
 '
 
-# _agents_hl_plan MODE [IDS] — the records for MODE (sync, reset, or tabs:
-# the tab ids IDS, space-separated), from one snapshot; false when Herdr did
-# not answer in 3 s.
+# _agents_hl_plan MODE [IDS [SNAP]] — the records for MODE (sync, reset, or
+# tabs: the tab ids IDS, space-separated), from one snapshot: SNAP when the
+# caller has it, else asked for; false when Herdr did not answer in 3 s.
+_agents_hl_snap() { _agents_timeout 3 _agents_hl_herdr api snapshot 2>/dev/null; }
 _agents_hl_plan() {
-    local snap state="" now
-    snap="$(_agents_timeout 3 _agents_hl_herdr api snapshot 2>/dev/null)" || return 1
+    local snap="${3:-}" state="" now
+    [[ -n "$snap" ]] || snap="$(_agents_hl_snap)" || return 1
     [[ -r "$AGENTS_RUN_DIR/herdr-labels.tsv" ]] && state="$(cat "$AGENTS_RUN_DIR/herdr-labels.tsv" 2>/dev/null)"
     _agents_now now
     printf '%s\n' "$snap" | jq -r --arg mode "$1" --arg glyphs "$(_agents_glyph_map)" --arg state "$state" \
@@ -276,12 +278,13 @@ _agents_hl_tokens() {
 # anything reaches a herdr argument.)
 _agents_hl_text() { [[ -n "$1" && ${#1} -le 160 && "$1" != *[[:cntrl:]]* && "$1" != -* ]]; }
 
-# _agents_hl_apply MODE [IDS] — run MODE's plan: each write, then the state
-# file. AGENTS_DRY_RUN=true prints the writes instead. Prints what it changed;
-# 3 when a tab in IDS is not there (said on stderr), after the others.
+# _agents_hl_apply MODE [IDS [SNAP]] — run MODE's plan (from SNAP, when
+# given): each write, then the state file. AGENTS_DRY_RUN=true prints the
+# writes instead. Prints what it changed; 3 when a tab in IDS is not there
+# (said on stderr), after the others.
 _agents_hl_apply() {
     local plan line kind a b c d e state="" n=0 ok rc=0 ops
-    plan="$(_agents_hl_plan "$1" "${2:-}")" || { echo "agents: Herdr did not answer" >&2; return 1; }
+    plan="$(_agents_hl_plan "$1" "${2:-}" "${3:-}")" || { echo "agents: Herdr did not answer" >&2; return 1; }
     while IFS= read -r line; do
         [[ -n "$line" ]] || continue
         IFS=$'\x1f' read -r kind a b c d e <<<"$line"
@@ -333,9 +336,15 @@ _agents_hl_apply() {
 # agent's event: the same process, not a second one): first, where the menu
 # bar would refresh, Herdr's agents are read again (the cache the menu reads
 # could be up to 10 s old) and the menu bar is poked.
+#
+# For `agents herdr`, which syncs the mirrors next: _AGENTS_HL_SNAP is the
+# last pass's snapshot ("" when none was taken), and _AGENTS_HL_HANDED is
+# true when this sync left its events to the one running (which syncs the
+# mirrors after its own passes).
 agents_herdr_sync() {
     local throttle=false quiet=false a lock="$AGENTS_RUN_DIR/herdr-labels.lock" dirty="$AGENTS_RUN_DIR/herdr-labels.dirty"
-    local stamp="$AGENTS_RUN_DIR/herdr-labels.stamp" now age pass=0 round=0 out poke=false
+    local stamp="$AGENTS_RUN_DIR/herdr-labels.stamp" now age pass=0 round=0 out poke=false snap
+    _AGENTS_HL_SNAP="" _AGENTS_HL_HANDED=false
     for a in "$@"; do
         case "$a" in
             --throttle)    throttle=true ;;
@@ -365,11 +374,18 @@ agents_herdr_sync() {
     fi
     while [[ $round -lt 2 ]]; do
         round=$((round + 1)) pass=0
-        if ! _agents_lock "$lock"; then : > "$dirty"; return 0; fi
+        if ! _agents_lock "$lock"; then : > "$dirty"; _AGENTS_HL_HANDED=true; return 0; fi
         while [[ $pass -lt 5 ]]; do
             pass=$((pass + 1))
             rm -f "$dirty"
-            out="$(_agents_hl_apply sync)" || true
+            # Taken here, not in the plan's subshell: the mirror sync reads it too.
+            if snap="$(_agents_hl_snap)" && [[ -n "$snap" ]]; then
+                _AGENTS_HL_SNAP="$snap"
+                out="$(_agents_hl_apply sync "" "$snap")" || true
+            else
+                _AGENTS_HL_SNAP="" out=""
+                echo "agents: Herdr did not answer" >&2
+            fi
             [[ "$quiet" == true || -z "$out" ]] || printf '%s\n' "$out"
             _agents_now now
             [[ "${AGENTS_DRY_RUN:-false}" == true ]] || _agents_replace "$stamp" "$now" || true
@@ -457,7 +473,10 @@ agents_herdr() {
         sync)   # The same events that rename a tab bring or end an agent's
                 # mirror in herdr-core (hcmirror.sh; nothing without a core),
                 # and --throttle holds for both: decided before the label
-                # sync writes its stamp. -n leaves the core alone.
+                # sync writes its stamp. -n leaves the core alone. The mirror
+                # sync reads the label sync's snapshot (one Herdr call, not
+                # two); a sync that left its events to a running one leaves
+                # the mirrors to it too.
                 local due=true now age
                 if [[ " $* " == *" --throttle "* ]]; then
                     _agents_now now
@@ -465,7 +484,8 @@ agents_herdr() {
                     [[ $age -ge $_AGENTS_HL_THROTTLE ]] || due=false
                 fi
                 agents_herdr_sync "$@" || return
-                [[ "$due" == false || "${AGENTS_DRY_RUN:-false}" == true ]] || agents_hc_mirror_sync -q ;;
+                [[ "$due" == false || "${AGENTS_DRY_RUN:-false}" == true || "$_AGENTS_HL_HANDED" == true ]] \
+                    || _agents_hm_sync "$_AGENTS_HL_SNAP" -q ;;
         reset)  agents_herdr_reset "$@" ;;
         *)      echo "usage: agents herdr [status | sync [--throttle] [--poke] [-n] [-q] | reset [-n] [TAB_ID...]]" >&2; return 2 ;;
     esac

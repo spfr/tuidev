@@ -454,6 +454,16 @@ _agents_link_session devbox devbox 2>/dev/null && fail "a machine without agents
 _agents_link_session workbox workbox 2>/dev/null && fail "an unreachable machine counted as a session"
 [[ "$(cut -f1 "$AGENTS_RUN_DIR/link/h.workbox")" == unreachable ]] || fail "unreachable state"
 [[ "$(AGENTS_LINK=0 _agents_link_watch)" == *"link is off"* ]] || fail "AGENTS_LINK=0 did not end the watcher"
+# Reconnecting: a short session doubles the wait, up to a minute; a minute-long
+# one starts it over, and so does a wait the machine slept through (the
+# sixth here: an hour with the lid closed). The clock and sleep are the test's.
+( AGENTS_NOW="$NOW"; n=0; s=0
+  _agents_link_session() { s=$((s + 1)); if [[ $s -eq 9 ]]; then AGENTS_NOW=$((AGENTS_NOW + 90)); else AGENTS_NOW=$((AGENTS_NOW + 1)); fi; return 1; }
+  sleep() { n=$((n + 1)); printf '%s ' "$1" >> "$tmp/waits"
+            AGENTS_NOW=$((AGENTS_NOW + $1)); [[ $n -ne 6 ]] || AGENTS_NOW=$((AGENTS_NOW + 3600))
+            [[ $n -lt 10 ]] || exit 0; }
+  rm -f "$tmp/waits"; _agents_link_loop devbox devbox )
+[[ "$(cat "$tmp/waits")" == "10 20 40 60 60 60 10 20 5 10 " ]] || fail "the link's reconnect waits: $(cat "$tmp/waits")"
 # A watcher killed while it took its lock leaves a half-written holder file:
 # after a minute the lock is taken over all the same, not held for ever.
 mkdir -p "$tmp/stuck.lock"; : > "$tmp/stuck.lock/holder.4242"; touch -t 202601010000 "$tmp/stuck.lock/holder.4242" "$tmp/stuck.lock"

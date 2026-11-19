@@ -249,6 +249,29 @@ out="$(AGENTS_HC_UP=0 agents_main hc up 2>&1)" || fail "up, AGENTS_HC_UP=0: $out
 RUNNING=true
 pass "AGENTS_HC_UP=0 turns the job off, not agents hc up"
 
+# Once a core is found or started, up syncs the mirrors quietly: a core
+# started again has none. A sync that fails or talks fails nothing and says
+# nothing; an up that failed syncs nothing.
+reset; rm -f "$MARK"; RUNNING=true; hello true
+( agents_hc_mirror_sync() { echo "$*" >> "$FAKE/msync.calls"; echo "noise"; echo "noise" >&2; return 1; }
+  out="$(agents_main hc up -q 2>&1)" || fail "up -q failed because of the mirror sync: $out"
+  [[ -z "$out" && "$(calls msync)" == "-q " && ! -e "$MARK" ]] || fail "up -q, good core: '$out', sync: $(calls msync)"
+  RUNNING=false; out="$(agents_main hc up 2>&1)" || fail "up failed because of the mirror sync: $out"
+  [[ "$out" == "herdr-core started" && "$(calls msync)" == "-q -q " ]] || fail "up, started: '$out', sync: $(calls msync)"
+  RUNNING=true; hello false; rm -f "$FAKE/msync.calls"
+  agents_main hc up -q >/dev/null 2>&1 && fail "up -q passed a headless core"
+  [[ ! -e "$FAKE/msync.calls" ]] || fail "an up that failed synced the mirrors"
+) || exit 1
+# With mirrors off, or no Herdr here, the sync is nothing: no call to Herdr
+# or to the core beyond up's own hello.
+reset; rm -f "$MARK"; hello true
+AGENTS_HC_MIRROR=0 agents_main hc up -q >/dev/null 2>&1 || fail "up -q, mirrors off"
+[[ ! -e "$FAKE/herdr.calls" && "$(grep -c '^connect$' "$FAKE/hc.calls")" == 1 ]] || fail "up -q, mirrors off, asked more: $(calls herdr) / $(calls hc)"
+reset; rm -f "$MARK"; hello true
+AGENTS_HC_MIRROR=1 AGENTS_NO_HERDR=1 agents_main hc up -q >/dev/null 2>&1 || fail "up -q, no Herdr"
+[[ ! -e "$FAKE/herdr.calls" && "$(grep -c '^connect$' "$FAKE/hc.calls")" == 1 ]] || fail "up -q, no Herdr, asked more: $(calls herdr) / $(calls hc)"
+pass "up syncs the mirrors once it found or started a core, quietly and never failing for it; nothing with mirrors off or no Herdr"
+
 # A core gets neither the pane's identity nor what loading agents exported.
 reset; RUNNING=false; hello true
 out="$(HERDR_ENV=1 HERDR_PANE_ID=w1-1 agents_main hc up -q 2>&1)" || fail "up -q: $out"
@@ -690,13 +713,17 @@ rc=0; out="$(agents_main hc auto no-such-agent 2>&1)" || rc=$?
 [[ $rc -eq 127 && "$out" == *"no-such-agent: command not found"* ]] || fail "a missing command: rc $rc, $out"
 pass "auto needs a command, and a missing one is 127 like the shell's"
 
-# Through bin/agents itself: the modules it loads hold everything hc.sh
-# calls, and the agent gets the environment it was given, without the
+# Through bin/agents itself: the modules its `hc auto` fast path loads hold
+# everything hc.sh calls (test_agents_install.sh checks every fast path's
+# reach), and the agent gets the environment it was given, without the
 # patterns loading agents exports.
+auto_mods=""
+for row in "${_AGENTS_FAST_PATHS[@]}"; do [[ "${row%%|*}" != "hc auto" ]] || { auto_mods="${row#*|}"; auto_mods="${auto_mods%%|*}"; }; done
+[[ "$auto_mods" == config\ * ]] || fail "no hc auto row in _AGENTS_FAST_PATHS: ${_AGENTS_FAST_PATHS[*]}"
 fns="$(grep -oE '_agents_[a-z0-9_]+' "$REPO_DIR/lib/agents/hc.sh" | sort -u)"
 missing="$(env -i PATH="$PATH" HOME="$HOME" AGENTS_CONF="$AGENTS_CONF" bash -c '
     for m in $1; do . "$2/lib/agents/$m.sh"; done
-    for f in $3; do declare -F "$f" >/dev/null || echo "$f"; done' _ "$_AGENTS_AUTO_MODULES" "$REPO_DIR" "$fns")"
+    for f in $3; do declare -F "$f" >/dev/null || echo "$f"; done' _ "$auto_mods" "$REPO_DIR" "$fns")"
 [[ -z "$missing" ]] || fail "agents hc auto does not load what defines: $missing"
 reset
 rc=0; out="$(cd "$tmp/My Proj" && env -i PATH="$PATH" HOME="$HOME" FAKE="$FAKE" AGENTS_CONF="$AGENTS_CONF" AGENTS_HC_AUTO=1 \

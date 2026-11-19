@@ -114,6 +114,81 @@ used="$(sed -nE 's/.*_agents_awk(_eval)? "([a-z_ ]+)".*/\2/p' "$REPO_DIR"/lib/ag
     || fail "modules run awk programs bin/agents does not check: $(LC_ALL=C comm -23 <(echo "$used") <(echo "$listed") | tr '\n' ' ')"
 pass "_AGENTS_AWK_FILES lists every awk program, and the modules run only those"
 
+# 3d. The fast paths (_AGENTS_FAST_PATHS: hc auto, statusline, bar poke, the
+# wait hooks) load a few modules: each list must define everything its call
+# can reach. What it can reach is read from the full load: every function the
+# call's body names, then theirs, and every setting or constant (AGENTS_*,
+# _AGENTS_*) they name that a module sets. fast_missing MODULES CALL prints
+# what MODULES, sourced alone in a clean shell, leave undefined.
+cat > "$tmp/closure.sh" <<'EOF'
+# bash closure.sh REPO CALL — "F name" / "V name" for what CALL can reach.
+repo="$1" call="$2"
+base=" $(compgen -v | tr '\n' ' ') "
+for m in $(. "$repo/bin/agents" >/dev/null 2>&1; echo "$_AGENTS_MODULES"); do . "$repo/lib/agents/$m.sh"; done
+set=" "
+for v in $(compgen -v); do [[ "$base" == *" $v "* ]] || set+="$v "; done
+q="$call" seen=" "
+while [[ -n "${q// /}" ]]; do
+    set -- $q; f="$1"; shift; q="$*"
+    [[ "$seen" != *" $f "* ]] || continue
+    seen+="$f "; echo "F $f"
+    body="$(declare -f "$f")"
+    for g in $(printf '%s\n' "$body" | grep -oE '(_agents|agents)_[A-Za-z0-9_]+' | sort -u); do
+        declare -F "$g" >/dev/null && q+=" $g"
+    done
+    for v in $(printf '%s\n' "$body" | grep -oE '_?AGENTS_[A-Z0-9_]+' | sort -u); do
+        [[ "$set" != *" $v "* ]] || echo "V $v"
+    done
+done | sort -u
+EOF
+fast_missing() {
+    local need
+    need="$(env -i PATH="$PATH" HOME="$HOME" AGENTS_CONF="$tmp/none.conf" bash "$tmp/closure.sh" "$REPO_DIR" "$2")"
+    [[ "$need" == *"F $2"* ]] || { echo "(no function $2)"; return; }
+    # shellcheck disable=SC2016  # the inner shell's own variables
+    env -i PATH="$PATH" HOME="$HOME" AGENTS_CONF="$tmp/none.conf" bash -c '
+        for m in $2; do . "$1/lib/agents/$m.sh"; done
+        while read -r k n; do
+            case "$k" in
+                F) declare -F "$n" >/dev/null || echo "$n" ;;
+                V) [[ -n "${!n+set}" ]] || echo "$n" ;;
+            esac
+        done <<<"$3"' _ "$REPO_DIR" "$1" "$need"
+}
+rows="$(bash -c '. "$1"; printf "%s\n" "${_AGENTS_FAST_PATHS[@]}"' _ "$REPO_DIR/bin/agents")"
+[[ "$(printf '%s\n' "$rows" | grep -c .)" -ge 5 ]] || fail "fewer fast paths than hc auto, statusline, bar poke and the wait hooks: $rows"
+while IFS='|' read -r words mods call; do
+    [[ "$mods" == config\ * ]] || fail "fast path '$words' does not load config first: $mods"
+    for m in $mods; do [[ " $(bash -c '. "$1"; echo "$_AGENTS_MODULES"' _ "$REPO_DIR/bin/agents") " == *" $m "* ]] || fail "fast path '$words': no module $m"; done
+    missing="$(fast_missing "$mods" "${call%% *}")"
+    [[ -z "$missing" ]] || fail "agents $words loads $mods, which leaves undefined what ${call%% *} can reach: ${missing//$'\n'/ }"
+done <<<"$rows"
+# The check catches a module left out: statusline's limits need events.sh.
+missing="$(fast_missing "config palette util snapshot limits statusline" agents_statusline)"
+[[ "$missing" == *_agents_data_dir* ]] || fail "a list without events.sh passed the closure check: $missing"
+missing="$(fast_missing "config util" agents_bar_poke)"
+[[ "$missing" == *agents_bar_poke* && "$missing" == *_AGENTS_BAR_GAP* ]] || fail "a list without bar.sh passed the closure check: $missing"
+pass "each fast path's modules define every function and setting its call can reach, and a module left out is caught"
+
+# At runtime a fast path whose call its modules do not define loads every
+# module and runs as any other run, never fails. A copy of bin/agents with
+# bar.sh and hooks.sh left out of their rows, beside the repo's modules.
+mkdir -p "$tmp/fb/bin" "$tmp/fb/lib"
+ln -s "$REPO_DIR/lib/agents" "$tmp/fb/lib/agents"
+sed -e 's/^\(    "bar poke|config util\) bar|/\1|/' -e 's/^\(    "hook wait-end|.*\) hooks|/\1|/' "$REPO_DIR/bin/agents" > "$tmp/fb/bin/agents"
+if ! grep -q '"bar poke|config util|' "$tmp/fb/bin/agents" || ! grep -q '"hook wait-end|config util events snapshot classify where notify bar|' "$tmp/fb/bin/agents"; then
+    fail "the test's copy of bin/agents did not drop the modules"
+fi
+for b in "$REPO_DIR/bin/agents" "$tmp/fb/bin/agents"; do
+    rc=0; out="$(AGENTS_RUN_DIR="$tmp/fbrun" AGENTS_DATA_DIR="$tmp/fbdata" bash "$b" bar poke 2>&1)" || rc=$?
+    [[ $rc -eq 0 && -z "$out" ]] || fail "$b bar poke: rc $rc, $out"
+    rc=0; out="$(AGENTS_RUN_DIR="$tmp/fbrun" AGENTS_DATA_DIR="$tmp/fbdata" bash "$b" bar poke --bogus 2>&1)" || rc=$?
+    [[ $rc -eq 2 && "$out" == "usage: agents bar poke [--settle]" ]] || fail "$b bar poke --bogus: rc $rc, $out"
+    rc=0; out="$(echo '{"session_id":"s1","duration_ms":5}' | AGENTS_RUN_DIR="$tmp/fbrun" AGENTS_DATA_DIR="$tmp/fbdata" bash "$b" hook wait-end -n 2>&1)" || rc=$?
+    [[ $rc -eq 0 && -z "$out" ]] || fail "$b hook wait-end: rc $rc, $out"
+done
+pass "a fast path whose list lost its call's module falls back to loading every module"
+
 # 4. A missing module, or no modules at all: a clear error, nothing half loaded.
 mv "$lib/tsv.sh" "$tmp/tsv.sh"
 out="$("$bin" --help 2>&1)" && fail "agents ran without tsv.sh"

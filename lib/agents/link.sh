@@ -509,15 +509,21 @@ _agents_link_session() {
 }
 
 # _agents_link_loop LABEL TARGET — sessions for ever: again 5 s after one
-# that lasted a minute, else after twice the last wait, up to 5 minutes.
+# that lasted a minute, else after twice the last wait, up to a minute. A
+# wait that took far longer than it was (the machine slept: a lid closed
+# for an hour) starts the doubling over, so the machines come back within
+# seconds of waking, not one at a time at the cap.
+_AGENTS_LINK_WAIT_MAX=60
 _agents_link_loop() {
     local wait=5 t0 t1
     while :; do
         _agents_now t0
         _agents_link_session "$1" "$2" || true
         _agents_now t1
-        if [[ $((t1 - t0)) -ge 60 ]]; then wait=5; else wait=$((wait * 2)); [[ $wait -le 300 ]] || wait=300; fi
+        if [[ $((t1 - t0)) -ge 60 ]]; then wait=5; else wait=$((wait * 2)); [[ $wait -le $_AGENTS_LINK_WAIT_MAX ]] || wait=$_AGENTS_LINK_WAIT_MAX; fi
         sleep "$wait"
+        _agents_now t0
+        [[ $((t0 - t1)) -le $((wait + 60)) ]] || wait=5
     done
 }
 

@@ -20,8 +20,11 @@
 #   - herdr-core stores only the status a program reports (OSC 7501), and an
 #     attach reports none, so Herdr's state for the pane is printed as one:
 #     `herdr agent wait` blocks until it changes, no polling.
-# While the phone types in a mirror the pane has the phone's size; Herdr gives
-# it the desk's size back when you type there.
+# While the phone shows a mirror the pane has the phone's size, and it gets
+# its own back only when the phone stops showing that session (typing at the
+# desk does not give it back). Herdr's phone app keeps the last session it
+# opened attached while it shows its Inbox: until the app is closed, or opens
+# another session, that pane stays at the phone's size.
 #
 # Not mirrored: a pane that is itself on a core-hosted agent (`agents hc run`:
 # hc.sh marks it), a pane you opted out (`agents hc mirror off [PANE]`, until
@@ -35,21 +38,27 @@
 # again.
 #
 # Owns: `agents hc mirror` (status, sync, end, off, on), `agents hc _mirror`,
-#   hc-mirror.lock, hc-mirror.started/ (when each pane's mirror last
-#   started), hc-mirror.off (the opted-out panes).
+#   hc-mirror.lock, hc-mirror.dirty (a sync that came in while one ran),
+#   hc-mirror.started/ (when each pane's mirror last started),
+#   hc-mirror.wait/ (each pane's follower's last answer from Herdr),
+#   hc-mirror.off (the opted-out panes).
 # Uses: config.sh (AGENTS_HC_MIRROR, AGENTS_RUN_DIR), hc.sh (_agents_hc_bin,
 #   _agents_hc_running, _agents_hc_name, _agents_hc_pane_marked,
 #   _AGENTS_HC_WAIT, _AGENTS_HC_HERDR_WAIT), herdrlabel.sh (_agents_hl_herdr,
 #   _agents_hl_ready), util.sh (_agents_lock, _agents_unlock, _agents_timeout,
 #   _agents_now, _agents_stamp_age, _agents_replace).
 # Public: agents_hc_mirror, agents_hc_mirror_sync, agents_hc_mirror_end,
-#   agents_hc_mirror_off, agents_hc_mirror_on, and for hcphone.sh
+#   agents_hc_mirror_off, agents_hc_mirror_on, _agents_hm_sync for
+#   herdrlabel.sh (a sync from the snapshot it has), and for hcphone.sh
 #   _agents_hm_on, _agents_hm_list, _agents_hm_have_of, _agents_hm_want,
 #   _agents_hm_off_read, _agents_hm_is_off.
 
 _AGENTS_HM_LABEL="tuidev_mirror"
 _AGENTS_HM_PANE_RE='^[A-Za-z0-9][A-Za-z0-9:._-]{0,63}$'
 _AGENTS_HM_AGAIN=60              # seconds before a pane's mirror is started again
+_AGENTS_HM_PAUSE=1               # seconds a sync waits before going again for syncs that came in
+_AGENTS_HM_RETRY=2               # a follower Herdr did not answer asks again after this, doubled each time
+_AGENTS_HM_RETRY_MAX=60          # … up to this
 
 # The agent panes of one `herdr api snapshot`, a line each:
 # PANE, COLS, ROWS, AGENT, STATE, CWD and TITLE (the session's task title,
@@ -259,41 +268,93 @@ _agents_hm_start() {
 }
 
 # agents_hc_mirror_sync [-q] [-n] — one mirror for each agent pane, none for
-# anything else. Quietly nothing when it is off or no core runs, while
-# another sync holds the lock (the event that started that one is this one's
-# too, or the next one's), or when Herdr or the core did not answer. Once
-# the core has not answered one call, it is not asked again this time.
-agents_hc_mirror_sync() {
-    local quiet=false dry=false a lock="$AGENTS_RUN_DIR/hc-mirror.lock" snap want have started=0 ended=0 waiting=0
-    local pane cols rows agent state cwd title addr name seen="" panes dir f now age rc hung=false off nooff=0
+# anything else. Quietly nothing when it is off or no core runs, or when
+# Herdr or the core did not answer. Once the core has not answered one call,
+# it is not asked again this time.
+#
+# One sync at a time, the label sync's way (herdrlabel.sh): a sync that
+# finds another running leaves a mark (hc-mirror.dirty) and returns, and the
+# running one goes again a second later, so a burst of Herdr events costs one
+# more pass, not one each. -q (the event hooks, `agents hc up -q`) tries the
+# lock once; a sync run by hand waits up to 2 s for it. `off` and `end` hold
+# the lock too: a mark left while they did is taken up when they let go.
+agents_hc_mirror_sync() { _agents_hm_sync "" "$@"; }
+
+# _agents_hm_sync SNAP [-q] [-n] — agents_hc_mirror_sync, where SNAP is a
+# `herdr api snapshot` answer the caller already has (`agents herdr sync`'s,
+# taken a moment ago): the first pass reads it instead of asking Herdr
+# again; "" asks. A pass after a mark asks again.
+_agents_hm_sync() {
+    local snap="$1" quiet=false dry=false a lock="$AGENTS_RUN_DIR/hc-mirror.lock" dirty="$AGENTS_RUN_DIR/hc-mirror.dirty"
+    local tries=10 round=0 pass
+    shift
     for a in "$@"; do
         case "$a" in
-            -q|--quiet)   quiet=true ;;
+            -q|--quiet)   quiet=true tries=1 ;;
             -n|--dry-run) dry=true ;;
             *)            echo "usage: agents hc mirror sync [-n] [-q]" >&2; return 2 ;;
         esac
     done
     if ! _agents_hm_ready; then
         # Off, with mirrors an earlier sync started: they go, once.
-        if ! _agents_hm_on && [[ "$dry" == false && -d "$(_agents_hm_started_dir)" ]]; then
+        if [[ "$dry" == false && -d "$AGENTS_RUN_DIR/hc-mirror.started" ]] && ! _agents_hm_on; then
             agents_hc_mirror_end -q || true
         fi
         [[ "$quiet" == true ]] || echo "agents hc mirror: $(_agents_hm_why_not)"
         return 0
     fi
     mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
-    _agents_lock "$lock" 10 0.2 || return 0
-    if ! snap="$(_agents_hm_snap)" || ! want="$(_agents_hm_want_of "$snap")"; then
+    while [[ $round -lt 2 ]]; do
+        round=$((round + 1)) pass=0
+        if ! _agents_lock "$lock" "$tries" 0.2; then
+            : > "$dirty" 2>/dev/null
+            [[ "$quiet" == true ]] || echo "agents hc mirror: another sync is running; it goes again for this one"
+            return 0
+        fi
+        while [[ $pass -lt 5 ]]; do
+            pass=$((pass + 1))
+            rm -f "$dirty"
+            _agents_hm_pass "$quiet" "$dry" "$snap"
+            snap=""
+            [[ -e "$dirty" && "$dry" == false ]] || break
+            sleep "$_AGENTS_HM_PAUSE" 2>/dev/null || true
+        done
         _agents_unlock "$lock"
+        # A sync that came in between the last look and the unlock.
+        [[ -e "$dirty" ]] || break
+    done
+    return 0
+}
+
+# _agents_hm_let_go — let go of the sync's lock (`off`, `end`), then take up
+# a sync that came in meanwhile and found it held.
+_agents_hm_let_go() {
+    _agents_unlock "$AGENTS_RUN_DIR/hc-mirror.lock"
+    [[ ! -e "$AGENTS_RUN_DIR/hc-mirror.dirty" ]] || _agents_hm_sync "" -q
+}
+
+# _agents_hm_pass QUIET DRY SNAP — one pass of the sync, under its lock.
+_agents_hm_pass() {
+    local quiet="$1" dry="$2" snap="$3" want have started=0 ended=0 waiting=0
+    local pane cols rows agent state cwd title addr name seen="" panes dir wdir names f now age rc hung=false off nooff=0
+    if { [[ -z "$snap" ]] && ! snap="$(_agents_hm_snap)"; } || ! want="$(_agents_hm_want_of "$snap")"; then
         [[ "$quiet" == true ]] || echo "agents hc mirror: Herdr did not answer; nothing changed" >&2
         return 0
     fi
     [[ "$dry" == true ]] || _agents_hm_off_prune "$snap"
     _agents_hm_off_read; off="$REPLY"
     if ! have="$(_agents_hm_have)"; then
-        _agents_unlock "$lock"
         [[ "$quiet" == true ]] || echo "agents hc mirror: herdr-core did not answer; nothing changed" >&2
         return 0
+    fi
+    # Up to 3.25.0 a follower's file had a random name (hc-mirror-wait.XXXXXX),
+    # and one killed outright left it behind: those go once, when the folder
+    # for the new ones is made, before this pass starts a mirror whose
+    # follower would make it.
+    wdir="$(_agents_hm_wait_dir)"
+    if [[ "$dry" == false && ! -d "$wdir" ]]; then
+        rm -f "$AGENTS_RUN_DIR"/hc-mirror-wait.* 2>/dev/null
+        mkdir -p "$wdir" 2>/dev/null
     fi
     panes="$(printf '%s\n' "$want" | cut -d$'\x1f' -f1)"
     while IFS=$'\x1f' read -r addr pane name; do
@@ -335,14 +396,15 @@ agents_hc_mirror_sync() {
         [[ $rc -eq 0 ]] || { [[ "$quiet" == true ]] || echo "  could not start it" >&2; }
         [[ $rc -ne 124 ]] || hung=true
     done <<<"$want"
-    # The start times of panes that have no agent any more.
-    if [[ "$dry" == false && -d "$dir" ]]; then
-        for f in "$dir"/*; do
-            [[ -e "$f" ]] || continue
-            printf '%s\n' "$panes" | LC_ALL=C tr -c 'A-Za-z0-9._\n-' '_' | grep -qxF -- "${f##*/}" || rm -f "$f"
+    # The start times and the followers' files of panes that have no agent
+    # any more.
+    if [[ "$dry" == false ]]; then
+        names=$'\n'"$(printf '%s\n' "$panes" | LC_ALL=C tr -c 'A-Za-z0-9._\n-' '_')"$'\n'
+        for f in "$dir"/* "$wdir"/*; do
+            [[ -e "$f" && "$names" != *$'\n'"${f##*/}"$'\n'* ]] || continue
+            rm -f "$f"
         done
     fi
-    _agents_unlock "$lock"
     if [[ "$quiet" == false && $((started + ended + waiting)) -eq 0 ]]; then
         if [[ $nooff -eq 0 ]]; then echo "agents hc mirror: every agent pane has its mirror"
         else echo "agents hc mirror: every agent pane has its mirror, but the $nooff opted out (agents hc mirror status)"; fi
@@ -425,7 +487,7 @@ agents_hc_mirror_off() {
             said="herdr-core did not answer; the next sync ends its mirror"
         fi
     fi
-    _agents_unlock "$lock"
+    _agents_hm_let_go
     echo "$pane: no mirror from now on (agents hc mirror on $pane undoes it)${said:+; $said}"
 }
 
@@ -467,29 +529,46 @@ _agents_hm_report() {
 }
 
 # _agents_hm_follow PANE [OWNER] — report PANE's state now, then each time it
-# changes, until Herdr no longer has an agent there, the process OWNER (the
-# mirror's attach) is gone, the terminal takes no more reports, or a TERM or
-# HUP. The wait is a background job the trap ends with it (a signal is taken
-# only between commands, never inside a $( ) the shell waits for): herdr
-# itself, not a function around it, so its pid is the one to end. Its answer
-# goes through a file. Run only as its own process (`&`, a pipeline): the
+# changes, for as long as the process OWNER (the mirror's attach) runs: until
+# OWNER is gone, the terminal takes no more reports, or a TERM or HUP (the
+# terminal's hangup). When Herdr does not answer (the pane's state not given
+# in time, no agent in the pane for now, a `herdr agent wait` that failed:
+# Herdr restarting, its socket gone, the run dir removed), it asks again
+# after a pause, 2 s doubling to 60 s, from the pane's state: the phone's
+# status and the size kept for the pane (_agents_hm_resized) last as long as
+# the attach. Without OWNER (tests) the first of these ends it.
+# The wait, and each pause, is a background job the trap ends with it (a
+# signal is taken only between commands, never inside a $( ) the shell waits
+# for): herdr itself, not a function around it, so its pid is the one to
+# end. Its answer goes through the pane's file in hc-mirror.wait/, one name a
+# pane, so a follower killed outright (SIGKILL, a reboot) leaves no more than
+# that one, which the pane's next follower reuses and the sync removes with
+# the pane's start time. Run only as its own process (`&`, a pipeline): the
 # trap is that process's, and a ( ) body would put it in a child the
 # caller's kill never reaches.
 _agents_hm_follow() {
-    local pane="$1" owner="${2:-}" out cur="" agent s args wp h="${HERDR_BIN_PATH:-}"
+    local pane="$1" owner="${2:-}" out cur="" agent="" s args wp back=0 again=false h="${HERDR_BIN_PATH:-}"
     [[ -n "$h" && -x "$h" ]] || h="$(command -v herdr 2>/dev/null)" || return 0
-    _AGENTS_HM_OUT=""
-    trap 'kill $(jobs -p) 2>/dev/null; wait; [[ -z "$_AGENTS_HM_OUT" ]] || rm -f "$_AGENTS_HM_OUT"; exit 0' HUP TERM
+    _AGENTS_HM_OUT="$(_agents_hm_wait_dir)/$(_agents_hm_file_name "$pane")"
+    trap 'kill $(jobs -p) 2>/dev/null; wait; rm -f "$_AGENTS_HM_OUT"; exit 0' HUP TERM
     [[ -z "$_AGENTS_HM_BASE" ]] || trap '_agents_hm_resized "$pane"' WINCH
-    out="$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr pane get "$pane" 2>/dev/null)" || return 0
-    cur="$(printf '%s' "$out" | jq -r '.result.pane.agent_status // empty' 2>/dev/null)"
-    agent="$(printf '%s' "$out" | jq -r '.result.pane.agent // empty' 2>/dev/null)"
-    [[ -n "$agent" ]] || return 0
-    mkdir -p "$AGENTS_RUN_DIR" 2>/dev/null
-    _AGENTS_HM_OUT="$(mktemp "$AGENTS_RUN_DIR/hc-mirror-wait.XXXXXX" 2>/dev/null)" || return 0
-    _agents_hm_tell "$cur" "$agent" "$(printf '%s' "$out" | jq -r '.result.pane.terminal_title_stripped // empty' 2>/dev/null)" \
-        || { rm -f "$_AGENTS_HM_OUT"; return 0; }
     while :; do
+        if [[ "$again" == true ]]; then
+            again=false
+            if [[ -z "$owner" ]] || ! kill -0 "$owner" 2>/dev/null; then break; fi
+            _agents_hm_pause "$back"
+            kill -0 "$owner" 2>/dev/null || break
+        fi
+        if [[ -z "$agent" ]]; then
+            if ! out="$(_agents_timeout "$_AGENTS_HC_HERDR_WAIT" _agents_hl_herdr pane get "$pane" 2>/dev/null)"; then
+                _agents_hm_later; continue
+            fi
+            cur="$(printf '%s' "$out" | jq -r '.result.pane.agent_status // empty' 2>/dev/null)"
+            agent="$(printf '%s' "$out" | jq -r '.result.pane.agent // empty' 2>/dev/null)"
+            [[ -n "$agent" ]] || { _agents_hm_later; continue; }
+            _agents_hm_tell "$cur" "$agent" "$(printf '%s' "$out" | jq -r '.result.pane.terminal_title_stripped // empty' 2>/dev/null)" || break
+            mkdir -p "${_AGENTS_HM_OUT%/*}" 2>/dev/null
+        fi
         [[ -z "$owner" ]] || kill -0 "$owner" 2>/dev/null || break
         args=()
         for s in idle working blocked "done" unknown; do [[ "$s" == "$cur" ]] || args+=(--until "$s"); done
@@ -497,7 +576,9 @@ _agents_hm_follow() {
         wp=$!
         # A resize (WINCH) ends a wait early; the job is waited for again.
         while kill -0 "$wp" 2>/dev/null; do wait "$wp" 2>/dev/null; done
-        wait "$wp" 2>/dev/null || break
+        # Asked again from the pane's state: what changed meanwhile is reported.
+        wait "$wp" 2>/dev/null || { agent=""; _agents_hm_later; continue; }
+        back=0
         s="$(jq -r '.result.agent.agent_status // empty' "$_AGENTS_HM_OUT" 2>/dev/null)"
         [[ -n "$s" && "$s" != "$cur" ]] || { sleep 1; continue; }
         cur="$s"
@@ -505,6 +586,30 @@ _agents_hm_follow() {
     done
     rm -f "$_AGENTS_HM_OUT"
 }
+
+# _agents_hm_later — a pause before the follower's next try: _AGENTS_HM_RETRY
+# seconds after a wait that worked, else twice the last, up to
+# _AGENTS_HM_RETRY_MAX. Sets the caller's `back` and `again` (bash's dynamic
+# scope; no fork).
+_agents_hm_later() {
+    again=true back=$((back * 2))
+    [[ $back -ge $_AGENTS_HM_RETRY ]] || back=$_AGENTS_HM_RETRY
+    [[ $back -le $_AGENTS_HM_RETRY_MAX ]] || back=$_AGENTS_HM_RETRY_MAX
+}
+
+# _agents_hm_pause SECONDS — the follower's pause: a job, like its wait, so
+# the hangup's trap runs at once and ends it too (a sleep in the foreground
+# would hold the trap until it ended); waited for again after a WINCH.
+_agents_hm_pause() {
+    local sp
+    sleep "$1" &
+    sp=$!
+    while kill -0 "$sp" 2>/dev/null; do wait "$sp" 2>/dev/null; done
+    return 0
+}
+
+# hc-mirror.wait/: each pane's follower's file, named as its start time is.
+_agents_hm_wait_dir() { printf '%s\n' "$AGENTS_RUN_DIR/hc-mirror.wait"; }
 
 # _agents_hm_tell STATE AGENT TITLE — the report and the title; false when
 # the terminal did not take them (it is gone).
@@ -557,8 +662,9 @@ _agents_hm_size() {
 # Nothing is left to end the follower by hand, so it ends by itself: the
 # terminal's hangup reaches it (it stays in this process group, the
 # terminal's foreground one, which is also how it gets each WINCH), it looks
-# for the attach (this pid, which the exec keeps) before each wait, and a
-# report the terminal does not take ends it. Does not return once it
+# for the attach (this pid, which the exec keeps) before each wait and around
+# each pause, and a report the terminal does not take ends it. Herdr not
+# answering does not: it asks again while the attach runs. Does not return once it
 # attaches; the attach's exit status is the mirror's.
 agents_hc_mirror_run() {
     local pane="${1:-}" cols="${2:-}" rows="${3:-}" w="${4:-}" h="${5:-}" herdr="${HERDR_BIN_PATH:-}"
@@ -616,7 +722,7 @@ agents_hc_mirror_end() {
         [[ "$quiet" == true ]] || echo "ended the mirror of $pane (${name:-$addr})"
     done <<<"$have"
     rm -rf "$(_agents_hm_started_dir)" 2>/dev/null
-    _agents_unlock "$lock"
+    _agents_hm_let_go
     [[ "$quiet" == true || $n -gt 0 ]] || echo "agents hc mirror: no mirror runs"
     return 0
 }
