@@ -15,7 +15,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
 
 export HOME="$tmp/home" TUIDEV_STATE_DIR="$tmp/home/.config/tuidev" TUIDEV_NO_COLOR=1
-unset ZDOTDIR
+unset ZDOTDIR XDG_CONFIG_HOME FNM_DIR
 mkdir -p "$HOME" "$TUIDEV_STATE_DIR"
 
 # shellcheck source=../ui.sh disable=SC1091
