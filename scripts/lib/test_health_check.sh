@@ -9,7 +9,8 @@
 set -eo pipefail
 
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"; trap 'rm -rf "$tmp"' EXIT
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/tuidev-test.XXXXXX")"; tmp="$(cd "$tmp" && pwd)"   # no "//" from a TMPDIR that ends in a slash: paths are compared as text
+trap 'rm -rf "$tmp"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
