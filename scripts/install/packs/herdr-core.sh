@@ -118,7 +118,8 @@ herdr_core_install() {
     else
         _herdr_core_systemd
         print_info "No Keychain here: log Claude Code in once with claude and /login (kept in ~/.claude); a token exported in your shell does not reach a hosted agent."
-        print_todo "Log Claude Code in once for hosted agents: run claude, then /login"
+        [[ -e "$HOME/.claude/.credentials.json" ]] \
+            || print_todo "Log Claude Code in once for hosted agents: run claude, then /login"
     fi
     _herdr_core_fragment
     print_info "Start an agent the phone can see: agents hc run claude   (ctrl+\\ detaches; it keeps running)"

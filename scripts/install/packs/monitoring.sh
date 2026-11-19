@@ -143,8 +143,14 @@ _monitoring_swiftbar() {
     _monitoring_prune_plugins "$dir" "$name"
 
     print_info "Open SwiftBar once (open -a SwiftBar) and turn on Launch at login in its settings."
-    print_todo "Open SwiftBar once (open -a SwiftBar) and turn on Launch at login in its settings"
-    print_todo "Allow terminal-notifier's notifications when macOS asks (System Settings > Notifications), and let it control your terminal app on the first click"
+    # Steps for the human only where they are still open: SwiftBar is
+    # installed and not running; terminal-notifier is installed.
+    if [[ "$DRY_RUN" == true ]] || { [[ -d /Applications/SwiftBar.app ]] && ! pgrep -xq SwiftBar 2>/dev/null; }; then
+        print_todo "Open SwiftBar once (open -a SwiftBar) and turn on Launch at login in its settings"
+    fi
+    if command_exists terminal-notifier || [[ "$DRY_RUN" == true ]]; then
+        print_todo "Allow terminal-notifier's notifications when macOS asks (System Settings > Notifications), and let it control your terminal app on the first click"
+    fi
     print_info "terminal-notifier: allow its notifications when macOS asks (or in System Settings > Notifications), so a click on an agent's banner jumps to its session; 'terminal-notifier -diagnose' says why none appear."
     print_info "The first click asks to let terminal-notifier control your terminal app: allow it, so a click lands on the session's tab (declined, it only brings the app forward)."
 }

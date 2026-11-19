@@ -1,6 +1,5 @@
 # tuidev
 
-<!-- headline: draft -->
 **Run your agents anywhere. See everything they do.**
 
 Run Claude Code and Codex on your laptop, on a VM or an always-on box, and pick them up from your phone. tuidev shows which agent needs you, what each one runs and costs, and keeps them away from your keys. It is the setup one team works in every day, shared in the open. It is built on open tools and names them below; it adds to them and replaces none.
@@ -52,7 +51,7 @@ One sidebar lists every agent on every machine, the blocked one first, and tabs 
 
 ### Keep agents away from your keys
 
-`--pack ai-clis` turns on Claude Code's and Codex's own sandbox settings and gates git and gh writes behind a prompt. Claude Code's commands and `Read` tool are denied `~/.ssh`, `~/.aws` and the rest of one [credential list](configs/sandbox/credential-paths.txt): CLI tokens, shell history and browser profiles. Publish and cloud tokens exported in your shell are stripped from the commands agents run. Plain Codex's `workspace-write` limits writes and network but not reads, so it can still read those paths; run it under `sbx` (macOS Seatbelt) for the same protection. `secret` keeps API tokens in your OS keychain, out of every agent's environment, and hands one to one command with `secret run -n NAME -- CMD`. [Sandboxing](docs/sandboxing.md) · [Secrets](docs/secrets.md#what-an-agent-can-reach)
+`--pack ai-clis` turns on Claude Code's and Codex's own sandbox settings and gates git and gh writes behind a prompt. Claude Code's commands and `Read` tool are denied `~/.ssh`, `~/.aws` and the rest of one [credential list](configs/sandbox/credential-paths.txt): CLI tokens, shell history and browser profiles. A list of publish and cloud tokens exported in your shell is unset in Claude Code's sandboxed commands and in every command Codex runs. Plain Codex's `workspace-write` limits writes and network but not reads, so it can still read those paths; run it under `sbx` (macOS Seatbelt) for the same protection. `secret` keeps API tokens in your OS keychain, out of every agent's environment, and hands one to one command with `secret run -n NAME -- CMD`. [Sandboxing](docs/sandboxing.md) · [Secrets](docs/secrets.md#what-an-agent-can-reach)
 
 <img src="docs/assets/sbx.png" width="800" alt="sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with &quot;Operation not permitted&quot;, so does appending to ~/.zshrc, and make test in the project still runs and passes.">
 

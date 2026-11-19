@@ -82,14 +82,14 @@ if [[ "$(uname)" == Darwin ]]; then
     pass "full lists the steps of its packs, not minimal's"
 fi
 
-# The warnings line appears only with warnings, and names the way to find them.
+# The warnings line counts the warnings this run printed, and is absent
+# without any.
 for p in minimal full; do
-    out="$(tail_of --profile "$p")"
-    n="$(printf '%s\n' "$out" | sed -n 's/^ℹ \([0-9][0-9]*\) warnings\{0,1\} above: scroll up, or run `tuidev check`$/\1/p')"
-    if [[ -n "$n" ]]; then
-        [[ "$n" -gt 0 ]] || fail "$p: warning line with a zero count"
-    fi
+    all="$("$SH" "$INSTALL" --profile "$p" --dry-run < /dev/null 2>&1 | strip)"
+    want="$(printf '%s\n' "$all" | grep -c '^⚠ ' || true)"
+    n="$(printf '%s\n' "$all" | sed -n 's/^ℹ \([0-9][0-9]*\) warnings\{0,1\} above: scroll up, or run `tuidev check`$/\1/p')"
+    [[ "${n:-0}" == "$want" ]] || fail "$p: $want warning(s) printed, the line says '${n:-nothing}'"
 done
-pass "the warning line, when shown, has a count above zero"
+pass "the warning line counts what was printed, and is absent without warnings"
 
 echo "all install todo tests passed"
