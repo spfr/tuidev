@@ -136,12 +136,25 @@ Reads and writes are both denied:
 ~/.password-store  ~/.netrc  ~/.git-credentials  ~/.npmrc  ~/.pypirc
 ~/.cargo/credentials[.toml]  ~/.vault-token  ~/.pgpass  ~/.config/git/credentials
 ~/.config/containers/auth.json (podman)  ~/.gem/credentials
+~/.yarnrc.yml (Yarn 2+)  ~/.composer/auth.json  ~/.config/composer/auth.json
+~/.config/glab-cli  ~/.config/rclone  ~/.config/sops  ~/.config/doctl  ~/.config/hcloud
+~/.config/stripe  ~/.fly  ~/.supabase  ~/.oci  ~/.pulumi/credentials.json
+~/.cache/huggingface/token  ~/.cache/huggingface/stored_tokens  ~/.sentryclirc
+~/.terraformrc  ~/.databrickscfg  ~/.boto  ~/.s3cfg
 ~/.local/share/keyrings (GNOME Keyring)  ~/.config/zsh/secrets.zsh (see secrets.md)
-~/.local/share/atuin  ~/.zsh_history  ~/.bash_history
-~/Library/Cookies  ~/Library/Safari  ~/.mozilla  ~/.config/google-chrome  ~/.config/chromium
+~/.local/share/atuin  ~/.zsh_history  ~/.bash_history  ~/.zsh_sessions (Terminal.app)
+~/.local/share/fish/fish_history  ~/.python_history  ~/.node_repl_history
+~/.psql_history  ~/.mysql_history
+~/Library/Cookies  ~/Library/Safari  ~/.mozilla  ~/.config/mozilla  ~/.zen
+~/.config/google-chrome  ~/.config/google-chrome-beta  ~/.config/google-chrome-unstable
+~/.config/google-chrome-canary  ~/.config/chromium  ~/.config/BraveSoftware
+~/.config/microsoft-edge  ~/.config/microsoft-edge-beta  ~/.config/microsoft-edge-dev
+~/.config/vivaldi  ~/.config/opera
 ```
 
-Where tokens should live instead of dotfiles, and what each sandbox does to keep agents out of that store, is in [secrets.md](secrets.md). Browser profiles under `~/Library/Application Support` are denied too (Chrome, Brave, Edge, Arc, Firefox; `configs/sandbox/browser-paths.txt`). `sbx` also stops `open` and Apple Events: they would hand work to apps outside the sandbox.
+Where tokens should live instead of dotfiles, and what each sandbox does to keep agents out of that store, is in [secrets.md](secrets.md). Browser profiles under `~/Library/Application Support` are denied too (Chrome and its Beta, Dev and Canary, Chromium, Brave, Edge and its channels, Vivaldi, Opera, Arc, Firefox, Zen; `configs/sandbox/browser-paths.txt`), but not the rest of that folder. `sbx` also stops `open` and Apple Events: they would hand work to apps outside the sandbox.
+
+**Known and left readable on purpose:** `~/.m2/settings.xml`, `~/.gradle/gradle.properties`, `~/.config/pip/pip.conf` and `~/.bunfig.toml` can hold registry passwords, but Maven, Gradle, pip and bun read them on every build for mirrors, proxies and JVM flags, and bun's minimum release age from the `release-age` pack lives in `~/.bunfig.toml`. Denying them would break builds inside the sandbox or turn that wait off, so keep their secrets in environment variables or `secret run` instead. On macOS, `doctl` and `sops` keep their config under `~/Library/Application Support` by default, which the list doesn't cover; point them at the `~/.config` paths above (`XDG_CONFIG_HOME=~/.config` for sops, `doctl --config`) to have it denied.
 
 The shipped `configs/claude/settings.json` adds matching `permissions.deny` rules, plus `.env` / `.env.*` anywhere in the project (`Read(**/.env)` and friends), so Claude Code's `Read` tool (and `Edit`, for `.env*`) respects the same boundary whether or not you're also running under `sbx`. Codex has no equivalent: under `workspace-write` it can read these paths. Both also refuse the commands that print a stored secret (`secret get`, `secret export`, `secret run`, `security find-generic-password` and the like): `Bash(...)` deny rules for Claude Code, `forbidden` rules in `~/.codex/rules/tuidev.rules` for Codex. They match the plain command only, so for Codex they are the whole defense of the store; see [secrets.md](secrets.md#what-an-agent-can-reach).
 

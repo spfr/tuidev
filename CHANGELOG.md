@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`agents statusline`, `bar poke` and the wait hooks start about twice as fast** (17 ms, was 32 ms): they load only the modules they use. [Engineering](docs/engineering.md)
 - **`tuidev check` probes each pack for real.** A pack may define `<pack>_check`; `cooling` and `release-age` no longer warn forever. [Engineering](docs/engineering.md)
 - **`tuidev install --help` and `uninstall --help` read as help**, and hints name commands a one-line install has.
+- **The credential list covers more CLIs, histories and browsers**: GitLab, rclone, sops, doctl, hcloud, Fly, Supabase, OCI, Pulumi, Hugging Face, Sentry, Terraform, Databricks, boto and s3cmd tokens, Yarn and Composer auth, REPL and fish history, and the Chrome channels, Chromium, Edge, Vivaldi, Opera and Zen profiles on macOS and Linux. [Sandboxing](docs/sandboxing.md#credentials-denied-under-strict-and-standard)
+- **Agents' commands no longer see GitLab, Hugging Face, Cloudflare, Vercel, Netlify, Sentry, Stripe, DigitalOcean, Fly, Supabase, Pulumi or Doppler tokens, `DATABASE_URL` or `PGPASSWORD`**: Claude Code unsets them in sandboxed commands, Codex drops them (and `TF_TOKEN_*`) from every command it runs. [Secrets](docs/secrets.md#what-an-agent-can-reach)
 
 ### Fixed
 
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The `AGENTS.md` template matches the sandbox**: `gh` and background tasks were described wrongly.
 - **`agents report` prices Claude Fable 5.2, Mythos 5.2 and the new GPT-6 Codex models**, and a cost that leaves tokens out says so: the share unpriced, a `*` on a row priced in part, the models to price. [API-equivalent cost](docs/agent-workflows.md#tokens-and-denials)
 - **The README claims only what ships**: plain Codex can read `~/.ssh` (`sbx` closes it), the cleanup hooks act in auto mode, Linux has no memory-guard service, the Node heap limit is about Node's own default. [Agent workflows](docs/agent-workflows.md#cleanup-hooks-claude-code)
+- **The Codex config and `CLAUDE.md` no longer say the 4 GB Node heap limit stops a runaway**: it pins the limit on every machine; the memory guard stops a runaway. [Agent workflows](docs/agent-workflows.md#ai-clis)
 
 ## [3.25.0] - 2026-11-18
 

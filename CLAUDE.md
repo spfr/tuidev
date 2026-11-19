@@ -5,12 +5,12 @@
 ## Claude Code specifics
 
 - **Settings are the authoritative policy.** `configs/claude/settings.json` ships:
-  - `sandbox.enabled = true` — Claude's own native sandbox is on by default, so plain `claude` is confined without a wrapper (`autoAllowBashIfSandboxed`, `excludedCommands` for `docker`/`gh`, `filesystem.denyRead` for the AI CLIs' own token files);
+  - `sandbox.enabled = true` — Claude's own native sandbox is on by default, so plain `claude` is confined without a wrapper (`autoAllowBashIfSandboxed`, `excludedCommands` for `docker`/`gh`, `filesystem.denyRead` for the AI CLIs' own token files, `credentials.envVars` for third-party tokens, mirrored in Codex's `shell_environment_policy.filters`);
   - a read-only `allow` list;
   - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`;
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);
-  - `env.NODE_OPTIONS=--max-old-space-size=4096`, so a runaway Node test fails fast instead of taking the machine's memory (Codex: `shell_environment_policy.set`);
+  - `env.NODE_OPTIONS=--max-old-space-size=4096`, which pins Node's heap limit to 4 GB on every machine (about Node's own default on a 16 GB+ one); the memory guard, not this, is what stops a runaway (Codex: `shell_environment_policy.set`);
   - `Notification`, `TeammateIdle` and `PermissionDenied` hooks that call `~/.local/bin/notify.sh`;
   - a `statusLine` that runs `~/.local/bin/agents statusline` (it records Claude's usage limits, then prints a compact line or `AGENTS_STATUSLINE_CMD`'s; nothing without the `monitoring` pack, and a user's own `statusLine` survives the merge);
   - `SubagentStop` and `SessionEnd` (`clear|resume`) hooks that run `~/.local/bin/agents hook` to stop the background commands a finished subagent or cleared session left running (a no-op without the `monitoring` pack; `AGENTS_HOOK_REAP=0` turns them off);
