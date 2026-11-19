@@ -133,7 +133,7 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
 
 - **Verdicts, not guesses.** `agents why PID` prints the evidence: "safe to stop: what it waits for already finished", "check first: dev server on :5173, its session is still active". `agents reap --stuck` stops the stuck loops. Kills go descendants first and re-check each process's start time before every signal.
 - **Fixed at the source.** In auto mode, Claude Code hooks stop the background commands a subagent left running once it hands back its report ([check it works on your setup](docs/agent-workflows.md#verify-the-cleanup-hooks)).
-- **A runaway can't take the Mac.** A test an agent started once grew to 16 GB in 55 seconds. A memory guard now warns past 8 GB, naming the process, its project and session, and stops a runaway in an agent tree at half the RAM. Agents' Node heap is fixed at 4 GB (about Node's own default on a 16 GB+ Mac), whatever your shell exports.
+- **A runaway can't take the Mac.** A test an agent started once grew to 16 GB in 55 seconds. A memory guard now warns past 8 GB, naming the process, its project and session, and stops a runaway in an agent tree at half the RAM. Agents' Node heap limit is set to 4 GB, which is about Node's own default on a 16 GB+ Mac.
 - **On Linux,** `agents`, the hooks and the reports work the same, but orphans rarely show as stale (they go to systemd's subreaper, not pid 1), and the memory guard has no service yet: run `agents mem guard` in a tmux pane.
 - **Where the tokens go.** `agents report --view tokens` reads the transcripts already on disk: tokens by model, CLI, subagent and project, the cache hit rate, what polling cost, and what it all would cost at API list prices. All local; nothing is sent anywhere.
 
