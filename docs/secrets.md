@@ -58,9 +58,9 @@ It costs one store call per name at every shell start. `secret` itself adds abou
 
 A variable exported in the shell you start `claude` or `codex` from is in the agent's environment and in every command it runs. `secret run` never puts anything there. So level 1 keeps values away from agents and level 2 hands them over, unless you also strip them:
 
-- **Claude Code** unsets the variables listed in `sandbox.credentials.envVars` before each sandboxed command and the processes it starts. The shipped settings list publish and cloud tokens (`GITHUB_TOKEN`, `NPM_TOKEN`, `GITLAB_TOKEN`, `HF_TOKEN`, `CLOUDFLARE_API_TOKEN`, `VERCEL_TOKEN`, `STRIPE_API_KEY` and others), plus `DATABASE_URL` and `PGPASSWORD`; add your level-2 names in your own `~/.claude/settings.json` (`{ "name": "BUILD_CACHE_TOKEN", "mode": "deny" }`). Names are exact: no wildcards. Claude Code itself, hooks, MCP servers and the unsandboxed `gh` still have them.
+- **Claude Code** unsets the variables listed in `sandbox.credentials.envVars` before each sandboxed command and the processes it starts. The shipped settings list publish and cloud tokens (`GITHUB_TOKEN`, `NPM_TOKEN`, `GITLAB_TOKEN`, `HF_TOKEN`, `CLOUDFLARE_API_TOKEN`, `VERCEL_TOKEN`, `STRIPE_API_KEY` and others); add your level-2 names in your own `~/.claude/settings.json` (`{ "name": "BUILD_CACHE_TOKEN", "mode": "deny" }`). Names are exact: no wildcards. Claude Code itself, hooks, MCP servers and the unsandboxed `gh` still have them.
 - **Codex** removes the same names, plus `TF_TOKEN_*`, from every command it runs, inside its sandbox or not (`[shell_environment_policy.filters]` in `~/.codex/config.toml`; patterns take `*` and `?`). Add yours there as `NAME = "exclude"`. Checked on Codex 0.170 with `codex sandbox -- env`.
-- **A test that needs one of them** (a local `DATABASE_URL`, say) doesn't get it from your shell. Set it in the command itself (`DATABASE_URL=postgres://localhost/app_test npm test`), or remove that name from your copy of the settings.
+- **Not on the list:** `DATABASE_URL` and `PGPASSWORD` (tests often need a local one) and the model providers' own API keys. Add them the same way if your shell exports production values.
 
 Reading the store directly is the other way in. What stops an agent's command from doing that, by store and by sandbox:
 

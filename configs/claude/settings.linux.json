@@ -176,9 +176,7 @@
         { "name": "FLY_API_TOKEN", "mode": "deny" },
         { "name": "SUPABASE_ACCESS_TOKEN", "mode": "deny" },
         { "name": "PULUMI_ACCESS_TOKEN", "mode": "deny" },
-        { "name": "DOPPLER_TOKEN", "mode": "deny" },
-        { "name": "DATABASE_URL", "mode": "deny" },
-        { "name": "PGPASSWORD", "mode": "deny" }
+        { "name": "DOPPLER_TOKEN", "mode": "deny" }
       ]
     }
   },

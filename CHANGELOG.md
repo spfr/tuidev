@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tuidev check` probes each pack for real.** A pack may define `<pack>_check`; `cooling` and `release-age` no longer warn forever. [Engineering](docs/engineering.md)
 - **`tuidev install --help` and `uninstall --help` read as help**, and hints name commands a one-line install has.
 - **The credential list covers more CLIs, histories and browsers**: GitLab, rclone, sops, doctl, hcloud, Fly, Supabase, OCI, Pulumi, Hugging Face, Sentry, Terraform, Databricks, boto and s3cmd tokens, Yarn and Composer auth, REPL and fish history, and the Chrome channels, Chromium, Edge, Vivaldi, Opera and Zen profiles on macOS and Linux. [Sandboxing](docs/sandboxing.md#credentials-denied-under-strict-and-standard)
-- **Agents' commands no longer see GitLab, Hugging Face, Cloudflare, Vercel, Netlify, Sentry, Stripe, DigitalOcean, Fly, Supabase, Pulumi or Doppler tokens, `DATABASE_URL` or `PGPASSWORD`**: Claude Code unsets them in sandboxed commands, Codex drops them (and `TF_TOKEN_*`) from every command it runs. [Secrets](docs/secrets.md#what-an-agent-can-reach)
+- **Agents' commands no longer see GitLab, Hugging Face, Cloudflare, Vercel, Netlify, Sentry, Stripe, DigitalOcean, Fly, Supabase, Pulumi or Doppler tokens**: Claude Code unsets them in sandboxed commands, Codex drops them (and `TF_TOKEN_*`) from every command it runs. [Secrets](docs/secrets.md#what-an-agent-can-reach)
 
 ### Fixed
 
