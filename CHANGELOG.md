@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`tuidev update` in a clone no longer fails when a file disappears while it lists untracked files** (a build or test running there).
 - **`agents why` on a process flagged for its memory says how much it holds**, not only its CPU. [Agent workflows](docs/agent-workflows.md#flagged-is-it-safe-to-stop)
 - **`tuidev update` no longer says "Update Complete" when the download or the pull failed**: it ends with "not updated" and exit 1. [Updating](docs/updating.md)
 - **A migration that fails mid-update says where the install stands and how to finish or roll back**; the next update finishes it. [Updating](docs/updating.md)

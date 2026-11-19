@@ -1101,7 +1101,9 @@ run_repo_mode() {
     fi
 
     print_section "git clean --dry-run (untracked / ignored)"
-    run_cmd git -C "$target" clean -ndx
+    # A listing only: a file that vanishes while git walks the tree (a build or
+    # a test running there) must not fail the update.
+    run_cmd git -C "$target" clean -ndx || print_info "could not list untracked files (the tree changed while git read it)"
 }
 
 # ----------------------------------------------------------------------------
