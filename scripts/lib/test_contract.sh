@@ -99,6 +99,21 @@ hints="$(cd "$REPO_DIR" && grep -nE '(print_[a-z]+|echo|die)[^#]*(\bmake [a-z]|\
 [[ -z "$hints" ]] || fail "hints that need a clone (use tuidev install, tuidev update or \"\$(tuidev home)/scripts/...\"): $hints"
 pass "no printed hint needs a clone (make, ./install.sh)"
 
+# 4d. Every job the packs install from configs/agents/ (a LaunchAgent's
+#     plist, a systemd user unit) runs `agents`, so uninstall.sh stops and
+#     removes it by name; and the plist's Label is its file's name, which
+#     launchctl and the packs use.
+for f in "$REPO_DIR"/configs/agents/*.plist "$REPO_DIR"/configs/agents/*.service "$REPO_DIR"/configs/agents/*.timer; do
+    n="${f##*/}"
+    case "$n" in
+        *.plist)   n="${n%.plist}"
+                   grep -qF "<string>$n</string>" "$f" || fail "$f: its Label is not $n" ;;
+        *.service) [[ -f "${f%.service}.timer" ]] && n="${n%.service}.timer" ;;   # removed with its timer
+    esac
+    grep -qE "^for [a-z_]+ in (.* )?$n( |;)" "$REPO_DIR/uninstall.sh" || fail "uninstall.sh does not stop and remove ${f##*/} ($n)"
+done
+pass "uninstall.sh names every LaunchAgent and systemd user unit in configs/agents/"
+
 # Every shipped config the installer upgrades-if-unmodified (install_config
 # --upgrade-shipped) is fingerprinted, so it can tell an unmodified old copy
 # (upgrade it) from one the user edited (leave it alone). Each hash file lists

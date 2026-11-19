@@ -1,0 +1,24 @@
+# The memory guard (`agents mem guard`), installed by ./install.sh --pack
+# monitoring into ~/.config/systemd/user (Linux): it warns about, records
+# and stops a runaway process in an agent tree before the machine runs out
+# of memory, as the macOS LaunchAgent dev.tuidev.memguard does. Started with
+# your user manager (at boot, once lingering is on), restarted when it fails.
+# Settings: AGENTS_MEM_* in ~/.config/agents.conf, then
+# systemctl --user restart tuidev-memguard.service. AGENTS_MEM_GUARD=off
+# exits 0, and it stays down.
+# Change it with a drop-in (systemctl --user edit tuidev-memguard.service):
+# the pack writes this file again on every install and update.
+
+[Unit]
+Description=The memory guard (agents mem guard)
+
+[Service]
+ExecStart=/bin/bash %h/.local/bin/agents mem guard
+Environment=PATH=%h/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin
+# Restarted when it fails (a second guard waits a minute, then fails, and
+# is tried again); not after AGENTS_MEM_GUARD=off, which exits 0.
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

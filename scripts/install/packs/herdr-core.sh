@@ -45,8 +45,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/../../lib/ui.sh"
 # shellcheck source=../../lib/config_write.sh disable=SC1091
 . "$SCRIPT_DIR/../../lib/config_write.sh"
-# _monitoring_launchagent: agents' LaunchAgents are installed one way;
-# MONITORING_REPO: where configs/agents/ is.
+# _monitoring_launchagent and _monitoring_systemd_units: agents' own jobs are
+# installed one way; MONITORING_REPO: where configs/agents/ is.
 # shellcheck source=./monitoring.sh disable=SC1091
 . "$SCRIPT_DIR/monitoring.sh"
 
@@ -62,26 +62,16 @@ _herdr_core_bin() {
 # _herdr_core_systemd — Linux: the user timer and service that keep the core
 # running, enabled, and whether they run without a login (lingering).
 _herdr_core_systemd() {
-    local dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" u user linger
-    for u in "$HERDR_CORE_UNIT.service" "$HERDR_CORE_UNIT.timer"; do
-        print_step "installing herdr-core kept running (systemd user unit) -> $dir/$u"
-        install_config "$dir/$u" "$MONITORING_REPO/configs/agents/$u" --overwrite
-    done
-    if ! command -v systemctl >/dev/null 2>&1 || ! systemctl --user show-environment >/dev/null 2>&1; then
+    if ! _monitoring_systemd_units "herdr-core kept running" "$HERDR_CORE_UNIT.service" "$HERDR_CORE_UNIT.timer"; then
         print_warning "no systemd user manager here (a container?): nothing starts herdr-core (continuing)."
         print_info "  Where systemd runs: systemctl --user enable --now $HERDR_CORE_UNIT.timer. Else run agents hc up after each boot."
         return 0
     fi
-    { run_cmd systemctl --user daemon-reload && run_cmd systemctl --user enable --now "$HERDR_CORE_UNIT.timer"; } \
+    run_cmd systemctl --user enable --now "$HERDR_CORE_UNIT.timer" \
         || { print_warning "$HERDR_CORE_UNIT.timer did not start: systemctl --user enable --now $HERDR_CORE_UNIT.timer (continuing)"; return 0; }
     print_info "herdr-core starts with your user manager from now on, and again within 5 minutes if it stops."
     print_info "  Off: AGENTS_HC_UP=0 in $MONITORING_CONF (a core you stop stays down), or systemctl --user disable --now $HERDR_CORE_UNIT.timer until the next tuidev update"
-    user="${USER:-$(id -un)}"
-    linger="$(loginctl show-user "$user" -p Linger 2>/dev/null)" || linger=""
-    if [[ "$linger" != "Linger=yes" ]]; then
-        print_warning "lingering is off: your user manager, and this timer, run only while you are logged in."
-        print_info "  So it runs from boot, with no login (needs root, once): sudo loginctl enable-linger $user"
-    fi
+    _monitoring_linger_hint "this timer"
 }
 
 # The claude and codex functions for AGENTS_HC_AUTO, in our own shell.d dir.

@@ -309,7 +309,7 @@ fi
 echo ""
 
 # ============================================================================
-# systemd units (the herdr-core pack's timer and service). systemd-analyze
+# systemd units (the monitoring and herdr-core packs' timers and services). systemd-analyze
 # runs only on a host with systemd, so this is a structural check that runs
 # everywhere: known sections, Key=value lines with keys from a short list,
 # a known Type=, plain time spans in [Timer], and what each kind needs.
@@ -321,7 +321,7 @@ unit_check() {
     LC_ALL=C awk -v kind="${1##*.}" '
         BEGIN {
             keys["Unit"] = " Description Documentation After Before Wants Requires PartOf "
-            keys["Service"] = " Type ExecStart ExecStartPre ExecStop Environment KillMode SuccessExitStatus SyslogLevel LogLevelMax "
+            keys["Service"] = " Type ExecStart ExecStartPre ExecStop Environment KillMode SuccessExitStatus SyslogLevel LogLevelMax Restart RestartSec Nice IOSchedulingClass "
             keys["Timer"] = " OnBootSec OnStartupSec OnActiveSec OnUnitActiveSec OnUnitInactiveSec OnCalendar AccuracySec RandomizedDelaySec Persistent Unit "
             keys["Install"] = " WantedBy RequiredBy Alias "
         }

@@ -1,0 +1,20 @@
+# Runs tuidev-sample.service (`agents sample --scheduled`) a minute after
+# your user manager starts and every minute after that. Installed and enabled
+# by ./install.sh --pack monitoring (Linux). Without lingering
+# (sudo loginctl enable-linger $USER) a user manager runs only while you are
+# logged in, and so does this.
+# Turn it off: AGENTS_SAMPLER=0 in ~/.config/agents.conf, or
+# systemctl --user disable --now tuidev-sample.timer until the next update.
+
+[Unit]
+Description=agents sample once a minute
+
+[Timer]
+OnStartupSec=1min
+OnUnitActiveSec=1min
+# systemd may move a run by up to a minute to batch wakeups; a sample is due
+# 55 s after the last, so let it move a few seconds only.
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

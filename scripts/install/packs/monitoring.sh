@@ -7,12 +7,17 @@
 # (sessions, orphaned MCP servers, CPU hogs, keep-awake, thermal pressure),
 # with mcp-lazy, which `agents mcp lazy` puts in front of an MCP server so a
 # session starts it on its first tool call.
-# On macOS it adds SwiftBar and a menu-bar plugin built on `agents`, and
-# terminal-notifier, so a click on an agent's notification jumps to its session,
-# and a LaunchAgent that runs the memory guard (`agents mem guard`), which
-# stops a runaway process in an agent tree before macOS runs out of memory,
-# and one that runs the link watcher (`agents link watch`), which opens here
-# what you click in a Herdr pane of another machine.
+# On every platform it adds the sampler (`agents sample --scheduled`, once a
+# minute: the history, tokens, runs, waits and usage limits, whether or not a
+# menu runs) and the memory guard (`agents mem guard`), which stops a runaway
+# process in an agent tree before the machine runs out of memory: on macOS
+# as LaunchAgents (dev.tuidev.sample, dev.tuidev.memguard), on Linux as
+# systemd user units (tuidev-sample.timer and .service,
+# tuidev-memguard.service; no systemd, as in a container: a warning and what
+# to run by hand). On macOS it adds SwiftBar and a menu-bar plugin built on
+# `agents`, terminal-notifier, so a click on an agent's notification jumps to
+# its session, and a LaunchAgent that runs the link watcher (`agents link
+# watch`), which opens here what you click in a Herdr pane of another machine.
 #
 # Entrypoint: monitoring_install
 # Invoked via: ./install.sh --pack monitoring
@@ -163,6 +168,77 @@ _monitoring_memguard() {
     print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM; 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
 }
 
+# The sampler: `agents sample --scheduled` once a minute, so the history,
+# tokens, runs, waits and limits stay current without the menu (and the
+# hooks' waits outside Herdr are recorded). A sample the menu or `agents
+# watch` took within 55 s stands: the run then does nothing.
+MONITORING_SAMPLE_LABEL="dev.tuidev.sample"
+_monitoring_sampler() {
+    _monitoring_launchagent "$MONITORING_SAMPLE_LABEL" tuidev-sample "the sampler" \
+        "launchctl bootstrap gui/$(id -u) $HOME/Library/LaunchAgents/$MONITORING_SAMPLE_LABEL.plist"
+    print_info "sampler: agents sample once a minute, with or without the menu; AGENTS_SAMPLER=0 in $MONITORING_CONF turns it off."
+}
+
+# --- Linux: systemd user units ------------------------------------------------
+# The sampler's timer and service, and the memory guard's service, beside
+# herdr-core's (scripts/install/packs/herdr-core.sh), all in
+# configs/agents/ and written as shipped into ~/.config/systemd/user.
+MONITORING_SAMPLE_UNIT="tuidev-sample"
+MONITORING_MEMGUARD_UNIT="tuidev-memguard"
+
+# _monitoring_systemd_ready — a systemd user manager runs here (not in a
+# container, not as root without a user bus).
+_monitoring_systemd_ready() {
+    command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1
+}
+
+# _monitoring_systemd_units WHAT UNIT... — write each UNIT
+# (configs/agents/UNIT) into the user unit directory, recorded, then reload
+# systemd's view of them. False when no systemd user manager runs here: the
+# files are in place for one, and the caller says what to run instead.
+_monitoring_systemd_units() {
+    local what="$1" dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" u
+    shift
+    for u in "$@"; do
+        print_step "installing $what (systemd user unit) -> $dir/$u"
+        install_config "$dir/$u" "$MONITORING_REPO/configs/agents/$u" --overwrite
+    done
+    _monitoring_systemd_ready || return 1
+    run_cmd systemctl --user daemon-reload || print_warning "systemctl --user daemon-reload failed (continuing)"
+    return 0
+}
+
+# _monitoring_linger_hint WHAT — without lingering, a user manager (and WHAT)
+# runs only while you are logged in: the one root command that changes that.
+_monitoring_linger_hint() {
+    local user linger
+    user="${USER:-$(id -un)}"
+    linger="$(loginctl show-user "$user" -p Linger 2>/dev/null)" || linger=""
+    [[ "$linger" != "Linger=yes" ]] || return 0
+    print_warning "lingering is off: your user manager, and $1, run only while you are logged in."
+    print_info "  So it runs from boot, with no login (needs root, once): sudo loginctl enable-linger $user"
+}
+
+# _monitoring_linux_units — the sampler (enabled timer) and the memory guard
+# (enabled service, restarted so a new agents takes over, as launchd's
+# bootstrap does on macOS).
+_monitoring_linux_units() {
+    local s="$MONITORING_SAMPLE_UNIT" m="$MONITORING_MEMGUARD_UNIT.service"
+    if ! _monitoring_systemd_units "the sampler and the memory guard" "$s.service" "$s.timer" "$m"; then
+        print_warning "no systemd user manager here (a container?): nothing samples or guards memory on its own (continuing)."
+        print_info "  Where systemd runs: systemctl --user enable --now $s.timer $m"
+        print_info "  Else, in a tmux pane: agents watch (it samples while it runs) and agents mem guard"
+        return 0
+    fi
+    { run_cmd systemctl --user enable --now "$s.timer"; } \
+        || print_warning "$s.timer did not start: systemctl --user enable --now $s.timer (continuing)"
+    { run_cmd systemctl --user enable "$m" && run_cmd systemctl --user restart "$m"; } \
+        || print_warning "the memory guard did not start: systemctl --user enable --now $m (continuing)"
+    print_info "sampler: agents sample once a minute ($s.timer); AGENTS_SAMPLER=0 in $MONITORING_CONF turns it off."
+    print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM ($m); 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
+    _monitoring_linger_hint "the sampler and the memory guard"
+}
+
 # The link watcher: one ssh to each of your other machines, so a click in one
 # of their Herdr panes opens here (lib/agents/link.sh).
 MONITORING_LINK_LABEL="dev.tuidev.link"
@@ -178,10 +254,11 @@ monitoring_install() {
     _monitoring_agents
     if is_macos; then
         _monitoring_swiftbar
+        _monitoring_sampler
         _monitoring_memguard
         _monitoring_link
     else
-        print_info "memory guard: run 'agents mem guard' in a tmux pane (or a systemd user service) to stop runaway agent processes."
+        _monitoring_linux_units
         print_info "link watcher: on the machine you sit at, run 'agents link watch' in a tmux pane (or a systemd user service)."
     fi
 
@@ -193,11 +270,18 @@ monitoring_install() {
     print_success "monitoring pack complete"
 }
 
-# The health check's probe (pack_check): agents, and a process monitor.
-# terminal-notifier and the SwiftBar plugin have checks of their own there.
+# The health check's probe (pack_check): agents, a process monitor, and the
+# sampler's job (the LaunchAgent, or the systemd timer's unit file). File
+# tests only: nothing asks launchd or systemd. terminal-notifier and the
+# SwiftBar plugin have checks of their own there.
 monitoring_check() {
     command -v agents >/dev/null 2>&1 || return 1
-    command -v btm >/dev/null 2>&1 || command -v htop >/dev/null 2>&1
+    command -v btm >/dev/null 2>&1 || command -v htop >/dev/null 2>&1 || return 1
+    if is_macos; then
+        [[ -f "$HOME/Library/LaunchAgents/$MONITORING_SAMPLE_LABEL.plist" ]]
+    else
+        [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$MONITORING_SAMPLE_UNIT.timer" ]]
+    fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
