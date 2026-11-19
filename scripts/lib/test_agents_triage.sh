@@ -543,7 +543,7 @@ memv() { W="$1" _agents_awk_colored "lib_fmt mem_view" -F '\t' -v total=50331648
 out="$(printf '80913\t5767168\t100\tvm guest\t-\t-\n2141\t10485760\t2000\tnode\tbilling\tclaude:7\n99\t31457280\t10\tbig\t-\t-\n' | memv 80 12373196 13631488 2)"
 [[ "$out" == "MEMORY  ████████████▎░░░░░░░░░░░░░░░░░  41% used of 48.0G · pressure normal"* ]] || fail "memory bar: $out"
 [[ "$out" == *$'\n'"SWAP    ███████████████████████████▎░░  ! 11.8 of 13.0G"$'\n'* ]] || fail "swap bar: $out"
-[[ "$out" == *$'\n'"GUARD   running (pid 42) · kill · 2 stops in 7 days"$'\n'* ]] || fail "guard line: $out"
+[[ "$out" == *$'\n'"GUARD   running (pid 42) · kill · 2 stops in 7 days (agents mem log)"$'\n'* ]] || fail "guard line: $out"
 [[ "$out" == *$'\n'"PID     FOOTPRINT    warn 8G        stop 24G  PROCESS"$'\n'* ]] || fail "the thresholds over the bars: $out"
 [[ "$out" == *$'\n'"80913        5.5G  █████▌░░│░░░░░░░░░░░░░░░░  vm guest · rss 100K"$'\n'* ]] || fail "process bar with the warn mark: $out"
 [[ "$out" == *$'\n'"2141        10.0G  ████████│██░░░░░░░░░░░░░░  node · billing · claude:7 · rss 1M"* ]] || fail "past the warning: $out"
@@ -758,6 +758,15 @@ pass "menu: Machines is one row that says how many, what runs and what is wrong,
 menu="$(plugin "$(runs 21)"$'\n'"$(printf 'memg\ton\t42\t8388608\t25165824\t0\t-\t-\t-\t0\nhog\t77\tnode\t600\t5.0\t5.0\t9000000\t0\tS77\t-\tme\t-\t-\tnode x\t-\n')")"
 [[ "$menu" == *$'\n'"Hogs (1) · node | sfimage=memorychip $RED refresh=true symbolize=false"$'\n'"--node · 8.5G memory | "* ]] || fail "a memory hog's row: $(printf '%s\n' "$menu" | grep -A1 '^Hogs')"
 pass "menu: Hogs is one row naming them, red while a memory hog is among them"
+
+# A stalled memory guard says so, with Restart; one read inside a sandbox is unknown, not "not set up".
+menu="$(plugin "$(runs 21)"$'\n'"$(printf 'memg\tstalled\t42\t5033164\t8388608\t0\t-\t-\t-\t0\n')")"
+[[ "$menu" == *"Memory guard stalled: no look in three polls"* && "$menu" == *"--Restart it | "*"param2=restart"* && "$menu" == *" · guard stalled | "* ]] \
+    || fail "a stalled guard in the menu: $(printf '%s\n' "$menu" | grep -i guard)"
+menu="$(plugin "$(runs 21)"$'\n'"$(printf 'memg\tunknown\t-\t5033164\t8388608\t0\t-\t-\t-\t0\n')")"
+[[ "$menu" == *"Memory guard: unknown (the process table can't be read here)"* && "$menu" != *"not set up"* ]] \
+    || fail "an unknown guard in the menu: $(printf '%s\n' "$menu" | grep -i guard)"
+pass "menu: a stalled memory guard warns and offers Restart; unknown is not \"not set up\""
 
 # An older agents: no triage rows, Herdr's status alone; nothing breaks.
 old="$(printf '%s\n' "$MENU_TSV" | grep -vE '^(triage|pace|waitsum|swap)'$'\t')"

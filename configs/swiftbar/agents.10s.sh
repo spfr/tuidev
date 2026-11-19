@@ -1079,7 +1079,7 @@ fi
 # memory pressure, or sleep disabled with nothing to restore it.
 
 attention=""
-if [[ "$mempress" == warn || $mem_recent -eq 1 || "$mem_state" == stopped || $limit_max -ge 95 ]]; then attention="$HUE_WARN"; fi
+if [[ "$mempress" == warn || $mem_recent -eq 1 || "$mem_state" == stopped || "$mem_state" == stalled || $limit_max -ge 95 ]]; then attention="$HUE_WARN"; fi
 if { num "$thermal" && [[ $thermal -ge 2 ]]; } || [[ "$mempress" == critical || "$lid_state" == stale ]]; then attention="$HUE_NEED"; fi
 
 # title_sym NAME [TINT] — a symbol in the title. SwiftBar colors them by position,
@@ -1803,7 +1803,10 @@ section_system() {
         warn)     line+=" · memory pressure"; look="sfimage=memorychip $TINT_WARN" ;;
         critical) line+=" · memory pressure critical"; look="sfimage=memorychip $TINT_NEED" ;;
     esac
-    if [[ "$mem_state" == stopped ]]; then line+=" · guard not running"; look="sfimage=shield.slash $TINT_WARN"; fi
+    case "$mem_state" in
+        stopped) line+=" · guard not running"; look="sfimage=shield.slash $TINT_WARN" ;;
+        stalled) line+=" · guard stalled"; look="sfimage=shield.slash $TINT_WARN" ;;
+    esac
     if [[ "$cool_state" == stale ]]; then line+=" · fan control stopped"; look="sfimage=fan $TINT_WARN"; fi
     put "$line | $look $TERM_OPEN param2=watch"
     put "--Load $load/$cores | size=11"
@@ -1828,17 +1831,23 @@ section_system() {
 }
 
 # The memory guard: on (with the size it stops a runaway at), not running
-# (with Start), or off; then its last incident, and the memory view.
+# (with Start), stalled (with Restart), unknown (read inside a sandbox), or
+# off; then its last incident, and the memory view.
 section_memguard() {
     local line ago=""
     case "$mem_state" in
         on)      memv "${mem_stop:-0}"; line="Memory guard: on · stops agent runaways at $REPLY | sfimage=shield.lefthalf.filled $TERM_OPEN param2=--hold param3=mem" ;;
         stopped) line="Memory guard not running | sfimage=shield.slash $TINT_WARN $TERM_OPEN param2=--hold param3=mem" ;;
+        stalled) line="Memory guard stalled: no look in three polls | sfimage=shield.slash $TINT_WARN $TERM_OPEN param2=--hold param3=mem" ;;
+        unknown) line="Memory guard: unknown (the process table can't be read here) | sfimage=shield.lefthalf.filled $TINT_IDLE $TERM_OPEN param2=--hold param3=mem" ;;
         off)     line="Memory guard: off (AGENTS_MEM_GUARD) | sfimage=shield.slash $TINT_IDLE $TERM_OPEN param2=--hold param3=mem" ;;
         *)       line="Memory guard: not set up (agents mem guard) | sfimage=shield.slash $TINT_IDLE $TERM_OPEN param2=--hold param3=mem" ;;
     esac
     put "$line"
-    [[ "$mem_state" != stopped ]] || put "--Start it | $ACT param1=mem param2=restart sfimage=play.circle"
+    case "$mem_state" in
+        stopped) put "--Start it | $ACT param1=mem param2=restart sfimage=play.circle" ;;
+        stalled) put "--Restart it | $ACT param1=mem param2=restart sfimage=arrow.clockwise" ;;
+    esac
     if num "$mem_last" && [[ $mem_last -gt 0 ]]; then
         now_s; agev $((NOW_S - mem_last)); ago="$REPLY"
         cl "$mem_what"; line="$REPLY"

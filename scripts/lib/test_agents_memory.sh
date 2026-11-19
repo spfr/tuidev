@@ -488,7 +488,9 @@ reset
 SECONDS=0
 (
     eval "$real_fp"
+    # shellcheck disable=SC2329  # called by the real _agents_mem_fp
     _agents_mem_footprint() { _agents_timeout 1 sh -c 'exec sleep 30'; }
+    # shellcheck disable=SC2329  # called by the real _agents_mem_fp
     _agents_mem_top() { _agents_timeout 1 sh -c 'exec sleep 30'; }
     OSTYPE=darwin25 AGENTS_NOW=18100 agents_mem_tick >/dev/null
     AGENTS_NOW=18100 _agents_mem_beat
@@ -504,6 +506,7 @@ pass "a probe cut off: no stop, no warning, the last footprint stands; the look 
 reset
 mkdir -p "$AGENTS_RUN_DIR/memguard.lock"
 echo "4242 Wed_Oct_14_06:00:00_2026" > "$AGENTS_RUN_DIR/memguard.lock/holder"
+# shellcheck disable=SC2329  # the stub is called by _agents_mem_guard_state
 gstate() { ( _agents_holder_check() { return "${HOLDER_RC:-0}"; }; AGENTS_NOW="$1" _agents_mem_guard_state ); }
 [[ "$(gstate 1000)" == "on 4242" ]] || fail "no heartbeat yet (a guard from before it had one): on"
 echo "1000 5" > "$AGENTS_RUN_DIR/memguard.beat"
@@ -521,7 +524,8 @@ pass "guard state: on, stalled once the heartbeat is three polls old, unknown wh
 # 4h. `agents mem`: the stalled guard, the escalation (counted with the stops,
 #     pointing at the log, its why under it), and in a sandbox, no "not running".
 reset
-show() { ( _agents_mem_top() { :; }; _agents_mem_guard_state() { echo "$GS"; }; AGENTS_NOW=12100 AGENTS_WIDTH=120 _agents_mem_show ); }
+# shellcheck disable=SC2329  # the stubs are called by _agents_mem_show
+show() { ( _agents_mem_top() { return "${TOP_RC:-0}"; }; OSTYPE=darwin25; _agents_mem_guard_state() { echo "$GS"; }; AGENTS_NOW=12100 AGENTS_WIDTH=120 _agents_mem_show ); }
 mkdir -p "$AGENTS_DATA_DIR"
 printf '%s\n' $'12000\tstop\t620\tnode\tclientFuelToday.test.js\tcairn\tclaude:600\t31457280\t10485760\t3\t2097152' \
     $'12040\tescalate\t610\tzsh\tclientFuelToday.test.js\tcairn\tclaude:600\t31457280\t10485760\t3\t2097152\tnode (clientFuelToday.test.js) stopped again 40s after the guard stopped pid 620 under the same command' \
@@ -533,6 +537,10 @@ out="$(GS=unknown MACH=$'50331648\t-\t-\t-\t-' show)"
 [[ "$out" == *"GUARD   unknown: the process table can't be read from inside a sandbox"* ]] || fail "sandbox guard wording: $out"
 [[ "$out" == *"MEMORY  unknown: can't be read from inside a sandbox"* ]] || fail "sandbox memory wording: $out"
 [[ "$out" != *"not running"* && "$out" != *"pressure -"* ]] || fail "a sandbox reads as a guard that is down: $out"
+out="$(GS=unknown MACH=$'50331648\t40\t-\t-\t-' show)"
+[[ "$out" == *"60% used of 48.0G · pressure can't be read from inside a sandbox"* ]] || fail "free memory read, pressure not: $out"
+out="$(GS="on 42" TOP_RC=124 show)"
+[[ "$out" == *"top did not answer in 5 s: no footprints this time"* ]] || fail "a top cut off is said: $out"
 pass "agents mem: stalled, escalations with why and the log, and a sandbox said as such"
 
 # 5. The menu's memg row: the guard's state and the last incident.
