@@ -220,7 +220,8 @@ snap() { find "$H" -type f -exec cksum {} + 2>/dev/null | LC_ALL=C sort; find "$
 rt_fixture ""
 out="$(hc)"; has "rc=0" "a healthy home"; has "Runtime failed:    0"
 out="$(hc --bogus)"; has "rc=2" "a bad argument"
-pass "exit 0 when nothing fails, 2 for a bad argument"
+rm "$HS/profile"; out="$(hc)"; has "runtime: skipped: no install is recorded here"; hasnt "is not installed (fix"
+pass "exit 0 when nothing fails, 2 for a bad argument; with no install recorded the runtime probes are skipped"
 
 # 1. macOS: each LaunchAgent the active packs declare is loaded, not only on disk.
 rt_fixture monitoring

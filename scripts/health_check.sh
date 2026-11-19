@@ -820,7 +820,9 @@ probe_bin_copy() {
     fi
     n=0
     cmp -s "$dest" "$src" || n=1
-    if [[ "$name" == agents && -d "$REPO_DIR/lib/agents" ]]; then
+    if [[ "$name" == agents && -d "$REPO_DIR/lib/agents" && ! -d "$TUIDEV_LIB_DIR/agents" ]]; then
+        n=$((n + 1))
+    elif [[ "$name" == agents && -d "$REPO_DIR/lib/agents" ]]; then
         # The modules: one that differs or is missing; what only the install
         # has (themes, a module a release dropped) is left out.
         n=$(( n + $(diff -rq "$REPO_DIR/lib/agents" "$TUIDEV_LIB_DIR/agents" 2>/dev/null \
@@ -1154,6 +1156,11 @@ check_doctor() {
 check_runtime() {
     local p kind name
     print_header "Runtime (what runs now)"
+    # What runs is an install's: with none recorded there is nothing to compare.
+    if ! $TUIDEV_PROFILE_FOUND; then
+        print_info "runtime: skipped: no install is recorded here ($TUIDEV_PROFILE_FILE_DEFAULT)"
+        return 0
+    fi
     RT_ACTIVE=" "
     for p in $(tuidev_active_packs) core $(tuidev_extra_packs "$PROFILE"); do
         [[ "$RT_ACTIVE" == *" $p "* ]] || RT_ACTIVE+="$p "
