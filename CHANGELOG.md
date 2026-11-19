@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Agents' commands no longer see `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or `OPENAI_API_KEY`**; the CLIs keep their own login. [Secrets](docs/secrets.md#what-an-agent-can-reach)
 - **The palette always starts with the update**: "Check for a new release" asks now and offers it; the preview that changes nothing is "Preview an update". [Updating](docs/updating.md)
+- **The install clip shows the one-line `curl … | bash` install**: both questions and the `p` preview, served offline from this checkout. [Tapes](docs/assets/tapes/README.md#the-clips)
 
 ## [3.26.0] - 2026-11-19
 
