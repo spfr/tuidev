@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The agent docs read in the order you need them** and say only what ships: agent workflows is about 40% shorter, remote opens with "anywhere", the cheatsheet is one line per key or command. [Agent workflows](docs/agent-workflows.md) · [Remote](docs/remote.md) · [Cheatsheet](docs/CHEATSHEET.md)
+
 ## [3.27.1] - 2026-11-19
 
 ### Changed
