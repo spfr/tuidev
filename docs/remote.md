@@ -94,7 +94,7 @@ The other machines answer over one shared ssh connection each, so the list comes
 |---|---|---|---|---|
 | `enter` | open it in your browser, forwarding first when it is remote | | go to its pane (here) or peek at it (elsewhere) | |
 | `ctrl-k` (also `ctrl-x` and `delete`) | stop the process that holds it | stop its tree | stop its tree | |
-| `ctrl-s` | sweep its machine | sweep its machine | | sweep it: `agents reap` stops what sessions left behind, asked first |
+| `ctrl-s` | sweep its machine | sweep its machine | | sweep it: `agents reap` stops what sessions left behind that is safe to stop, asked first |
 | `ctrl-p` | | | peek at its pane | |
 | `ctrl-e` | | | list what each session runs | |
 | `ctrl-r` | reload the list | | | |

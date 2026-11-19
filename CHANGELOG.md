@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`agents statusline`, `bar poke` and the wait hooks start about twice as fast** (17 ms, was 32 ms): they load only the modules they use. [Engineering](docs/engineering.md)
 - **`tuidev check` probes each pack for real.** A pack may define `<pack>_check`; `cooling` and `release-age` no longer warn forever. [Engineering](docs/engineering.md)
 - **`tuidev install --help` and `uninstall --help` read as help**, and hints name commands a one-line install has.
+- **`agents reap` stops only what its verdict calls safe to stop**, shows each verdict in the plan and counts the "check first" ones; `--all` takes those too, and `agents why` without a PID lists every verdict. [Flagged](docs/agent-workflows.md#flagged-is-it-safe-to-stop)
 
 ### Fixed
 

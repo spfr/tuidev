@@ -42,7 +42,7 @@ agents_main() {
         return
     fi
     AGENTS_DRY_RUN=false AGENTS_YES=false AGENTS_CONFIRM_GUI=false AGENTS_NOTIFY=false AGENTS_STUCK=false
-    AGENTS_AUTO=false AGENTS_THROTTLE=false
+    AGENTS_AUTO=false AGENTS_THROTTLE=false AGENTS_ALL=false
     _agents_colors
     if [[ -t 1 ]]; then AGENTS_WIDTH="${COLUMNS:-$(_agents_term_cols)}"; else AGENTS_WIDTH=160; fi
     case "$cmd" in
@@ -61,14 +61,23 @@ agents_main() {
                     --notify)      AGENTS_NOTIFY=true ;;
                     --stuck)       [[ "$cmd" == reap ]] || { echo "agents: --stuck is a reap option" >&2; return 2; }
                                    AGENTS_STUCK=true ;;
-                    --auto|--throttle)
+                    --auto|--throttle|--all)
                                    [[ "$cmd" == reap ]] || { echo "agents: $a is a reap option" >&2; return 2; }
-                                   if [[ "$a" == --auto ]]; then AGENTS_AUTO=true; else AGENTS_THROTTLE=true; fi ;;
+                                   case "$a" in
+                                       --auto) AGENTS_AUTO=true ;;
+                                       --all)  AGENTS_ALL=true ;;
+                                       *)      AGENTS_THROTTLE=true ;;
+                                   esac ;;
                     -*)            echo "agents: unknown option $a" >&2; return 2 ;;
                     *)             args+=("$a") ;;
                 esac
             done
             set -- ${args[@]+"${args[@]}"}
+            # Auto-reap keeps its own rules: --all never widens it.
+            if [[ "$AGENTS_AUTO" == true && "$AGENTS_ALL" == true ]]; then
+                echo "agents: --all and --auto do not go together (auto-reap stops only what is safe for it)" >&2
+                return 2
+            fi
             ;;
     esac
     case "$cmd" in

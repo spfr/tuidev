@@ -65,7 +65,7 @@ Line editing uses the Emacs keymap. Put `bindkey -v` in `~/.zshrc.local` for vi 
 | `hunk diff`, `hunk show` | review the working tree or a commit in hunk (`--pack hunk`); `--watch` reloads on change |
 | `gs` `ga` `gc` `gp` `gl` `gd` `gco` `gb` | `git status` / `add` / `commit` / `push` / `pull` / `diff` / `checkout` / `branch` |
 | `top` | `btm` at a terminal (`--pack monitoring`) |
-| `agents`, `agents watch` | agent sessions, stale processes, hogs; `agents reap`, `agents awake on 2h` (`--pack monitoring`) |
+| `agents`, `agents watch` | agent sessions, stale processes, hogs; `agents why` (verdicts), `agents reap` (what is safe to stop; `--all` the rest), `agents awake on 2h` (`--pack monitoring`) |
 | `md`, `mdp FILE` | glow (`--extras`) |
 | `help CMD` | `tldr` (`--extras`) |
 | `loc` | tokei (`--extras`) |

@@ -411,7 +411,8 @@ case_ why-token why 6000@Wed_Oct_14_08:10:00_2026
 case_ why-moved why 6000@Mon_Jan_01_00:00:00_2024
 case_ why-none why 900
 case_ why-copy why --copy 5010
-case_ why-usage why
+case_ why-list why
+case_ why-usage why --copy
 case_ report report
 case_ report-7d report --since 7d
 case_ report-today report --since today
@@ -465,6 +466,8 @@ case_ runs-json runs --json
 case_ runs-7d runs --since 7d
 case_ reap-n reap -n
 case_ reap-stuck-n reap --stuck -n
+case_ reap-all-n reap --all -n
+case_ reap-stuck-all-n reap --stuck --all -n
 case_ reap-auto-n reap --auto -n
 case_ kill-n kill -n 90419
 case_ kill-token-n kill -n 60829@Wed_Oct_14_08:23:56_2026

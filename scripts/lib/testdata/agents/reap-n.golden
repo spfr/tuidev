@@ -1,13 +1,12 @@
   60872   chrome-devtools-mcp
-  60829   npm
-  60831   node
-  27681   caffeinate
-  4100    node
+  60829   npm · safe to stop — probably left by an agent session that ended
+  60831   node · safe to stop — probably left by an agent session that ended
+  27681   caffeinate · safe to stop — probably left by an agent session that ended
   6001    chrome-devtools-mcp
-  6000    npm
-  6100    node
+  6000    npm · safe to stop — its session ended
   202     chrome-headless-shell
   201     node
-  200     npm
-dry run: would send SIGTERM to 11 process(es), then SIGKILL to any left after 3s
+  200     npm · safe to stop — probably left by an agent session that ended
+left out: 2 flagged "check first" (agents reap --all includes them; agents why PID explains one)
+dry run: would send SIGTERM to 9 process(es), then SIGKILL to any left after 3s
 [rc=0]

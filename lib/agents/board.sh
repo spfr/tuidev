@@ -652,7 +652,7 @@ _agents_board_palette() {
             "runs${t}Runs: the commands that finished${t}agents runs" \
             "report${t}Report: where the day went${t}agents report" \
             "tokens${t}Report: tokens and cost${t}agents report --view tokens" \
-            "reap${t}Sweep what sessions left behind here${t}agents reap, asks first"
+            "reap${t}Sweep what sessions left behind here${t}agents reap: what is safe to stop, asks first"
         ! command -v tuidev >/dev/null 2>&1 || printf '%s\n' "tuidev${t}More: everything tuidev can do${t}tuidev palette"
     } | awk -F '\t' -v d="$C_DIM" -v z="$C_0" '{ printf "%s\t%-46s %s%s%s\n", $1, $2, d, $3, z }' \
       | SHELL="${BASH:-/bin/bash}" "$(_agents_fzf)" --ansi --delimiter "$t" --with-nth '2..' --layout reverse --height 100% \

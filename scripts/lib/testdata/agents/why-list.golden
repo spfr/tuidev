@@ -1,0 +1,21 @@
+19 flagged (agents why PID explains one):
+  1010    dup    go           check first — the same command runs 3× in this directory
+  1020    dup    go           check first — the same command runs 3× in this directory
+  1080    long   make         informational — running 45m; its session is still active
+  2010    dup    go           check first — the same command runs 3× in this directory
+  5010    stuck  wait-loop    safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+  5020    stuck  wait-loop    safe to stop — nothing has written to the file it watches for 1h30m
+  5030    stuck  wait-loop    check first — waiting 3h0m, with no file to judge by (age only)
+  5040    stuck  wait-loop    check first — the file it watches is gone; waiting 2h0m
+  5060    long   node         check first — dev server on :3000, its session is still active
+  5070    long   make         informational — running 25m; its session is still active
+  5080    stuck  wait-loop    safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago)
+  5090    stuck  wait-loop    check first — waiting 3h0m on whether @TMP@/w/build.log exists
+  60829   stale  npm          safe to stop — probably left by an agent session that ended
+  60831   stale  node         safe to stop — probably left by an agent session that ended
+  27681   stale  caffeinate   safe to stop — probably left by an agent session that ended
+  4100    stale  node         check first — a server on :5173, left behind when its session ended
+  6000    stale  npm          safe to stop — its session ended
+  6100    stale  node         check first — a server on :5174, left behind when its session ended
+  200     stale  npm          safe to stop — probably left by an agent session that ended
+[rc=0]

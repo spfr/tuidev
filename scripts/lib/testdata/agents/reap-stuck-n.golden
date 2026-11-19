@@ -1,20 +1,16 @@
   5011    sleep
-  5010    zsh
-  5020    zsh
-  5030    zsh
-  5040    zsh
-  5080    zsh
-  5090    zsh
+  5010    zsh · safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+  5020    zsh · safe to stop — nothing has written to the file it watches for 1h30m
+  5080    zsh · safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago)
   60872   chrome-devtools-mcp
-  60829   npm
-  60831   node
-  27681   caffeinate
-  4100    node
+  60829   npm · safe to stop — probably left by an agent session that ended
+  60831   node · safe to stop — probably left by an agent session that ended
+  27681   caffeinate · safe to stop — probably left by an agent session that ended
   6001    chrome-devtools-mcp
-  6000    npm
-  6100    node
+  6000    npm · safe to stop — its session ended
   202     chrome-headless-shell
   201     node
-  200     npm
-dry run: would send SIGTERM to 18 process(es), then SIGKILL to any left after 3s
+  200     npm · safe to stop — probably left by an agent session that ended
+left out: 5 flagged "check first" (agents reap --all includes them; agents why PID explains one)
+dry run: would send SIGTERM to 13 process(es), then SIGKILL to any left after 3s
 [rc=0]

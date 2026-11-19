@@ -73,11 +73,12 @@ LOOK
                                of a burst at the window's end; --settle: once more
                                then. Claude Code's hooks, Herdr's events and the
                                menu itself run it; AGENTS_BAR_REFRESH is the backstop
-  agents why [--copy] PID[@START]
+  agents why [--copy] [PID[@START]]
                                why an item is listed, the evidence (owner, age,
                                ports, the file a loop watches and its last line)
                                and a verdict: safe to stop, check first, leave
-                               it, informational; --copy puts it on the clipboard
+                               it, informational; --copy puts it on the clipboard.
+                               Without a PID: every flagged item, one line each
 
 OTHER MACHINES (over ssh: Herdr's saved machines, and AGENTS_REMOTE_HOSTS)
   agents board [MACHINE|local] every session on every machine in one list, by what
@@ -227,8 +228,12 @@ HISTORY (local, names only; AGENTS_HISTORY=0 records nothing)
 ACT
   agents kill [OPTS] PID...    SIGTERM the whole tree, descendants first, then
                                SIGKILL whatever is left after 3s
-  agents reap [OPTS]           kill every stale tree
-    --stuck                    reap: also stop polling loops flagged stuck
+  agents reap [OPTS]           kill each stale tree whose verdict (agents why) is
+                               safe to stop; the plan shows each verdict and how
+                               many "check first" ones it left out
+    --stuck                    reap: also stop polling loops flagged stuck (the
+                               safe ones)
+    --all                      reap: include the "check first" ones too
     --auto                     reap without asking only what is safe to: stale
                                trees that listen on no port, loops stuck on a file
                                quiet for 2 x AGENTS_WAIT_STUCK (cron; the menu runs
