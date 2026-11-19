@@ -1,0 +1,30 @@
+#!/bin/bash
+# curl, for clip-install.tape only (first on its PATH): the one-line install,
+#   curl -fsSL https://github.com/spfr/tuidev/releases/latest/download/get.sh | bash
+# answered without the network. It serves the three files a release carries
+# at that URL, get.sh, tuidev.tar.gz and tuidev.tar.gz.sha256, from
+# $DEMO_RELEASE, where the tape builds them from this checkout with
+# scripts/dist.sh: so a render needs no network, and shows this checkout's
+# get.sh and installer, not whichever release is the latest. Like curl, it
+# writes to the -o file or to stdout; the other flags (get.sh's -q, --retry,
+# --proto, ...) are taken and ignored. Any other URL is refused, never fetched.
+set -eo pipefail
+
+base="https://github.com/spfr/tuidev/releases/latest/download/"
+out="" url=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -o) out="${2:-}"; shift ;;
+        *://*) url="$1" ;;
+    esac
+    shift
+done
+
+name="${url#"$base"}"
+case "$name" in
+    get.sh|tuidev.tar.gz|tuidev.tar.gz.sha256) ;;
+    *) echo "curl (demo stand-in): serves ${base}NAME only, not ${url:-no URL}" >&2; exit 22 ;;
+esac
+src="${DEMO_RELEASE:?the tape sets DEMO_RELEASE}/$name"
+[[ -f "$src" ]] || { echo "curl (demo stand-in): $src is missing (scripts/dist.sh builds it)" >&2; exit 22; }
+if [[ -n "$out" ]]; then cp "$src" "$out"; else cat "$src"; fi

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The install clip shows the one-line `curl … | bash` install**: both questions and the `p` preview, served offline from this checkout. [Tapes](docs/assets/tapes/README.md#the-clips)
+
 ## [3.26.0] - 2026-11-19
 
 ### Added

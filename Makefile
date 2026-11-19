@@ -148,7 +148,7 @@ SHELL_FILES := install.sh uninstall.sh scripts/*.sh scripts/lib/*.sh \
                scripts/install/*.sh scripts/install/packs/*.sh \
                scripts/migrations/*.sh get.sh bin/tuidev bin/sbx bin/secret bin/agents lib/agents/*.sh configs/swiftbar/*.sh \
                configs/herdr/plugins/*/*.sh \
-               docs/assets/tapes/*.sh docs/assets/tapes/herdr/*.sh docs/assets/tapes/bin/agents
+               docs/assets/tapes/*.sh docs/assets/tapes/herdr/*.sh docs/assets/tapes/bin/agents docs/assets/tapes/offline/curl
 
 lint: ## Shellcheck every shell script (install, scripts, libs, packs, migrations, sbx)
 	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not found. brew install shellcheck"; exit 1; }

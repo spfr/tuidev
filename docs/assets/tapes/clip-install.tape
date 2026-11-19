@@ -1,12 +1,23 @@
 # docs/assets/clips/install.mp4 (and .gif, captioned by screenshots.sh): the
-# installer's dry run for the full profile. First its opening screen (the
-# profile, the packs, the first steps it would take), then the whole run, which
-# ends with what to do next and the steps it would leave to you. The real
-# install.sh, run from a copy of this checkout in the demo home
-# (/Users/Shared/NAME, as in sbx.tape), so the paths on screen are the demo's.
-# The whole run is recorded hidden and shown once it has ended: its middle
-# names the renderer's own SwiftBar plugin folder (read with `defaults`), which
-# no shot may show. Render: make screenshots TAPES=clip-install
+# one-line install as the README gives it, `curl -fsSL .../get.sh | bash`, in
+# the demo home (/Users/Shared/NAME, as in sbx.tape). get.sh downloads the
+# release, checks and unpacks it, asks what this machine should get (1,
+# everything for agent work), then asks once more before it changes anything.
+# `p` previews every change (the installer's --dry-run), and the clip ends on
+# that question, asked again after the preview. Nothing is installed: the
+# answer after the last frame, typed hidden, is n.
+#
+# What stands in for the network: `curl` is docs/assets/tapes/offline/curl,
+# first on PATH. For the one-liner's URL and get.sh's two downloads
+# (releases/latest/download/get.sh, tuidev.tar.gz and tuidev.tar.gz.sha256) it
+# serves a release that scripts/dist.sh builds from this checkout's last
+# commit, into the demo home, and it refuses any other URL. So a render needs
+# no network and shows this checkout's get.sh and installer, not whichever
+# release is the latest. The rest is real: get.sh's checksum and layout
+# checks, the unpack to ~/.local/share/tuidev/versions/X.Y.Z, both questions
+# and the dry run. The dry run is recorded hidden and shown once it has ended:
+# its middle names the renderer's own SwiftBar plugin folder (read with
+# `defaults`), which no shot may show. Render: make screenshots TAPES=clip-install
 Source docs/assets/tapes/theme.tape
 Output docs/assets/clips/install.mp4
 Set Width 1200
@@ -23,28 +34,40 @@ Type `PATH="$(printf '%s' "$PATH" | tr : '\n' | grep -v "^$HOME/" | paste -sd: -
 Enter
 Type `R="$PWD" && source docs/assets/tapes/demo-env.sh`
 Enter
-Type `mkdir "$HOME/tuidev" && tar -C "$R" --exclude .git --exclude docs/assets -cf - . | tar -C "$HOME/tuidev" -xf - && cd "$HOME/tuidev"`
+# The network's stand-in first on PATH, and the release it serves, built from
+# this checkout.
+Type `export DEMO_RELEASE="$HOME/.demo-release" PATH="$R/docs/assets/tapes/offline:$PATH"`
 Enter
-Sleep 3s
-Type "clear"
+Type `TUIDEV_DIST_DIR="$DEMO_RELEASE" "$R/scripts/dist.sh" && cd && clear`
 Enter
-Sleep 500ms
+Sleep 4s
 Show
 
-# What it would do, before it does anything: its opening screen.
-Type "./install.sh --profile full --dry-run 2>&1 | head -24"
+# The one-liner, word for word as the README gives it.
+Type "curl -fsSL https://github.com/spfr/tuidev/releases/latest/download/get.sh | bash"
+Sleep 400ms
+Enter
+Sleep 4s
+
+# What this machine should get: everything for agent work.
+Type "1"
 Sleep 300ms
 Enter
-Sleep 6s
-Ctrl+L
+Sleep 2500ms
 
-# The whole dry run, shown once it has ended.
-Type "./install.sh --profile full --dry-run"
-Sleep 400ms
+# Preview first: the installer's dry run, shown once it has ended.
+Type "p"
+Sleep 300ms
 Hide
 Enter
-Sleep 3s
+Sleep 1500ms
+Wait+Line@60s /\[n\]o:/
 Show
 Sleep 5s
 
 Sleep 2s
+# After the last frame: decline, so nothing is left waiting.
+Hide
+Type "n"
+Enter
+Sleep 1s
