@@ -85,11 +85,11 @@ pane() {   # ID TAB WS AGENT CWD TITLE
 }
 fixture() {
     {
-        pane w1:p1 w1:t1 w1 claude /work/agentic "◐ API docs"
+        pane w1:p1 w1:t1 w1 claude /work/backend "◐ API docs"
         pane w1:p2 w1:t2 w1 ""     /work/mactui_setup "user@box: ~/work/mactui_setup"
-        pane w1:p3 w1:t3 w1 claude /work/agentic "✳ Fix login redirect and port proxying"
-        pane w1:p4 w1:t3 w1 ""     /work/agentic ""
-        pane w1:p5 w1:t3 w1 claude /work/agentic "✳ Claude Code"
+        pane w1:p3 w1:t3 w1 claude /work/backend "✳ Fix login redirect and port proxying"
+        pane w1:p4 w1:t3 w1 ""     /work/backend ""
+        pane w1:p5 w1:t3 w1 claude /work/backend "✳ Claude Code"
         pane w1:p6 w1:t4 w1 ""     /work/notes ""
         pane w2:p1 w2:t1 w2 codex  "$HOME/src/api" "codex --yolo"
     } | jq -s --arg home "$HOME" '{id: "cli:api:snapshot", result: {type: "snapshot", snapshot: {

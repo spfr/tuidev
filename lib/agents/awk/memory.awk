@@ -4,7 +4,7 @@
 #   PID START RSS_KIB UID NAME LABEL ROOT ROOT_KIND TOOL TOOL_START TOOL_NAME
 # A process qualifies at -v screen=KIB of RSS or more; with -v floor=KIB as
 # well (memory pressure is up), the largest down to that floor do too. LABEL
-# is the script an interpreter runs (node's clientFuelToday.test.js), ROOT
+# is the script an interpreter runs (node's invoiceTotalSum.test.js), ROOT
 # the topmost agent above it and ROOT_KIND that agent's kind ("-" for both
 # outside any agent tree). TOOL is the command the nearest agent above it
 # started (its direct child on the way down: a test runner, a shell running

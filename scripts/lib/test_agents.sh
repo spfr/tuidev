@@ -1450,8 +1450,8 @@ pass "SwiftBar session rows lead with their kind's mark; unknown kinds take the 
 # then the project it started in; a build's temp path shows its base name only,
 # whole in the submenu.
 st_row() { printf 'stale\t%s\torphan\t5520\t0.0\t0.0\t35840\t0\tWed_Oct_14_09:13:19_2026\t-\tme\t-\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
-menu="$(plugin "$(st_row 900 /work/agentic-vms "/var/folders/vr/x1/T/go-build315/b001/web.test -test.count=1" agentic-vms)"$'\n'"$(st_row 901 /var/folders/vr/x1/T/go-build9 /var/folders/vr/x1/T/go-build9/b001/api.test go-build9)"$'\n'"$(st_row 902 - "node $HOME/.local/lib/example-agent-mcp.cjs" -)" "")"
-[[ "$menu" == *$'\n--web.test -test.count=1 · agentic-vms · '* ]] || fail "stale label: base name and project: $menu"
+menu="$(plugin "$(st_row 900 /work/sandbox-vms "/var/folders/vr/x1/T/go-build315/b001/web.test -test.count=1" sandbox-vms)"$'\n'"$(st_row 901 /var/folders/vr/x1/T/go-build9 /var/folders/vr/x1/T/go-build9/b001/api.test go-build9)"$'\n'"$(st_row 902 - "node $HOME/.local/lib/example-agent-mcp.cjs" -)" "")"
+[[ "$menu" == *$'\n--web.test -test.count=1 · sandbox-vms · '* ]] || fail "stale label: base name and project: $menu"
 [[ "$menu" == *$'\n--api.test · '* && "$menu" != *"api.test · go-build9"* ]] || fail "stale label: a temp cwd is no project: $menu"
 [[ "$menu" == *$'\n--node example-agent-mcp.cjs · '* ]] || fail "stale label: a home path cut to its base name: $menu"
 [[ "$(printf '%s\n' "$menu" | sed 's/ | .*//' | grep -cE '^(--)?[^-].*/var/folders')" == 0 ]] || fail "a temp path on a stale row: $menu"

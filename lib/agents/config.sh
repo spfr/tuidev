@@ -370,7 +370,7 @@ agents_config() {
     local key
     if [[ "${1:-}" == --edit ]]; then
         [[ -r "$AGENTS_CONF" ]] || { echo "agents: $AGENTS_CONF does not exist" >&2; return 1; }
-        open -t "$AGENTS_CONF"
+        if [[ "$(uname)" == Darwin ]]; then open -t "$AGENTS_CONF"; else "${VISUAL:-${EDITOR:-vi}}" "$AGENTS_CONF"; fi
         return
     fi
     if [[ -r "$AGENTS_CONF" ]]; then echo "# $AGENTS_CONF"; else echo "# $AGENTS_CONF (absent: defaults)"; fi

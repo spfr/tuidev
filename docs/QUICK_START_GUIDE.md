@@ -52,7 +52,7 @@ When an agent waits on you, tuidev shows it four ways:
 - **`agents`.** Run it in any terminal. It lists Needs you, To review and Running, one line each, blocked first.
 - **The board.** In Herdr, **prefix+space** opens `agents board`: every session on every machine, with the last lines of the one under the cursor. Enter goes there, esc closes it.
 
-Answer the prompt and the session goes back to work. [Fleet attention](agent-workflows.md#fleet-attention--herdr---pack-herdr) and [the board](agent-workflows.md#the-board-every-session-one-screen) have the rest.
+Answer the prompt and the session goes back to work. [Which agent needs you](agent-workflows.md#fleet-attention--herdr---pack-herdr) and [the board](agent-workflows.md#the-board-every-session-one-screen) have the rest.
 
 ## 6. See what agents left behind
 

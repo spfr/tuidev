@@ -102,7 +102,7 @@ pass "agent files parse and pin only allowed models and efforts"
 rm -rf "$HOME" && mkdir -p "$HOME"
 
 # A fake checkout of the earlier standalone installer, under a path that itself has /build/ in it.
-legacy="$tmp/build/agents orchestration"
+legacy="$tmp/build/standalone installer"
 mkdir -p "$legacy/core" "$legacy/build/skills/delegation" "$legacy/claude/agents"
 echo "marker" > "$legacy/core/00-orchestration.md"
 echo "legacy policy" > "$legacy/build/CLAUDE.md"

@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.27.2] - 2026-11-19
+
 ### Changed
 
 - **The docs tell one story and claim only what ships**: the vision, roadmap (done, next, not planned) and FAQ (how tuidev differs from Herdr, Rex and the CLIs' own features) are rewritten; the README, quick start and profiles are corrected. [Vision](VISION.md) · [Roadmap](docs/roadmap.md) · [FAQ](docs/FAQ.md)
 - **The agent docs read in the order you need them**: agent workflows is about 40% shorter, remote opens with "anywhere", the cheatsheet is one line per key or command. [Agent workflows](docs/agent-workflows.md) · [Remote](docs/remote.md) · [Cheatsheet](docs/CHEATSHEET.md)
 - **Reference docs checked against the code**: module and lib tables, sandbox settings and CI jobs are current. [Engineering](docs/engineering.md)
+- **`agents --help` points at `agents config` for the settings keys**, which prints all of them; the help listed only some.
+
+### Fixed
+
+- **`agents config --edit` works on Linux**: it opens the file in `$VISUAL` or `$EDITOR`.
 
 ## [3.27.1] - 2026-11-19
 
@@ -640,7 +647,7 @@ where to look.
   its cost is a floor.
 - **"Sessions of unknown type" is now "Commands with no known agent"**, and
   says where they ran: `Commands with no known agent spent 1.4 h in 18
-  polling loops today (12 in agentic-vms)`. These are foreground commands:
+  polling loops today (12 in sandbox-vms)`. These are foreground commands:
   only a background task's output or a subagent's worktree names the agent
   that ran one. The agents view calls them `(no agent)` and says why, and
   the insight points to `agents runs`.
@@ -1014,7 +1021,7 @@ cleanup with evidence, the menu bar and the shell, each with a picture.
   per agent type. `--json` for each (additive, `schema_version` 1); the
   summary adds `insights` and `runs` (`count`, `failed`, `dup`, `cleaned`).
 - **Top insights.** The report opens with the three findings worth acting
-  on, ranked by the CPU at stake, each saying what to do: "agentic-vms: `go`
+  on, ranked by the CPU at stake, each saying what to do: "sandbox-vms: `go`
   test runs ×281 in 7d, 50 duplicates (9.5 CPU-h) — consider a shared test
   cache or serializing them". Each sample refreshes today's top one, and the
   menu shows it under Today (the full sentence as its tooltip); a click opens

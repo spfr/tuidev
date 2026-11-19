@@ -2,7 +2,7 @@
 
 See everything your agents do: which one needs you, what each one runs, what it left behind, what it costs, and whether it is safe to stop. This doc covers running Claude Code and Codex with tuidev, Herdr's sidebar, the `agents` command with its board and menu bar, cleanup, memory, history, hooks and notifications. It all reads files on your machine and sends nothing anywhere. Running agents on other machines and from your phone is the other half: [remote.md](remote.md).
 
-**Your editor is a GUI; the terminal runs agents.** Run `claude` or `codex` in a Herdr pane (the `full` profile, the default on a Mac) so one sidebar shows which agent needs you, or in a plain Ghostty tab, and review the diff in VS Code or Cursor. tmux is an optional pack for a box that stays on.
+**Your editor is a GUI; the terminal runs agents.** Run `claude` or `codex` in a Herdr pane (the `full` profile, the first choice when you install on a Mac) so one sidebar shows which agent needs you, or in a plain Ghostty tab, and review the diff in VS Code or Cursor. tmux is for a box that stays on.
 
 ## At a glance
 
@@ -34,7 +34,7 @@ The pack installs configs, not the CLIs, which update themselves. Both run as pl
 - **Permissions.** Read-only commands are allowed (`gh pr view|list`, `gh run view|list`, `rg`, `jq`, `shellcheck`). `git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api` and `rg --pre` (which runs a program) always ask. Credential paths and `.env*` are denied.
 - **Sandbox.** `sandbox.enabled` is `true`, and `sandbox.credentials.envVars` unsets common third-party tokens in sandboxed commands ([sandboxing.md](sandboxing.md), [secrets.md](secrets.md#what-an-agent-can-reach)).
 - **No attribution** (no `Co-Authored-By`), and [agent teams](#agent-teams) are off.
-- **A 4 GB Node heap.** `env.NODE_OPTIONS` is `--max-old-space-size=4096`, so a Node test or build that leaks fails with `JavaScript heap out of memory` at 4 GB of heap on every machine. It caps the heap only, not buffers or native memory, so it does not stop every runaway: the [memory guard](#memory-guard-agents-mem) does. Raise it for one command with `NODE_OPTIONS=--max-old-space-size=8192 npm run build`; a project script that sets its own `NODE_OPTIONS` wins.
+- **A 4 GB Node heap.** `env.NODE_OPTIONS` is `--max-old-space-size=4096`, so a Node test or build that leaks fails with `JavaScript heap out of memory` at 4 GB of heap on every machine. It caps the heap only, not buffers or native memory, so it does not stop every runaway: the [memory guard](#memory-guard-agents-mem) does. Raise it for one command with `NODE_OPTIONS=--max-old-space-size=8192 npm run build`; a project script that sets its own `NODE_OPTIONS` wins. It replaces a `NODE_OPTIONS` exported in your shell inside Claude sessions: put other Node flags in the settings' `env`.
 - **Hooks and a status line** for notifications, waits, cleanup and the menu bar: [Claude Code hooks](#claude-code-hooks).
 
 **Shipped Codex policy:** `sandbox_mode = "workspace-write"`, `approval_policy = "on-request"`, network off, `file_opener = "vscode"`, an unpinned model, the same 4 GB Node heap (`shell_environment_policy.set`), the same token names removed from its commands (`shell_environment_policy.filters`), and `~/.codex/rules/tuidev.rules`, which makes the same git and gh writes prompt. Plain Codex can still read credential paths: `workspace-write` limits writes and network, not reads ([sandboxing.md](sandboxing.md)).
@@ -109,7 +109,7 @@ herdr --machine workbox agent list    # scriptable, no TUI
 
 <sub>This Mac and two Linux containers saved as SSH machines, with scripted agent stand-ins that report their state through `herdr pane report-agent`. How it is made: [docs/assets/tapes/README.md](assets/tapes/README.md#the-herdr-fleet).</sub>
 
-Herdr is in the `full` profile and is how you see which agent needs you; tmux (`--pack tmux`) is an optional pack for keeping a terminal alive over SSH on a box that stays on. Herdr's prefix is `Ctrl+b`, so it doesn't clash with tmux's `Ctrl+a`.
+Herdr is in the `full` profile and is how you see which agent needs you; tmux (`--pack tmux`, also in `full` and `remote`) is for keeping a terminal alive over SSH on a box that stays on. Herdr's prefix is `Ctrl+b`, so it doesn't clash with tmux's `Ctrl+a`.
 
 **tuidev's keys in Herdr** (the `tuidev.link` plugin; the bindings are a managed block in `~/.config/herdr/config.toml`, and a binding of your own outside it wins):
 
@@ -364,7 +364,7 @@ On macOS the pack installs [SwiftBar](https://swiftbar.app) and its plugin (`age
 
 Every action runs `agents` with the `PID@START` it listed, so a menu opened before a pid was reused can't stop the wrong process, and menu parameters never carry a path or a name a process controls. Killing a live session asks first in a dialog (Cancel is the default). Each action reports its result as a notification. Windows open in your terminal (`agents open-term`, `AGENTS_TERMINAL`): with Ghostty 1.3 or later, a new window of the Ghostty you run, through its AppleScript; the first time, macOS asks whether SwiftBar may control Ghostty. Status colors come from [your palette](theming.md#agents-and-its-menu) when it suits the menu's appearance; Option-click the item for SwiftBar's own menu.
 
-**When it refreshes.** At once when something changes (`agents bar poke`): Claude Code's hooks, Herdr's agent events (that is how it hears of Codex, `agy` and Grok sessions in Herdr), Codex's `notify` if you wire it, and the menu opening. A poke goes out at most once every 2 s, and the last of a burst is never lost. While a command runs, or a session nothing reports on works, it refreshes every 10 s. Otherwise its timer, `AGENTS_BAR_REFRESH` (1m), is a backstop, and when nothing is going on it skips its reading for up to 5 minutes. Opening the menu shows the last output at once and asks your other machines in the background (at most every 20 s). A poke does nothing where SwiftBar doesn't run the plugin (Linux, a box without SwiftBar); `agents bar` says what a poke would do now. One refresh runs `agents tsv` once: one `ps` snapshot, with Herdr and the MCP inventory from their caches.
+**When it refreshes.** At once when something changes (`agents bar poke`): Claude Code's hooks, Herdr's agent events (that is how it hears of Codex, `agy` and Grok sessions in Herdr), Codex's `notify` if you wire it (a commented example is in [config.toml](../configs/codex/config.toml)), and the menu opening. A poke goes out at most once every 2 s, and the last of a burst is never lost. While a command runs, or a session nothing reports on works, it refreshes every 10 s. Otherwise its timer, `AGENTS_BAR_REFRESH` (1m), is a backstop, and when nothing is going on it skips its reading for up to 5 minutes. Opening the menu shows the last output at once and asks your other machines in the background (at most every 20 s). A poke does nothing where SwiftBar doesn't run the plugin (Linux, a box without SwiftBar); `agents bar` says what a poke would do now. One refresh runs `agents tsv` once: one `ps` snapshot, with Herdr and the MCP inventory from their caches.
 
 ### One process in detail: `show`, `jump`, `peek`, `pick`
 
@@ -427,7 +427,7 @@ A session then starts `mcp-lazy` (about 10 MB, installed beside `agents`) where 
 
 - **The cache** is one private file per server command line in `~/.cache/tuidev/mcp-lazy/`, keyed by a hash of the command, the program's size and modification time, and the server's env values (never stored in the name). It keeps answers per client, so Claude Code and Codex both stay lazy. A client's first session with a new server starts it and fills the cache. Changed tools update the cache and notify the session.
 - **Failures stay contained.** A server that exits fails only its open requests; the next request starts it again. When the session ends, the server's process group gets TERM after 3 seconds (`MCP_LAZY_GRACE`), then KILL.
-- **What is rewritten:** a stdio server's `command` becomes `mcp-lazy` and its args `["--name", NAME, "--", COMMAND, ARGS...]`, in `~/.claude.json` and Codex's `config.toml`; never a project's `.mcp.json` or a plugin's. Each file is backed up to `~/.local/state/tuidev/agents/backups/` first (the last 10 kept) and replaced in one rename, only if no session wrote it meanwhile. Sessions already running keep what they started with.
+- **What is rewritten:** a stdio server's `command` becomes `mcp-lazy` and its args `["--name", NAME, "--", COMMAND, ARGS...]`, in `~/.claude.json` and Codex's `config.toml`; never a project's `.mcp.json` or a plugin's. Each file is backed up to `~/.local/state/tuidev/agents/backups/` first (the last 10 kept) and replaced in one rename (of the file a symlink leads to, so a dotfile manager's link stays), only if no session wrote it meanwhile. Sessions already running keep what they started with.
 - **Seeing it:** `agents mcp` marks such a server `(lazy)` and says how many copies have not started; the menu says `via mcp-lazy: not started`. `MCP_LAZY=0` in a server's env runs it directly; `MCP_LAZY_DEBUG=1` logs to the CLI's MCP log. `uninstall.sh` runs `agents mcp eager --all` first.
 
 ## Flagged: is it safe to stop?
@@ -497,6 +497,7 @@ $ agents reap -n --stuck
   27681   caffeinate · safe to stop — probably left by an agent session that ended
   6001    chrome-devtools-mcp
   6000    npm · safe to stop — its session ended
+  …
 left out: 5 flagged "check first" (agents reap --all includes them; agents why PID explains one)
 dry run: would send SIGTERM to 13 process(es), then SIGKILL to any left after 3s
 ```
@@ -525,7 +526,7 @@ A test that leaks can take a Mac's memory in under a minute: one node process an
 
 What it does:
 
-- **Warns** when a process passes the warning, and again at each doubling: a notification names the process, the script it runs, its project and session (`node (clientFuelToday.test.js) in cairn holds 16.6G; stopped at 24.0G`), and a click jumps to that session. A process growing faster than `AGENTS_MEM_RATE` (200 MB/s) gets one warning too. The warning is the smaller of `AGENTS_MEM_WARN` (8 GB) and 60% of the stop size, so it always comes before the stop.
+- **Warns** when a process passes the warning, and again at each doubling: a notification names the process, the script it runs, its project and session (`node (invoiceTotalSum.test.js) in store holds 16.6G; stopped at 24.0G`), and a click jumps to that session. A process growing faster than `AGENTS_MEM_RATE` (200 MB/s) gets one warning too. The warning is the smaller of `AGENTS_MEM_WARN` (8 GB) and 60% of the stop size, so it always comes before the stop.
 - **Stops** a process in an agent tree, below the agent and yours, past `AGENTS_MEM_KILL` (half the RAM), or the largest such past the warning while macOS reports critical memory pressure. It stops the tree through the same engine as `agents kill`: its refusals, a start-time check, SIGTERM, then SIGKILL after `AGENTS_GRACE`. An agent session itself, your apps and other users' processes are only ever warned about.
 - **Escalates to the tool command.** When it stops the same script again under the same tool command (the command the agent started, such as a test runner) within 120 seconds, that runner keeps restarting it, so the guard stops the tool command's tree instead. Never the agent, and never anything outside the agent's tree.
 - **Records** every warning, stop and escalation in `memory.tsv` in the data directory (`epoch event pid name label project session footprint rss free% swap`, then why for an escalation; names only), and stops in `events.tsv`. A turn to critical pressure is recorded with the biggest process at the time, so the next morning `agents mem` says what happened.
@@ -581,7 +582,7 @@ Keep-awake is `caffeinate -di` on macOS and `systemd-inhibit` on Linux, never `p
 - it runs `pmset -a disablesleep 1`, asking for your administrator password each time in macOS's own dialog; no sudo rights are stored;
 - it is always time-boxed: a duration is required, and one past `AGENTS_LID_MAX` (8h) is refused;
 - a small root-owned guard (fixed text in `lib/agents/lid.sh`) turns lid sleep back on when the time is up, when the battery falls below `AGENTS_LID_MIN_BATTERY` (20%) off AC, or when thermal pressure reaches heavy. If the guard fails to start, sleep is restored at once;
-- `agents awake off` ends it early (one more password); `agents awake restore` restores the setting whatever set it.
+- `agents awake off` ends it early (one more password); `agents awake restore` restores the setting whatever set it. `agents awake on` and `agents awake agents` do not end it: lid mode runs until one of those two or its timer.
 
 A reboot keeps `disablesleep` but kills the guard. `agents`, `agents awake status`, the menu and `tuidev check` then warn `lid sleep is disabled and nothing will restore it`; fix it with the menu's Restore lid sleep…, `agents awake restore`, or `sudo pmset -a disablesleep 0`.
 
@@ -604,7 +605,7 @@ agents cool off                 # macOS runs them
 - **The curve** follows the hottest CPU or GPU core, averaged the way the chassis takes heat in (rising over about a minute, falling over three), so the fans settle at a steady speed instead of chasing each burst. When the chip itself needs air, a faster average takes over, and heavy thermal pressure means full speed at once. A fan's target changes only in steps of 150 rpm or more. `/Library/Application Support/tuidev/fan/fan.conf` can set `low` and `high` for balanced.
 - **Safety.** It only adds air: in auto, a fan is taken only when the curve asks for more than macOS runs it at, and never set below its minimum. Every error, a missing temperature, `SIGTERM`, uninstall and system sleep hand the fans back to macOS; after a crash, launchd restarts the daemon within seconds and it releases them first. The chip's own thermal protection keeps working underneath. Run one fan tool at a time: with TG Pro, Macs Fan Control or Stats also driving the fans, the two fight.
 - **What runs as root:** the pack builds `~/.local/lib/tuidev/fan/tuidev-fan`, copies it to `/Library/PrivilegedHelperTools/dev.tuidev.fan` (root-owned) and loads `/Library/LaunchDaemons/dev.tuidev.fan.plist`. `mode` and `fan.conf` in `/Library/Application Support/tuidev/fan/` are writable by admins, so `agents cool` and the menu switch modes without a password; the daemon clamps whatever they hold. Errors go to `/var/log/tuidev-fan.log`. `tuidev update --configs` rebuilds it only when the source changed. That one `sudo` runs a file you built, so run the pack when nothing untrusted runs as you.
-- **Check a new Mac by hand:** stop the daemon (`sudo launchctl bootout system/dev.tuidev.fan`), then `sudo /Library/PrivilegedHelperTools/dev.tuidev.fan try 3500 30` holds 3500 rpm for 30 s and releases the fans. Always run the root-owned copy. A fanless Mac has nothing to install: the pack says so.
+- **Check a new Mac by hand:** stop the daemon (`sudo launchctl bootout system/dev.tuidev.fan`), then `sudo /Library/PrivilegedHelperTools/dev.tuidev.fan try 3500 30` holds 3500 rpm for 30 s and releases the fans. Always run the root-owned copy: the one in your home folder can be replaced by any process of yours. A fanless Mac has nothing to install: the pack says so.
 
 ## Is it running: `agents doctor`
 
@@ -809,7 +810,7 @@ Over pace means more than 5 points past the time gone, with how long the rest la
 |-----|------------------------------|------|
 | Claude Code (Pro and Max) | its status line: the `rate_limits` in the JSON Claude Code hands its `statusLine` command | after each assistant message |
 | Codex | the `rate_limits` of the newest `token_count` event in its session logs | each sample |
-| Antigravity (`agy`) | `agy -p /quota --output-format json`, which uses no tokens | every 10 minutes, from a sample, when `agy` and `jq` are installed |
+| Antigravity (`agy`) | `agy -p /quota --output-format json`, which uses no tokens | every 10 minutes at most, from a sample, when `agy` and `jq` are installed and `agy` was used since the last reading; this one asks Antigravity, as `agy` itself does |
 | Grok, Cursor | not exposed locally; their sessions still count in `agents`, and Grok's tokens in the [token report](#tokens-and-denials) | |
 
 **Claude Code's status line.** The shipped `statusLine` runs `agents statusline` when `agents` is installed. It records Claude's two windows in `limits.tsv`, then prints `Opus · ctx 42% · 5h 23% · wk 41%`. To keep a status line of your own, set `AGENTS_STATUSLINE_CMD` to its command: `agents statusline` pipes it the same JSON and shows what it prints. The settings merge never replaces a `statusLine` you already had, so Claude's limits reach `agents` only once you move your command into `AGENTS_STATUSLINE_CMD` and set `statusLine` to the shipped one.
@@ -956,7 +957,7 @@ A stale tree, and a command flagged `stuck`, `long` or `dup`, also carry the [ve
 
 ## Settings: `~/.config/agents.conf`
 
-The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf) once and never overwrites it. Uncomment a line to change it; `agents config` prints what is in effect, and `agents config --edit` opens the file. It is read as `KEY=value` lines, never run as a script: unknown keys and malformed values are reported and ignored. The same names in the environment win, and `AGENTS_CONF` points at another file.
+The pack places a fully commented [`agents.conf`](../configs/agents/agents.conf) once and never overwrites it. Uncomment a line to change it; `agents config` prints what is in effect, and `agents config --edit` opens the file (in your text editor on macOS, `$VISUAL` or `$EDITOR` on Linux). It is read as `KEY=value` lines, never run as a script: unknown keys and malformed values are reported and ignored. The same names in the environment win, and `AGENTS_CONF` points at another file.
 
 | Key | Default | Meaning |
 |-----|---------|---------|

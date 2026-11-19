@@ -4,7 +4,7 @@ Short answers: first to what people ask before they install, then to what they h
 
 ## Before you install
 
-**How is this different from Herdr?** Herdr runs the panes. It knows which pane holds an agent and whether that agent is working, blocked or done, on every machine you add, and its phone app has an inbox of the agents that need you. It does that better than tuidev could, and tuidev doesn't try. tuidev installs Herdr (`--pack herdr`) and adds what sits around it: tabs named after the task, the board, the map of what runs where, the Ctrl-click that opens another machine's preview here, and `agents hc run` to put an agent on the phone. `agents`, the menu bar and notifications don't need Herdr: they work with tmux or a plain Ghostty tab too. [Fleet attention](agent-workflows.md#fleet-attention--herdr---pack-herdr).
+**How is this different from Herdr?** Herdr runs the panes. It knows which pane holds an agent and whether that agent is working, blocked or done, on every machine you add, and its phone app has an inbox of the agents that need you. It does that better than tuidev could, and tuidev doesn't try. tuidev installs Herdr (`--pack herdr`) and adds what sits around it: tabs named after the task, the board, the map of what runs where, the Ctrl-click that opens another machine's preview here, and `agents hc run` to put an agent on the phone. `agents`, the menu bar and notifications don't need Herdr: they work with tmux or a plain Ghostty tab too. [Which agent needs you](agent-workflows.md#fleet-attention--herdr---pack-herdr).
 
 **And from Rex?** Rex, Superlogical's terminal, has been in public testing since October 2026 (macOS, by invitation). tuidev has no integration with it. It stays on the [watch-list](roadmap.md#watch-list) until a stable release has held up in daily use. `agents`, the sandbox settings, `secret` and the installer don't depend on which terminal or multiplexer you use.
 
@@ -56,7 +56,7 @@ Short answers: first to what people ask before they install, then to what they h
 
 ## tmux
 
-tmux is optional (`--pack tmux`), and the `remote` profile includes it. These apply once it is installed.
+tmux is a pack (`--pack tmux`); the `full` and `remote` profiles include it. These apply once it is installed.
 
 **Keys work in plain zsh but not inside tmux.** Check `echo $TERM`: it should be `tmux-256color` inside tmux and `xterm-ghostty` (or `xterm-*`) outside. Shift+Enter and modified keys depend on `extended-keys`: run `tmux show -s extended-keys`. Reload with `Ctrl+a r`, or restart the tmux server after a tmux upgrade.
 

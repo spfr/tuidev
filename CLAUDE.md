@@ -7,7 +7,7 @@
 - **Settings are the authoritative policy.** `configs/claude/settings.json` ships:
   - `sandbox.enabled = true` — Claude's own native sandbox is on by default, so plain `claude` is confined without a wrapper (`autoAllowBashIfSandboxed`, `excludedCommands` for `docker`/`gh`, `filesystem.denyRead` for the AI CLIs' own token files, `credentials.envVars` for third-party tokens, mirrored in Codex's `shell_environment_policy.filters`);
   - a read-only `allow` list;
-  - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`;
+  - `ask` rules for git and gh writes (`git add|commit|push|merge|tag`, `gh pr create|merge`, `gh release`, `gh api`), mirrored for Codex in `configs/codex/rules/tuidev.rules`, and for `rg --pre`;
   - `deny` rules for the same credential paths `sbx` blocks, plus `.env*` (these merge into the sandbox's `denyRead` too);
   - `sandbox.credentials.envVars`, which unsets publish, cloud and model-provider tokens (`GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, …) in sandboxed commands (Codex: `shell_environment_policy.filters`);
   - empty `attribution` with `sessionUrl: false` (no `Co-Authored-By`, "Generated with" or session links);

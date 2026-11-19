@@ -91,8 +91,8 @@ pass "a hung footprint or top is cut off: its output dropped, 124, never a zero 
 psfix="$(cat <<EOF
   510   500   501 me    0.0     3000   0:00.10 01:42:53 Wed Oct 14 07:31:08 2026     -zsh
   600   510   501 me    0.3   700000   4:30.13 01:42:53 Wed Oct 14 07:31:08 2026     claude --continue
-  610   600   501 me    0.0     2000   0:00.01 00:01:00 Wed Oct 14 09:00:00 2026     /bin/zsh -c node --test test/clientFuelToday.test.js
-  620   610   501 me   99.0 $((20 * G))   0:50.00 00:00:55 Wed Oct 14 09:00:05 2026     /usr/local/bin/node --heap-prof-interval=524288 --test test/clientFuelToday.test.js
+  610   600   501 me    0.0     2000   0:00.01 00:01:00 Wed Oct 14 09:00:00 2026     /bin/zsh -c node --test test/invoiceTotalSum.test.js
+  620   610   501 me   99.0 $((20 * G))   0:50.00 00:00:55 Wed Oct 14 09:00:05 2026     /usr/local/bin/node --heap-prof-interval=524288 --test test/invoiceTotalSum.test.js
   700     1   501 me    5.0 $((5 * G))   1:00.00 03:00:00 Wed Oct 14 06:00:00 2026     /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --type=renderer
   800     1   501 me    0.0   200000   0:00.10 03:00:00 Wed Oct 14 06:00:00 2026     /usr/bin/python3 small.py
 EOF
@@ -100,7 +100,7 @@ EOF
 cands="$(printf '%s\n' "$psfix" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc memory" -v self=99999 -v screen=$((4 * G)) -v floor=0 -v max=8)"
 [[ "$(printf '%s\n' "$cands" | cut -f1 | tr '\n' ' ')" == "620 700 " ]] || fail "candidates by size: $cands"
 IFS=$'\t' read -r p st rss uid name label root kind tool tst tname <<<"$(printf '%s\n' "$cands" | head -1)"
-[[ "$p $uid $name $label $root $kind" == "620 501 node clientFuelToday.test.js 600 claude" ]] || fail "node candidate: $p $uid $name $label $root $kind"
+[[ "$p $uid $name $label $root $kind" == "620 501 node invoiceTotalSum.test.js 600 claude" ]] || fail "node candidate: $p $uid $name $label $root $kind"
 [[ "$st" == Wed_Oct_14_09:00:05_2026 && "$rss" == $((20 * G)) ]] || fail "node start/rss: $st $rss"
 [[ "$tool|$tst|$tname" == "610|Wed_Oct_14_09:00:00_2026|zsh" ]] || fail "node's tool command, the agent's child: $tool|$tst|$tname"
 IFS=$'\t' read -r p _ _ _ name label root kind tool tst tname <<<"$(printf '%s\n' "$cands" | sed -n 2p)"
@@ -114,7 +114,7 @@ out="$(printf '%s\n' "$nested" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_p
     || fail "tool commands under a nested agent: $out"
 # A shell someone types in is never the tool command: the guard stops the
 # process's own tree again instead.
-bare="$(printf '%s\n' "$psfix" | sed 's|/bin/zsh -c node --test test/clientFuelToday.test.js|-zsh|')"
+bare="$(printf '%s\n' "$psfix" | sed 's|/bin/zsh -c node --test test/invoiceTotalSum.test.js|-zsh|')"
 out="$(printf '%s\n' "$bare" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc memory" -v self=99999 -v screen=0 -v max=400 -v pids=" 620 ")"
 [[ "$(printf '%s\n' "$out" | awk -F '\t' '$1 == 620 { print $9 }')" == "-" ]] || fail "a bare shell as the tool command: $out"
 pass "candidates carry the tool command: the nearest agent's child, never an agent"
@@ -147,9 +147,9 @@ real_fp="$(declare -f _agents_mem_fp)"
 _agents_mem_fp() { [[ $# -eq 0 ]] || echo "$*" >> "$tmp/sampled"; [[ -z "$FPS" ]] || printf '%s\n' "$FPS"; return "${FP_RC:-0}"; }
 # Whether ps reads the process table (PS_OK=0: inside a sandbox).
 _agents_mem_ps_ok() { [[ "${PS_OK:-1}" == 1 ]]; }
-_agents_cwds() { local p; for p in "$@"; do printf '%s\t/Users/NAME/work/cairn\n' "$p"; done; }
+_agents_cwds() { local p; for p in "$@"; do printf '%s\t/Users/NAME/work/store\n' "$p"; done; }
 agents_root_of() { return 1; }
-_agents_kill_unattended() { echo "$*" >> "$tmp/killed"; agents_event "$_AGENTS_EV_KIND" memory "${1%%@*}" node cairn -; }
+_agents_kill_unattended() { echo "$*" >> "$tmp/killed"; agents_event "$_AGENTS_EV_KIND" memory "${1%%@*}" node store -; }
 reset() { rm -rf "$AGENTS_RUN_DIR" "$AGENTS_DATA_DIR" "$tmp/killed" "$tmp/sampled"; unset _AGENTS_MEM_STATE _AGENTS_MEM_LEVEL _AGENTS_MEM_FREE _AGENTS_MEM_STOPS; }
 # One look, in a subshell: each reads the state the last one saved.
 tick() { ( AGENTS_NOW="$1" agents_mem_tick ); }
@@ -157,9 +157,9 @@ tick() { ( AGENTS_NOW="$1" agents_mem_tick ); }
 reset
 out="$(tick 1000)"
 [[ "$(cat "$tmp/killed" 2>/dev/null)" == "" ]] || fail "20 GB is under the 24 GB stop size: nothing stopped"
-[[ "$out" == *"node (clientFuelToday.test.js) in cairn holds 20.0G; stopped at 24.0G"* ]] || fail "warning text: $out"
-[[ "$out" == *"Google Chrome in cairn holds 5.0G"* ]] && fail "5 GB is under the 8 GB warning"
-grep -q $'\twarn\t620\tnode\tclientFuelToday.test.js\tcairn\tclaude:600\t' "$AGENTS_DATA_DIR/memory.tsv" || fail "warn incident: $(cat "$AGENTS_DATA_DIR/memory.tsv")"
+[[ "$out" == *"node (invoiceTotalSum.test.js) in store holds 20.0G; stopped at 24.0G"* ]] || fail "warning text: $out"
+[[ "$out" == *"Google Chrome in store holds 5.0G"* ]] && fail "5 GB is under the 8 GB warning"
+grep -q $'\twarn\t620\tnode\tinvoiceTotalSum.test.js\tstore\tclaude:600\t' "$AGENTS_DATA_DIR/memory.tsv" || fail "warn incident: $(cat "$AGENTS_DATA_DIR/memory.tsv")"
 pass "past the warning: notified with process, script, project and stop size, recorded in memory.tsv"
 
 out="$(tick 1005)"
@@ -167,7 +167,7 @@ out="$(tick 1005)"
 FPS=$'620\t'$((30 * G))
 out="$(tick 1010)"
 [[ "$(cat "$tmp/killed")" == "620@Wed_Oct_14_09:00:05_2026" ]] || fail "a footprint past 24 GB stops it by PID@START: $(cat "$tmp/killed" 2>/dev/null)"
-[[ "$out" == *"Stopped node (clientFuelToday.test.js) in cairn: it held 30.0G past the 24.0G limit (claude:600)"* ]] || fail "stop text: $out"
+[[ "$out" == *"Stopped node (invoiceTotalSum.test.js) in store: it held 30.0G past the 24.0G limit (claude:600)"* ]] || fail "stop text: $out"
 grep -q $'\tstop\t620\t' "$AGENTS_DATA_DIR/memory.tsv" || fail "stop incident"
 grep -q $'\tguard\tmemory\t620\t' "$AGENTS_DATA_DIR/events.tsv" || fail "stop event in events.tsv"
 pass "the footprint (top) past half the RAM stops it, tree and all, once warned; recorded in memory.tsv and events.tsv"
@@ -192,8 +192,8 @@ psfix="$(printf '%s\n' "$psfix_small" | awk -v g="$G" '$1 == 600 { $6 = g * 30 }
 FPS=""
 out="$(tick 3000)"
 [[ ! -s "$tmp/killed" ]] || fail "an agent or an app past the stop size was stopped: $(cat "$tmp/killed")"
-[[ "$out" == *"claude in cairn holds 30.0G (not stopped by the guard)"* ]] || fail "agent warning: $out"
-[[ "$out" == *"Google Chrome in cairn holds 30.0G (not stopped by the guard)"* ]] || fail "app warning: $out"
+[[ "$out" == *"claude in store holds 30.0G (not stopped by the guard)"* ]] || fail "agent warning: $out"
+[[ "$out" == *"Google Chrome in store holds 30.0G (not stopped by the guard)"* ]] || fail "app warning: $out"
 reset
 psfix="$(printf '%s\n' "$psfix_small" | awk -v g="$G" '$1 == 620 { $6 = g * 30 } { print }')"
 out="$(AGENTS_MEM_GUARD=warn tick 3100)"
@@ -223,7 +223,7 @@ pass "critical pressure: the largest agent-tree process past the warning is stop
 reset
 psfix="$(printf '%s\n' "$psfix_small" | awk -v g="$G" '$1 == 620 { $6 = g * 30 } { print }')"
 out="$(AGENTS_DRY_RUN=true tick 5000)"
-[[ "$out" == *"would stop node (clientFuelToday.test.js) in cairn (claude:600): 30.0G past the 24.0G limit"* ]] || fail "dry run text: $out"
+[[ "$out" == *"would stop node (invoiceTotalSum.test.js) in store (claude:600): 30.0G past the 24.0G limit"* ]] || fail "dry run text: $out"
 [[ ! -s "$tmp/killed" && ! -e "$AGENTS_DATA_DIR/memory.tsv" && ! -e "$AGENTS_RUN_DIR/memguard.state" ]] || fail "dry run wrote or stopped something"
 psfix="$psfix_small"
 pass "dry run: says what it would stop; records, saves and stops nothing"
@@ -272,7 +272,7 @@ FPS=$'620\t'$((22 * G))
 out="$(AGENTS_MEM_KILL=20 tick 7025)"
 [[ "$(samples 620)" == 5 ]] || fail "sampled on the fifth look too: $(samples 620)"
 [[ "$(cat "$tmp/killed")" == "620@Wed_Oct_14_09:00:05_2026" ]] || fail "22 GB past AGENTS_MEM_KILL=20 stops it: $(cat "$tmp/killed" 2>/dev/null)"
-[[ "$out" == *"Stopped node (clientFuelToday.test.js) in cairn: it held 22.0G past the 20.0G limit (claude:600)"* ]] || fail "stop text: $out"
+[[ "$out" == *"Stopped node (invoiceTotalSum.test.js) in store: it held 22.0G past the 20.0G limit (claude:600)"* ]] || fail "stop text: $out"
 [[ "$(samples 700)" == 1 ]] || fail "Chrome, beside it, sampled once: $(samples 700)"
 pass "a process the guard could stop is sampled every look while large, and stopped past AGENTS_MEM_KILL"
 
@@ -285,7 +285,7 @@ out="$(tick 8000)"
 [[ "$out" != *"Google Chrome"* ]] || fail "6 GB is under the warning: $out"
 psfix="$(fix 1000 $((9 * G)))"
 out="$(tick 8005)"
-[[ "$out" == *"Google Chrome in cairn holds 9.0G (not stopped by the guard)"* ]] || fail "past the warning by RSS: $out"
+[[ "$out" == *"Google Chrome in store holds 9.0G (not stopped by the guard)"* ]] || fail "past the warning by RSS: $out"
 out="$(tick 8010)$(tick 8015)$(tick 8020)"
 [[ "$out" != *"Google Chrome"* ]] || fail "warned once: $out"
 grep -c $'\twarn\t700\t' "$AGENTS_DATA_DIR/memory.tsv" | grep -qx 1 || fail "one warn incident"
@@ -296,7 +296,7 @@ FPS=$'700\t'$((12 * G))
 out="$(tick 8105)$(tick 8110)"
 [[ "$out" != *"Google Chrome"* ]] || fail "not sampled again with RSS flat: $out"
 out="$(tick 8400)"
-[[ "$out" == *"Google Chrome in cairn holds 12.0G (not stopped by the guard)"* ]] || fail "the 5-minute look warns: $out"
+[[ "$out" == *"Google Chrome in store holds 12.0G (not stopped by the guard)"* ]] || fail "the 5-minute look warns: $out"
 out="$(tick 8405)"
 [[ "$out" != *"Google Chrome"* ]] || fail "and only once: $out"
 FPS=""
@@ -429,48 +429,48 @@ pass "thresholds on 8, 16, 32 and 64 GB: a warning before the stop on each; scre
 # at CLOCK) running SCRIPT at 30 GB.
 worker() {
     printf '%s\n' "$psfix_small" | awk -v g="$G" -v p="$1" -v c="$2" -v js="$3" \
-        '$1 == 620 { $1 = p; $6 = g * 30; $12 = c; gsub(/clientFuelToday\.test\.js/, js) } { print }'
+        '$1 == 620 { $1 = p; $6 = g * 30; $12 = c; gsub(/invoiceTotalSum\.test\.js/, js) } { print }'
 }
 killed() { tr '\n' ' ' < "$tmp/killed" 2>/dev/null; }
 reset
-psfix="$(worker 620 09:00:05 clientFuelToday.test.js)"
+psfix="$(worker 620 09:00:05 invoiceTotalSum.test.js)"
 tick 12000 >/dev/null
-psfix="$(worker 621 09:00:50 clientFuelToday.test.js)"
+psfix="$(worker 621 09:00:50 invoiceTotalSum.test.js)"
 out="$(tick 12040)"
 [[ "$(killed)" == "620@Wed_Oct_14_09:00:05_2026 610@Wed_Oct_14_09:00:00_2026 " ]] || fail "the respawn stops the tool command: $(killed)"
-[[ "$out" == *"Stopped zsh in cairn, the command that keeps starting node (clientFuelToday.test.js): it held 30.0G past the 24.0G limit again 40s after the last stop (claude:600)"* ]] || fail "escalation text: $out"
+[[ "$out" == *"Stopped zsh in store, the command that keeps starting node (invoiceTotalSum.test.js): it held 30.0G past the 24.0G limit again 40s after the last stop (claude:600)"* ]] || fail "escalation text: $out"
 line="$(grep $'\tescalate\t' "$AGENTS_DATA_DIR/memory.tsv")"
-[[ "$line" == *$'\tescalate\t610\tzsh\tclientFuelToday.test.js\tcairn\tclaude:600\t'* \
-    && "$line" == *$'\tnode (clientFuelToday.test.js) stopped again 40s after the guard stopped pid 620 under the same command' ]] || fail "escalate incident: $line"
+[[ "$line" == *$'\tescalate\t610\tzsh\tinvoiceTotalSum.test.js\tstore\tclaude:600\t'* \
+    && "$line" == *$'\tnode (invoiceTotalSum.test.js) stopped again 40s after the guard stopped pid 620 under the same command' ]] || fail "escalate incident: $line"
 grep -q $'\tguard\tmemory\t610\t' "$AGENTS_DATA_DIR/events.tsv" || fail "the escalation in events.tsv"
 # Outside the window: only the process again.
 reset
-psfix="$(worker 620 09:00:05 clientFuelToday.test.js)"; tick 13000 >/dev/null
-psfix="$(worker 621 09:02:10 clientFuelToday.test.js)"; tick 13121 >/dev/null
+psfix="$(worker 620 09:00:05 invoiceTotalSum.test.js)"; tick 13000 >/dev/null
+psfix="$(worker 621 09:02:10 invoiceTotalSum.test.js)"; tick 13121 >/dev/null
 [[ "$(killed)" == "620@Wed_Oct_14_09:00:05_2026 621@Wed_Oct_14_09:02:10_2026 " ]] || fail "121 s later is a new runaway: $(killed)"
 # Another script under the same command: only the process.
 reset
-psfix="$(worker 620 09:00:05 clientFuelToday.test.js)"; tick 14000 >/dev/null
+psfix="$(worker 620 09:00:05 invoiceTotalSum.test.js)"; tick 14000 >/dev/null
 psfix="$(worker 621 09:00:50 other.test.js)"; tick 14030 >/dev/null
 [[ "$(killed)" == "620@Wed_Oct_14_09:00:05_2026 621@Wed_Oct_14_09:00:50_2026 " ]] || fail "another script is not a respawn: $(killed)"
 # Node straight under the agent: its tool command is itself, so the agent is
 # never the one stopped.
 reset
-psfix="$(worker 620 09:00:05 clientFuelToday.test.js | awk '$1 == 620 { $2 = 600 } { print }')"; tick 15000 >/dev/null
-psfix="$(worker 621 09:00:50 clientFuelToday.test.js | awk '$1 == 621 { $2 = 600 } { print }')"; tick 15010 >/dev/null
+psfix="$(worker 620 09:00:05 invoiceTotalSum.test.js | awk '$1 == 620 { $2 = 600 } { print }')"; tick 15000 >/dev/null
+psfix="$(worker 621 09:00:50 invoiceTotalSum.test.js | awk '$1 == 621 { $2 = 600 } { print }')"; tick 15010 >/dev/null
 [[ "$(killed)" == "620@Wed_Oct_14_09:00:05_2026 621@Wed_Oct_14_09:00:50_2026 " ]] || fail "under the agent itself: $(killed)"
 # Under a nested agent (claude > codex > zsh > node): the nested agent's
 # child, zsh, never codex or claude.
 reset
 nest() { worker "$@" | awk '$1 == 610 { $2 = 605 } { print }'; echo "  605   600   501 me    0.0   300000   0:00.10 00:01:00 Wed Oct 14 08:59:00 2026     codex exec run-tests"; }
-psfix="$(nest 620 09:00:05 clientFuelToday.test.js)"; tick 16000 >/dev/null
-psfix="$(nest 621 09:00:50 clientFuelToday.test.js)"; tick 16010 >/dev/null
+psfix="$(nest 620 09:00:05 invoiceTotalSum.test.js)"; tick 16000 >/dev/null
+psfix="$(nest 621 09:00:50 invoiceTotalSum.test.js)"; tick 16010 >/dev/null
 [[ "$(killed)" == "620@Wed_Oct_14_09:00:05_2026 610@Wed_Oct_14_09:00:00_2026 " ]] || fail "nested agent: $(killed)"
 # A dry run says what it would stop.
 reset
-psfix="$(worker 620 09:00:05 clientFuelToday.test.js)"; tick 17000 >/dev/null
-psfix="$(worker 621 09:00:50 clientFuelToday.test.js)"; out="$(AGENTS_DRY_RUN=true tick 17020)"
-[[ "$out" == "would stop zsh (pid 610), the command running node (clientFuelToday.test.js) in cairn (claude:600): node (clientFuelToday.test.js) stopped again 20s after the guard stopped pid 620 under the same command" ]] || fail "dry run escalation: $out"
+psfix="$(worker 620 09:00:05 invoiceTotalSum.test.js)"; tick 17000 >/dev/null
+psfix="$(worker 621 09:00:50 invoiceTotalSum.test.js)"; out="$(AGENTS_DRY_RUN=true tick 17020)"
+[[ "$out" == "would stop zsh (pid 610), the command running node (invoiceTotalSum.test.js) in store (claude:600): node (invoiceTotalSum.test.js) stopped again 20s after the guard stopped pid 620 under the same command" ]] || fail "dry run escalation: $out"
 [[ "$(killed)" == "620@Wed_Oct_14_09:00:05_2026 " ]] || fail "the dry run stopped something: $(killed)"
 psfix="$psfix_small"
 # Stops older than the window leave the state file and the loop's memory.
@@ -542,12 +542,12 @@ reset
 # shellcheck disable=SC2329  # the stubs are called by _agents_mem_show
 show() { ( _agents_mem_top() { return "${TOP_RC:-0}"; }; OSTYPE=darwin25; _agents_mem_guard_state() { echo "$GS"; }; AGENTS_NOW=12100 AGENTS_WIDTH=120 _agents_mem_show ); }
 mkdir -p "$AGENTS_DATA_DIR"
-printf '%s\n' $'12000\tstop\t620\tnode\tclientFuelToday.test.js\tcairn\tclaude:600\t31457280\t10485760\t3\t2097152' \
-    $'12040\tescalate\t610\tzsh\tclientFuelToday.test.js\tcairn\tclaude:600\t31457280\t10485760\t3\t2097152\tnode (clientFuelToday.test.js) stopped again 40s after the guard stopped pid 620 under the same command' \
+printf '%s\n' $'12000\tstop\t620\tnode\tinvoiceTotalSum.test.js\tstore\tclaude:600\t31457280\t10485760\t3\t2097152' \
+    $'12040\tescalate\t610\tzsh\tinvoiceTotalSum.test.js\tstore\tclaude:600\t31457280\t10485760\t3\t2097152\tnode (invoiceTotalSum.test.js) stopped again 40s after the guard stopped pid 620 under the same command' \
     > "$AGENTS_DATA_DIR/memory.tsv"
 out="$(GS="stalled 42 125" show)"
 [[ "$out" == *"GUARD   stalled (pid 42, no look for 2m; agents mem restart) · kill · 2 stops in 7 days, 1 escalated to the tool command (agents mem log)"* ]] || fail "stalled and escalation summary: $out"
-[[ "$out" == *"escalate zsh (clientFuelToday.test.js)"*$'\n'*"node (clientFuelToday.test.js) stopped again 40s after the guard stopped pid 620 under the same command"* ]] || fail "the escalation and why in the incidents: $out"
+[[ "$out" == *"escalate zsh (invoiceTotalSum.test.js)"*$'\n'*"node (invoiceTotalSum.test.js) stopped again 40s after the guard stopped pid 620 under the same command"* ]] || fail "the escalation and why in the incidents: $out"
 [[ "$(HOME="$tmp" show)" == *"INCIDENTS (~/data/memory.tsv; agents mem log)"* ]] || fail "the incidents' path under HOME starts with a bare ~ (bash 3.2 keeps a quoted \\~): $out"
 out="$(GS=unknown MACH=$'50331648\t-\t-\t-\t-' show)"
 [[ "$out" == *"GUARD   unknown: the process table can't be read from inside a sandbox"* ]] || fail "sandbox guard wording: $out"
@@ -562,10 +562,10 @@ pass "agents mem: stalled, escalations with why and the log, and a sandbox said 
 # 5. The menu's memg row: the guard's state and the last incident.
 reset
 mkdir -p "$AGENTS_DATA_DIR" "$AGENTS_RUN_DIR"
-printf '1000\tstop\t620\tnode\tclientFuelToday.test.js\tcairn\tclaude:600\t31457280\t10485760\t3\t2097152\n' > "$AGENTS_DATA_DIR/memory.tsv"
+printf '1000\tstop\t620\tnode\tinvoiceTotalSum.test.js\tstore\tclaude:600\t31457280\t10485760\t3\t2097152\n' > "$AGENTS_DATA_DIR/memory.tsv"
 echo 50331648 > "$AGENTS_RUN_DIR/memtotal"
 row="$(_agents_mem_tsv_row)"
-[[ "$row" == $'memg\tnone\t-\t8388608\t25165824\t1000\tstop\tnode (clientFuelToday.test.js)\tcairn\t31457280' ]] || fail "memg row: $row"
+[[ "$row" == $'memg\tnone\t-\t8388608\t25165824\t1000\tstop\tnode (invoiceTotalSum.test.js)\tstore\t31457280' ]] || fail "memg row: $row"
 # The LaunchAgent on macOS, the systemd user service on Linux.
 unit="$(_agents_mem_unit)"; mkdir -p "${unit%/*}"; touch "$unit"
 [[ "$(_agents_mem_guard_state)" == stopped ]] || fail "an installed guard service with no guard running is stopped"

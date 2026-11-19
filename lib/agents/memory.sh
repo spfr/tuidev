@@ -26,7 +26,7 @@
 #            label the script's, and why says what repeated), refused (it
 #            could not), pressure (memory pressure turned critical; the
 #            biggest process at the time)
-#   label:   the script an interpreter runs (clientFuelToday.test.js), "-"
+#   label:   the script an interpreter runs (invoiceTotalSum.test.js), "-"
 #   session: the agent tree it ran in, as kind:pid ("-" outside one)
 
 # The LaunchAgent the monitoring pack installs on macOS to run the guard.
@@ -235,7 +235,7 @@ _agents_mem_warn_kib() {
 # _agents_mem_gb KIB — "16.6G" (one decimal), for messages.
 _agents_mem_gb() { printf '%d.%dG' $(($1 / 1048576)) $(($1 * 10 / 1048576 % 10)); }
 
-# _agents_mem_what NAME LABEL — "node (clientFuelToday.test.js)", or NAME.
+# _agents_mem_what NAME LABEL — "node (invoiceTotalSum.test.js)", or NAME.
 _agents_mem_what() { if [[ "$2" == - || -z "$2" ]]; then printf '%s' "$1"; else printf '%s (%s)' "$1" "$2"; fi; }
 
 # _agents_mem_project PID — the short name of PID's working directory, "-".

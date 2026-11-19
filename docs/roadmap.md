@@ -1,6 +1,6 @@
 # Roadmap
 
-*As of 19 November 2026 (3.27.1).*
+*As of 19 November 2026 (3.27.2).*
 
 What already works for running agents anywhere and seeing what they do, what comes next, what tuidev will deliberately not do, and which outside projects it watches. The why behind these choices is in [VISION.md](../VISION.md).
 
