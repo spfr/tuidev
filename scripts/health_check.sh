@@ -693,10 +693,47 @@ job_file() {
     esac
 }
 
-# probe_job PACK KIND NAME [FN] — one job a pack declares (pack_array PACK jobs).
+# job_program FILE — REPLY: the program the job FILE (a plist or a unit)
+# starts: the first of ProgramArguments or ExecStart (%h as $HOME), or the
+# script when that is a shell; "" when it can't be told.
+job_program() {
+    local f="$1" a b
+    REPLY=""
+    [[ -r "$f" ]] || return 0
+    case "$f" in
+        *.plist) REPLY="$(awk '
+                     /<key>ProgramArguments<\/key>/ { p = 1; next }
+                     p && /<\/array>/ { exit }
+                     p && /<string>/ { s = $0; sub(/.*<string>/, "", s); sub(/<\/string>.*/, "", s); a[++n] = s }
+                     END { if (n) { x = a[1]; if (x ~ /\/(ba|z|da)?sh$/ && n > 1) x = a[2]; print x } }' "$f")" ;;
+        *)       REPLY="$(awk '/^ExecStart=/ { sub(/^ExecStart=[-@+!:]*/, ""); print; exit }' "$f")"
+                 read -r a b _ <<< "$REPLY"
+                 case "${a##*/}" in bash|sh|zsh|dash) REPLY="$b" ;; *) REPLY="$a" ;; esac
+                 REPLY="${REPLY//%h/$HOME}" ;;
+    esac
+    [[ "$REPLY" == /* ]] || REPLY=""
+}
+
+# job_program_gone NAME FILE ACTION — true, with a failure set, when the job
+# FILE starts a program that is not there (the program's own repair when
+# tuidev installs it, else ACTION).
+# shellcheck disable=SC2329  # run through runtime_row
+job_program_gone() {
+    local prog act="$3"
+    job_program "$2"; prog="$REPLY"
+    [[ -n "$prog" && ! -e "$prog" ]] || return 1
+    ! path_owner "$prog" || act="$REPLY"
+    _p fail "$1 starts ${prog/#"$HOME"/$TILDE}, which is not there" "tuidev update --configs" "$act"
+}
+
+# probe_job PACK KIND NAME [FN] — one job a pack declares (pack_array PACK
+# jobs). A fault is a failure: its file gone, or the program it starts gone.
+# A job that is installed but not loaded, disabled or stopped is one you may
+# have turned off (the units and docs/remote.md say how): a warning, with
+# how to start it again; --fix starts it.
 # shellcheck disable=SC2329  # run through runtime_row
 probe_job() {
-    local pack="$1" kind="$2" name="$3" fn="${4:-}" file shown act="" st
+    local pack="$1" kind="$2" name="$3" fn="${4:-}" file shown act="" st unit
     job_file "$kind" "$name"; file="$REPLY"; shown="${file/#"$HOME"/$TILDE}"
     [[ -z "$fn" ]] || act="pack:$pack:$fn"
     case "$kind" in
@@ -706,34 +743,41 @@ probe_job() {
                 if [[ "$kind" == launchd ]]; then _p fail "$name: no LaunchAgent at $shown" "tuidev install --pack $pack" "$act"; else _p none; fi
                 return 0
             fi
+            ! job_program_gone "$name" "$file" "$act" || return 0
             if [[ "$kind" == launchd ]]; then launchd_state "gui/$UID/$name"; else launchd_state "system/$name"; fi
             case "$REPLY" in
                 loaded)   _p ok "$name loaded (launchd)" ;;
                 unloaded) if [[ "$kind" == launchd ]]; then
-                              _p fail "$name is installed but not loaded" "launchctl bootstrap gui/$UID $shown" "$act"
+                              _p warn "$name is installed but not loaded (turned off?)" "launchctl bootstrap gui/$UID $shown" "$act"
                           else
-                              _p fail "$name is installed but not loaded" "sudo launchctl bootstrap system $file"
+                              _p warn "$name is installed but not loaded (turned off?)" "sudo launchctl bootstrap system $file"
                           fi ;;
                 *)        _p skip "$name loaded: skipped: ${REPLY#skip }" ;;
             esac ;;
         systemd|systemd-enabled)
             if ! systemd_ready; then _p skip "$name enabled: skipped: $REPLY"; return 0; fi
             if [[ ! -f "$file" ]]; then _p fail "$name: no unit at $shown" "tuidev install --pack $pack" "$act"; return 0; fi
+            unit="$file"; [[ "$name" != *.timer ]] || unit="${file%.timer}.service"
+            ! job_program_gone "$name" "$unit" "$act" || return 0
             st="$(systemctl --user is-enabled "$name" 2>/dev/null)"
             if [[ "$st" != enabled ]]; then
-                _p fail "$name is ${st:-not enabled}" "systemctl --user enable --now $name" "systemd:$name"
+                _p warn "$name is ${st:-not enabled} (turned off?)" "systemctl --user enable --now $name" "systemd:$name"
                 return 0
             fi
             if [[ "$kind" == systemd ]]; then
                 st="$(systemctl --user is-active "$name" 2>/dev/null)"
                 if [[ "$st" != active ]]; then
-                    _p fail "$name is enabled but ${st:-not active}" "systemctl --user enable --now $name" "systemd:$name"
+                    _p warn "$name is enabled but ${st:-not active} (stopped?)" "systemctl --user enable --now $name" "systemd:$name"
                     return 0
                 fi
                 _p ok "$name enabled and active (systemd)"
             else
                 _p ok "$name enabled (systemd)"
             fi ;;
+        systemd-file)
+            # The service half of a timer: there or not; nothing to ask systemd.
+            if ! systemd_ready || [[ -f "$file" ]]; then _p none; return 0; fi
+            _p fail "$name: no unit at $shown, so its timer starts nothing" "tuidev install --pack $pack" "$act" ;;
         *)  _p none ;;
     esac
 }
@@ -745,7 +789,7 @@ active_jobs() {
         while read -r kind name fn; do
             case "$kind" in
                 launchd|launchd-system) [[ "$TUIDEV_OS" == Darwin ]] || continue ;;
-                systemd|systemd-enabled) [[ "$TUIDEV_OS" == Linux ]] || continue ;;
+                systemd|systemd-enabled|systemd-file) [[ "$TUIDEV_OS" == Linux ]] || continue ;;
                 *) continue ;;
             esac
             printf '%s %s %s %s\n' "$pack" "$kind" "$name" "$fn"
@@ -823,16 +867,29 @@ probe_bin_copy() {
     if [[ "$name" == agents && -d "$REPO_DIR/lib/agents" && ! -d "$TUIDEV_LIB_DIR/agents" ]]; then
         n=$((n + 1))
     elif [[ "$name" == agents && -d "$REPO_DIR/lib/agents" ]]; then
-        # The modules: one that differs or is missing; what only the install
-        # has (themes, a module a release dropped) is left out.
-        n=$(( n + $(diff -rq "$REPO_DIR/lib/agents" "$TUIDEV_LIB_DIR/agents" 2>/dev/null \
-            | awk -v i="Only in $TUIDEV_LIB_DIR/agents" 'index($0, i) != 1 { c++ } END { print c + 0 }') ))
+        modules_differ; n=$((n + REPLY))
     fi
     if (( n == 0 )); then
         _p ok "$name: ~/.local/bin/$name is the one in these files"
     else
         _p warn "$name: ~/.local/bin/$name is not the one in $REPO_DIR ($n file(s) differ)" "tuidev update --configs" "$act"
     fi
+}
+
+# modules_differ — REPLY: how many of the files the monitoring pack installs
+# from lib/agents (its own list, _monitoring_agents_files) differ from the
+# installed ones or are missing there. Anything else in either tree (a
+# .DS_Store in a clone, a module a release dropped) is not compared.
+# shellcheck disable=SC2329  # run through runtime_row
+modules_differ() {
+    local rels a b
+    REPLY=0
+    rels="$(pack_call monitoring _monitoring_agents_files)" || return 0
+    [[ -n "$rels" ]] || return 0
+    a="$(cd "$REPO_DIR/lib/agents" && printf '%s\n' "$rels" | xargs cksum 2>/dev/null)"
+    b="$(cd "$TUIDEV_LIB_DIR/agents" 2>/dev/null && printf '%s\n' "$rels" | xargs cksum 2>/dev/null)"
+    REPLY="$(_B="$b" awk 'BEGIN { n = split(ENVIRON["_B"], l, "\n"); for (i = 1; i <= n; i++) have[l[i]] = 1 }
+                          !($0 in have) { c++ } END { print c + 0 }' <<< "$a")"
 }
 
 # probe_bin_path NAME — PATH finds ~/.local/bin/NAME, not another copy first.
@@ -895,7 +952,8 @@ hook_program() {
         \$HOME/*)       REPLY="$HOME/${REPLY#\$HOME/}" ;;
         \$\{HOME\}/*)   REPLY="$HOME/${REPLY#\$\{HOME\}/}" ;;
     esac
-    [[ "$REPLY" == /* ]] || REPLY=""
+    # An escaped space (My\ App) ends the word at a backslash: can't tell.
+    [[ "$REPLY" == /* && "$REPLY" != *\\ ]] || REPLY=""
 }
 
 # tuidev_owned PATH — tuidev installed PATH: one of its commands, or a file
@@ -1073,13 +1131,21 @@ all_job_files() {
     done
 }
 
-# tuidev's LaunchAgents and user units on disk that the manifest lacks.
+# The LaunchAgents and user units on disk that are jobs some pack ships
+# (all_job_files: read only when one of those names is unrecorded) and that
+# the manifest lacks. A file of yours that only shares the prefix is not
+# tuidev's business, and is never named.
 unrecorded_jobs() {
-    local f dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    local f dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" cand="" known
     for f in "$HOME"/Library/LaunchAgents/dev.tuidev.*.plist "$dir"/tuidev-*.service "$dir"/tuidev-*.timer; do
         [[ -f "$f" ]] || continue
-        tuidev_manifest_has file "$f" || printf '%s\n' "$f"
+        tuidev_manifest_has file "$f" || cand+="$f"$'\n'
     done
+    [[ -n "$cand" ]] || return 0
+    known=$'\n'"$(all_job_files)"$'\n'
+    while IFS= read -r f; do
+        [[ -z "$f" || "$known" != *$'\n'"$f"$'\n'* ]] || printf '%s\n' "$f"
+    done <<< "$cand"
 }
 
 # shellcheck disable=SC2329  # run through runtime_row
@@ -1092,15 +1158,9 @@ probe_unrecorded() {
 }
 
 manifest_record_jobs() {
-    local f known
-    known=$'\n'"$(all_job_files)"$'\n'
+    local f
     while IFS= read -r f; do
-        [[ -n "$f" ]] || continue
-        if [[ "$known" == *$'\n'"$f"$'\n'* ]]; then
-            run_cmd tuidev_manifest_record file "$f"
-        else
-            print_info "  ${f/#"$HOME"/$TILDE} is not a job tuidev ships: left as it is"
-        fi
+        [[ -z "$f" ]] || run_cmd tuidev_manifest_record file "$f"
     done <<< "$(unrecorded_jobs)"
 }
 
@@ -1161,11 +1221,12 @@ check_runtime() {
         print_info "runtime: skipped: no install is recorded here ($TUIDEV_PROFILE_FILE_DEFAULT)"
         return 0
     fi
+    # The packs the install recorded (the profile file), never a forced
+    # --profile: --fix repairs only what was chosen here.
     RT_ACTIVE=" "
-    for p in $(tuidev_active_packs) core $(tuidev_extra_packs "$PROFILE"); do
+    for p in $(tuidev_active_packs); do
         [[ "$RT_ACTIVE" == *" $p "* ]] || RT_ACTIVE+="$p "
     done
-    case "$PROFILE" in desktop|full|remote) pack_active sandbox || RT_ACTIVE+="sandbox " ;; esac
     RT_JOBS="$(active_jobs)"
     RT_JOB_FILES=$'\n'
     while read -r _ kind name _; do

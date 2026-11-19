@@ -132,6 +132,19 @@ stub tmux; ! probe tmux || fail "tmux without its config passed"
 mkdir -p "$HOME/.config/tmux"; : > "$HOME/.config/tmux/tmux.conf"; probe tmux || fail "tmux with its config"
 pass "the fallback looks for the declared commands (macOS-only ones skipped elsewhere); tmux checks its config too"
 
+# --- tuidev_manifest_drop: that one record, backslashes and all ------------------
+(
+    # shellcheck source=manifest.sh disable=SC1091
+    . "$LIB_DIR/manifest.sh"
+    TUIDEV_MANIFEST_FILE="$tmp/manifest.drop"
+    printf '%s\n' '# m' 'file /a\\b' 'file /a\b' 'file /c' > "$TUIDEV_MANIFEST_FILE"
+    tuidev_manifest_drop file '/a\\b'
+    [[ "$(cat "$TUIDEV_MANIFEST_FILE")" == $'# m\nfile /a\\b\nfile /c' ]] || { cat "$TUIDEV_MANIFEST_FILE" >&2; exit 1; }
+    tuidev_manifest_drop file '/not/there'
+    [[ "$(cat "$TUIDEV_MANIFEST_FILE")" == $'# m\nfile /a\\b\nfile /c' ]]
+) || fail "tuidev_manifest_drop removed another record than the one named"
+pass "tuidev_manifest_drop removes exactly that record: file /a\\\\b leaves file /a\\b alone"
+
 # --- Runtime probes and --fix: the whole script, against a fixture home ----------
 # Stubs: every core command this machine lacks, zsh, uname (FAKE_OS),
 # launchctl (state in $RT.loaded.LABEL; LCTL=sandbox answers as inside
@@ -186,7 +199,8 @@ chmod +x "$RS"/* "$RL/launchctl" "$RD/systemctl"
 H="$RT/home"; HS="$H/.config/tuidev"
 rt_fixture() {
     rm -rf "$RT" "$RT".*; mkdir -p "$HS" "$H/.local/bin" "$H/Library/LaunchAgents" "$H/.config/systemd/user" "$H/.claude"
-    printf 'profile=minimal\ncore=true\nremote=false\nsandbox=false\nui=false\nextras=false\nextra_packs=%s\nrepo=%s\n' "$1" "$REPO" > "$HS/profile"
+    printf 'profile=minimal\ncore=%s\nremote=false\nsandbox=%s\nui=false\nextras=false\nextra_packs=%s\nrepo=%s\n' \
+        "${RT_CORE:-true}" "${RT_SANDBOX:-false}" "$1" "$REPO" > "$HS/profile"
     cp "$REPO/VERSION" "$HS/version"
     cp "$REPO/bin/tuidev" "$REPO/bin/secret" "$REPO/bin/mcp-lazy" "$H/.local/bin/"
     cp "$REPO/scripts/notify.sh" "$H/.local/bin/notify.sh"
@@ -199,7 +213,8 @@ rt_fixture() {
     printf '# tuidev install manifest\n' > "$HS/manifest"
 }
 # hc ARGS... — the whole check as tuidev check runs it; output, then "rc=N".
-# PRE: a dir first on PATH; NOLC=1, NOSD=1, NOJQ=1: no launchctl, systemctl, jq.
+# PRE: a dir first on PATH; NOLC=1, NOSD=1, NOJQ=1: no launchctl, systemctl,
+# jq; PROFILE: the --profile to force (minimal).
 hc() {
     local rc=0 p="${PRE:+$PRE:}$RS"
     [[ -n "${NOLC:-}" ]] || p+=":$RL"
@@ -209,7 +224,7 @@ hc() {
     env -u XDG_CONFIG_HOME -u XDG_STATE_HOME -u CODEX_HOME -u CLAUDE_CONFIG_DIR -u CODEX_SANDBOX \
         HOME="$H" TUIDEV_STATE_DIR="$HS" TUIDEV_NO_COLOR=1 RTM="$RT" FAKE_OS="${FAKE_OS:-Darwin}" \
         AGENTS_HISTORY=0 AGENTS_MEM_GUARD=off AGENTS_NO_HERDR=1 AGENTS_CONF="$tmp/none.conf" PATH="$p" \
-        "$BASH" "$HC" --profile minimal "$@" 2>&1 || rc=$?
+        "$BASH" "$HC" --profile "${PROFILE:-minimal}" "$@" 2>&1 || rc=$?
     echo "rc=$rc"
 }
 has() { [[ "$out" == *"$1"* ]] || fail "${2:-expected}: no '$1' in: $(printf '%s\n' "$out" | sed -n '/Runtime/,$p')"; }
@@ -228,10 +243,10 @@ rt_fixture monitoring
 for l in sample memguard; do printf '<plist/>\n' > "$H/Library/LaunchAgents/dev.tuidev.$l.plist"; done
 : > "$RT.loaded.dev.tuidev.memguard"
 out="$(hc)"
-has "✗ dev.tuidev.sample is installed but not loaded (fix: launchctl bootstrap gui/$UID ~/Library/LaunchAgents/dev.tuidev.sample.plist; tuidev check --fix does it)"
+has "⚠ dev.tuidev.sample is installed but not loaded (turned off?) (fix: launchctl bootstrap gui/$UID ~/Library/LaunchAgents/dev.tuidev.sample.plist; tuidev check --fix does it)"
 has "✓ dev.tuidev.memguard loaded (launchd)"
 has "✗ dev.tuidev.link: no LaunchAgent at ~/Library/LaunchAgents/dev.tuidev.link.plist"
-has "Runtime failed:    2"; has "rc=1" "a job not loaded is a failure"
+has "Runtime failed:    1"; has "rc=1" "a missing LaunchAgent is a failure"
 grep -q "launchctl print gui/$UID/dev.tuidev.sample" "$RT.calls" || fail "launchctl print was not asked"
 ! grep -qE 'launchctl (bootstrap|bootout|kickstart)' "$RT.calls" || fail "the check changed launchd: $(cat "$RT.calls")"
 out="$(LCTL=sandbox hc)"
@@ -239,7 +254,16 @@ has "dev.tuidev.sample loaded: skipped: launchd can't be asked from inside a san
 hasnt "✗ dev.tuidev.sample" "inside a sandbox a job must be skipped, not failed"
 out="$(NOLC=1 hc)"
 has "dev.tuidev.memguard loaded: skipped: launchctl is not here"
-pass "LaunchAgents: loaded passes, unloaded and missing fail with the command, a sandbox or no launchctl is a skip"
+printf '<plist/>\n' > "$H/Library/LaunchAgents/dev.tuidev.link.plist"
+out="$(hc)"; has "⚠ dev.tuidev.link is installed but not loaded (turned off?)"; has "Runtime failed:    0"
+has "rc=0" "a job turned off (bootout) is a warning, not a failure"
+printf '%s\n' '<plist><dict><key>ProgramArguments</key><array>' '<string>/bin/bash</string>' "<string>$H/.local/bin/agents</string>" \
+    '<string>mem</string>' '</array></dict></plist>' > "$H/Library/LaunchAgents/dev.tuidev.memguard.plist"
+out="$(hc)"; has "✓ dev.tuidev.memguard loaded (launchd)"
+mv "$H/.local/bin/agents" "$tmp/agents.away"
+out="$(hc)"; has "✗ dev.tuidev.memguard starts ~/.local/bin/agents, which is not there"; has "rc=1" "a loaded job whose program is gone"
+mv "$tmp/agents.away" "$H/.local/bin/agents"; printf '<plist/>\n' > "$H/Library/LaunchAgents/dev.tuidev.link.plist"; rm -f "$H/Library/LaunchAgents/dev.tuidev.link.plist"
+pass "LaunchAgents: loaded passes; unloaded warns (turned off) with the command; a missing plist or program fails; a sandbox or no launchctl is a skip"
 
 # --fix --dry-run changes nothing and says what it would do; --fix loads them
 # with the pack's own step (the plist written as the pack writes it) and probes again.
@@ -247,7 +271,7 @@ before="$(snap)"; rm -f "$RT.calls"
 out="$(hc --fix --dry-run)"
 has "[DRY RUN] the monitoring pack's step for its sampler (_monitoring_sampler)"
 has "[DRY RUN] the monitoring pack's step for its link watcher (_monitoring_link)"
-has "That was a dry run"; has "rc=1" "a dry run leaves the failures"
+has "That was a dry run"; has "rc=1" "a dry run leaves the failures (the link plist)"
 [[ "$(snap)" == "$before" ]] || fail "--fix --dry-run changed the home: $(diff <(echo "$before") <(snap) | head -5)"
 ! grep -qE 'launchctl (bootstrap|bootout|kickstart)' "$RT.calls" || fail "--fix --dry-run ran launchctl: $(cat "$RT.calls")"
 out="$(hc --fix)"
@@ -263,15 +287,19 @@ pass "--fix --dry-run changes nothing; --fix loads each LaunchAgent with the pac
 # 2. Linux: user units enabled (and a timer active); no systemd is a skip.
 FAKE_OS=Linux; export FAKE_OS
 rt_fixture monitoring
-U="$H/.config/systemd/user"; : > "$U/tuidev-sample.timer"; : > "$U/tuidev-memguard.service"
+U="$H/.config/systemd/user"; : > "$U/tuidev-sample.timer"; : > "$U/tuidev-sample.service"; : > "$U/tuidev-memguard.service"
 : > "$RT.sd.tuidev-sample.timer.enabled"; : > "$RT.sd.tuidev-sample.timer.active"; : > "$RT.sd.tuidev-memguard.service.enabled"
 out="$(hc)"
 has "✓ tuidev-sample.timer enabled and active (systemd)"; has "✓ tuidev-memguard.service enabled (systemd)"
 hasnt "dev.tuidev." "LaunchAgents are not probed on Linux"; has "rc=0"
 rm -f "$RT.sd.tuidev-sample.timer.active"
-out="$(hc)"; has "✗ tuidev-sample.timer is enabled but inactive (fix: systemctl --user enable --now tuidev-sample.timer"; has "rc=1"
+out="$(hc)"; has "⚠ tuidev-sample.timer is enabled but inactive (stopped?) (fix: systemctl --user enable --now tuidev-sample.timer; tuidev check --fix does it)"
+has "rc=0" "a stopped timer is a warning"
 rm -f "$RT.sd.tuidev-sample.timer.enabled"
-out="$(hc)"; has "✗ tuidev-sample.timer is disabled"
+out="$(hc)"; has "⚠ tuidev-sample.timer is disabled (turned off?)"; has "rc=0" "a timer turned off (disable --now) is a warning"
+printf '[Service]\nExecStart=/bin/bash %%h/.local/bin/agents-gone sample --scheduled\n' > "$U/tuidev-sample.service"
+out="$(hc)"; has "✗ tuidev-sample.timer starts ~/.local/bin/agents-gone, which is not there"; has "rc=1"
+: > "$U/tuidev-sample.service"
 out="$(SD_DOWN=1 hc)"; has "tuidev-sample.timer enabled: skipped: no systemd user manager answers here"; hasnt "✗ tuidev-sample"
 out="$(NOSD=1 hc)"; has "tuidev-sample.timer enabled: skipped: systemctl is not here"
 out="$(hc --fix)"
@@ -281,8 +309,20 @@ out="$(hc --fix)"
 has "--fix: the monitoring pack's step for its sampler and memory guard units (_monitoring_linux_units)"
 has "✓ tuidev-memguard.service enabled (systemd)"; has "rc=0"
 cmp -s "$U/tuidev-memguard.service" "$REPO/configs/agents/tuidev-memguard.service" || fail "the unit was not written as shipped"
+# A timer's service is the job's too: gone, it is put back, never dropped
+# from the manifest; one on disk and unrecorded is recorded.
+grep -qxF "file $U/tuidev-sample.service" "$HS/manifest" || fail "the pack did not record the service"
+rm "$U/tuidev-sample.service"
+out="$(hc)"; has "✗ tuidev-sample.service: no unit at ~/.config/systemd/user/tuidev-sample.service, so its timer starts nothing"
+hasnt "the manifest records files that are gone" "a job's own file is the job row's"
+out="$(hc --fix)"
+[[ -f "$U/tuidev-sample.service" ]] || fail "--fix did not put the service back"
+grep -qxF "file $U/tuidev-sample.service" "$HS/manifest" || fail "--fix dropped the service's record"; has "rc=0"
+grep -v "tuidev-sample.service" "$HS/manifest" > "$tmp/m" && cat "$tmp/m" > "$HS/manifest"
+out="$(hc)"; has "⚠ not in the manifest, so tuidev uninstall would leave them: ~/.config/systemd/user/tuidev-sample.service"
+out="$(hc --fix)"; grep -qxF "file $U/tuidev-sample.service" "$HS/manifest" || fail "--fix did not record the service"
 FAKE_OS=Darwin
-pass "Linux: units enabled and a timer active; disabled or inactive fails; no systemd is a skip; --fix enables, or writes the units first"
+pass "Linux: units enabled and a timer active; disabled or stopped warns; a gone service or program fails; --fix enables, or writes the units; a timer's service is restored and recorded"
 
 # 3. Version drift: the installed commands against these files, and PATH.
 rt_fixture ""
@@ -301,6 +341,17 @@ has "✓ notify.sh: ~/.local/bin/notify.sh is the one in these files"
 has "⚠ secret: PATH finds $tmp/other/secret"; [[ -e "$tmp/other/secret" ]] || fail "--fix touched a file on PATH that is not tuidev's"
 pass "version drift: an edited or missing copy, configs from another release, another copy first on PATH; --fix reinstalls tuidev's own"
 
+# agents' modules are compared on what the monitoring pack installs only: a
+# stray file in a clone (.DS_Store, notes) is no drift --fix could never clear.
+CR="$tmp/clone"; mkdir -p "$CR"; cp -R "$REPO/scripts" "$REPO/bin" "$REPO/lib" "$REPO/configs" "$REPO/VERSION" "$CR/"
+: > "$CR/lib/agents/.DS_Store"; echo notes > "$CR/lib/agents/notes.txt"
+rt_fixture monitoring
+out="$(HC="$CR/scripts/health_check.sh" hc)"; has "✓ agents: ~/.local/bin/agents is the one in these files"
+echo "# edited" >> "$H/.local/lib/tuidev/agents/cli.sh"; rm "$H/.local/lib/tuidev/agents/awk/json.awk"
+out="$(HC="$CR/scripts/health_check.sh" hc)"; has "⚠ agents: ~/.local/bin/agents is not the one in $CR (2 file(s) differ)"
+out="$(HC="$CR/scripts/health_check.sh" hc --fix)"; has "✓ agents: ~/.local/bin/agents is the one in these files"
+pass "agents' modules: only what the pack installs is compared; an edited or missing module is drift, and --fix clears it"
+
 # 4. Hooks that start a program that is gone: tuidev's fail, the rest warn, none is edited.
 if [[ -n "$JQ" ]]; then
 rt_fixture ""
@@ -310,7 +361,8 @@ cat > "$H/.claude/settings.json" <<'EOF'
   "Notification":[{"matcher":"x","hooks":[{"type":"command","command":"\"$HOME/.local/bin/notify.sh\" 'Claude Code' 'Needs you'"}]}],
   "Stop":[{"hooks":[{"type":"command","command":"~/bin/their-hook.sh --flag"},{"type":"command","command":"python3 ${HOME}/bin/gone.py"},
                     {"type":"command","command":"~/bin/ok-hook"},{"type":"command","command":"$HOME/bin/not-exec"},
-                    {"type":"command","command":"[ -x \"$HOME/.local/bin/agents\" ] && exit 0"},{"type":"command","command":"jq -n 1"}]}]},
+                    {"type":"command","command":"[ -x \"$HOME/.local/bin/agents\" ] && exit 0"},{"type":"command","command":"jq -n 1"},
+                    {"type":"command","command":"/Applications/My\\ App/x --y"}]}]},
  "statusLine":{"type":"command","command":"/opt/nowhere/status"}}
 EOF
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"/opt/codex-hook.sh"}]}]}}\n' > "$H/.codex/hooks.json"
@@ -325,6 +377,7 @@ has "⚠ ~/.claude/settings.json: the statusLine hook runs /opt/nowhere/status, 
 has "⚠ ~/.codex/hooks.json: the SessionStart hook runs /opt/codex-hook.sh, which is not there (not tuidev's"
 has "⚠ ~/.codex/config.toml: the notify hook runs /opt/notifier, which is not there (not tuidev's"
 hasnt "ok-hook" "a hook whose program is there"; hasnt "/ignored" "notify under another table"
+hasnt "My" "a path with an escaped space can't be told, so it is skipped"
 out="$(hc --fix)"
 has "✓ notify.sh: ~/.local/bin/notify.sh is the one in these files"; hasnt "✗ ~/.claude/settings.json" "the tuidev hook after --fix"
 has "the Stop hook runs ~/bin/their-hook.sh, which is not there (not tuidev's"
@@ -345,7 +398,8 @@ rm "$H/.local/lib/tuidev/agents/cli.sh"
 out="$(hc)"
 has "⚠ the manifest records files that are gone: ~/.config/gone.conf, ~/.gone-rc (uninstall skips them"
 has "✗ gone, though tuidev installed them: ~/.local/lib/tuidev/agents/cli.sh (fix: tuidev update --configs; tuidev check --fix does it)"
-has "⚠ not in the manifest, so tuidev uninstall would leave them: ~/Library/LaunchAgents/dev.tuidev.memguard.plist, ~/Library/LaunchAgents/dev.tuidev.mine.plist"
+has "⚠ not in the manifest, so tuidev uninstall would leave them: ~/Library/LaunchAgents/dev.tuidev.memguard.plist"
+hasnt "dev.tuidev.mine" "a file of yours that only shares the prefix"
 cp "$HS/manifest" "$tmp/manifest.before"
 out="$(hc --fix --dry-run)"
 has "[DRY RUN] tuidev_manifest_drop file $H/.config/gone.conf"; has "[DRY RUN] tuidev_manifest_record file $H/Library/LaunchAgents/dev.tuidev.memguard.plist"
@@ -355,10 +409,21 @@ out="$(hc --fix)"
 grep -qxF "file $H/.local/bin/tuidev" "$HS/manifest" || fail "--fix dropped a record whose file is there"
 grep -qxF "file $H/Library/LaunchAgents/dev.tuidev.memguard.plist" "$HS/manifest" || fail "--fix did not record tuidev's job"
 ! grep -q "dev.tuidev.mine" "$HS/manifest" || fail "--fix recorded a plist tuidev does not ship"
-has "dev.tuidev.mine.plist is not a job tuidev ships: left as it is"; [[ -f "$H/Library/LaunchAgents/dev.tuidev.mine.plist" ]] || fail "a plist that is not tuidev's was touched"
+hasnt "dev.tuidev.mine" "after --fix"; [[ -f "$H/Library/LaunchAgents/dev.tuidev.mine.plist" ]] || fail "a plist that is not tuidev's was touched"
 cmp -s "$H/.local/lib/tuidev/agents/cli.sh" "$REPO/lib/agents/cli.sh" || fail "--fix did not put the module back"
 hasnt "gone, though tuidev installed them" "after --fix"
-pass "manifest: gone records warn and --fix drops them; tuidev's own files come back; unrecorded jobs tuidev ships get recorded, others are left alone"
+pass "manifest: gone records warn and --fix drops them; tuidev's own files come back; unrecorded jobs tuidev ships get recorded, a file of yours is never named"
+
+# --fix repairs only what the install recorded, never a forced --profile.
+RT_CORE=false rt_fixture ""; rm "$H/.local/bin/secret"
+out="$(hc --fix)"; [[ ! -e "$H/.local/bin/secret" ]] || fail "--fix installed secret on an install without the core pack"
+hasnt "secret: ~/.local/bin/secret is not installed" "secret is not this install's"
+rt_fixture ""
+out="$(PROFILE=desktop hc --fix)"; [[ ! -e "$H/.local/bin/sbx" ]] || fail "--profile desktop --fix installed sbx on a minimal install"
+hasnt "sbx: ~/.local/bin/sbx is not installed" "sbx is not this install's"
+RT_SANDBOX=true rt_fixture ""
+out="$(hc)"; has "✗ sbx: ~/.local/bin/sbx is not installed" "an install that recorded the sandbox pack"
+pass "--fix repairs only the packs the install recorded: no secret without core, no sbx for a forced --profile desktop"
 
 # 6. agents doctor's rows are counted here: one implementation.
 rt_fixture monitoring

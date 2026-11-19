@@ -40,13 +40,15 @@ MONITORING_CASKS=(swiftbar)   # macOS only; casks are Homebrew-on-macOS
 # What this pack keeps running (pack_array NAME jobs: `tuidev check` asks
 # launchd or systemd, and --fix runs the function after each to install and
 # start it again). The guard's service is only enabled: AGENTS_MEM_GUARD=off
-# ends it, and `agents doctor` says whether a guard runs.
+# ends it, and `agents doctor` says whether a guard runs. The timer's
+# service is a file only (systemd-file): its timer is what is enabled.
 # shellcheck disable=SC2034  # read by pack_array
 MONITORING_JOBS=(
     "launchd dev.tuidev.sample _monitoring_sampler"
     "launchd dev.tuidev.memguard _monitoring_memguard"
     "launchd dev.tuidev.link _monitoring_link"
     "systemd tuidev-sample.timer _monitoring_linux_units"
+    "systemd-file tuidev-sample.service _monitoring_linux_units"
     "systemd-enabled tuidev-memguard.service _monitoring_linux_units"
 )
 
@@ -73,12 +75,22 @@ MONITORING_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/agents.conf"
 # from (lib/agents/palette.sh; without one it uses the terminal's own). The
 # modules go first, so an interrupted install never leaves a new agents without
 # them (the old one needs none).
-_monitoring_agents() {
-    local dest="$HOME/.local/bin/agents" lib="$TUIDEV_LIB_DIR/agents" src
-    print_step "installing the agents modules -> $lib"
+# _monitoring_agents_files — what _monitoring_agents installs from
+# lib/agents, relative to it, sorted: the modules, the awk programs and the
+# price list (`tuidev check` compares the install against the same list).
+_monitoring_agents_files() {
+    local src
     while IFS= read -r src; do
-        install_config "$lib/${src#"$MONITORING_REPO/lib/agents/"}" "$src" --overwrite
+        printf '%s\n' "${src#"$MONITORING_REPO/lib/agents/"}"
     done < <(find "$MONITORING_REPO/lib/agents" -type f \( -name '*.sh' -o -name '*.awk' -o -name '*.tsv' \) | LC_ALL=C sort)
+}
+
+_monitoring_agents() {
+    local dest="$HOME/.local/bin/agents" lib="$TUIDEV_LIB_DIR/agents" src rel
+    print_step "installing the agents modules -> $lib"
+    while IFS= read -r rel; do
+        install_config "$lib/$rel" "$MONITORING_REPO/lib/agents/$rel" --overwrite
+    done < <(_monitoring_agents_files)
     for src in "$MONITORING_REPO"/configs/themes/*/palette.toml; do
         install_config "$lib/themes/${src#"$MONITORING_REPO/configs/themes/"}" "$src" --overwrite
     done

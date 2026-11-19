@@ -45,6 +45,39 @@ _agents_doctor_ps() {
     fi
 }
 
+# _agents_doctor_no_systemd — true off macOS when no systemd user manager
+# answers here (a container, or a sandbox), REPLY saying why: what the pack
+# would run the sampler and the guard with is not there, so their rows say
+# skipped. The same test as `tuidev check`'s systemd_ready (health_check.sh
+# runs without these modules, and agents without the repo: a mirror, not a
+# shared helper). Asked once a probe.
+_agents_doctor_no_systemd() {
+    REPLY=""
+    [[ "$OSTYPE" != darwin* ]] || return 1
+    if [[ -z "${_AGENTS_DOCTOR_SD+x}" ]]; then
+        _AGENTS_DOCTOR_SD=""
+        if ! command -v systemctl >/dev/null 2>&1; then _AGENTS_DOCTOR_SD="systemctl is not here"
+        elif ! systemctl --user show-environment >/dev/null 2>&1; then _AGENTS_DOCTOR_SD="no systemd user manager answers here (a container, or a sandbox)"
+        fi
+    fi
+    REPLY="$_AGENTS_DOCTOR_SD"
+    [[ -n "$REPLY" ]]
+}
+
+# _agents_doctor_has_pack NAME — the install recorded --pack NAME (the
+# profile's extra_packs; agents runs without the repo's libs).
+_agents_doctor_has_pack() {
+    local f="${TUIDEV_STATE_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tuidev}/profile" line
+    [[ -r "$f" ]] || return 1
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            extra_packs=*|extra_packs:*) line="${line#extra_packs[=:]}"
+                                         [[ " $line " != *" $1 "* ]] || return 0 ;;
+        esac
+    done < "$f"
+    return 1
+}
+
 # _agents_doctor_sampler_fix — the command that starts the sampler's job
 # again: the LaunchAgent (macOS) or the systemd timer (Linux) the monitoring
 # pack installed; "" when neither is installed (the pack brings one).
@@ -80,6 +113,10 @@ _agents_doctor_sampler() {
         _agents_doctor_row warn sampler "$line"
         return 0
     fi
+    if _agents_doctor_no_systemd; then
+        _agents_doctor_row skip sampler "nothing here can run one on a schedule: $REPLY (agents watch samples while it runs)"
+        return 0
+    fi
     _agents_doctor_sampler_fix
     _agents_doctor_row fail sampler "$line" "${REPLY:-tuidev install --pack monitoring}"
 }
@@ -87,6 +124,16 @@ _agents_doctor_sampler() {
 _agents_doctor_guard() {
     local st pid age
     read -r st pid age <<<"$(_agents_mem_guard_state)"
+    # No systemd: nothing the pack installs can run the guard here; one run
+    # by hand in a tmux pane is still seen (on, stalled).
+    if [[ "$st" == stopped || "$st" == none ]] && _agents_doctor_no_systemd; then
+        _agents_doctor_row skip "memory guard" "nothing here can run one: $REPLY (agents mem guard in a tmux pane)"
+        return 0
+    fi
+    if [[ "$st" == stalled ]] && _agents_doctor_no_systemd; then
+        _agents_doctor_row fail "memory guard" "stalled: pid $pid has not looked for ${age}s" "stop it, then run agents mem guard again where it ran"
+        return 0
+    fi
     case "$st" in
         on)       _agents_doctor_row ok "memory guard" "on (pid $pid)" ;;
         stalled)  _agents_doctor_row fail "memory guard" "stalled: pid $pid has not looked for ${age}s" "agents mem restart" ;;
@@ -110,6 +157,9 @@ _agents_doctor_hooks() {
                 | map(select(test("local/bin/agents"))) | length' "$f" 2>/dev/null)"
     if [[ ! "$n" =~ ^[0-9]+$ ]]; then
         _agents_doctor_row warn hooks "$shown is not valid JSON" "jq . $shown"
+    elif [[ "$n" == 0 ]] && ! _agents_doctor_has_pack ai-clis; then
+        # The hooks are the ai-clis pack's: nothing to judge without it.
+        _agents_doctor_row skip hooks "Claude Code's hooks come with --pack ai-clis (tuidev install --pack ai-clis adds them)"
     elif [[ "$n" == 0 ]]; then
         _agents_doctor_row warn hooks "no hook or status line in $shown calls agents" "tuidev update --configs"
     elif [[ ! -x "$bin" ]]; then
@@ -142,6 +192,7 @@ _agents_doctor_dirs() {
 _agents_doctor_probe() {
     local now
     _AGENTS_DOCTOR_ROWS=""
+    unset _AGENTS_DOCTOR_SD
     _agents_now now
     _agents_doctor_ps
     _agents_doctor_sampler "$now"
@@ -185,7 +236,8 @@ _agents_doctor_repair() {
         case "$name" in
             sampler)        [[ "$fix" == launchctl* || "$fix" == systemctl* ]] || continue
                             fn=_agents_doctor_restart_sampler ;;
-            "memory guard") fn=_agents_doctor_restart_guard ;;
+            "memory guard") [[ "$fix" == "agents mem restart" ]] || continue
+                            fn=_agents_doctor_restart_guard ;;
             *)              continue ;;
         esac
         if [[ "$AGENTS_DRY_RUN" == true ]]; then

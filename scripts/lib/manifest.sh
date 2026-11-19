@@ -130,7 +130,9 @@ tuidev_manifest_drop() {
     [[ -f "$TUIDEV_MANIFEST_FILE" ]] || return 0
     grep -qxF -- "$line" "$TUIDEV_MANIFEST_FILE" || return 0
     tmp="$TUIDEV_MANIFEST_FILE.drop.$$"
-    if awk -v l="$line" '$0 != l' "$TUIDEV_MANIFEST_FILE" > "$tmp"; then
+    # Through the environment: awk -v would turn a backslash in a path into
+    # an escape, and drop another record.
+    if _TUIDEV_DROP="$line" awk '$0 != ENVIRON["_TUIDEV_DROP"]' "$TUIDEV_MANIFEST_FILE" > "$tmp"; then
         mv -f "$tmp" "$TUIDEV_MANIFEST_FILE"
     else
         rm -f "$tmp"
