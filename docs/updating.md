@@ -41,7 +41,7 @@ One update or install runs at a time: started again from the terminal, the menu 
 
 ## Checking the install: `tuidev check`
 
-`tuidev check` runs `scripts/health_check.sh` against the profile in `~/.config/tuidev/profile` (without one: `desktop` on macOS, `minimal` on Linux; a `custom` profile is checked as `minimal`). `tuidev check --profile P` forces one. It prints a line per probe and ends with a summary.
+`tuidev check` runs `scripts/health_check.sh` against the profile in `~/.config/tuidev/profile` (without one: `desktop` on macOS, `minimal` on Linux; a `custom` profile is checked as `minimal`). `tuidev check --profile P` forces one, and `tuidev check --fix` repairs what it safely can (below). It prints a line per probe and ends with a summary.
 
 A probe is required or optional. A failed required probe counts toward the exit code; a failed optional one prints a warning and changes nothing.
 
@@ -54,10 +54,25 @@ A probe is required or optional. A failed required probe counts toward the exit 
 | Extras | the extras tools | never |
 | Packs | each pack in `extra_packs`: its own `<pack>_check` if it defines one, else every command and (macOS) app it declares. With `monitoring`: `agents` loads its modules, the SwiftBar plugin and terminal-notifier. With `herdr`: outdated integrations, a server on an older binary, large logs | never |
 | Shell, power | `compinit` run more than once per shell; lid sleep disabled with nothing to restore it | never |
+| Runtime | what runs now, not only what is on disk (below) | a failure counts like a required one |
+
+The other groups ask whether things are installed. **Runtime** asks whether they work:
+
+| Probe | Pass | Fails or warns when | `--fix` |
+|-------|------|---------------------|---------|
+| Jobs | each job an active pack declares is running: on macOS its LaunchAgent is loaded (`launchctl print gui/$UID/LABEL`: `dev.tuidev.sample`, `.memguard`, `.link`, `.hc`; the cooling pack's root `dev.tuidev.fan` in `system/`); on Linux its user unit is enabled, and a timer also active (`tuidev-sample.timer`, `tuidev-memguard.service`, `tuidev-hc.timer`) | the plist or unit is missing, not loaded, disabled or inactive (fail) | runs the pack's own step for it (`_monitoring_sampler`, `_monitoring_linux_units`…), which writes the file through `install_config` and bootstraps it; a unit that is only off gets `systemctl --user enable --now`. The fan daemon needs sudo: its command is printed |
+| Versions | the configs applied (`~/.config/tuidev/version`) are this release's; `~/.local/bin/{tuidev,agents,sbx,secret,mcp-lazy,notify.sh}` are byte for byte the ones in these files (`agents` with its modules); `PATH` finds `~/.local/bin`'s copy first | another release's configs, an edited or missing copy (warn; missing: fail), another copy earlier on `PATH`, naming both paths (warn) | puts tuidev's copy back (the owning pack's step); the configs and `PATH` are yours: `tuidev update --configs`, or the line it names |
+| Hooks | every program a hook or the status line in `~/.claude/settings.json`, `~/.codex/hooks.json` and Codex's `notify` starts by path (absolute, `~` or `$HOME`, or the script an interpreter runs) is there and executable | tuidev's (`~/.local/bin/notify.sh`, `agents`…) is gone (fail); anyone else's is gone (warn, labelled *not tuidev's*) | puts tuidev's program back; never edits a hooks file, never touches anyone else's hook |
+| Manifest | every `file`, `dir`, `tool` and `block` record names something on disk; every `dev.tuidev.*` LaunchAgent and `tuidev-*` unit on disk is recorded | a file tuidev keeps is gone (fail); a record names a file that is gone (warn); a job is not recorded, so `tuidev uninstall` would leave it (warn) | puts tuidev's file back; drops the records of what is gone; records the jobs tuidev ships (any other is left alone) |
+| `agents doctor` | with `monitoring`: the rows of [`agents doctor`](agent-workflows.md#is-it-running-agents-doctor): `ps` readable, the sampler's last sample, the memory guard, the hooks calling this `agents`, its data and run dirs writable | as `agents doctor` says | `agents doctor --fix`: the sampler's job and the guard started again |
+
+Every probe reads only (`launchctl print`, `systemctl is-enabled`/`is-active`, `jq`, `cmp`, `diff`, file tests), and together they added about 0.15 s to a run of the check where it was measured (`hyperfine`, a healthy test home). Each prints `skipped: WHY` and counts as neither a pass nor a failure where it can't tell: inside an agent's sandbox (launchd answers `Operation not permitted`; `ps` is blocked), without `launchctl`, `systemctl`, a systemd user manager (a container) or `jq`. With no install recorded (no `~/.config/tuidev/profile`) the whole group is skipped.
+
+**`tuidev check --fix`** repairs each runtime failure that has a safe, idempotent repair, then probes it again and prints the result; `--fix --dry-run` prints what it would run and changes nothing. The repairs are the installer's own steps: the pack's function for a job or a file, `install_config` for every write, recorded in the manifest. It takes the install lock (one install, update or repair at a time). It never runs sudo, never removes or edits a file of yours, never touches a hook that is not tuidev's and never edits `settings.json`; anything it can't repair keeps its fix command on the line, for you to run.
 
 **Skipped, already inside a sandbox.** Seatbelt doesn't nest. Run from inside an agent's sandbox, `sandbox-exec` is refused with `sandbox_apply: Operation not permitted`, which says nothing about Seatbelt itself. That one probe prints `skipped, already inside a sandbox` and counts as neither a pass nor a failure. Any other failure of it counts. Run `tuidev check` from your own shell for the full answer.
 
-**Exit codes.** `0`: every required probe passed, warnings or not. `1`: at least one required probe failed (the summary names the count; run the installer for the profile or install the missing tools). `2`: a bad `--profile` value or an unknown argument.
+**Exit codes.** `0`: no required or runtime probe failed, warnings or not. `1`: at least one did (the summary counts each kind; with `--fix`, one still fails after the repairs, and with `--fix --dry-run` nothing was repaired). `2`: a bad `--profile` value or an unknown argument.
 
 ## Hearing about a new release
 

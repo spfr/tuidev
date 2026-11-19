@@ -456,6 +456,29 @@ PID     FOOTPRINT    warn 8G        stop 24G  PROCESS
 
 Each process's bar ends at the guard's stop size, with its warning marked, so it reads as how far from being stopped. A stalled guard reads `stalled (pid 42, no look for 2m; agents mem restart)`; inside an agent's sandbox, where the process table can't be read, the guard and the memory read as `unknown: ... from inside a sandbox`, not as a guard that is down. Swap fills up before a guard stop, so past 80% it shows in the summary of `agents` and in the menu too; below that, only here. The last incidents follow. Memory hogs (RSS past `AGENTS_MEM_WARN`) also lead the hogs in `agents hogs`, `agents ls` and the menu.
 
+### Is it running: `agents doctor`
+
+The sampler and the memory guard work in the background, so when one stops nothing says so until a report comes up empty or a runaway is not stopped. `agents doctor` asks:
+
+```text
+✓ ps            the process table can be read
+✗ sampler       no sampler has run since 09:12: tuidev install --pack monitoring starts one
+                fix: launchctl kickstart -k gui/501/dev.tuidev.sample
+✓ memory guard  on (pid 812)
+✓ hooks         11 command(s) in ~/.claude/settings.json (hooks, status line) call this agents
+✓ dirs          the data and run dirs can be written
+```
+
+| Row | Ok | Not ok |
+|-----|----|--------|
+| `ps` | the process table can be read | skipped inside a sandbox, with `agents mem`'s wording |
+| `sampler` | the newest sample is under 10 minutes old (the rule `agents` uses for its "no sampler has run" line) | fails, with the command that starts the sampler's job (the LaunchAgent, or `systemctl --user enable --now tuidev-sample.timer`); warns under `AGENTS_SAMPLER=0`; skipped under `AGENTS_HISTORY=0` |
+| `memory guard` | `on` | `stalled` and `stopped` fail (`agents mem restart`); `none` warns (nothing installs one); `off` and `unknown` (a sandbox) are skipped |
+| `hooks` | the hooks and status line in `~/.claude/settings.json` that call `~/.local/bin/agents` find this `agents` | warns when none calls it, or they call another copy; fails when `~/.local/bin/agents` is gone; skipped without `jq` or the file. Read only |
+| `dirs` | the data and run dirs can be written, or made | fails; skipped inside a sandbox, which refuses those writes |
+
+`agents doctor --fix` restarts what failed through the commands that already do it: the sampler's job (`launchctl kickstart -k`, or the systemd timer), then one sample; the guard with `agents mem restart`, then up to 5 s for it to look. Then it probes again. `-n` prints what it would run. Exit codes: `0` nothing failed, `1` something still fails, `2` a bad argument. `--tsv` prints the rows (`STATUS NAME DETAIL FIX`, and `did`, `would` or `failed` for a repair), which is how [`tuidev check`](updating.md#checking-the-install-tuidev-check) shows them, so the two never disagree. It needs only the monitoring pack: it ships with `agents`.
+
 ### Fans (`--pack cooling`)
 
 A MacBook under agent workloads runs its SoC at 75–85 °C for hours, and macOS keeps the fans near their minimum (about 1350 rpm on an M4 Pro, out of 5777) until the chip itself is near its limit: the chassis, and the palm rest, take the heat. The `cooling` pack adds the missing fan curve. Apple has no public fan API, so like every fan tool (TG Pro, Macs Fan Control, Stats) it writes the System Management Controller's fan keys as root; the difference is that it is one small, readable Swift file in this repo, [`lib/fan/tuidev-fan.swift`](../lib/fan/tuidev-fan.swift), with no network and no third-party code.

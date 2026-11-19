@@ -117,6 +117,27 @@ tuidev_manifest_values() {
     ' "$file"
 }
 
+# tuidev_manifest_drop KIND VALUE... — remove the record `KIND VALUE...`
+# (every copy of that exact line) in one rename; the rest stays as it was.
+# For a record whose file is gone (`tuidev check --fix`). Unlike
+# tuidev_manifest_record it needs no enabling: the caller decides, and wraps
+# it in run_cmd so DRY_RUN only prints it.
+tuidev_manifest_drop() {
+    [[ $# -ge 2 && -n "$1" && -n "$2" ]] || return 2
+    local kind="$1"
+    shift
+    local line="$kind $*" tmp
+    [[ -f "$TUIDEV_MANIFEST_FILE" ]] || return 0
+    grep -qxF -- "$line" "$TUIDEV_MANIFEST_FILE" || return 0
+    tmp="$TUIDEV_MANIFEST_FILE.drop.$$"
+    if awk -v l="$line" '$0 != l' "$TUIDEV_MANIFEST_FILE" > "$tmp"; then
+        mv -f "$tmp" "$TUIDEV_MANIFEST_FILE"
+    else
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
 # tuidev_manifest_has KIND VALUE [FILE] — exit 0 if that exact record exists.
 tuidev_manifest_has() {
     local kind="$1" value="$2"

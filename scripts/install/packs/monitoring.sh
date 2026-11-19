@@ -37,6 +37,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MONITORING_FORMULAE=(bottom terminal-notifier)
 MONITORING_CASKS=(swiftbar)   # macOS only; casks are Homebrew-on-macOS
 
+# What this pack keeps running (pack_array NAME jobs: `tuidev check` asks
+# launchd or systemd, and --fix runs the function after each to install and
+# start it again). The guard's service is only enabled: AGENTS_MEM_GUARD=off
+# ends it, and `agents doctor` says whether a guard runs.
+# shellcheck disable=SC2034  # read by pack_array
+MONITORING_JOBS=(
+    "launchd dev.tuidev.sample _monitoring_sampler"
+    "launchd dev.tuidev.memguard _monitoring_memguard"
+    "launchd dev.tuidev.link _monitoring_link"
+    "systemd tuidev-sample.timer _monitoring_linux_units"
+    "systemd-enabled tuidev-memguard.service _monitoring_linux_units"
+)
+
 MONITORING_REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 MONITORING_SWIFTBAR_DOMAIN="com.ameba.SwiftBar"
 
@@ -149,7 +162,10 @@ _monitoring_launchagent() {
         "$MONITORING_REPO/configs/agents/$label.plist" > "$tmp"
     install_config "$plist" "$tmp" --overwrite
     rm -f "$tmp"
-    [[ "$DRY_RUN" == true ]] && return 0
+    if [[ "$DRY_RUN" == true ]]; then
+        run_cmd launchctl bootstrap "gui/$(id -u)" "$plist"
+        return 0
+    fi
     local job
     job="gui/$(id -u)/$label"
     if launchctl print "$job" >/dev/null 2>&1; then

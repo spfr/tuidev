@@ -30,6 +30,10 @@ COOLING_SRC="$COOLING_REPO/lib/fan/tuidev-fan.swift"
 # The daemon's own paths (Paths in tuidev-fan.swift).
 COOLING_PLIST="/Library/LaunchDaemons/dev.tuidev.fan.plist"
 COOLING_ROOT_BIN="/Library/PrivilegedHelperTools/dev.tuidev.fan"
+# The daemon, for `tuidev check` (pack_array NAME jobs): root's, so loading
+# it again is a command for you (sudo), never a repair the check runs.
+# shellcheck disable=SC2034  # read by pack_array
+COOLING_JOBS=("launchd-system dev.tuidev.fan")
 
 # The source's sha256, as the stamp records it.
 _cooling_src_sum() { shasum -a 256 "$COOLING_SRC" | awk '{ print $1 }'; }
