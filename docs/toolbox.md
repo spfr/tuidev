@@ -160,7 +160,7 @@ Not by a long list of instructions. Every line in an instruction file is loaded 
 
 3. **The easy path is the good path.** `rg`, `jq`, `shellcheck` and the read-only `gh` commands are on Claude Code's allow list, so they run without a prompt. Git and gh writes ask. Credential paths are denied to the sandbox. An agent that takes the path with no prompts is using the right tools.
 
-4. **A few lines it cannot guess.** The [`AGENTS.md` template](../templates/AGENTS_TEMPLATE.md) has one Environment section for your projects: which tools are scriptable, which are TUIs for the human, where long-running processes go, how Node and worktrees work here. The `orchestration` pack adds six rules, none of them a tool list: leave work uncommitted, don't poll in a sleep loop, stop what you start. Its subagent definitions put search on the cheapest model and review on the strongest ([orchestration.md](orchestration.md)).
+4. **A few lines it cannot guess.** The [`AGENTS.md` template](../templates/AGENTS_TEMPLATE.md) has one Environment section for your projects: which tools are scriptable, which are TUIs for the human, where long-running processes go, how Node and worktrees work here. The `orchestration` pack adds six rules, none of them a tool list: leave work uncommitted, don't poll in a sleep loop, stop what you start. Its subagent definitions put search and command runs on the cheapest model and review on a top one ([orchestration.md](orchestration.md)).
 
 5. **The machine corrects what instructions miss.** Hooks stop the background commands a subagent left running. The memory guard stops a runaway test. And `agents report` reads what your agents did, not what they were told: `--view denials` lists the commands you or auto mode keep refusing, `--view context` the MCP servers and skills every session loads and never uses, `--view waste` the duplicate test runs and stuck loops, each with the one thing to change.
 
@@ -174,7 +174,7 @@ The tools above serve one loop. Each step has a default that works on both syste
 |------|----------|------|
 | **Confine** | Agents run in a sandbox by default: writes to the project only, and no reads of your credentials. | Claude Code's and Codex's own sandboxes (`--pack ai-clis`); `sbx` on macOS; a container for the rest ([sandboxing.md](sandboxing.md)) |
 | **Isolate** | One git worktree per parallel task, never a shared dirty index. | `claude -w NAME`, subagent `isolation: worktree`, the `delegation` skill |
-| **Route** | Search and command runs on the cheapest model, review on the strongest. | `--pack orchestration` |
+| **Route** | Search and command runs on the cheapest model, review on a top one. | `--pack orchestration` |
 | **Keep it running** | Work that must outlive the lid runs on a box that stays on. | tmux or Herdr on a `--profile remote` machine |
 | **Watch** | One place says who is blocked, on which machine. | Herdr's sidebar, `agents`, the menu bar, `notify.sh` |
 | **Verify** | Done means the checks ran, and the result is pasted, not claimed. | The definition of done in `AGENTS.md`; `hyperfine` when the claim is "faster" |
