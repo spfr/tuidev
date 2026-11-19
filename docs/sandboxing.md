@@ -90,7 +90,7 @@ Escape hatch, one run at a time: `sbx --profile off -- CMD` runs CMD with no san
 
 **The AI CLIs' state dirs** are writable so the CLIs can save sessions, logs and caches: `~/.claude`, `~/.claude.json*`, `~/.local/share/claude`, `~/.local/state/claude`, `~/.cache/claude` and `~/.codex`.
 
-**Except what steers a CLI outside the sandbox.** Settings, hooks, instructions, memory, agents, skills, plugins, scheduled work and binaries are loaded by later sessions, including unsandboxed ones, so an agent that could edit them would escape on your next run. A rule file in `~/.claude/rules/` loads into every Claude session, and a Codex agent in `~/.codex/agents/` can set its own `sandbox_mode = "danger-full-access"`. Under `strict` and `standard` these stay read-only:
+**Except what steers a CLI outside the sandbox.** Settings, hooks, instructions, memory, agents, skills, plugins, scheduled work and binaries are loaded by later sessions, including unsandboxed ones, so an agent that could edit them would escape on your next run. A rule file in `~/.claude/rules/` loads into every Claude session, and a Codex agent in `~/.codex/agents/` carries instructions every later session can be handed. Under `strict` and `standard` these stay read-only:
 
 ```
 ~/.claude/settings.json  ~/.claude/settings.local.json  ~/.claude/keybindings.json
