@@ -217,7 +217,44 @@ agents_hc_status() {
     fi
     [[ "$gui" != true ]] || echo "  in your desktop login: agents started in it can use the Keychain"
     echo "  phone: Herdr's app reaches it over SSH (Tailscale SSH needs no key); agents hc run CMD puts an agent in its inbox"
+    _agents_hc_phone_status
     _agents_hc_auto_status
+}
+
+# _agents_hc_remote_clients — how many clients reach this core from another
+# device right now: `herdr-core connect` (or `hc connect`) processes with an
+# sshd above them. Nothing printed, and failure, when the process table can't
+# be read (a sandbox).
+_agents_hc_remote_clients() {
+    local ps
+    ps="$(agents_snapshot)"
+    [[ -n "$ps" ]] || return 1
+    printf '%s\n' "$ps" | awk '
+        { pp[$1] = $2; a = ""; for (i = 14; i <= NF; i++) a = a (i > 14 ? " " : "") $i; av[$1] = a }
+        END {
+            for (p in av) {
+                if (av[p] !~ /(^|\/)(herdr-core|hc)( .*)? connect( |$)/) continue
+                q = pp[p]; d = 0
+                while (q > 1 && (q in av) && d++ < 16) {
+                    if (av[q] ~ /^sshd|\/sshd|sshd-session|sshd:/) { n++; break }
+                    q = pp[q]
+                }
+            }
+            print n + 0
+        }'
+}
+
+# _agents_hc_phone_status — one line: is a phone (or any other device)
+# connected now. An empty inbox with no client is the network between the
+# phone and this machine, not the core.
+_agents_hc_phone_status() {
+    local n
+    n="$(_agents_hc_remote_clients)" || return 0
+    if [[ "$n" -gt 0 ]]; then
+        echo "  connected now: $n client$( [[ "$n" -eq 1 ]] || echo s ) over SSH"
+    else
+        echo "  connected now: no phone or other device. If the app says \"connecting\", look at the network between it and this machine (on the phone: Tailscale's own warnings, then off and on)"
+    fi
 }
 
 # _agents_hc_auto_status — one line: is automatic hosting on, and can the

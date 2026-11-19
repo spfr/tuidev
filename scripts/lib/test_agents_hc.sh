@@ -841,4 +841,25 @@ fi
 agents_usage | grep -q 'agents hc run' || fail "agents --help does not list agents hc"
 pass "agents --help lists it"
 
+# A phone (any other device) is a `herdr-core connect` with an sshd above it;
+# tuidev's own short calls and the core's holder are not.
+( agents_snapshot() { cat <<'PS'
+  100     1   0 root 0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 /usr/sbin/sshd
+  110   100   0 root 0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 sshd-session: me [priv]
+  111   110 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 sshd-session: me@notty
+  112   111 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 /Users/NAME/.local/share/herdr-core/active/Herdr Core.app/Contents/MacOS/herdr-core connect
+  200     1 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 /Users/NAME/.local/share/herdr-core/active/Herdr Core.app/Contents/MacOS/herdr-core hold --socket /x/default.sock
+  300   900 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 herdr-core connect
+  900     1 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 -zsh
+PS
+  }
+  [[ "$(_agents_hc_remote_clients)" == 1 ]] || { echo "FAIL: remote clients: $(_agents_hc_remote_clients)"; exit 1; }
+  [[ "$(_agents_hc_phone_status)" == "  connected now: 1 client over SSH" ]] || { echo "FAIL: phone line: $(_agents_hc_phone_status)"; exit 1; }
+  agents_snapshot() { echo "  900     1 501 me   0.0 100 0:00.01 01:00 Wed Oct 14 09:00:00 2026 -zsh"; }
+  [[ "$(_agents_hc_phone_status)" == *"no phone or other device"* ]] || { echo "FAIL: no client line"; exit 1; }
+  agents_snapshot() { :; }
+  [[ -z "$(_agents_hc_phone_status)" ]] || { echo "FAIL: an unreadable process table must print nothing"; exit 1; }
+) || exit 1
+echo "PASS: connected now: a client under sshd counts, the holder and a local call do not; nothing when ps can't be read"
+
 echo "all agents hc tests passed"
