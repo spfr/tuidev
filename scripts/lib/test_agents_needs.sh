@@ -341,10 +341,19 @@ rm -f "$AGENTS_DATA_DIR/events.tsv" "$tmp/signals"
 ( kill_env kill -y 5070@Wed_Oct_14_08:35:00_2026 >/dev/null 2>&1 )
 [[ "$(cut -f2-4 "$AGENTS_DATA_DIR/events.tsv")" == "kill"$'\t'"manual"$'\t'"5070" ]] || fail "kill event: $(cat "$AGENTS_DATA_DIR/events.tsv")"
 rm -f "$AGENTS_DATA_DIR/events.tsv"
+# By hand, reap stops only what agents_assess calls safe to stop; --all adds
+# the "check first" ones (the server 6100, the age-only and gone-file loops).
+rm -f "$tmp/signals"
 ( kill_env reap -y --stuck >/dev/null 2>&1 )
-[[ "$(cut -f2,3,4 "$AGENTS_DATA_DIR/events.tsv" | sort | tr '\n' ' ')" == "reap"$'\t'"stale"$'\t'"6000 reap"$'\t'"stale"$'\t'"6100 reap"$'\t'"stuck"$'\t'"5010 reap"$'\t'"stuck"$'\t'"5020 reap"$'\t'"stuck"$'\t'"5030 reap"$'\t'"stuck"$'\t'"5040 reap"$'\t'"stuck"$'\t'"5080 " ]] \
+[[ "$(cut -f2,3,4 "$AGENTS_DATA_DIR/events.tsv" | sort | tr '\n' ' ')" == "reap"$'\t'"stale"$'\t'"6000 reap"$'\t'"stuck"$'\t'"5010 reap"$'\t'"stuck"$'\t'"5020 reap"$'\t'"stuck"$'\t'"5080 " ]] \
     || fail "reap events: $(cut -f2-4 "$AGENTS_DATA_DIR/events.tsv" | tr '\n' ' ')"
-rm -f "$AGENTS_DATA_DIR/events.tsv"
+[[ "$(awk -F '\t' '$4 == 5010 { print $7 }' "$AGENTS_DATA_DIR/events.tsv")" == claude:5000 ]] || fail "reap event session: $(cat "$AGENTS_DATA_DIR/events.tsv")"
+[[ "$(sort "$tmp/signals" | tr '\n' ' ')" == "TERM 5010 TERM 5011 TERM 5020 TERM 5080 TERM 6000 TERM 6001 " ]] || fail "reap signals: $(tr '\n' ' ' < "$tmp/signals")"
+rm -f "$AGENTS_DATA_DIR/events.tsv" "$tmp/signals"
+( kill_env reap -y --stuck --all >/dev/null 2>&1 )
+[[ "$(cut -f2,3,4 "$AGENTS_DATA_DIR/events.tsv" | sort | tr '\n' ' ')" == "reap"$'\t'"stale"$'\t'"6000 reap"$'\t'"stale"$'\t'"6100 reap"$'\t'"stuck"$'\t'"5010 reap"$'\t'"stuck"$'\t'"5020 reap"$'\t'"stuck"$'\t'"5030 reap"$'\t'"stuck"$'\t'"5040 reap"$'\t'"stuck"$'\t'"5080 " ]] \
+    || fail "reap --all events: $(cut -f2-4 "$AGENTS_DATA_DIR/events.tsv" | tr '\n' ' ')"
+rm -f "$AGENTS_DATA_DIR/events.tsv" "$tmp/signals"
 ( kill_env kill -n 5070 >/dev/null 2>&1 )
 [[ ! -e "$AGENTS_DATA_DIR/events.tsv" ]] || fail "a dry-run kill logged an event"
 _AGENTS_EV_KIND="" _agents_log_cleanups $'1\tx\t0\tp'

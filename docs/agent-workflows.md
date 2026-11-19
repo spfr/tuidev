@@ -255,10 +255,12 @@ agents watch              # the same, redrawn every 2s (q quits)
 agents open-term watch    # the same in a new window of your terminal (AGENTS_TERMINAL)
 agents ls                 # the full table: PIDs, ports, MCP servers, commands, stale processes, hogs
 agents ps 90419           # everything one session runs (all sessions without a pid)
-agents reap -n            # what `reap` would kill: every stale tree
-agents reap -n --stuck    # the same, plus the polling loops flagged stuck
-agents reap               # SIGTERM each stale tree, SIGKILL what's left after 3s (asks first)
+agents reap -n            # what `reap` would kill: each stale tree whose verdict is "safe to stop"
+agents reap -n --stuck    # the same, plus the polling loops flagged stuck that are safe to stop
+agents reap               # SIGTERM those, SIGKILL what's left after 3s (asks first)
+agents reap --all         # the "check first" ones too (a server left behind, a loop stuck by age only)
 agents reap --auto -n     # what auto-reap would stop on its own (see below)
+agents why                # every flagged item with its verdict, one line each
 agents why PID            # why an item is listed, the evidence, and whether it is safe to stop
 agents show PID           # one process in detail: session, what it is doing, where it lives, CPU, children
 agents show --watch PID   # the same, redrawn every 2s (q quits); --json for scripts
@@ -329,7 +331,7 @@ agents limits             # each CLI's usage limits: a gauge per window with the
   - `dup`: the same command runs more than once in the same directory, within a session or across sessions, and at least two copies have run for a minute. A command's directory is where it `cd`s first, so parallel worktree subagents running the same `go test` in their own worktrees are not duplicates;
   - `long`: running longer than `AGENTS_TOOL_LONG` (20 minutes);
   - `wait`: a polling loop the agent waits on (`until …; do sleep 5; done`). It is never `dup` or `long`; the menu marks it with a gray hourglass, and it can still be stopped;
-  - `stuck` (with `wait`): a polling loop that has run `AGENTS_WAIT_STUCK` (60 minutes) or longer, unless the file it watches changed within that time: then its producer is alive (a long build's log), and the loop stays a plain `wait`. The watched file is the first absolute path the loop's condition gives to `tail`, `head`, `grep`, `cat`, `test`, `[` or `[[`, directly (`until grep -q ok /tmp/x.log`) or through an assignment before the loop (`F=/tmp/x.output; until tail -1 $F | …`); paths other commands take (`docker exec db /usr/bin/pg_isready`, `curl --unix-socket …`) don't count. `agents` checks every such file with one `find -mmin`. A loop with no watched file, or whose file doesn't exist, is judged by its age alone. A stuck loop usually waits for a line that will never come: it needs you, and `agents why PID` shows the file's last line and how long it has been quiet ([Flagged](#flagged-is-it-safe-to-stop)). `agents reap --stuck` stops every stuck loop along with the stale trees;
+  - `stuck` (with `wait`): a polling loop that has run `AGENTS_WAIT_STUCK` (60 minutes) or longer, unless the file it watches changed within that time: then its producer is alive (a long build's log), and the loop stays a plain `wait`. The watched file is the first absolute path the loop's condition gives to `tail`, `head`, `grep`, `cat`, `test`, `[` or `[[`, directly (`until grep -q ok /tmp/x.log`) or through an assignment before the loop (`F=/tmp/x.output; until tail -1 $F | …`); paths other commands take (`docker exec db /usr/bin/pg_isready`, `curl --unix-socket …`) don't count. `agents` checks every such file with one `find -mmin`. A loop with no watched file, or whose file doesn't exist, is judged by its age alone. A stuck loop usually waits for a line that will never come: it needs you, and `agents why PID` shows the file's last line and how long it has been quiet ([Flagged](#flagged-is-it-safe-to-stop)). `agents reap --stuck` stops the stuck loops that are safe to stop along with the stale trees, and `--all` adds the "check first" ones;
   - `hot`: its subtree uses `AGENTS_HOG_NOW` CPU or more.
 
   For agent authors: Claude Code appends `[exited with code N]` as the last line of a background task's `.output` file, so a loop such as `until tail -1 "$F" | grep -qE '^(ok|FAIL)'` never ends once the task has finished. Match the exit line too (`grep -qE '^(ok|FAIL)|^\[exited with code'`), or cap the tries (`for i in $(seq 120); do …; sleep 5; done`).
@@ -543,7 +545,7 @@ A flag says why an item is listed, not that it should be killed. Each one is a d
 | `long` | A command running longer than `AGENTS_TOOL_LONG` (20 minutes) | Informational: builds, test suites and dev servers run long on purpose | Nothing, unless you expected it to end |
 | `dup` | The same command runs more than once in one directory | Medium | Keep the newest (Stop duplicates) |
 
-For each item, `agents why PID` (or `PID@START`) prints the evidence and a verdict, and the menu shows the same. One function (`agents_assess`) makes the verdict for every surface: `why`, `json`, the menu and auto-reap. The evidence is the owner (the session's kind, pid, project and Herdr status, or that its session ended), age and CPU, listening ports and directory, and, for a polling loop, the file it watches, that file's last line and how long ago it changed. The last line comes from the last 2 KB of a regular file (never a symlink, never a file under the credential paths of [sandboxing.md](sandboxing.md), such as `~/.ssh` or `~/.netrc`, and not for a loop that only tests that the file exists), with control characters removed, cut to 80 characters. The verdicts:
+For each item, `agents why PID` (or `PID@START`) prints the evidence and a verdict, and the menu shows the same. One function (`agents_assess`) makes the verdict for every surface: `why`, `json`, the menu, `agents reap` and auto-reap. The evidence is the owner (the session's kind, pid, project and Herdr status, or that its session ended), age and CPU, listening ports and directory, and, for a polling loop, the file it watches, that file's last line and how long ago it changed. The last line comes from the last 2 KB of a regular file (never a symlink, never a file under the credential paths of [sandboxing.md](sandboxing.md), such as `~/.ssh` or `~/.netrc`, and not for a loop that only tests that the file exists), with control characters removed, cut to 80 characters. The verdicts:
 
 - **safe to stop** (high confidence): a helper whose session ended and that a sample saw running under an agent (`safe to stop — its session ended`); medium confidence when no sample saw that (`safe to stop — probably left by an agent session that ended`), because a `nohup npx …` or `caffeinate` of your own looks the same once it belongs to pid 1. A stuck loop whose watched file ends in a completion marker (`[exited with code N]`, `exit N`, `ok`, `PASS`, `FAIL`, `--- FAIL`, a pytest or cargo summary, `done`, `error`), so what it waits for already happened and its condition will never match: `safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)`. Or a stuck loop whose file nothing has written to since, when its condition reads the file (`tail`, `grep`, `cat`, `head`, `wc`, `jq`).
 - **check first** (medium): anything listening on a port, whether its session ended or not (`check first — dev server on :3000, its session is still active`); a stale tree when the listening ports could not be listed (no `lsof` or `ss`, or it failed: `check first — its session ended, but the port check was unavailable`); a stuck loop judged by its age alone, whose file is gone, or whose condition only tests that a file exists (`while [ -f lock ]`, `until test -s out`: how long such a file has been quiet says nothing); a young loop whose file already says it finished; duplicates; hogs.
@@ -572,7 +574,18 @@ next:
   auto-reap (AGENTS_AUTO_REAP=1) would stop this on its own
 ```
 
-`agents why --copy PID@START` puts that text on the clipboard instead. `why` refuses a `PID@START` whose pid now names another process.
+`agents why --copy PID@START` puts that text on the clipboard instead. `why` refuses a `PID@START` whose pid now names another process. Without a PID, `agents why` lists every flagged item on one line: pid, flag, name and verdict.
+
+**`agents reap`** goes by the same verdicts: by hand it stops only the stale trees (and, with `--stuck`, the stuck loops) that are safe to stop. Its plan, under `-n` and before the y/N, shows each one's verdict, then how many it left out as "check first"; `agents reap --all` takes those too. When every item is "check first", it says so and asks nothing:
+
+```
+$ agents reap -n --stuck
+  5011    sleep
+  5010    zsh · safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+  6000    npm · safe to stop — its session ended
+left out: 2 flagged "check first" (agents reap --all includes them; agents why PID explains one)
+dry run: would send SIGTERM to 3 process(es), then SIGKILL to any left after 3s
+```
 
 **Auto-reap** (`AGENTS_AUTO_REAP=1`, off by default) stops, without asking, only the two high-trust cases:
 

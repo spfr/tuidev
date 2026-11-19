@@ -1663,24 +1663,74 @@ if command -v jq >/dev/null 2>&1; then
         and (.agents[0].activity.tools[] | select(.pid == 5030) | .flags) == ["wait"]' >/dev/null \
         || fail "json stuck flags: $(printf '%s' "$sj" | jq -c '[.agents[0].activity.tools[] | {pid, flags}]')"
 fi
-[[ "$(printf '%s\n' "$st_enr" | agents_reap_tokens true | tr '\n' ' ')" == "5010@Wed_Oct_14_05:33:00_2026 5070@Wed_Oct_14_07:30:00_2026 " ]] \
-    || fail "reap --stuck tokens: $(printf '%s\n' "$st_enr" | agents_reap_tokens true | tr '\n' ' ')"
-[[ -z "$(printf '%s\n' "$st_enr" | agents_reap_tokens false)" ]] || fail "plain reap picks polling loops"
-[[ "$(printf '%s\n' "$enriched" | agents_reap_tokens true | wc -l | tr -d ' ')" == 4 ]] || fail "reap --stuck lost the stale trees"
-# shellcheck disable=SC2317,SC2329  # stubs for the sourced agents_main
-reap_out="$(
-    agents_collect() { printf '%s\n' "$st_enr"; }
-    agents_snapshot() { printf '%s\n' "$st_fixture"; }
-    _agents_cwds() { :; }
-    AGENTS_SELF=9999 AGENTS_UID=501 agents_main reap -n --stuck 2>&1
-)"
-[[ "$reap_out" == *"  5011    sleep"*"  5010    zsh"*"  5070    zsh"*"would send SIGTERM to 3 process(es)"* ]] || fail "reap -n --stuck: $reap_out"
-[[ "$reap_out" != *5020* && "$reap_out" != *5030* && "$reap_out" != *5040* && "$reap_out" != *5050* && "$reap_out" != *5060* ]] || fail "reap --stuck picked a loop that is not stuck: $reap_out"
-# shellcheck disable=SC2317,SC2329
-[[ "$(agents_collect() { printf '%s\n' "$st_enr"; }; agents_main reap -n 2>&1)" == "no stale processes" ]] || fail "plain reap stops polling loops"
 rc=0; agents_main kill -n --stuck 5010 >/dev/null 2>&1 || rc=$?
 [[ $rc -eq 2 ]] || fail "--stuck accepted by kill"
-pass "stuck loops: ps shows stuck, json flags it (schema 1), reap -n --stuck plans only stuck loops and stale trees"
+pass "stuck loops: ps shows stuck, json flags it (schema 1)"
+
+# `agents reap` goes by agents_assess's verdicts: only "safe to stop" by
+# default, the "check first" ones with --all. With the watched files' details,
+# 5070 (a loop on a file quiet for years) is safe to stop and 5010 (its file
+# is gone) is check first; without them both are age-only, so check first.
+st_full="$st_enr"$'\n'"$(_agents_watch_info "$st_watch")"
+items() { printf '%s\n' "$1" | agents_assess | agents_reap_items "$2" "$3" | awk -F '\t' '{ print $1, $2 }' | tr '\n' ' '; }
+[[ "$(items "$st_full" true false)" == "skip 5010 take 5070@Wed_Oct_14_07:30:00_2026 " ]] || fail "reap --stuck items: $(items "$st_full" true false)"
+[[ "$(items "$st_full" true true)" == "take 5010@Wed_Oct_14_05:33:00_2026 take 5070@Wed_Oct_14_07:30:00_2026 " ]] || fail "reap --stuck --all items: $(items "$st_full" true true)"
+[[ -z "$(items "$st_full" false true)" ]] || fail "plain reap picks polling loops"
+[[ "$(printf '%s\n' "$st_full" | agents_assess | agents_reap_items true false | awk -F '\t' '$1 == "take" { print $3, $4, $5 }')" \
+    == "stuck claude:5000 safe to stop — nothing has written to the file it watches for "* ]] || fail "a take row: reason, session, verdict"
+# Stale trees: each one is taken or left out by its verdict, never both.
+st_stale="$(printf '%s\n' "$enriched" | agents_assess | agents_reap_items false false)"
+[[ "$(printf '%s\n' "$st_stale" | grep -c .)" == 4 ]] || fail "reap lost a stale tree: $st_stale"
+[[ -z "$(printf '%s\n' "$st_stale" | awk -F '\t' '($1 == "take") != ($5 ~ /^safe to stop/)')" ]] || fail "reap takes by its verdict: $st_stale"
+[[ "$(printf '%s\n' "$st_stale" | grep -c '^skip')" -ge 1 && "$(printf '%s\n' "$enriched" | agents_assess | agents_reap_items false true | grep -c '^take')" == 4 ]] \
+    || fail "a stale listener left out, and --all takes every stale tree: $st_stale"
+# shellcheck disable=SC2317,SC2329  # stubs for the sourced agents_main
+reap_n() {   # RECORDS ARGS... — `agents reap -n ARGS` against the stuck fixture
+    _reap_recs="$1"; shift   # a global: agents_reap's own locals would hide a local here
+    agents_collect() { printf '%s\n' "$_reap_recs"; }
+    agents_snapshot() { printf '%s\n' "$st_fixture"; }
+    _agents_cwds() { :; }
+    AGENTS_SELF=9999 AGENTS_UID=501 agents_main reap -n "$@" 2>&1
+}
+reap_out="$(reap_n "$st_full" --stuck)"
+[[ "$reap_out" == "  5070    zsh · safe to stop — nothing has written to the file it watches for "*$'\n''left out: 1 flagged "check first" (agents reap --all includes them; agents why PID explains one)'$'\n''dry run: would send SIGTERM to 1 process(es), then SIGKILL to any left after 3s' ]] \
+    || fail "reap -n --stuck: $reap_out"
+reap_out="$(reap_n "$st_full" --stuck --all)"
+[[ "$reap_out" == "  5011    sleep"$'\n''  5010    zsh · check first — the file it watches is gone; waiting 3h27m'$'\n''  5070    zsh · safe to stop'*$'\n''dry run: would send SIGTERM to 3 process(es)'* ]] \
+    || fail "reap -n --stuck --all: $reap_out"
+[[ "$reap_out" != *"left out"* ]] || fail "--all leaves something out: $reap_out"
+[[ "$reap_out" != *5020* && "$reap_out" != *5030* && "$reap_out" != *5040* && "$reap_out" != *5050* && "$reap_out" != *5060* ]] || fail "reap --stuck picked a loop that is not stuck: $reap_out"
+# Nothing safe to stop: it says so, asks nothing and succeeds.
+rc=0; reap_out="$(reap_n "$st_enr" --stuck)" || rc=$?
+[[ $rc -eq 0 && "$reap_out" == 'nothing safe to stop; left out: 2 flagged "check first" (agents reap --all includes them; agents why PID explains one)' ]] \
+    || fail "reap --stuck with nothing safe (rc $rc): $reap_out"
+rc=0
+# shellcheck disable=SC2317,SC2329
+reap_out="$(agents_collect() { printf '%s\n' "$st_enr"; }; AGENTS_YES=false agents_main reap --stuck </dev/null 2>&1)" || rc=$?
+[[ $rc -eq 0 && "$reap_out" == "nothing safe to stop; "* ]] || fail "reap --stuck without -n asked or failed with nothing safe (rc $rc): $reap_out"
+[[ "$(reap_n "$st_full")" == "no stale processes" ]] || fail "plain reap stops polling loops (or counts them as left out)"
+for bad in "kill --all 5010" "term --all 5010" "reap --auto --all"; do
+    rc=0
+    # shellcheck disable=SC2086  # split into words on purpose
+    agents_main $bad -n >/dev/null 2>&1 || rc=$?
+    [[ $rc -eq 2 ]] || fail "agents $bad accepted (rc $rc)"
+done
+# The dialog (--confirm-gui) carries the same verdicts and the left-out line.
+msg="$(_AGENTS_KILL_NOTES=$'7\tsafe to stop — its session ended\n' _AGENTS_KILL_AFTER="left out: 1" _agents_kill_message $'7\tnpm\t1\t-\n8\tnode\t0\t-')"
+[[ "$msg" == "Kill 2 process trees?"$'\n\n'"• npm (pid 7, 1 child process): safe to stop — its session ended"$'\n'"• node (pid 8)"$'\n\n'"left out: 1" ]] || fail "dialog with verdicts: $msg"
+msg="$(_AGENTS_KILL_NOTES=$'7\tsafe to stop — its session ended\n' _agents_kill_message $'7\tnpm\t0\t-')"
+[[ "$msg" == "Kill npm (pid 7)?"$'\n\n'"safe to stop — its session ended" ]] || fail "dialog for one tree with its verdict: $msg"
+pass "reap: only safe to stop (each verdict in the plan, the check-first count after it); --all takes those too; nothing safe asks nothing"
+
+# `agents why` without a PID: every flagged item, one line each, or none.
+# shellcheck disable=SC2317,SC2329
+why_list="$(agents_collect() { printf '%s\n' "$st_full"; }; agents_main why)"
+[[ "$why_list" == "3 flagged (agents why PID explains one):"$'\n'"  5010    stuck  wait-loop    check first — the file it watches is gone; waiting 3h27m"$'\n'"  5050    long   make         informational"*$'\n'"  5070    stuck  wait-loop    safe to stop — nothing has written to the file it watches for "* ]] \
+    || fail "why without a PID: $why_list"
+# shellcheck disable=SC2317,SC2329
+[[ "$(agents_collect() { printf '%s\n' "$st_fixture" | head -2 | agents_classify "" ""; }; agents_main why)" == "nothing flagged: "* ]] || fail "why with nothing flagged"
+rc=0; agents_main why --copy >/dev/null 2>&1 || rc=$?; [[ $rc -eq 2 ]] || fail "why --copy without a PID (rc $rc)"
+pass "agents why without a PID lists the flagged items with their verdicts; none says so"
 
 st_menu_recs="$(printf '%s\n' "$st_enr" | awk -F '\t' '($1 == "agent" || $1 == "act") && $2 != 5050')"
 menu="$(plugin "$st_menu_recs" "")"

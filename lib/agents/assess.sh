@@ -3,7 +3,7 @@
 #
 # Why an item is listed, how far to trust that, and what to do about it. The
 # verdict is made in one place, agents_assess; `agents why`, `json`, `tsv` (the
-# menu) and auto-reap only read its rows.
+# menu), `agents reap` and auto-reap only read its rows.
 #
 # Owns: agents_assess (awk/assess.awk) and `agents why`.
 # Uses: config.sh, util.sh, snapshot.sh (agents_collect), palette.sh (colors),
@@ -79,19 +79,39 @@ _agents_why_text() {
     printf '%snext:%s\n%s%s' "$C_B" "$C_0" "$next" "$autot"
 }
 
-# agents_why [--copy] PID[@START] — the evidence and verdict for one item;
+# _agents_why_list RECORDS — `agents why` without a PID: each flagged item,
+# one line with its pid, flag, name and agents_assess's verdict (the one
+# `agents reap` and the menu read), or a line saying none is flagged.
+_agents_why_list() {
+    # shellcheck disable=SC2016  # awk source
+    { printf '%s\n' "$1" | agents_assess; printf '%s\n' "$1"; } | _agents_awk_eval "lib_proc lib_activity" '
+        $1 == "need" { if (!seen[$2]++) { o[++n] = $2; fl[$2] = $4; tx[$2] = $11 }; next }
+        NF >= 14 && ($1 == "stale" || $1 == "act") && !($2 in nm) { nm[$2] = substr(cmd_name($14), 1, 12) }
+        END {
+            if (!n) { print "nothing flagged: no stale processes, stuck polling loops, or long or duplicate commands"; exit }
+            print n " flagged (agents why PID explains one):"
+            for (i = 1; i <= n; i++) printf "  %-7s %-6s %-12s %s\n", o[i], fl[o[i]], ((o[i] in nm) ? nm[o[i]] : "-"), tx[o[i]]
+        }' -F '\t'
+}
+
+# agents_why [--copy] [PID[@START]] — the evidence and verdict for one item;
 # --copy puts the text on the clipboard instead (the menu's Copy details).
+# Without a PID, the flagged items with their verdicts (_agents_why_list).
 agents_why() {
-    local copy="" token="" a pid want="" recs now needs text
+    local copy="" token="" given="" a pid want="" recs now needs text
     for a in "$@"; do
         case "$a" in
             --copy) copy=1 ;;
             -*)     echo "agents: unknown option $a" >&2; return 2 ;;
-            *)      token="$a" ;;
+            *)      token="$a" given=1 ;;
         esac
     done
+    if [[ -z "$given" && -z "$copy" ]]; then
+        recs="$(agents_collect)" || return 1
+        _agents_why_list "$recs"; return 0
+    fi
     if [[ ! "$token" =~ $_AGENTS_TOKEN_RE ]]; then
-        echo "usage: agents why [--copy] PID[@START]" >&2; return 2
+        echo "usage: agents why [--copy] [PID[@START]]" >&2; return 2
     fi
     pid="${BASH_REMATCH[1]}" want="${BASH_REMATCH[3]}"
     recs="$(AGENTS_HERDR_MODE="${copy:+async}" agents_collect)" || return 1

@@ -1,0 +1,20 @@
+  5011    sleep
+  5010    zsh · safe to stop — what it waits for already finished ([exited with code 0], 5h0m ago)
+  5020    zsh · safe to stop — nothing has written to the file it watches for 1h30m
+  5030    zsh · check first — waiting 3h0m, with no file to judge by (age only)
+  5040    zsh · check first — the file it watches is gone; waiting 2h0m
+  5080    zsh · safe to stop — what it waits for already finished (--- FAIL: TestX (0.01s), 2h10m ago)
+  5090    zsh · check first — waiting 3h0m on whether @TMP@/w/build.log exists
+  60872   chrome-devtools-mcp
+  60829   npm · safe to stop — probably left by an agent session that ended
+  60831   node · safe to stop — probably left by an agent session that ended
+  27681   caffeinate · safe to stop — probably left by an agent session that ended
+  4100    node · check first — a server on :5173, left behind when its session ended
+  6001    chrome-devtools-mcp
+  6000    npm · safe to stop — its session ended
+  6100    node · check first — a server on :5174, left behind when its session ended
+  202     chrome-headless-shell
+  201     node
+  200     npm · safe to stop — probably left by an agent session that ended
+dry run: would send SIGTERM to 18 process(es), then SIGKILL to any left after 3s
+[rc=0]

@@ -11,7 +11,7 @@
 #   ctrl-k  (or ctrl-x, or delete) stop what is under the cursor: a process tree (agents kill: its
 #           refusals and its y/N question, on the machine that runs it), a
 #           server's process, or a forward
-#   ctrl-s  sweep that machine: agents reap (stale trees), asked first
+#   ctrl-s  sweep that machine: agents reap (the stale trees safe to stop), asked first
 #   ctrl-p  peek at its pane · ctrl-e what each session runs · ctrl-r reload
 # The other machines answer `agents map --rows` over ssh; one without it is
 # listed as needing tuidev. What they send is text: an id is used only when
@@ -436,7 +436,7 @@ _agents_map_preview() {
             [[ "$m" != - ]] || return 0
             echo "$m"
             echo
-            echo "ctrl-s  sweep: stop what sessions left behind there (agents reap; asked first)" ;;
+            echo "ctrl-s  sweep: stop what sessions left behind there that is safe to stop (agents reap; asked first)" ;;
     esac
 }
 

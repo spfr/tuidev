@@ -101,10 +101,20 @@ _agents_alive() {
     done <<<"$1"
 }
 
+# _agents_kill_note PID — the caller's note for that root (_AGENTS_KILL_NOTES:
+# "pid<TAB>note" lines; `agents reap` gives each tree's verdict), or nothing.
+_agents_kill_note() {
+    local p note
+    while IFS=$'\t' read -r p note; do
+        [[ "$p" == "$1" ]] && { printf '%s' "$note"; return 0; }
+    done <<<"${_AGENTS_KILL_NOTES:-}"
+}
+
 # _agents_kill_message ROOTS — the confirmation text. ROOTS: one
-# "pid<TAB>name<TAB>children<TAB>project" line per tree.
+# "pid<TAB>name<TAB>children<TAB>project" line per tree; each tree's note
+# (_agents_kill_note) after it, and the caller's _AGENTS_KILL_AFTER at the end.
 _agents_kill_message() {
-    local pid name kids proj n=0 one="" all=""
+    local pid name kids proj note n=0 one="" all="" after="${_AGENTS_KILL_AFTER:-}"
     while IFS=$'\t' read -r pid name kids proj; do
         [[ -n "$pid" ]] || continue
         n=$((n + 1))
@@ -113,9 +123,12 @@ _agents_kill_message() {
         one+=" (pid $pid"
         case "$kids" in 0) ;; 1) one+=", 1 child process" ;; *) one+=", $kids child processes" ;; esac
         one+=")"
-        all+="• $one"$'\n'
+        note="$(_agents_kill_note "$pid")"
+        all+="• $one${note:+: $note}"$'\n'
     done <<<"$1"
-    if [[ $n -eq 1 ]]; then echo "Kill $one?"; else printf 'Kill %d process trees?\n\n%s' "$n" "$all"; fi
+    if [[ $n -eq 1 && -z "$note$after" ]]; then echo "Kill $one?"
+    elif [[ $n -eq 1 ]]; then printf 'Kill %s?\n\n%s%s' "$one" "${note:+$note$'\n'}" "${after:+$after$'\n'}"
+    else printf 'Kill %d process trees?\n\n%s%s' "$n" "$all" "${after:+$'\n'$after$'\n'}"; fi
 }
 
 # agents_kill_tokens TREE(true|false) TOKEN... — the kill/reap/term engine.
@@ -146,7 +159,11 @@ agents_kill_tokens() {
         return 1
     fi
     n="$(printf '%s\n' "$plan" | grep -c .)"
-    printf '%s\n' "$plan" | awk -F '\t' '{ printf "  %-7s %s\n", $1, $3 }'
+    # Each process, and a tree's root with the caller's note (reap: its verdict).
+    printf '%s\n' "$plan" | NOTES="${_AGENTS_KILL_NOTES:-}" awk -F '\t' '
+        BEGIN { n = split(ENVIRON["NOTES"], l, "\n"); for (i = 1; i <= n; i++) if ((j = index(l[i], "\t")) > 1) note[substr(l[i], 1, j - 1)] = substr(l[i], j + 1) }
+        { printf "  %-7s %s%s\n", $1, $3, (($1 in note) ? " \302\267 " note[$1] : "") }'
+    [[ -z "${_AGENTS_KILL_AFTER:-}" ]] || printf '%s\n' "$_AGENTS_KILL_AFTER"
     if [[ "$AGENTS_DRY_RUN" == true ]]; then
         if [[ "$tree" == true ]]; then
             echo "dry run: would send SIGTERM to $n process(es), then SIGKILL to any left after ${AGENTS_GRACE}s"
