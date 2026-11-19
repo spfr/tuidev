@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The palette always starts with the update**: "Check for a new release" asks now and offers it; the preview that changes nothing is "Preview an update". [Updating](docs/updating.md)
+
 ## [3.26.0] - 2026-11-19
 
 ### Added

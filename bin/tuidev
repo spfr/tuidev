@@ -502,6 +502,10 @@ _tuidev_palette_rows() {
     ! _tuidev_repo 2>/dev/null || repo="$REPLY"
     if _tuidev_update_available; then
         _tuidev_row "Update tuidev to $LATEST" "you have $INSTALLED; shows what changes and asks" 1 "tuidev update --ask"
+    elif [[ -n "$repo" ]]; then
+        # No newer release known (the daily check may be hours old): this
+        # row asks GitHub now, and offers the update when one is out.
+        _tuidev_row "Check for a new release" "asks now; offers the update when one is out" 1 "tuidev update --ask"
     fi
     if _tuidev_has agents; then
         _tuidev_row "Board: every session" "by who needs you, on every machine; enter goes there" 0 "agents board"
@@ -545,7 +549,7 @@ _tuidev_palette_rows() {
         name="${name%/}"; name="${name##*/}"
         [[ ! "$name" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || _tuidev_row "Theme: $name" "Ghostty, tmux and Starship" 1 "tuidev theme $name"
     done
-    _tuidev_row "Check for updates" "packages, migrations, config drift; changes nothing" 1 "tuidev update --check"
+    _tuidev_row "Preview an update" "packages, migrations, config drift; changes nothing" 1 "tuidev update --check"
     _tuidev_row "What's new" "this release's changelog" 1 "tuidev whatsnew | tuidev md"
     _tuidev_row "Add a pack" "preview what a pack would install" 1 "tuidev install --help"
     printf -v cmd 'tuidev md %q' "$repo/docs/CHEATSHEET.md"

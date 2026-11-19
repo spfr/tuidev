@@ -81,7 +81,7 @@ Once a day, `tuidev latest --if-due` asks `https://github.com/spfr/tuidev/releas
 When the release is newer than the one installed:
 
 - the menu bar shows a row for it, with Update now… and What changed (macOS, `--pack monitoring`);
-- Herdr shows one toast, and **prefix+u** opens a popup with the installed and the latest version that asks before it updates (`--pack herdr`);
+- Herdr shows one toast, and **prefix+u** opens a popup with the installed and the latest version that asks before it updates (`--pack herdr`); the palette (`tuidev`, Herdr **prefix+a**) starts with the same question: "Update tuidev to X" when one is known to be out, "Check for a new release" otherwise;
 - `agents` ends with one line, and so does `tuidev latest`;
 - the palette's first row is the update.
 
