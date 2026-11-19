@@ -133,6 +133,7 @@ agents_main() {
                       *)           echo "usage: agents sample [--scheduled]" >&2; return 2 ;;
                   esac ;;
         config)   agents_config "$@" ;;
+        doctor)   agents_doctor "$@" ;;
         cwd)      agents_token_cwd "$@" ;;
         copy-path) local c; c="$(agents_token_cwd "$@")" || return 1
                   printf '%s' "$c" | pbcopy ;;

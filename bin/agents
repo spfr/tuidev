@@ -68,7 +68,7 @@ _agents_find_lib() {
 }
 
 # config first: it reads agents.conf. The others only define functions.
-_AGENTS_MODULES="config palette glyph util release snapshot classify mcp lazy where watched system awake lid cool remote forward link map board herdrlabel hc hcmirror hcphone kill notify events reap memory assess triage transcript history runs tokens grok limits statusline context report render json tsv terminal activity show pick bar hooks usage cli"
+_AGENTS_MODULES="config palette glyph util release snapshot classify mcp lazy where watched system awake lid cool remote forward link map board herdrlabel hc hcmirror hcphone kill notify events reap memory assess triage transcript history runs tokens grok limits statusline context report render json tsv terminal activity show pick bar hooks doctor usage cli"
 # The runs that start often load only the modules they use (below): a row
 # each, "WORDS|MODULES|CALL": the words the run starts with, its modules
 # (config first), and the function it calls with the words after those (a

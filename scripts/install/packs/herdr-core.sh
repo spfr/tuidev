@@ -54,6 +54,12 @@ HERDR_CORE_LABEL="dev.tuidev.hc"
 HERDR_CORE_UNIT="tuidev-hc"
 HERDR_CORE_URL="https://herdr.dev/core/"
 HERDR_CORE_REPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+# The job that keeps the core up (pack_array NAME jobs; monitoring.sh says how).
+# shellcheck disable=SC2034  # read by pack_array
+HERDR_CORE_JOBS=(
+    "launchd $HERDR_CORE_LABEL _herdr_core_launchagent"
+    "systemd $HERDR_CORE_UNIT.timer _herdr_core_systemd"
+)
 
 _herdr_core_bin() {
     command -v herdr-core 2>/dev/null || { [[ -x "$HOME/.local/bin/herdr-core" ]] && echo "$HOME/.local/bin/herdr-core"; }
@@ -72,6 +78,12 @@ _herdr_core_systemd() {
     print_info "herdr-core starts with your user manager from now on, and again within 5 minutes if it stops."
     print_info "  Off: AGENTS_HC_UP=0 in $MONITORING_CONF (a core you stop stays down), or systemctl --user disable --now $HERDR_CORE_UNIT.timer until the next tuidev update"
     _monitoring_linger_hint "this timer"
+}
+
+# macOS: the LaunchAgent that runs `agents hc up -q` at login and every 5
+# minutes, installed and (re)loaded as agents' own jobs are.
+_herdr_core_launchagent() {
+    _monitoring_launchagent "$HERDR_CORE_LABEL" tuidev-hc "herdr-core at login" "agents hc up"
 }
 
 # The claude and codex functions for AGENTS_HC_AUTO, in our own shell.d dir.
@@ -96,7 +108,7 @@ herdr_core_install() {
     fi
 
     if is_macos; then
-        _monitoring_launchagent "$HERDR_CORE_LABEL" tuidev-hc "herdr-core at login" "agents hc up"
+        _herdr_core_launchagent
         print_info "herdr-core starts in your desktop login from now on, so the phone finds one whose agents can use the Keychain, and again within 5 minutes if it stops."
         print_info "  Off: AGENTS_HC_UP=0 in $MONITORING_CONF (a core you stop stays down)"
     else

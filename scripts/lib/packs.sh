@@ -11,12 +11,16 @@
 #   pack_entrypoint NAME        its entrypoint function (sandbox-container
 #                               → sandbox_container_install)
 #   pack_run NAME               source the pack here and call its entrypoint
-#   pack_array NAME formulae|casks
-#                               the pack's <PACK>_FORMULAE / <PACK>_CASKS,
-#                               one per line, read without installing anything
+#   pack_array NAME formulae|casks|jobs
+#                               the pack's <PACK>_FORMULAE / <PACK>_CASKS /
+#                               <PACK>_JOBS, one per line, read without
+#                               installing anything
 #   pack_binaries NAME          the commands its formulae put on PATH
 #   pack_check NAME             is it in place? the pack's own <pack>_check,
 #                               else what it declares (`tuidev check`'s probe)
+#   pack_call NAME FN [ARG...]  source the pack in a subshell and run one of
+#                               its functions (`tuidev check --fix` repairs
+#                               with the pack's own step)
 #   tuidev_formula_binary F     formula → command ("" for plugin-only formulae)
 #   tuidev_cask_app C           cask → /Applications bundle name
 
@@ -65,17 +69,24 @@ pack_run() {
     "$fn"
 }
 
-# pack_array NAME formulae|casks
+# pack_array NAME formulae|casks|jobs
 # Sources the pack in a subshell (it defines functions and arrays only; see
 # the pack contract in docs/engineering.md) and prints the array. Silent when
 # the pack or array is absent — cargo- or script-installed tools have none.
+# A job is "KIND NAME [FN]": what the pack keeps running, which `tuidev check`
+# asks launchd or systemd about. KIND: launchd (a LaunchAgent in
+# ~/Library/LaunchAgents, loaded), launchd-system (a LaunchDaemon, loaded;
+# only where its plist is), systemd (a user unit, enabled and active) or
+# systemd-enabled (enabled; its process may end by choice). FN: the pack's
+# own function that installs and starts it again (none: a command for you).
 pack_array() {
     local name="$1" kind="$2" script var
     script="$(pack_script "$name")" || return 0
     case "$kind" in
         formulae) var="$(_pack_var_prefix "$name")_FORMULAE" ;;
         casks)    var="$(_pack_var_prefix "$name")_CASKS" ;;
-        *)        print_error "pack_array: kind must be formulae|casks"; return 2 ;;
+        jobs)     var="$(_pack_var_prefix "$name")_JOBS" ;;
+        *)        print_error "pack_array: kind must be formulae|casks|jobs"; return 2 ;;
     esac
     (
         set +eu
@@ -123,6 +134,23 @@ pack_check() {
         set +e   # the pack's own `set -e` must not end a probe halfway
         if declare -F "$fn" >/dev/null; then "$fn"; exit; fi
         _pack_check_declared "$name"
+    )
+}
+
+# pack_call NAME FN [ARG...] — FN, a function of the pack's file, run in a
+# subshell with the pack sourced (DRY_RUN and manifest recording as the
+# caller has them). False when the pack or FN is missing, else FN's status.
+pack_call() {
+    local name="$1" fn="$2" script
+    shift 2
+    script="$(pack_script "$name")" || return 1
+    (
+        set +u
+        # shellcheck disable=SC1090
+        . "$script" >/dev/null 2>&1 || exit 1
+        set +e
+        declare -F "$fn" >/dev/null || exit 1
+        "$fn" "$@"
     )
 }
 

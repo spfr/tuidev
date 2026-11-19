@@ -297,6 +297,11 @@ CLAUDE CODE HOOKS AND STATUS LINE (shipped in ~/.claude/settings.json; JSON on s
 SETTINGS
   agents config [--edit]       effective settings, and the file they came from;
                                --edit opens the file in your text editor
+  agents doctor [--fix [-n]]   is the monitoring pack's runtime working: ps can be
+                               read, the sampler's last sample, the memory guard,
+                               Claude Code's hooks calling this agents, the data and
+                               run dirs writable; --fix restarts the sampler's job
+                               and the guard (-n: says what it would run)
   $AGENTS_CONF (KEY=value; AGENTS_CONF picks another file). Keys: AGENTS_HOG_PCT
   AGENTS_HOG_MIN AGENTS_HOG_NOW AGENTS_HOG_SUSTAIN AGENTS_HOG_TOP AGENTS_GRACE
   AGENTS_AWAKE_POLL
