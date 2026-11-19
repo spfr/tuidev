@@ -675,7 +675,9 @@ _agents_mem_show() {
         -v warn="$(_agents_mem_warn_kib "$stop")" -v stop="$stop" -v high="$_AGENTS_SWAP_HIGH" -v late="$late" -v wait="$_AGENTS_MEM_PROBE_WAIT"
     [[ -s "$AGENTS_DATA_DIR/memory.tsv" ]] || return 0
     echo
-    printf '%sINCIDENTS%s %s(%s; agents mem log)%s\n' "$C_B" "$C_0" "$C_DIM" "${AGENTS_DATA_DIR/#"$HOME"/\~}/memory.tsv" "$C_0"
+    # A quoted \~ stays \~ in bash 3.2's replacement: the tilde from a variable.
+    local t="~"
+    printf '%sINCIDENTS%s %s(%s; agents mem log)%s\n' "$C_B" "$C_0" "$C_DIM" "${AGENTS_DATA_DIR/#"$HOME"/$t}/memory.tsv" "$C_0"
     while IFS=$'\t' read -r e ev pid name label proj session fp _ _ _ note; do
         [[ "$e" =~ ^[0-9]+$ ]] || continue
         n=$((n + 1))
