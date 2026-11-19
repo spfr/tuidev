@@ -396,7 +396,7 @@ The memory guard, the link watcher, the fan daemon and the phone mirrors (with h
 
 | Setting | Where |
 |---------|-------|
-| A 4 GB Node heap cap for agents, so a runaway test fails inside the test | `--pack ai-clis` |
+| A 4 GB Node heap limit for agents on every machine (about Node's default on a 16 GB+ one) | `--pack ai-clis` |
 | A memory guard that stops a runaway in an agent tree | `--pack monitoring` |
 | Cleanup of what a finished subagent or cleared session left running | `--pack ai-clis` hooks |
 | MCP servers started on first use, not once per session | `agents mcp lazy` |

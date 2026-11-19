@@ -2,7 +2,7 @@
 
 **Run many AI coding agents, on more than one machine, and know which one needs you.**
 
-tuidev sets up your terminal for Claude Code and Codex on macOS and Linux. It tells you which agent is waiting for you, opens another machine's previews in your browser, finds the processes agents left running, and runs agents in a sandbox that cannot read `~/.ssh`. One line installs it, you can preview every change, and `tuidev uninstall` removes it.
+tuidev sets up your terminal for Claude Code and Codex on macOS and Linux. It tells you which agent is waiting for you, opens another machine's previews in your browser, finds the processes agents left running, and sandboxes Claude Code so its commands cannot read `~/.ssh` (Codex too, under `sbx` on macOS). One line installs it, you can preview every change, and `tuidev uninstall` removes it.
 
 [![CI](https://github.com/spfr/tuidev/actions/workflows/ci.yml/badge.svg)](https://github.com/spfr/tuidev/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/spfr/tuidev?sort=semver)](https://github.com/spfr/tuidev/releases/latest)
@@ -74,8 +74,8 @@ Set up tuidev (https://github.com/spfr/tuidev) on this machine.
 | The agent on another machine says its preview is at `localhost:5173`. That is its localhost, not yours. | Ctrl-click the link and it opens in your browser. [Remote feels local](#remote-feels-local) |
 | A subagent that finished hours ago left a loop polling a file. A crashed session left its MCP servers and a dev server running. | `agents` lists what was left behind, each with a verdict and its evidence, so you stop the right thing. [Stop what agents left behind](#stop-what-agents-left-behind) |
 | The fan is on, and nothing says which project is burning the CPU or the tokens. | CPU and tokens by project, session and job, in the terminal and in the menu bar. [See it all from the menu bar](#see-it-all-from-the-menu-bar) |
-| Any command an agent runs can read `~/.ssh`. | Claude Code and Codex run sandboxed by default. [Agents can't read your keys or your tokens](#agents-cant-read-your-keys-or-your-tokens) |
-| The API token you exported in `.zshrc` is in the environment of every agent you start. | Tokens live in the OS keychain and reach one command, when you ask. |
+| Any command an agent runs can read `~/.ssh`. | Claude Code's commands are sandboxed away from your keys by default; on macOS, Codex gets the same under `sbx`. [Keep agents away from your keys and tokens](#keep-agents-away-from-your-keys-and-tokens) |
+| The API token you exported in `.zshrc` is in the environment of every agent you start. | Tokens live in the OS keychain, out of agents' environment, and `secret run` hands one to one command. |
 
 tuidev is shell scripts and configs: a small core, and everything else an opt-in pack you can add later.
 
@@ -132,8 +132,9 @@ Every `claude` session starts its own MCP servers, and its subagents start test 
 <sub>Who needs you, why a five-hour polling loop is safe to stop, and where a day of agent work went.</sub>
 
 - **Verdicts, not guesses.** `agents why PID` prints the evidence: "safe to stop: what it waits for already finished", "check first: dev server on :5173, its session is still active". `agents reap --stuck` stops the stuck loops. Kills go descendants first and re-check each process's start time before every signal.
-- **Fixed at the source.** Claude Code hooks stop the background commands a subagent left running once it hands back its report.
-- **A runaway can't take the Mac.** A test an agent started once grew to 16 GB in 55 seconds. A memory guard now warns past 8 GB, naming the process, its project and session, and stops a runaway in an agent tree at half the RAM. Agents get a 4 GB Node heap cap, so the common case fails fast inside the test.
+- **Fixed at the source.** In auto mode, Claude Code hooks stop the background commands a subagent left running once it hands back its report ([check it works on your setup](docs/agent-workflows.md#verify-the-cleanup-hooks)).
+- **A runaway can't take the Mac.** A test an agent started once grew to 16 GB in 55 seconds. A memory guard now warns past 8 GB, naming the process, its project and session, and stops a runaway in an agent tree at half the RAM. Agents' Node heap is fixed at 4 GB (about Node's own default on a 16 GB+ Mac), whatever your shell exports.
+- **On Linux,** `agents`, the hooks and the reports work the same, but orphans rarely show as stale (they go to systemd's subreaper, not pid 1), and the memory guard has no service yet: run `agents mem guard` in a tmux pane.
 - **Where the tokens go.** `agents report --view tokens` reads the transcripts already on disk: tokens by model, CLI, subagent and project, the cache hit rate, what polling cost, and what it all would cost at API list prices. All local; nothing is sent anywhere.
 
 [Local processes: `agents`](docs/agent-workflows.md#local-processes-agents---pack-monitoring)
@@ -149,15 +150,15 @@ On macOS, the same pack adds a [SwiftBar](https://swiftbar.app) menu that answer
 
 <sub>Everything that needs you, one click from the menu bar. [More submenus, animated](docs/assets/menu.gif).</sub>
 
-## Agents can't read your keys or your tokens
+## Keep agents away from your keys and tokens
 
-Without a sandbox, any command an agent runs can read `~/.ssh`. `--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper, and gates git and gh writes behind a prompt. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 31 paths on one [credential list](configs/sandbox/credential-paths.txt). Codex's sandbox limits writes and network but not reads, so for anything else `sbx` runs a command under a macOS Seatbelt profile that denies the same list. [Sandboxing](docs/sandboxing.md)
+Without a sandbox, any command an agent runs can read `~/.ssh`. `--pack ai-clis` turns on Claude Code's and Codex's own sandboxes, so plain `claude` and `codex` run confined without a wrapper, and gates git and gh writes behind a prompt. Claude Code's Bash and `Read` tools are denied `~/.ssh`, `~/.aws` and the other 31 paths on one [credential list](configs/sandbox/credential-paths.txt). Codex's sandbox limits writes and network but not reads, so plain `codex` can still read them. For the same protection, run Codex under `sbx` with its own sandbox off (`sbx -- codex -s danger-full-access -a on-request`): `sbx` runs any command under a macOS Seatbelt profile that denies the same list. [Sandboxing](docs/sandboxing.md)
 
 <img src="docs/assets/sbx.png" width="800" alt="sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with &quot;Operation not permitted&quot;, so does appending to ~/.zshrc, and make test in the project still runs and passes.">
 
 <sub>Without a sandbox, any command an agent runs can read your keys. Under `sbx`, the same read is refused, so are writes outside the project, and the project's own work still runs.</sub>
 
-A token you export in `.zshrc` is in the environment of every agent you launch, and one `env` in a tool call puts it in a transcript. `secret` keeps tokens in the store your OS already has (the login Keychain, libsecret or `pass`), and a token reaches one command, only when you ask:
+A token you export in `.zshrc` is in the environment of every agent you launch, and one `env` in a tool call puts it in a transcript. `secret` keeps tokens in the store your OS already has (the login Keychain, libsecret or `pass`), out of every agent's environment, and puts one in a command's environment only when you ask (a process outside a sandbox can still read the store itself):
 
 ```bash
 secret scan                                 # tokens in your shell startup files, by name and line, never the value
@@ -174,7 +175,7 @@ It is one person's tokens on one machine, not a team secret manager. What each s
 - **Cheaper subagents.** `--pack orchestration` pins Claude Code's subagents to tiers: Haiku for search and command runs, Sonnet for routine implementation, Opus for hard changes and review. Codex gets the same roles. [Orchestration](docs/orchestration.md)
 - **A MacBook that stays cool.** Agents keep the chip at 75–85 °C for hours (measured on an M4 Pro) while macOS keeps the fans near their minimum. `--pack cooling` adds the missing fan curve: a small Swift daemon you build from [one readable file](lib/fan/tuidev-fan.swift), which only ever adds air and hands the fans back on any error. [Fans](docs/agent-workflows.md#fans---pack-cooling)
 - **No background tax.** tuidev runs when something happens, not on a stopwatch: an idle menu bar refreshes 12 times an hour, and your other machines are asked what runs there only when you open the menu. [What runs in the background](docs/performance.md#what-tuidev-runs-in-the-background)
-- **New package versions wait 3 days.** `--pack release-age` makes npm, bun and uv hold off on a version until it is 3 days old, which gives a hijacked release time to be noticed and pulled. Lockfiles still install as pinned.
+- **New package versions wait 3 days.** `--pack release-age` makes npm, bun and uv outside projects (`uvx`, `uv tool`, `uv pip`) hold off on a version until it is 3 days old, which gives a hijacked release time to be noticed and pulled. Lockfiles still install as pinned.
 - **Two audits.** `tuidev perf` checks what the OS does behind your agents (package stores in the Spotlight index, backups, file limits). `tuidev disk` shows what tools and agents left on disk and only ever runs a tool's own cleanup command. [Performance](docs/performance.md)
 - **Notifications.** When an agent needs you: a Herdr toast, a tmux message, a macOS banner or an [ntfy](https://ntfy.sh) push, whichever can reach you. Clicking the banner jumps to the session that asked. [Agent workflows](docs/agent-workflows.md)
 
