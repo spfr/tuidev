@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Reference docs checked against the code**: module and lib tables complete, the sandbox settings and CI jobs current, each doc opens with what you get from it. [Engineering](docs/engineering.md)
-- **Docs: the README, vision, roadmap, FAQ, quick start and profiles tell one story and claim only what ships**; the roadmap says what is done, next and not planned, and the FAQ says how tuidev differs from Herdr, Rex and the CLIs' own features. [Roadmap](docs/roadmap.md) · [FAQ](docs/FAQ.md)
+- **The docs tell one story and claim only what ships**: the vision, roadmap (done, next, not planned) and FAQ (how tuidev differs from Herdr, Rex and the CLIs' own features) are rewritten; the README, quick start and profiles are corrected. [Vision](VISION.md) · [Roadmap](docs/roadmap.md) · [FAQ](docs/FAQ.md)
+- **The agent docs read in the order you need them**: agent workflows is about 40% shorter, remote opens with "anywhere", the cheatsheet is one line per key or command. [Agent workflows](docs/agent-workflows.md) · [Remote](docs/remote.md) · [Cheatsheet](docs/CHEATSHEET.md)
+- **Reference docs checked against the code**: module and lib tables, sandbox settings and CI jobs are current. [Engineering](docs/engineering.md)
 
 ## [3.27.1] - 2026-11-19
 
