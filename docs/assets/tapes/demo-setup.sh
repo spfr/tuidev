@@ -28,7 +28,8 @@ if [[ ! -f "$home/.aws/credentials" ]]; then
     printf '[default]\naws_access_key_id = AKIAEXAMPLEFAKEKEY\naws_secret_access_key = not-a-real-secret\n' > "$home/.aws/credentials"
     chmod 700 "$home/.aws"; chmod 600 "$home/.aws/credentials"
 fi
-[[ -f "$home/.zshrc" ]] || printf '# made-up shell rc\n' > "$home/.zshrc"
+# It also exports a made-up token, for `secret scan` to name (clip-keys.tape).
+[[ -f "$home/.zshrc" ]] || printf '# made-up shell rc\nexport EDITOR=nvim\nexport DEMO_TOKEN="demo-0000-not-a-real-token"\n' > "$home/.zshrc"
 
 # sbx keeps an agent's own settings read-only; the shot shows it.
 mkdir -p "$home/.claude"
@@ -36,6 +37,11 @@ mkdir -p "$home/.claude"
 
 # `agents awake agents` is on, held by pid 8800 in fixtures/ps.txt.
 echo "8800 Wed_Oct_14_09:02:00_2026 agents 0" > "$home/.config/tuidev/run/awake"
+# The memory guard runs: pid 8900 in fixtures/ps.txt holds its lock (bin/agents
+# keeps its heartbeat current). A 48 GB Mac, so it warns at 8G and stops at 24G.
+mkdir -p "$home/.config/tuidev/run/memguard.lock"
+echo "8900 Wed_Oct_14_04:48:00_2026" > "$home/.config/tuidev/run/memguard.lock/holder"
+echo 50331648 > "$home/.config/tuidev/run/memtotal"
 
 # The background task api's polling loop (pid 2120) waits on: it finished 5h
 # ago, so its last line is Claude Code's exit marker and the loop's
@@ -50,7 +56,15 @@ fi
 # A made-up week of CPU samples and cleanups, for `agents report` and the menu.
 bash "$tapes/demo-history.sh" "$home"
 
-for tool in ps lsof launchctl sysctl memory_pressure pmset notifyutil herdr; do
+# With DEMO_HOG=1 (clip-hog.tape), the runaway test in fixtures/hog/ passed
+# the guard's warning size two minutes ago: its incident, as the guard writes it.
+mem="$home/.local/state/tuidev/agents/memory.tsv"
+if [[ -n "${DEMO_HOG:-}" && ! -f "$mem" ]]; then
+    printf '%d\twarn\t1311\tnode\tvitest\tmyapp\tclaude:1201\t%d\t%d\t44\t0\t-\n' "$(( $(date +%s) - 120 ))" 8704000 8704000 > "$mem"
+    chmod 600 "$mem"
+fi
+
+for tool in ps lsof launchctl sysctl memory_pressure pmset notifyutil herdr top; do
     ln -sf "$tapes/demo-stub.sh" "$home/.demo/stubs/$tool"
 done
 

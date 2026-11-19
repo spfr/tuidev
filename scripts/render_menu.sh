@@ -12,6 +12,9 @@
 #   docs/assets/menu-light.webp, menu-dark.webp the menu, with the submenu of
 #                                               its first flagged command open
 #   docs/assets/menu.gif                        the menu, then four submenus
+#   docs/assets/clips/menu.mp4                  the clip: the menu, then the
+#                                               verdict, limits and hogs
+#                                               (screenshots.sh captions it)
 #
 # So when the plugin's output changes, re-running this redraws the picture.
 # Nothing is read from this machine's processes or menu bar. macOS only; needs
@@ -134,4 +137,35 @@ else
     print_warning "ffmpeg not found: menu.gif not rendered (brew install ffmpeg)"
 fi
 
-print_success "menu rendered from the plugin's output: ${OUT#"$REPO_DIR"/}/menu-light.webp, menu-dark.webp, menu.gif"
+# The clip (clips/menu.mp4, captioned by screenshots.sh): what needs you on
+# top, the verdict on the flagged command, the usage limits, the hogs, each
+# for 3.5 s and the last held 2 s longer, as the tapes end.
+clip=(
+    '[]'
+    "$open"
+    '["Claude wk"]'
+    '["Hogs"]'
+)
+maxw=0 maxh=0
+for i in "${!clip[@]}"; do
+    read -r w h <<<"$(capture dark "$work/probe.png" "${clip[$i]}")"
+    [[ $w -gt $maxw ]] && maxw=$w
+    [[ $h -gt $maxh ]] && maxh=$h
+done
+ins=() graph=""
+for i in "${!clip[@]}"; do
+    capture dark "$work/clip$i.png" "${clip[$i]}" "[$maxw,$maxh]" >/dev/null
+    t=3.5; [[ $i -lt $((${#clip[@]} - 1)) ]] || t=5.5
+    ins+=(-loop 1 -framerate 10 -t "$t" -i "$work/clip$i.png")
+    graph+="[$i:v]"
+done
+if command_exists ffmpeg; then
+    mkdir -p "$OUT/clips"
+    ffmpeg -v error -y "${ins[@]}" \
+        -filter_complex "${graph}concat=n=${#clip[@]}:v=1:a=0,scale=trunc(iw/4)*2:-2:flags=lanczos,format=yuv420p[out]" \
+        -map "[out]" -c:v libx264 -preset slow -crf 20 -an "$OUT/clips/menu.mp4"
+else
+    print_warning "ffmpeg not found: clips/menu.mp4 not rendered (brew install ffmpeg)"
+fi
+
+print_success "menu rendered from the plugin's output: ${OUT#"$REPO_DIR"/}/menu-light.webp, menu-dark.webp, menu.gif, clips/menu.mp4"

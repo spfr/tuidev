@@ -279,7 +279,8 @@ CI (`.github/workflows/ci.yml`, with actions pinned to a SHA and updated by Depe
 The README's images in `docs/assets/` and the social preview card (`social-preview.png`, 1280×640, uploaded by hand in the repo's Settings › Social preview) are regenerated, never edited by hand:
 
 - the terminal shots (`tour.gif`, `herdr.gif` and `herdr.png`, `cleanup.gif`, `cli.gif`, `shell.png`, `agents.png`, `sbx.png`, the card) from [VHS](https://github.com/charmbracelet/vhs) tapes in `docs/assets/tapes/`;
-- the menu-bar picture (`menu-light.webp`, `menu-dark.webp`, `menu.gif`) by `scripts/render_menu.sh`, which draws the SwiftBar plugin's real output as a macOS menu and captures it with headless Chrome.
+- the menu-bar picture (`menu-light.webp`, `menu-dark.webp`, `menu.gif`) by `scripts/render_menu.sh`, which draws the SwiftBar plugin's real output as a macOS menu and captures it with headless Chrome;
+- the captioned clips in `clips/` (`make screenshots TAPES=clips`), from the `clip-*` tapes, the menu's frames and the remote screencast ([The clips](assets/tapes/README.md#the-clips)).
 
 Re-render them whenever a change alters what they show, such as `agents` output or its verdicts, the menu plugin, `sbx` messages, the shipped zsh, the prompt or the palette:
 

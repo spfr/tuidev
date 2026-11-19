@@ -5,6 +5,7 @@ The images in [docs/assets/](..) are rendered from the [VHS](https://github.com/
 ```bash
 make screenshots                         # every tape, then the menu picture
 make screenshots TAPES="agents menu"     # some, by name (menu = scripts/render_menu.sh)
+make screenshots TAPES=clips             # every clip (clip-*.tape, clip-menu, clip-remote)
 ```
 
 | Source | Image | Shows |
@@ -19,9 +20,22 @@ make screenshots TAPES="agents menu"     # some, by name (menu = scripts/render_
 | `sbx.tape` | `sbx.png` | a key read without and under `sbx`, then refused credentials and a `~/.zshrc` write, while `make test` runs |
 | `social-preview.tape` | `social-preview.png` | The 1280×640 Open Graph card; its text is in `social-card.sh` |
 | `theme.tape` | | Shared settings: the Tokyo Night palette and the Ghostty font, sourced by the others |
-| [`scripts/render_menu.sh`](../../../scripts/render_menu.sh) | `menu-light.webp`, `menu-dark.webp`, `menu.gif` | The SwiftBar menu: the plugin's real output over the fixtures, drawn as a macOS menu ([below](#the-swiftbar-menu)) |
+| [`scripts/render_menu.sh`](../../../scripts/render_menu.sh) | `menu-light.webp`, `menu-dark.webp`, `menu.gif`, `clips/menu.mp4` | The SwiftBar menu: the plugin's real output over the fixtures, drawn as a macOS menu ([below](#the-swiftbar-menu)) |
+| `clip-install.tape` | `clips/install.mp4`, `.gif` | The installer's dry run (what it would write, how it ends) from a copy of the checkout in the demo home, then `tuidev check`: a dry run installs nothing, so the check names what is missing and skips its runtime probes |
+| `clip-needs-you.tape` | `clips/needs-you.mp4`, `.gif` | `agents`, then `agents board` opening on the session blocked on a question |
+| `clip-leftovers.tape` | `clips/leftovers.mp4`, `.gif` | `agents stale`, `agents why 4500` (check first: a server left behind), `agents reap -n` planning only the safe ones and counting what it left out |
+| `clip-cost.tape` | `clips/cost.mp4`, `.gif` | `agents limits`, then `agents report`: CPU by job and project, tokens and their API-equivalent cost |
+| `clip-keys.tape` | `clips/keys.mp4`, `.gif` | `sbx` refusing the fake key while `make test` runs, then `secret scan` naming the demo's `DEMO_TOKEN` without printing it |
+| `clip-hog.tape` | `clips/hog.mp4`, `.gif` | With `DEMO_HOG=1`: `agents hogs`, `agents why 1311` and `agents mem`, a test run past the guard's warning size |
+| `clip-remote` (no tape) | `clips/remote.mp4`, `.gif` | 19 s cut from `remote-cut.mp4` ([below](#the-remote-screencasts-fleet)) at the seconds `REMOTE_SEGMENTS` in `scripts/screenshots.sh` lists |
 
 Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https://github.com/ryanoasis/nerd-fonts) (`brew install --cask font-symbols-only-nerd-font`): `theme.tape` lists it after JetBrains Mono as a fallback, so the file icons `eza` draws render as they do in Ghostty. Without it they show as blanks, and `make screenshots` warns. The `herdr` tape also needs Herdr and a container runtime: Apple's [`container`](https://github.com/apple/container) CLI (`container system start`) or podman. `herdr-demo.sh` reads `TUIDEV_CONTAINER_RUNTIME=container|podman` (see [The Herdr fleet](#the-herdr-fleet)). `make screenshots` skips the tape unless Herdr is installed and the runtime is running (Apple's `container system start`, or `podman machine start`). The menu needs Google Chrome or Chromium and Swift (the Xcode command-line tools). With `gifsicle` installed, the GIFs are optimized after rendering.
+
+## The clips
+
+The clips in `docs/assets/clips/` are short and silent, 15 to 20 s each, for README sections, release notes and posts. Each one shows a single outcome and holds its last frame for 2 s. A clip tape records `clips/NAME.mp4` with VHS. `scripts/screenshots.sh` then scales it to 1200 px wide at most and burns in a caption from [`clips.txt`](clips.txt) (one line per clip, so a caption can be reworded without touching the tape). The caption sits in a strip under the terminal, in the margin's color. Last, the script makes `NAME.gif` from the result. The ffmpeg Homebrew installs has no `drawtext` filter, so ImageMagick (`brew install imagemagick`) draws the caption and ffmpeg overlays it. `CLIP_CAPTIONS=0 make screenshots TAPES=clips` renders them without captions. The menu's clip comes from `render_menu.sh`'s frames, and the remote one is cut from `remote-cut.mp4`, so it exists only where that hand-made file does.
+
+`clip-install` and `clip-keys` run in `/Users/Shared/NAME`, as `sbx` and `tour` do. `clip-install` copies the checkout to `~/tuidev` in that home (without `.git` and `docs/assets`) and runs the installer from there, so its paths are the demo's, not the renderer's. The demo `~/.zshrc` exports a made-up `DEMO_TOKEN` for `secret scan` to name. `DEMO_HOG=1` (set by `clip-hog`) adds `fixtures/hog/` to the process table: a vitest run at 9.9 GB under the `myapp` session, plus the warning the guard recorded for it in `memory.tsv`. `agents cool` is not in that clip. It reads the fan daemon's status file, which would need a made-up one of its own, and it tells a different story (heat, not memory).
 
 ## The demo environment
 
@@ -30,7 +44,7 @@ Besides VHS (`brew install vhs`), the shots need the [Symbols Nerd Font](https:/
 - drops what the renderer's own shell would leak into the shots: `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, `ZDOTDIR`, `HISTFILE` and every `ATUIN_*` and `_ZO_*` (zoxide) setting, so neither this bash nor the `cli` tape's `exec zsh -i` reads or writes your history, zoxide database or config;
 - picks a time zone where it is mid-afternoon now, so the made-up history below has a working day behind its "Today", whenever the shots are rendered;
 - builds that home with `demo-setup.sh`: three projects (`myapp`, `api`, `web`), fake `~/.ssh/id_ed25519`, `~/.aws/credentials` and `~/.zshrc` for `sbx` to protect, a `make test` target in `myapp`, a `~/.claude/settings.json`, and the state `agents` reads (a keep-awake record and a Herdr socket);
-- writes the background-task output that the `api` session's polling loop watches (its last line is Claude Code's `[exited with code 0]`, dated 5 hours ago), and, with `demo-history.sh`, a made-up week of `agents sample` history, cleanups, finished runs (`runs.tsv`) and tokens (`tokens.tsv`, `tokens.today`, with a few compactions and denials and a Codex plan reading; fixed noise, ending now) for `agents report`, its Top insights and the menu's Today, tokens and insight lines (the insight is written by the real `agents` code, as a sample would);
+- writes the background-task output that the `api` session's polling loop watches (its last line is Claude Code's `[exited with code 0]`, dated 5 hours ago), and, with `demo-history.sh`, a made-up week of `agents sample` history, cleanups, finished runs (`runs.tsv`), waits (`waits.tsv`, which also sets the menu's blocked time) and tokens (`tokens.tsv`, `tokens.today`, with a few compactions and denials and a Codex plan reading; fixed noise, ending now) for `agents report`, its Top insights and the menu's Today, tokens and insight lines (the insight is written by the real `agents` code, as a sample would);
 - sets `HOME` to it and draws a two-line prompt shaped like the shipped Starship one, without Starship (the `shell`, `cli` and `tour` tapes start the real one, below);
 - puts `bin/agents` (the demo wrapper) and the repo's `bin/sbx` first on `PATH`.
 
@@ -51,6 +65,8 @@ The `cli` tape then runs `demo-zsh-setup.sh`, which copies the shipped `configs/
 | `herdr agent list` | `fixtures/herdr.tsv` (session status: blocked, working, done) |
 | `herdr pane read`, `herdr pane process-info` (only with `DEMO_PANES=1`, which `board.tape` sets) | `fixtures/panes.tsv` (each session's pane id and task title) and `fixtures/panes/*.txt` (a made-up screen each, input box and status lines included, so the board trims them as it does a real one) |
 | `sysctl`, `memory_pressure`, `pmset`, `notifyutil`, `launchctl` | fixed answers in `demo-stub.sh` |
+| `top` (each process's footprint, for `agents mem`) | `ps.txt`'s RSS, biggest first, in `demo-stub.sh` |
+| the memory guard (`agents mem guard`) | pid 8900 in `ps.txt` holds its lock (`demo-setup.sh`), the wrapper keeps its heartbeat current, and `memtotal` makes it a 48 GB Mac (warn at 8G, stop at 24G) |
 | `kill` | a no-op: the demo never signals anything, but for the process group of a job its own shell started (the watcher of a timed-out probe) |
 | `AGENTS_UID`, `AGENTS_SELF` | the fixture's uid 501, and a pid that isn't in the table (`AGENTS_TESTING=1`, the test harness's hook) |
 | `~/.local/state/tuidev/agents` | the same path in the demo home (`AGENTS_DATA_DIR`), filled by `demo-history.sh` |

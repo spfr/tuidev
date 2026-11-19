@@ -548,6 +548,7 @@ printf '%s\n' $'12000\tstop\t620\tnode\tclientFuelToday.test.js\tcairn\tclaude:6
 out="$(GS="stalled 42 125" show)"
 [[ "$out" == *"GUARD   stalled (pid 42, no look for 2m; agents mem restart) · kill · 2 stops in 7 days, 1 escalated to the tool command (agents mem log)"* ]] || fail "stalled and escalation summary: $out"
 [[ "$out" == *"escalate zsh (clientFuelToday.test.js)"*$'\n'*"node (clientFuelToday.test.js) stopped again 40s after the guard stopped pid 620 under the same command"* ]] || fail "the escalation and why in the incidents: $out"
+[[ "$(HOME="$tmp" show)" == *"INCIDENTS (~/data/memory.tsv; agents mem log)"* ]] || fail "the incidents' path under HOME starts with a bare ~ (bash 3.2 keeps a quoted \\~): $out"
 out="$(GS=unknown MACH=$'50331648\t-\t-\t-\t-' show)"
 [[ "$out" == *"GUARD   unknown: the process table can't be read from inside a sandbox"* ]] || fail "sandbox guard wording: $out"
 [[ "$out" == *"MEMORY  unknown: can't be read from inside a sandbox"* ]] || fail "sandbox memory wording: $out"
