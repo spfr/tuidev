@@ -101,7 +101,7 @@ pass "agent files parse and pin only allowed models and efforts"
 # The parsers may leave caches in HOME (a python3 or ruby shim); start clean.
 rm -rf "$HOME" && mkdir -p "$HOME"
 
-# A fake agents-orchestration checkout, under a path that itself has /build/ in it.
+# A fake checkout of the earlier standalone installer, under a path that itself has /build/ in it.
 legacy="$tmp/build/agents orchestration"
 mkdir -p "$legacy/core" "$legacy/build/skills/delegation" "$legacy/claude/agents"
 echo "marker" > "$legacy/core/00-orchestration.md"
@@ -116,7 +116,7 @@ echo "my executor" > "$dots/executor.md"
 mkdir -p "$HOME/links" "$HOME/rel/x" "$HOME/dots/claude/agents"
 echo "mine" > "$HOME/dots/claude/agents/executor.md"
 ln -s "$legacy/build/CLAUDE.md" "$HOME/links/abs"
-ln -s "/gone/agents-orchestration/build/AGENTS.md" "$HOME/links/dangling"
+ln -s "/gone/standalone-installer/build/AGENTS.md" "$HOME/links/dangling"
 # Relative, agent-shaped, and resolvable only from the link's own directory.
 ln -s "../../dots/claude/agents/executor.md" "$HOME/rel/x/executor.md"
 ln -s "$dots/executor.md" "$HOME/links/user"
@@ -153,7 +153,7 @@ for f in "$HOME/.claude/rules/tuidev-orchestration.md" "$HOME/.claude/agents/rev
     [[ -f "$f" && ! -L "$f" ]] || fail "$f should be a regular file now"
 done
 [[ "$(cat "$HOME/.claude/CLAUDE.md")" == "my claude notes" && ! -e "$HOME/.claude/CLAUDE.md.bak" ]] \
-    || fail "the user's CLAUDE.md from before agents-orchestration was not restored untouched"
+    || fail "the user's CLAUDE.md from before the earlier installer was not restored untouched"
 grep -qxF "my codex notes" "$HOME/.codex/AGENTS.md" || fail "user text in ~/.codex/AGENTS.md lost"
 grep -qxF "<!-- >>> tuidev managed (tuidev-orchestration) >>> -->" "$HOME/.codex/AGENTS.md" \
     || fail "the Codex block needs HTML-comment markers (a # line is a Markdown heading)"
@@ -169,7 +169,7 @@ orchestration_install >/dev/null
 [[ "$(find "$HOME" -type f -exec cksum {} + | sort)" == "$before" ]] || fail "second run changed files"
 pass "idempotent"
 
-# 5. A policy left as plain text (agents-orchestration --copy) is flagged.
+# 5. A policy left as plain text (the earlier installer's --copy) is flagged.
 printf '# Agent Orchestration\n\nThe main thread is the orchestrator: it plans.\n' > "$HOME/.claude/CLAUDE.md"
 out="$(orchestration_install 2>&1)"
 grep -qF "holds the orchestration policy as plain text" <<<"$out" \

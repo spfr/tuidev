@@ -1623,7 +1623,7 @@ Needs you now explains itself, agents stop leaving processes behind, and
 
 ### Added
 - **`--pack orchestration`**: one multi-agent policy for Claude Code and
-  Codex, merged in from the standalone agents-orchestration repo. The
+  Codex, merged in from an earlier standalone installer. The
   always-on policy as `~/.claude/rules/tuidev-orchestration.md` (your
   `~/.claude/CLAUDE.md` is left alone) and a managed block
   `tuidev-orchestration` in `~/.codex/AGENTS.md`; tiered subagents in
@@ -1632,12 +1632,12 @@ Needs you now explains itself, agents stop leaving processes behind, and
   `~/.claude/skills/` and `~/.agents/skills/`. Installs on its own, for teams
   and CI runners that don't use the rest of tuidev
   (`bash scripts/install/packs/orchestration.sh`), and `./uninstall.sh` then
-  removes just that. It removes the symlinks the agents-orchestration
+  removes just that. It removes the symlinks that earlier
   installer left, and restores the files that installer set aside. See
   [docs/orchestration.md](docs/orchestration.md).
 - The policy, agents and skills were re-audited against current Anthropic and
   OpenAI guidance (current models need less direction, and leftover
-  scaffolding hurts), which cut them to under half their agents-orchestration
+  scaffolding hurts), which cut them to under half their earlier
   length. The Codex standard implementor runs `gpt-6-luna` at `high`, OpenAI's
   starting point for Luna.
 - `--pack ai-clis` installs `~/.codex/rules/tuidev.rules`: Codex prompts

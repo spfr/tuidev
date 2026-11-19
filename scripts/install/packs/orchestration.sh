@@ -17,7 +17,7 @@
 #
 # Agent and skill files are tuidev-owned (--overwrite, backup first). The git
 # and gh write gates live in --pack ai-clis, which owns the CLIs' settings.
-# Replaces the symlinks the retired agents-orchestration installer left.
+# Replaces the symlinks the retired standalone installer left.
 #
 # Runs standalone, without the rest of tuidev (a team that only wants the
 # agents, CI runners, sandboxes); ./uninstall.sh then removes only this pack:
@@ -40,7 +40,7 @@ ORCHESTRATION_SRC="$REPO_ROOT/configs/orchestration"
 # so it is not in update.sh's cross-cutting MANAGED_BLOCKS list.
 ORCHESTRATION_BLOCK="tuidev-orchestration"
 
-# True for a symlink the agents-orchestration installer placed: an absolute
+# True for a symlink the earlier standalone installer placed: an absolute
 # link (that installer only wrote absolute ones) to that repo's build/ output
 # or its agent files, whose checkout is either gone (a dangling link) or still
 # has core/00-orchestration.md.
@@ -63,14 +63,14 @@ _orchestration_is_legacy_link() {
 }
 
 # _orchestration_writable DEST
-# Clears DEST for writing: removes a legacy agents-orchestration link (copying
+# Clears DEST for writing: removes a link the earlier standalone installer left (copying
 # onto it would write into that checkout), and refuses any other symlink — it
 # is yours (dotfiles, say), and neither a copy nor a backup through it is safe.
 _orchestration_writable() {
     local dest="$1"
     if _orchestration_is_legacy_link "$dest"; then
         run_cmd rm -f "$dest"
-        print_info "removed the agents-orchestration link $dest"
+        print_info "removed the earlier installer's link $dest"
     elif [[ -L "$dest" ]]; then
         print_warning "skipping $dest: it is a symlink of yours; install $(basename "$dest") there yourself if you want it"
         return 1
@@ -78,7 +78,7 @@ _orchestration_writable() {
 }
 
 # _orchestration_restore_backup DEST
-# agents-orchestration moved a file it replaced with a link to DEST.bak. Once
+# The earlier standalone installer moved a file it replaced with a link to DEST.bak. Once
 # that link is gone, put the user's own file back.
 _orchestration_restore_backup() {
     local dest="$1"
@@ -88,23 +88,23 @@ _orchestration_restore_backup() {
         [[ "${DRY_RUN:-false}" == true ]] && _orchestration_is_legacy_link "$dest" || return 0
     fi
     run_cmd mv "$dest.bak" "$dest"
-    print_info "restored your $dest from before agents-orchestration"
+    print_info "restored your $dest from before the earlier installer"
 }
 
 # _orchestration_warn_plain_copy FILE
-# A copy-mode agents-orchestration install left the policy as plain text: say
+# A copy-mode install of the earlier standalone installer left the policy as plain text: say
 # so, instead of silently loading it twice.
 _orchestration_warn_plain_copy() {
     local file="$1" outside
     # A link left in place (a dry run) is not the user's text.
     [[ -f "$file" && ! -L "$file" ]] || return 0
     outside="$(sed "/tuidev managed ($ORCHESTRATION_BLOCK) >>>/,/tuidev managed ($ORCHESTRATION_BLOCK) <<</d" "$file")"
-    # The first sentence of the agents-orchestration policy, and of ours
+    # The first sentence of the earlier installer's policy, and of ours
     # (3.2 and current).
     if grep -qF -e "The main thread is the orchestrator:" \
         -e "Delegate for context isolation, independent parallel work" \
         -e "Leave finished work uncommitted for the user to review." <<<"$outside"; then
-        print_warning "$file holds the orchestration policy as plain text (an agents-orchestration copy?): delete it there, or it loads twice"
+        print_warning "$file holds the orchestration policy as plain text (a copy from the earlier installer?): delete it there, or it loads twice"
         print_todo "Delete the plain-text orchestration policy from $file, or it loads twice"
     fi
 }
@@ -152,7 +152,7 @@ _orchestration_install_skills() {
     done
 }
 
-# agents-orchestration used to pin the Codex session model. The pack leaves
+# The earlier standalone installer used to pin the Codex session model. The pack leaves
 # the session model to Codex; flag a superseded pin rather than edit your file.
 _orchestration_check_codex_model() {
     local cfg="$HOME/.codex/config.toml"
