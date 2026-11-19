@@ -35,7 +35,7 @@ every mutation → ~/.config/tuidev/manifest   (read by uninstall.sh)
 | `bin/tuidev` | `~/.local/bin/tuidev`, and the installed version in `~/.config/tuidev/version` | overwrite (every install and `update --configs`: `tuidev_install_cli`) |
 | a release's `tuidev.tar.gz` | `~/.local/share/tuidev/versions/X.Y.Z`, `current` (a symlink to one) and `previous` (`TUIDEV_HOME`) | unpacked and switched by `get.sh`, which keeps the version before; removed by `uninstall.sh` |
 
-tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/tuidev`. It is defined once, in `scripts/lib/ui.sh`, and holds `profile`, `manifest`, `env`, `migrations`, `theme`, `backups/`, `sandbox/` and `shell.d/`. Derive every state path from it.
+tuidev keeps its own state in `TUIDEV_STATE_DIR`, which defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/tuidev`. It is defined once, in `scripts/lib/ui.sh`, and holds `profile`, `manifest`, `env`, `migrations`, `theme`, `version`, `update.lock`, `backups/`, `sandbox/` and `shell.d/`. Derive every state path from it.
 
 ```
 get.sh                  the install without git: fetch a release, check its sha256 and layout, unpack, ask, run its install.sh (standalone)
@@ -137,7 +137,7 @@ Source these instead of reimplementing them. Each lib is idempotent to source, s
 
 | Lib | Provides |
 |-----|----------|
-| `ui.sh` | `print_header/step/success/warning/error/info`, `run_cmd` (dry-run aware), `command_exists`, `is_macos`/`is_linux`, `file_mode`/`file_owner`, `file_sha256`, `die`, `TUIDEV_STATE_DIR`, `TUIDEV_LIB_DIR` |
+| `ui.sh` | `print_header/step/success/warning/error/info`, `print_usage` (a script's header comment as its `--help`), `run_cmd` (dry-run aware), `command_exists`, `is_macos`/`is_linux`, `file_mode`/`file_owner`, `file_sha256`, `die`, `TUIDEV_STATE_DIR`, `TUIDEV_LIB_DIR` |
 | `version.sh` | tuidev's own versions and releases: `version_valid` (X.Y.Z), `version_newer A B` (part by part, as numbers), `tuidev_is_release DIR` (a release `get.sh` unpacked), `tuidev_release_home DIR` (the home a `current` or `versions/X.Y.Z` lives in). `get.sh`, `bin/tuidev` and `lib/agents/release.sh` run without libs and keep copies, which `test_contract.sh` runs against these |
 | `pkg.sh` | `pkg_install NAME...`: Homebrew, then `apt-get`, `dnf`, `pacman`, using Homebrew names mapped per distro (macOS-only formulae skipped on Linux). Also `pkg_manager`, `pkg_manual_hint` and `PKG_UNAVAILABLE`, plus the `pkg_native_*` helpers `update.sh --packages` uses to find and upgrade outdated apt/dnf/pacman packages. It fails soft, never prompts for a sudo password, and records what it installs |
 | `gitconfig.sh` | `tuidev_git_defaults`: opinionated global git defaults (histogram, zdiff3, rerere, autoSquash/updateRefs, autoSetupRemote, delta). Sets a key only while it is unset, `[include]`s counted, records each in the manifest; run by install.sh and `update.sh --configs` |
@@ -149,11 +149,12 @@ Source these instead of reimplementing them. Each lib is idempotent to source, s
 | `herdr.sh` | Herdr's release binary (`herdr_ensure_direct`, `herdr_install_direct`, `herdr_asset`), which kind of install a machine has (`herdr_install_kind`: direct, brew, other, none), live upgrades (`herdr_self_update`; `herdr_handoff_blocker` for a server launchd or systemd supervises; `herdr_systemd_update`, which installs the release binary and reloads each systemd unit whose `herdr-handoff` reload hands over), and the cutover hints the pack, the migration, `update.sh` and `health_check.sh` share |
 | `fnm.sh` | The Node versions fnm manages: `fnm_bin` (before it is on `PATH`), `fnm_installed`, `fnm_default`, `fnm_newest FNM MAJOR`, `fnm_stale` (installed majors behind nodejs.org) and `fnm_superseded`; the fnm pack and `update.sh --packages` share them |
 | `uv.sh` | uv and the Pythons it manages: `uv_install_kind` (brew, standalone, other, none), `uv_self_check`, `uv_python_managed`, `uv_python_stale` (installed minors with a newer patch); `update.sh --packages` uses them |
-| `packs.sh` | `pack_script`, `pack_entrypoint`, `pack_run`, `pack_array NAME formulae\|casks`, `pack_binaries`, `TUIDEV_BUILTIN_PACKS` |
+| `packs.sh` | `pack_script`, `pack_entrypoint`, `pack_run`, `pack_array NAME formulae\|casks`, `pack_binaries`, `pack_check` (the health check's probe), `TUIDEV_BUILTIN_PACKS` |
 | `profile.sh` | `load_tuidev_profile`, `tuidev_profile_write`, `tuidev_profile_add_pack` / `tuidev_profile_remove_pack`, `tuidev_active_packs`, `tuidev_is_valid_pack`, `TUIDEV_VALID_PACKS` |
 | `config_write.sh` | `install_config DEST SRC --managed-block ID \| --adopt-existing \| --upgrade-shipped HASHFILE \| --overwrite`, `tuidev_is_shipped`, `write_managed_block`, `read_managed_block`, `remove_managed_block`, `tuidev_backup` |
 | `manifest.sh` | `tuidev_manifest_record KIND VALUE`, `tuidev_manifest_has`, `tuidev_manifest_values` |
 | `migrate.sh` | The migration runner, including the baseline and pending lists |
+| `lock.sh` | `tuidev_update_lock` / `tuidev_update_unlock`: one install or update at a time (`$TUIDEV_STATE_DIR/update.lock`, holding its holder's pid and start time; a gone holder's is taken over; kept across `update.sh`'s exec hand-over), and `tuidev_excl` (a file made with noclobber, never `mkdir`), bin/tuidev's `_tuidev_excl`'s twin |
 | `container.sh` | `tuidev_container_runtime` (Apple `container` → podman → docker) and up/down/build/run shims |
 
 Rules of thumb: never call `brew install` or `apt-get` directly in a pack; never `echo` raw status (use `print_*` so `NO_COLOR` and `TUIDEV_NO_COLOR` work); wrap every mutation in `run_cmd` so `--dry-run` previews it.
@@ -168,7 +169,9 @@ A pack is one file. The five built-in packs are `scripts/install/<name>.sh`, and
 4. Warn and continue on failure (`pkg_install ... || print_warning "... (continuing)"`) rather than exit.
 5. End with `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then <pack>_install "$@"; fi`, so the file also runs on its own.
 
-To add an optional pack, create the file, add its name to `TUIDEV_VALID_PACKS` in `scripts/lib/profile.sh`, and document it in [profiles.md](profiles.md). Install, update, health check, uninstall and `test_contract.sh` all find it from there, and `install.sh` needs no edit.
+A pack may also define `<pack>_check`, the health check's probe: read-only, quiet and cheap (file tests and `command -v`, no network, no sudo, nothing that starts a service), and true where its platform gives it nothing to do. Define one when its declared packages don't say whether it is in place (cooling's daemon, release-age's settings, herdr-core's job); `test_contract.sh` fails for a pack with neither.
+
+To add an optional pack, create the file, add its name to `TUIDEV_VALID_PACKS` in `scripts/lib/profile.sh`, and document it in [profiles.md](profiles.md). Install, update, uninstall and `test_contract.sh` all find it from there, and `install.sh` needs no edit. `tuidev check` probes each pack the profile lists with `pack_check`: the pack's own `<pack>_check`, else the commands its formulae put on `PATH` and, on macOS, the apps its casks install.
 
 ```bash
 #!/bin/bash
@@ -244,12 +247,13 @@ The asset names carry no version, so the one-line install never changes. The arc
 
 ## Verification
 
-Run these locally, in this order. `make ci-test` runs the first four.
+Run these locally, in this order. `make ci-test` runs the first five.
 
 ```bash
 make lint              # shellcheck -x over every shell file (the list lives in the Makefile)
 make validate-configs  # JSON, TOML, Lua, zsh/sh syntax (CI adds --strict)
 make check-links       # every relative link in every tracked .md resolves
+make check-paths       # no hardcoded user paths or personal hosts
 make test-lib          # every scripts/lib/test_*.sh harness, in parallel (scripts/test_lib.sh)
 make test-core         # core-tagged tests against this machine
 make container-test    # core-tagged tests in an Alpine container (tests scripts and configs, not the installer)

@@ -35,6 +35,10 @@ Both run the same `install.sh`. They differ in where tuidev's files live and how
 
 An update hands over to the new release's own `update.sh` before it runs migrations or writes configs, so those always come from the version you are moving to.
 
+When `tuidev update` (or `--all`) cannot get the new files, because the release can't be reached or its download is refused, or a clone's `git pull --ff-only` fails, it changes nothing else and ends with `not updated: …` and exit 1, never with "Update Complete". An update whose files arrived but whose migrations or configs did not run to the end (the installed version in `~/.config/tuidev/version` is not the files' `VERSION`) is finished by the next `tuidev update`, which says `finishing the update to X`, even offline.
+
+One update or install runs at a time: started again from the terminal, the menu bar or Herdr's popup while one runs, it stops with `another tuidev update is running (pid N)`. The lock is `~/.config/tuidev/update.lock`; one whose holder is gone (killed, or the machine restarted) is taken over. `--check` and `--dry-run` take none.
+
 ## Hearing about a new release
 
 Once a day, `tuidev latest --if-due` asks `https://github.com/spfr/tuidev/releases/latest` where it redirects to, which is the latest release's tag. It is one request with no body, no API call and no identifier beyond the request itself, and the answer goes into `~/.cache/tuidev/latest`. A check that fails is tried again an hour later, and checks that start together make one request. Nothing starts a timer for this: the menu bar's refresh, a Herdr event, Herdr starting and a run of `agents` each read when the next check is due from that file, and start it only then.
@@ -123,7 +127,11 @@ Three properties worth knowing:
   is pending before anything happens.
 - **A failure stops the whole run** and the id is *not* recorded, so the next
   update retries it. The machine is in a known-bad state at that point and
-  re-applying configs on top would only obscure it.
+  re-applying configs on top would only obscure it. The run says where the
+  install stands (in an install made with `get.sh`, `current` already points
+  at the new release while the configs are the old one's) and the two ways
+  out: fix the cause and run `tuidev update` again, which finishes the
+  update, or go back with `tuidev update --rollback`.
 - **Fresh installs skip history; upgrades apply it.** On a machine tuidev has
   never touched, `install.sh` marks every existing migration applied without
   running it — a brand-new machine has no legacy state to repair. On a machine
