@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A sampler of its own, once a minute, with or without the menu bar**: a LaunchAgent on macOS, a systemd user timer on Linux, a 25 ms no-op when the menu just sampled; history, tokens, waits and limits stay current, and auto-reap runs where no menu does. `AGENTS_SAMPLER=0` turns it off. [History](docs/agent-workflows.md#history-and-agents-report)
 - **The memory guard runs on Linux too**, as a systemd user service. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
 - **`agents`, `agents report` and `agents limits` say when no sampler has run**, and how to start one; `agents report` ends with "data as of", and the JSON carries `sampled_at`. [History](docs/agent-workflows.md#history-and-agents-report)
+- **`tuidev check` sees what runs, not only what is installed**: LaunchAgents loaded and user units enabled, the installed commands against the release and `PATH`, hooks that start a program that is gone (anyone's, labelled), the manifest against the disk, the sampler and the memory guard. A failure there exits 1; inside a sandbox each says "skipped". [Updating](docs/updating.md#checking-the-install-tuidev-check)
+- **`tuidev check --fix [--dry-run]`** repairs what is safe to, with the installer's own steps, and checks again; never sudo, your files or anyone else's hooks. [Updating](docs/updating.md#checking-the-install-tuidev-check)
+- **`agents doctor [--fix]`**: is the sampler sampling, the guard looking, the hooks calling this `agents`; `--fix` restarts what stopped. [Agent workflows](docs/agent-workflows.md#is-it-running-agents-doctor)
 
 ### Changed
 

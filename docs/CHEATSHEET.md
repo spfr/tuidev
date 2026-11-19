@@ -233,6 +233,8 @@ tuidev latest [on|off]             # the latest release known; the daily check o
 tuidev whatsnew [FROM]             # this release's changelog, or all since FROM
 tuidev md [FILE]                   # read Markdown in the pager (rendered with glow from --extras)
 tuidev check | perf | disk         # health check and the two audits
+tuidev check --fix [--dry-run]     # repair what runs (jobs, tuidev's files, the manifest), then check again
+agents doctor [--fix]              # are the sampler, the memory guard and the hooks' agents working (--pack monitoring)
 tuidev theme [NAME]                # list themes, or apply one
 tuidev uninstall                   # remove what the manifest records
 ```

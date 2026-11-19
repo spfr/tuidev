@@ -110,6 +110,7 @@ docs/assets/            README images; tapes/ holds their VHS sources and demo f
 | `pick.sh` | `agents pick`: the fzf browser, its list and its command line |
 | `bar.sh` | `agents bar poke`: the menu bar refreshes when something changed (`open -g swiftbar://refreshplugin`), only while SwiftBar runs the plugin (`bar.alive`, which the plugin writes), at most once every 2 s with the last of a burst kept (`bar.busy`, `bar.dirty` and a keeper for the window); `agents bar status` |
 | `hooks.sh` | `agents hook`: what a finished subagent or a cleared session left running; the menu bar's pokes from the wait and cleanup hooks |
+| `doctor.sh` | `agents doctor`: is the monitoring pack's runtime working (ps readable, the sampler's last sample by `history.sh`'s rule, the guard's state by `memory.sh`'s, Claude Code's hooks calling this `agents`, the data and run dirs writable), `--fix` through `agents mem restart` and the sampler's own job, and the `--tsv` rows `tuidev check` counts as its own |
 | `notify.sh` | the y/N prompt, the macOS dialog, notifications (terminal-notifier's, clickable to a session, else `osascript`'s) |
 | `usage.sh` | `agents --help` |
 | `cli.sh` | `agents_main`: options and the subcommand table; `agents cwd` |
@@ -149,10 +150,10 @@ Source these instead of reimplementing them. Each lib is idempotent to source, s
 | `herdr.sh` | Herdr's release binary (`herdr_ensure_direct`, `herdr_install_direct`, `herdr_asset`), which kind of install a machine has (`herdr_install_kind`: direct, brew, other, none), live upgrades (`herdr_self_update`; `herdr_handoff_blocker` for a server launchd or systemd supervises; `herdr_systemd_update`, which installs the release binary and reloads each systemd unit whose `herdr-handoff` reload hands over), and the cutover hints the pack, the migration, `update.sh` and `health_check.sh` share |
 | `fnm.sh` | The Node versions fnm manages: `fnm_bin` (before it is on `PATH`), `fnm_installed`, `fnm_default`, `fnm_newest FNM MAJOR`, `fnm_stale` (installed majors behind nodejs.org) and `fnm_superseded`; the fnm pack and `update.sh --packages` share them |
 | `uv.sh` | uv and the Pythons it manages: `uv_install_kind` (brew, standalone, other, none), `uv_self_check`, `uv_python_managed`, `uv_python_stale` (installed minors with a newer patch); `update.sh --packages` uses them |
-| `packs.sh` | `pack_script`, `pack_entrypoint`, `pack_run`, `pack_array NAME formulae\|casks`, `pack_binaries`, `pack_check` (the health check's probe), `TUIDEV_BUILTIN_PACKS` |
+| `packs.sh` | `pack_script`, `pack_entrypoint`, `pack_run`, `pack_array NAME formulae\|casks\|jobs`, `pack_binaries`, `pack_check` (the health check's probe), `pack_call NAME FN` (one of the pack's functions, in a subshell: `tuidev check --fix`'s repairs), `TUIDEV_BUILTIN_PACKS` |
 | `profile.sh` | `load_tuidev_profile`, `tuidev_profile_write`, `tuidev_profile_add_pack` / `tuidev_profile_remove_pack`, `tuidev_active_packs`, `tuidev_is_valid_pack`, `TUIDEV_VALID_PACKS` |
 | `config_write.sh` | `install_config DEST SRC --managed-block ID \| --adopt-existing \| --upgrade-shipped HASHFILE \| --overwrite`, `tuidev_is_shipped`, `write_managed_block`, `read_managed_block`, `remove_managed_block`, `tuidev_backup` |
-| `manifest.sh` | `tuidev_manifest_record KIND VALUE`, `tuidev_manifest_has`, `tuidev_manifest_values` |
+| `manifest.sh` | `tuidev_manifest_record KIND VALUE`, `tuidev_manifest_has`, `tuidev_manifest_values`, `tuidev_manifest_drop KIND VALUE` (a record whose file is gone: `tuidev check --fix`) |
 | `migrate.sh` | The migration runner, including the baseline and pending lists |
 | `lock.sh` | `tuidev_update_lock` / `tuidev_update_unlock`: one install or update at a time (`$TUIDEV_STATE_DIR/update.lock`, holding its holder's pid and start time; a gone holder's is taken over; kept across `update.sh`'s exec hand-over), and `tuidev_excl` (a file made with noclobber, never `mkdir`), bin/tuidev's `_tuidev_excl`'s twin |
 | `container.sh` | `tuidev_container_runtime` (Apple `container` → podman → docker) and up/down/build/run shims |
@@ -170,6 +171,8 @@ A pack is one file. The five built-in packs are `scripts/install/<name>.sh`, and
 5. End with `if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then <pack>_install "$@"; fi`, so the file also runs on its own.
 
 A pack may also define `<pack>_check`, the health check's probe: read-only, quiet and cheap (file tests and `command -v`, no network, no sudo, nothing that starts a service), and true where its platform gives it nothing to do. Define one when its declared packages don't say whether it is in place (cooling's daemon, release-age's settings, herdr-core's job); `test_contract.sh` fails for a pack with neither.
+
+A pack that keeps something running declares it in `<PACK>_JOBS`, one `"KIND NAME [FN]"` each: `launchd LABEL` (a LaunchAgent, loaded), `launchd-system LABEL` (a LaunchDaemon), `systemd UNIT` (a user unit, enabled and active), `systemd-enabled UNIT` (enabled; its process may end by choice), and FN, the pack's own function that writes and starts it again. `tuidev check` asks launchd or systemd about each job of an active pack (`pack_array NAME jobs`), and `tuidev check --fix` runs FN through `pack_call` for one that is not running. `<pack>_check` stays a quiet yes or no about files; whether something runs is the jobs' row ([updating.md](updating.md#checking-the-install-tuidev-check)).
 
 To add an optional pack, create the file, add its name to `TUIDEV_VALID_PACKS` in `scripts/lib/profile.sh`, and document it in [profiles.md](profiles.md). Install, update, uninstall and `test_contract.sh` all find it from there, and `install.sh` needs no edit. `tuidev check` probes each pack the profile lists with `pack_check`: the pack's own `<pack>_check`, else the commands its formulae put on `PATH` and, on macOS, the apps its casks install.
 
