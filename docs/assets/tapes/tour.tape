@@ -32,6 +32,8 @@ Ctrl+L
 # what they may touch
 Type "cd ../myapp"
 Enter
+# (Starship takes a moment after a cd: typing on would echo before the prompt.)
+Sleep 500ms
 Type "# without a sandbox, an agent's commands can read your keys"
 Enter
 Type "cat ~/.ssh/id_ed25519 | head -1"

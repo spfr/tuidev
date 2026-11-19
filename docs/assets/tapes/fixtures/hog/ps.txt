@@ -1,0 +1,2 @@
+ 1310  1201   501 NAME      0.0   4000   0:00.02 06:40 Wed Oct 14 09:53:20 2026     /bin/zsh -c -l source /Users/NAME/.claude/shell-snapshots/snapshot-zsh-1760421545000-k2x9qa.sh && eval 'npm test -- --run src/report' < /dev/null && pwd -P >| /tmp/claude-77aa-cwd
+ 1311  1310   501 NAME     99.4 10380000   6:31.80 06:38 Wed Oct 14 09:53:22 2026     node /Users/NAME/myapp/node_modules/.bin/vitest run src/report

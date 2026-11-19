@@ -23,6 +23,10 @@ export AGENTS_DATA_DIR="$DEMO_HOME/.local/state/tuidev/agents"
 # The fixture's uid, and a pid that is not in it (bin/agents hides its own tree).
 export AGENTS_TESTING=1 AGENTS_UID=501 AGENTS_SELF=99999 AGENTS_EUID=501
 
+# The memory guard is pid 8900 in fixtures/ps.txt (its lock is demo-setup.sh's):
+# a guard that runs looks every few seconds, so its heartbeat is now.
+[[ ! -f "$AGENTS_RUN_DIR/memguard.lock/holder" ]] || echo "$(date +%s) 5" > "$AGENTS_RUN_DIR/memguard.beat"
+
 # shellcheck source=../../../../bin/agents disable=SC1091
 . "$repo/bin/agents"
 
@@ -36,7 +40,7 @@ AGENTS_PATH="$tapes/bin/agents"
 _agents_cwds() {
     [[ $# -gt 0 ]] || return 0
     local IFS=,
-    sed "s|@HOME@|$HOME|g" "$DEMO_FIXTURES/cwds.tsv" \
+    { cat "$DEMO_FIXTURES/cwds.tsv"; [[ -z "${DEMO_HOG:-}" ]] || cat "$DEMO_FIXTURES/hog/cwds.tsv"; } | sed "s|@HOME@|$HOME|g" \
         | awk -F '\t' -v want=",$*," 'index(want, "," $1 ",") { print $1 "\t" $2 }'
 }
 

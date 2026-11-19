@@ -35,3 +35,4 @@
  5200  5100   501 NAME     98.7 610000 1:52:00.00 02:13:00 Wed Oct 14 07:47:00 2026     /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/141.0/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer) --type=renderer
  8800     1   501 NAME      0.0   2400   0:00.12 58:00 Wed Oct 14 09:02:00 2026     /bin/bash /Users/NAME/.local/bin/agents _awake-loop
  8801  8800   501 NAME      0.0   1900   0:00.00 58:00 Wed Oct 14 09:02:00 2026     caffeinate -di -w 8800
+ 8900     1   501 NAME      0.0   3400   0:01.10 05:12:00 Wed Oct 14 04:48:00 2026     /bin/bash /Users/NAME/.local/bin/agents mem guard

@@ -8,7 +8,11 @@ set -eo pipefail
 
 FIX="${DEMO_FIXTURES:?DEMO_FIXTURES is not set: run the demo through docs/assets/tapes/bin/agents}"
 
-fixture() { sed "s|@HOME@|$HOME|g" "$FIX/$1"; }
+# With DEMO_HOG=1 (clip-hog.tape), the hog/ fixtures add a runaway test to
+# the table and its working directory to cwds.tsv.
+fixture() {
+    { cat "$FIX/$1"; [[ -z "${DEMO_HOG:-}" || ! -f "$FIX/hog/$1" ]] || cat "$FIX/hog/$1"; } | sed "s|@HOME@|$HOME|g"
+}
 
 # ps axww -o ...: the whole table. ps -o FIELDS -p PIDS: those columns
 # (pid, stat, etime and lstart are the ones bin/agents asks for by pid).
@@ -77,6 +81,23 @@ stub_herdr() {
     esac
 }
 
+# top -l 1 -stats pid,mem [-o mem -n N | -pid PID...]: each process's MEM
+# (macOS's footprint, what `agents mem` reads), here its RSS from ps.txt,
+# biggest first.
+stub_top() {
+    local n=0 pids="" a
+    while [[ $# -gt 0 ]]; do
+        a="$1"; shift
+        case "$a" in
+            -n) n="${1:-0}"; shift ;;
+            -pid) pids="$pids,${1:-}"; shift ;;
+        esac
+    done
+    printf 'Processes: demo\n\nPID    MEM\n'
+    fixture ps.txt | awk -v want="$pids," '$1 ~ /^[0-9]+$/ && (want == "," || index(want, "," $1 ",")) { print $1, $6 }' \
+        | sort -k2,2nr | awk -v n="$n" 'n == 0 || NR <= n { printf "%-6s %dK\n", $1, $2 }'
+}
+
 stub_pmset() {
     case "${1:-} ${2:-}" in
         "-g batt")       printf "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1234567)\t86%%; charging; 0:41 remaining present: true\n" ;;
@@ -90,6 +111,7 @@ case "$(basename "$0")" in
     lsof)            stub_lsof "$@" ;;
     herdr)           stub_herdr "$@" ;;
     pmset)           stub_pmset "$@" ;;
+    top)             stub_top "$@" ;;
     launchctl)       printf 'PID\tStatus\tLabel\n' ;;
     sysctl)          printf '12\n1\n{ 3.84 3.51 3.20 }\n' ;;
     memory_pressure) echo "System-wide memory free percentage: 41%" ;;

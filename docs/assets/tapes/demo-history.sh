@@ -135,8 +135,33 @@ BEGIN {
     # and the permission prompt that says why api blocks.
     printf "2101@Wed_Oct_14_04:19:50_2026\tblocked\t%d\t%d\n", now - 360, now - 30 > (dir "/waits.now")
     printf "3101@Wed_Oct_14_09:12:48_2026\tdone\t%d\t%d\n", now - 720, now - 30 > (dir "/waits.now")
-    printf "%s\t12240\t25200\t86400\n", day > (dir "/waits.today")
     printf "%d\t2101@Wed_Oct_14_04:19:50_2026\tapi\tPermission\therdr\t-\n", now - 350 > (dir "/notify.tsv")
+}'
+# Waits (waits.tsv: epoch project agent status session secs, a row a sample),
+# as the samples record Herdr's blocked and done sessions: api blocked on a
+# question twice a day, web's work finished and left to review, once for an
+# hour and once for two (its second hour parked), and the two waits open now
+# (waits.now above). waits.today sums today's rows by class, as the sample does.
+LC_ALL=C awk -v now="$now" -v midnight="$midnight" -v day="$day" -v dir="$dir" '
+function stretch(t0, dur, p, a, st, s,   t) {
+    for (t = t0 + 300; t <= t0 + dur && t <= now - 30; t += 300) {
+        printf "%d\t%s\t%s\t%s\t%s\t300\n", t, p, a, st, s > (dir "/waits.tsv")
+        if (t < midnight) continue
+        if (st == "blocked") b += 300; else if (t - t0 <= 3600) f += 300; else k += 300
+    }
+}
+BEGIN {
+    api = "2101@Wed_Oct_14_04:19:50_2026"; web = "3101@Wed_Oct_14_09:12:48_2026"
+    for (d = 6; d >= 0; d--) {
+        x = midnight - d * 86400
+        stretch(x + 10 * 3600, 2400, "api", "claude", "blocked", api)
+        stretch(x + 11 * 3600, 3600, "web", "codex", "done", web)
+        stretch(x + 12.5 * 3600, 7200, "web", "codex", "done", web)
+        stretch(x + 13.5 * 3600, 2400, "api", "claude", "blocked", api)
+    }
+    stretch(now - 360, 360, "api", "claude", "blocked", api)
+    stretch(now - 720, 720, "web", "codex", "done", web)
+    printf "%s\t%d\t%d\t%d\n", day, b, f, k > (dir "/waits.today")
 }'
 chmod 600 "$dir"/*.tsv "$dir/tokens.today" "$dir/waits.now" "$dir/waits.today"
 echo "$now" > "$dir/sample.stamp"
