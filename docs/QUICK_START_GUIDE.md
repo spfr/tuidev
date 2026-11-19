@@ -21,7 +21,7 @@ exec zsh -l
 tuidev check     # health check against what you installed
 ```
 
-`tuidev check` is explained [below](#8-stay-current-and-leave).
+`tuidev check` is explained [below](#8-stay-current-and-leave). The installer ends with a numbered list of the steps its packs left to you (log in, grant a permission, a command that needs root) and the number of warnings it printed; `tuidev check` shows what still needs attention.
 
 ## 3. Two steps only you can do (macOS)
 

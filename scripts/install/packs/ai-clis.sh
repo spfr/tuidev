@@ -66,6 +66,7 @@ _ai_clis_install_configs() {
             print_warning "Claude Code's sandbox needs:$missing. Until they are installed, claude will refuse to start."
             print_info "    Debian/Ubuntu: sudo apt-get install bubblewrap socat   Fedora: sudo dnf install bubblewrap socat   Arch: sudo pacman -S bubblewrap socat"
             print_info "    To run unsandboxed instead (not recommended): set sandbox.failIfUnavailable to false in ~/.claude/settings.json"
+            print_todo "Install the sandbox dependencies for Claude Code:$missing (Debian/Ubuntu: sudo apt-get install bubblewrap socat)"
         fi
     fi
 
@@ -94,9 +95,11 @@ ai_clis_install() {
     local settings="$HOME/.claude/settings.json"
     if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && ! grep -q '"sandbox"' "$settings"; then
         print_warning "$settings still has no sandbox settings (removed by you, or not mergeable): claude runs unsandboxed. See docs/sandboxing.md."
+        print_todo "Add the sandbox block from configs/claude/settings.json to $settings (docs/sandboxing.md)"
     fi
     if [[ "${DRY_RUN:-false}" != true && -f "$settings" ]] && is_linux && grep -q '\*\*/\.env' "$settings"; then
         print_warning "$settings still has **/.env rules: on Linux they make Claude Code's sandbox rescan the whole project and stall the TUI. Use the literal rules from configs/claude/settings.linux.json (docs/sandboxing.md)."
+        print_todo "Replace the **/.env rules in $settings with the literal ones from configs/claude/settings.linux.json"
     fi
     # A status line of the user's own is kept, and Claude's usage limits then
     # never reach `agents` (they come only through the status line).

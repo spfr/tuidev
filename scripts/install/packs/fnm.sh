@@ -43,7 +43,10 @@ _fnm_ensure_node() {
     fi
 
     print_step "installing latest LTS Node via fnm"
-    "$fnm_bin" install --lts || print_warning "fnm install --lts failed (continuing)"
+    "$fnm_bin" install --lts || {
+        print_warning "fnm install --lts failed (continuing)"
+        print_todo "Install Node: fnm install --lts"
+    }
     local latest
     latest="$(fnm_installed "$fnm_bin" | tail -1)"
     if [[ -n "$latest" ]]; then
@@ -57,6 +60,7 @@ fnm_install() {
     if ! command_exists brew; then
         print_warning "Homebrew not found. Install fnm yourself, then re-run this pack:"
         print_info "    https://github.com/Schniz/fnm#installation"
+        print_todo "Install fnm (https://github.com/Schniz/fnm#installation), then: tuidev install --pack fnm"
         return 0
     fi
     brew_update_once

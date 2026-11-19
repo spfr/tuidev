@@ -63,11 +63,44 @@ print_header() {
 
 print_step()    { echo -e "${CYAN}>>> ${NC}$1"; }
 print_success() { echo -e "${GREEN}✓ ${NC}$1"; }
-print_warning() { echo -e "${YELLOW}⚠ ${NC}$1"; }
+# Warnings are counted (TUIDEV_WARNINGS) so install.sh can say how many scrolled
+# by. Counted in the calling shell: a call from a $(...) or a pipeline is lost.
+TUIDEV_WARNINGS=0
+print_warning() { TUIDEV_WARNINGS=$((TUIDEV_WARNINGS + 1)); echo -e "${YELLOW}⚠ ${NC}$1"; }
 print_error()   { echo -e "${RED}✗ ${NC}$1"; }
 print_info()    { echo -e "${CYAN}ℹ ${NC}$1"; }
 
-# print_usage SCRIPT COMMAND — SCRIPT's header comment (line 2 to the first
+# print_todo "text" — record one follow-up step for the human (an imperative
+# line naming the command), to be listed again at the end of the run by
+# print_todos. Identical lines are kept once. Newline-separated in a shell
+# variable, so it lives in the calling shell: call it from pack functions, not
+# from a $(...) or a pipeline.
+TUIDEV_TODOS=""
+print_todo() {
+    local line="$1" nl=$'\n'
+    [[ -n "$line" ]] || return 0
+    case "$nl$TUIDEV_TODOS$nl" in
+        *"$nl$line$nl"*) return 0 ;;
+    esac
+    TUIDEV_TODOS="${TUIDEV_TODOS:+$TUIDEV_TODOS$nl}$line"
+}
+
+# print_todos — the collected follow-ups, numbered, under a heading; nothing
+# when there are none. Under --dry-run they are what would be needed.
+print_todos() {
+    [[ -n "$TUIDEV_TODOS" ]] || return 0
+    local n=0 line heading="To do by hand:"
+    [[ "$DRY_RUN" == true ]] && heading="Would need doing by hand (dry run):"
+    echo -e "${GREEN}${heading}${NC}"
+    while IFS= read -r line; do
+        n=$((n + 1))
+        echo -e "  $n. $line"
+    done <<EOF
+$TUIDEV_TODOS
+EOF
+}
+
+# print_usage SCRIPT COMMAND —SCRIPT's header comment (line 2 to the first
 # line that is not a comment) as its --help: without the `# ` markers or the
 # `# ====` rules, and with `./NAME.sh` shown as COMMAND (`tuidev install`),
 # which works for every install. Run directly from a clone, and not through

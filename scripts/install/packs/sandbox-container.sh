@@ -43,6 +43,7 @@ sandbox_container_install() {
         _sbx_install_fallback_runtime
         if ! rt="$(tuidev_container_runtime)"; then
             print_warning "no container runtime available — install one, then re-run this pack."
+            print_todo "Install a container runtime (container, podman or docker), then: tuidev install --pack sandbox-container"
             return 0
         fi
     fi
@@ -53,7 +54,10 @@ sandbox_container_install() {
     # shellcheck disable=SC2016  # printed for you to run, not expanded here
     local ctl='"$(tuidev home)/scripts/container.sh"'
     run_cmd tuidev_container_up "$rt" \
-        || print_warning "could not start it now (continuing); retry with: $ctl up"
+        || {
+            print_warning "could not start it now (continuing); retry with: $ctl up"
+            print_todo "Start the container runtime: $ctl up"
+        }
 
     print_info "Stop it when idle: $ctl down; start: $ctl up"
     print_info "Force another runtime with TUIDEV_CONTAINER_RUNTIME=container|podman|docker."

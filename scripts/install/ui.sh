@@ -47,6 +47,7 @@ ui_install() {
         if [[ -f "$ghostty_dest" && "$(cksum < "$ghostty_dest")" != "$ghostty_was" ]] \
             && pgrep -xq ghostty 2>/dev/null; then
             print_info "Ghostty's config changed: press Cmd+Shift+, in Ghostty to reload it"
+            print_todo "Reload Ghostty's config: press Cmd+Shift+, in Ghostty"
         fi
     else
         print_warning "Ghostty config missing in repo: $ghostty_src"

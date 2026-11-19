@@ -117,7 +117,10 @@ _tmux_bootstrap_plugins() {
         fi
         print_step "installing tmux plugins (resurrect, continuum)"
         _tmux_tpm_run 120 "$tpm_dir/bin/install_plugins" >/dev/null 2>&1 \
-            || print_warning "tmux plugin install failed (open tmux and press 'prefix + I' to retry)"
+            || {
+                print_warning "tmux plugin install failed (open tmux and press 'prefix + I' to retry)"
+                print_todo "Install the tmux plugins: open tmux and press prefix + I"
+            }
         # Record only the plugin dirs this run created, so uninstall removes
         # ours and never a plugin the user installed themselves.
         for plugin in $new_plugins; do

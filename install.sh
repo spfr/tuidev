@@ -350,6 +350,7 @@ if [[ "$SHELL" != *zsh ]] && command_exists zsh; then
     elif ! command_exists chsh; then
         print_warning "chsh is not installed; set your login shell manually:"
         print_info "    chsh -s $zsh_path"
+        print_todo "Make zsh your login shell: chsh -s $zsh_path"
     elif [[ -f /etc/shells ]] && ! grep -qxF "$zsh_path" /etc/shells; then
         # chsh refuses any shell missing from /etc/shells (common for a
         # brew-installed zsh on Linux).
@@ -357,6 +358,7 @@ if [[ "$SHELL" != *zsh ]] && command_exists zsh; then
         print_info "To switch manually:"
         print_info "    echo '$zsh_path' | sudo tee -a /etc/shells"
         print_info "    chsh -s $zsh_path"
+        print_todo "Make zsh your login shell: echo '$zsh_path' | sudo tee -a /etc/shells, then chsh -s $zsh_path"
     elif [[ "$(id -u)" -eq 0 ]] || [[ -t 0 ]]; then
         # root is never prompted; anyone else needs a terminal to answer PAM.
         print_step "setting default shell to zsh"
@@ -364,11 +366,13 @@ if [[ "$SHELL" != *zsh ]] && command_exists zsh; then
             print_warning "could not change default shell (chsh failed)."
             print_info "Run this yourself when convenient:"
             print_info "    chsh -s $zsh_path"
+            print_todo "Make zsh your login shell: chsh -s $zsh_path"
         fi
     else
         print_info "not changing your login shell: chsh needs a terminal for its password prompt."
         print_info "Run this yourself:"
         print_info "    chsh -s $zsh_path"
+        print_todo "Make zsh your login shell: chsh -s $zsh_path"
     fi
 fi
 
@@ -444,14 +448,23 @@ print_step "Performance check (changes nothing; 'tuidev perf --fix' offers the f
 # ----------------------------------------------------------------------------
 
 print_header "Installation Complete"
-printf '%b\n' "${GREEN}Next steps:${NC}
-  1. Restart your shell:  ${YELLOW}exec zsh -l${NC}
-  2. Agent CLI configs:   ${YELLOW}tuidev install --pack ai-clis${NC}  (Claude Code + Codex, native sandboxes on)
-  3. Run an agent:        ${YELLOW}claude${NC}  or  ${YELLOW}codex${NC}  in a project, next to your editor
-  4. Verify health:       ${YELLOW}tuidev check${NC}   and   ${YELLOW}tuidev perf${NC}  (Spotlight, backups, limits)
-  5. Everything else:     ${YELLOW}tuidev${NC}  lists what you can do; ${YELLOW}tuidev update${NC} gets the next release
-
-${CYAN}Docs:${NC}
+printf '%b\n' "${GREEN}Always:${NC}
+  - Restart your shell:  ${YELLOW}exec zsh -l${NC}
+  - Verify health:       ${YELLOW}tuidev check${NC}   and   ${YELLOW}tuidev perf${NC}  (Spotlight, backups, limits)
+  - Everything else:     ${YELLOW}tuidev${NC}  lists what you can do; ${YELLOW}tuidev update${NC} gets the next release
+"
+# What this run's packs asked of the human (print_todo), then the warnings count.
+case " ${EXTRA_PACKS[*]-} " in
+    *" ai-clis "*) ;;
+    *) print_todo "Install the agent CLI configs (Claude Code + Codex, native sandboxes on): tuidev install --pack ai-clis" ;;
+esac
+print_todos
+if (( TUIDEV_WARNINGS > 0 )); then
+    echo ""
+    print_info "$TUIDEV_WARNINGS warning$( ((TUIDEV_WARNINGS == 1)) || echo s ) above: scroll up, or run \`tuidev check\`"
+fi
+echo ""
+printf '%b\n' "${CYAN}Docs:${NC}
   docs/profiles.md         what each profile and pack installs
   docs/sandboxing.md       native sandboxes, sbx, escape hatches
   docs/remote.md           Tailscale + tmux + mosh workflow
