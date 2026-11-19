@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A sampler of its own, once a minute, with or without the menu bar**: a LaunchAgent on macOS, a systemd user timer on Linux, a 25 ms no-op when the menu just sampled; history, tokens, waits and limits stay current, and auto-reap runs where no menu does. `AGENTS_SAMPLER=0` turns it off. [History](docs/agent-workflows.md#history-and-agents-report)
+- **The memory guard runs on Linux too**, as a systemd user service. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
+- **`agents`, `agents report` and `agents limits` say when no sampler has run**, and how to start one; `agents report` ends with "data as of", and the JSON carries `sampled_at`. [History](docs/agent-workflows.md#history-and-agents-report)
+
 ### Changed
 
 - **The quick start is one path, install to a waiting agent**, and `tuidev check` has a reference: what it probes, what "skipped, already inside a sandbox" means, its exit codes. The roadmap is current as of 19 November 2026; the 3.0 upgrade notes and two FAQ entries are shortened. [Quick start](docs/QUICK_START_GUIDE.md) · [Updating](docs/updating.md#checking-the-install-tuidev-check)
@@ -33,8 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A runner that restarts its runaway worker is stopped, not the worker again and again**: the same script stopped twice within 120 s under the same tool command stops that command, never the agent, and the log says why. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
 - **A hung `top` or `footprint` no longer stalls the memory guard**: each gets 5 s, and `agents mem` says `stalled` when the guard has not looked in three polls. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
 - **`agents mem` inside a sandbox says it can't read the process table**, instead of "not running". [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
-- **The README claims only what ships**: plain Codex can read `~/.ssh` (`sbx` closes it), the cleanup hooks act in auto mode, Linux has no memory-guard service, the Node heap limit is about Node's own default. [Agent workflows](docs/agent-workflows.md#cleanup-hooks-claude-code)
 - **The Codex config and `CLAUDE.md` no longer say the 4 GB Node heap limit stops a runaway**: it pins the limit on every machine; the memory guard stops a runaway. [Agent workflows](docs/agent-workflows.md#ai-clis)
+- **The README claims only what ships**: plain Codex can read `~/.ssh` (`sbx` closes it), the cleanup hooks act in auto mode, the Node heap limit is about Node's own default. [Agent workflows](docs/agent-workflows.md#cleanup-hooks-claude-code)
 
 ## [3.25.0] - 2026-11-18
 

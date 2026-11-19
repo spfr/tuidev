@@ -41,6 +41,10 @@ mkdir -p "$HOME"
 . "$REPO_DIR/bin/agents"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
+# When the data is from and whether a sampler runs, the last lines of the
+# report and limits views, are test_agents_history.sh's: here, the views alone.
+_agents_report_asof() { :; }
+_agents_sampler_say() { :; }
 pass() { echo "PASS: $1"; }
 has_jq() { command -v jq >/dev/null 2>&1; }
 # jqt JSON FILTER WHAT — FILTER must hold for JSON (skipped without jq).

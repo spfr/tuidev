@@ -11,7 +11,8 @@
 #   AGENTS_PRICES; AGENTS_PRICES=off: none), and one session's tokens for
 #   another view (agents_session_tokens).
 # Uses: config.sh, util.sh (_agents_window, _agents_replace),
-#   events.sh (_agents_data_dir), palette.sh (colors), tokens.sh
+#   events.sh (_agents_data_dir), palette.sh (colors), history.sh (when the
+#   newest sample ran: _agents_sample_when, _agents_sampler_say), tokens.sh
 #   (_agents_tokens_raw_since), context.sh (the context view's inventory);
 #   awk/report.awk and its parts (report_fmt, report_runs, report_tokens,
 #   report_denials, report_context, report_waits, report_insights,
@@ -50,7 +51,19 @@ agents_report() {
     esac
     if [[ -z "$since" ]]; then since=24h; [[ "$view" != trends && "$view" != context ]] || since=7d; fi
     _agents_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
-    _agents_report_awk "$view" "$since" "$json"
+    _agents_report_awk "$view" "$since" "$json" || return
+    [[ -n "$json" ]] || _agents_report_asof "$now"
+}
+
+# _agents_report_asof NOW — the text report's last lines: when the newest
+# sample it read ran (sampled_at in the JSON), and whether a sampler runs.
+_agents_report_asof() {
+    _agents_sample_when
+    if [[ -n "$REPLY" ]]; then
+        _agents_sample_at "$REPLY" "$1"
+        printf '\n%sdata as of %s%s\n' "$C_DIM" "$REPLY" "$C_0"
+    fi
+    _agents_sampler_say "$1"
 }
 _agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents|tokens|context|denials|waits] [--since 24h|7d|30d|today] [--json]" >&2; }
 
@@ -58,11 +71,12 @@ _agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|t
 # for the window the caller's _agents_window set; the context view also
 # gets the configured inventory (_agents_context_inventory) on fd 3.
 _agents_report_awk() {
-    local d="$AGENTS_DATA_DIR" inv=""
+    local d="$AGENTS_DATA_DIR" inv="" sampled
     [[ "$1" != context ]] || inv="$(_agents_context_inventory)"
+    _agents_sample_when; sampled="$REPLY"
     W="${AGENTS_WIDTH:-120}" \
     _agents_awk_colored "lib_json lib_sort lib_fmt lib_price lib_waits report_fmt report_runs report_tokens report_denials report_context report_waits report_insights report_views report" -F '\t' \
-        -v view="$1" -v label="$2" -v json="$3" -v start="$start" -v now="$now" -v off="$off" \
+        -v view="$1" -v label="$2" -v json="$3" -v start="$start" -v now="$now" -v off="$off" -v sampled="$sampled" \
         -v pstart="$((start - period))" -v pend="$((now - period))" -v hist="$AGENTS_HISTORY" \
         -v rawb="$(_agents_tokens_raw_since "$now" "$off")" \
         -v hf="$d/history.tsv" -v ef="$d/events.tsv" -v rf="$d/runs.tsv" \

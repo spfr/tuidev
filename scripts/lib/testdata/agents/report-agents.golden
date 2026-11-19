@@ -9,4 +9,6 @@ agents report · agents · last 24h
 LEAKS MOST       Explore 3 (2.1 h)
 DUPLICATES MOST  main 3 (0.33 CPU-h)
 (no agent): commands run in the foreground; only a background task's output or a subagent's worktree names the agent that ran one
+
+data as of 08:59
 [rc=0]

@@ -22,6 +22,7 @@ _AGENTS_CONF_KEYS+=" AGENTS_BAR_SECTIONS AGENTS_BAR_ICON AGENTS_BAR_TOP AGENTS_B
 _AGENTS_CONF_KEYS+=" AGENTS_TOOL_LONG AGENTS_LS_TOOLS AGENTS_WAIT_STUCK"
 _AGENTS_CONF_KEYS+=" AGENTS_LID AGENTS_LID_MAX AGENTS_LID_MIN_BATTERY"
 _AGENTS_CONF_KEYS+=" AGENTS_HISTORY AGENTS_HISTORY_DAYS AGENTS_AUTO_REAP AGENTS_PRICES"
+_AGENTS_CONF_KEYS+=" AGENTS_SAMPLER"
 _AGENTS_CONF_KEYS+=" AGENTS_HOOK_REAP AGENTS_HOOK_LOG AGENTS_STATUSLINE_CMD"
 _AGENTS_CONF_KEYS+=" AGENTS_MEM_GUARD AGENTS_MEM_WARN AGENTS_MEM_KILL AGENTS_MEM_RATE AGENTS_MEM_POLL AGENTS_MEM_IDLE"
 _AGENTS_CONF_KEYS+=" AGENTS_LINK AGENTS_REMOTE_HOSTS AGENTS_GLYPHS AGENTS_HERDR_NAMES AGENTS_HC_MIRROR AGENTS_HC_UP AGENTS_HC_AUTO"
@@ -67,7 +68,7 @@ _agents_conf_valid() {
         AGENTS_MEM_WARN|AGENTS_MEM_RATE|AGENTS_MEM_POLL|AGENTS_MEM_IDLE) [[ "$2" =~ ^[1-9][0-9]{0,4}$ ]] ;;
         AGENTS_MEM_KILL)    [[ "$2" =~ ^[0-9]{1,5}$ ]] ;;
         AGENTS_PRICES)      [[ -z "$2" || "$2" == off || "$2" =~ ^(/|~/)[^[:cntrl:]]+$ ]] ;;
-        AGENTS_HOOK_REAP|AGENTS_HOOK_LOG) [[ "$2" =~ ^[01]?$ ]] ;;
+        AGENTS_HOOK_REAP|AGENTS_HOOK_LOG|AGENTS_SAMPLER) [[ "$2" =~ ^[01]?$ ]] ;;
         AGENTS_STATUSLINE_CMD) [[ -z "$2" || "$2" =~ ^[[:print:]]+$ ]] ;;
         AGENTS_JOB_TEST|AGENTS_JOB_BUILD|AGENTS_JOB_SERVER|AGENTS_JOB_BROWSER|AGENTS_JOB_MCP) _agents_ere_ok "$2" ;;
         AGENTS_LID_MAX)     [[ "$2" =~ ^([0-9]+[smhd])+$ ]] ;;
@@ -174,6 +175,12 @@ AGENTS_AUTO_REAP="${AGENTS_AUTO_REAP:-0}"
 _agents_env_check AGENTS_HISTORY 1
 _agents_env_check AGENTS_HISTORY_DAYS 30
 _agents_env_check AGENTS_AUTO_REAP 0
+# The monitoring pack's sampler (a LaunchAgent on macOS, a systemd user timer
+# on Linux: `agents sample --scheduled` once a minute). 0 makes each of its
+# runs do nothing, without unloading it; the menu and `agents watch` still
+# sample while they run.
+AGENTS_SAMPLER="${AGENTS_SAMPLER:-1}"
+_agents_env_check AGENTS_SAMPLER 1
 # The memory guard (memory.sh; `agents mem guard`, which the monitoring pack
 # runs as a LaunchAgent on macOS): kill (the default) warns about, records and
 # stops a runaway in an agent tree; warn only warns and records; off does

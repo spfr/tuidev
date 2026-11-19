@@ -32,9 +32,13 @@
 # Uses: config.sh, util.sh, snapshot.sh (_agents_herdr, _agents_herdr_panes),
 #   classify.sh, events.sh (the data directory and the events lock), runs.sh (the run
 #   ledger), tokens.sh (_agents_tokens_scan, _agents_tokens_prune), report.sh
-#   (agents_insight_write), triage.sh (_agents_waits_state); awk/sample.awk.
-# Public: agents_sample, _agents_sample_kick, _agents_hist_line,
-#   _agents_prune_file.
+#   (agents_insight_write), triage.sh (_agents_waits_state), bar.sh
+#   (_agents_bar_target: does a menu run auto-reap); awk/sample.awk.
+# Public: agents_sample, agents_sample_scheduled (the pack's sampler, once a
+#   minute), _agents_sample_kick, _agents_hist_line, _agents_prune_file, and
+#   how old the newest sample is (_agents_sample_when, _agents_sample_at,
+#   _agents_sampler_line, _agents_sampler_say: `agents`, `agents report`
+#   and `agents limits` say when no sampler runs).
 
 # agents_sample — take one sample (a no-op with AGENTS_HISTORY=0). One at a
 # time: a second one while the first runs returns at once.
@@ -268,6 +272,95 @@ _agents_sample_kick() {
     _agents_sample_due || return 0
     _agents_detach agents_sample
     return 0
+}
+
+# agents_sample_scheduled — `agents sample --scheduled`: what the monitoring
+# pack's own sampler runs once a minute (the LaunchAgent dev.tuidev.sample on
+# macOS, the systemd user timer tuidev-sample.timer on Linux). Nothing with
+# AGENTS_SAMPLER=0. Otherwise one sample when one is due (_agents_sample_due:
+# none for 55 s), so a sample the menu or `agents watch` took stands and none
+# is taken twice. Then, with AGENTS_AUTO_REAP=1 and no menu to run it
+# (_agents_bar_target: none on Linux), `agents reap --auto --throttle
+# --notify`, as the menu runs it, when a sample saw something under an agent
+# (sample.state; with AGENTS_HISTORY=0 nothing says, and it runs): its
+# throttle keeps it to once a minute, whoever starts it. The no-op loads four
+# modules (bin/agents' fast path); the sample and the reap are whole runs of
+# agents of their own.
+agents_sample_scheduled() {
+    [[ "$AGENTS_SAMPLER" != 0 ]] || return 0
+    local now rc=0
+    _agents_now now
+    if _agents_sample_due "$now"; then
+        "${BASH:-bash}" "$AGENTS_PATH" sample >/dev/null || rc=$?
+    fi
+    [[ "$AGENTS_AUTO_REAP" == 1 ]] || return "$rc"
+    ! _agents_bar_target "$now" || return "$rc"
+    if [[ "$AGENTS_HISTORY" == 1 ]]; then
+        grep -q $'\t1$' "$AGENTS_DATA_DIR/sample.state" 2>/dev/null || return "$rc"
+    fi
+    "${BASH:-bash}" "$AGENTS_PATH" reap --auto --throttle --notify >/dev/null || rc=$?
+    return "$rc"
+}
+
+# _AGENTS_SAMPLE_STALE — seconds after which the newest sample says no
+# sampler runs: the scheduled one samples every minute, and the menu, idle,
+# skips its samples for up to 5 minutes.
+_AGENTS_SAMPLE_STALE=600
+
+# _agents_sample_when — REPLY: the epoch of the newest sample (sample.stamp,
+# written as each one starts), empty when none ran or history is off.
+_agents_sample_when() {
+    REPLY=""
+    [[ "$AGENTS_HISTORY" == 1 && -r "$AGENTS_DATA_DIR/sample.stamp" ]] || return 0
+    read -r REPLY < "$AGENTS_DATA_DIR/sample.stamp" 2>/dev/null
+    [[ "$REPLY" =~ ^[0-9]+$ ]] || REPLY=""
+}
+
+# _agents_sample_at EPOCH NOW — REPLY: EPOCH as HH:MM, with the date in
+# front when it is not NOW's day.
+_agents_sample_at() {
+    local d1 d2
+    _agents_strftime d1 %Y-%m-%d "$1"
+    _agents_strftime d2 %Y-%m-%d "$2"
+    if [[ "$d1" == "$d2" ]]; then _agents_strftime REPLY %H:%M "$1"; else _agents_strftime REPLY '%b %d %H:%M' "$1"; fi
+}
+
+# _agents_sampler_line NOW — REPLY: one line when the newest sample is older
+# than _AGENTS_SAMPLE_STALE, or none ran: since when, and what starts a
+# sampler on this machine. Empty while samples are current, and with
+# AGENTS_HISTORY=0 (nothing samples then, by choice). File tests only.
+_agents_sampler_line() {
+    local t fix units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    _agents_sample_when; t="$REPLY"; REPLY=""
+    [[ "$AGENTS_HISTORY" == 1 ]] || return 0
+    [[ -z "$t" || $(( $1 - t )) -ge $_AGENTS_SAMPLE_STALE ]] || return 0
+    if [[ "$AGENTS_SAMPLER" == 0 ]]; then
+        fix="AGENTS_SAMPLER=0 in agents.conf; agents watch samples while it runs"
+    elif [[ "${OSTYPE:-}" != darwin* && -f "$units/tuidev-sample.timer" ]]; then
+        fix="systemctl --user enable --now tuidev-sample.timer starts one"
+    else
+        fix="tuidev install --pack monitoring starts one"
+    fi
+    if [[ -z "$t" ]]; then REPLY="no sampler has run yet: $fix"; return 0; fi
+    _agents_sample_at "$t" "$1"
+    REPLY="no sampler has run since $REPLY: $fix"
+}
+
+# _agents_sampler_say NOW — print _agents_sampler_line's line, dimmed, if
+# any, folded at the words to AGENTS_WIDTH (80 at most, as the views).
+_agents_sampler_say() {
+    local w="${AGENTS_WIDTH:-80}" out="" word words
+    _agents_sampler_line "$1"
+    [[ -n "$REPLY" ]] || return 0
+    [[ "$w" =~ ^[0-9]+$ && $w -le 80 ]] || w=80
+    [[ $w -ge 24 ]] || w=24
+    read -r -a words <<<"$REPLY"
+    for word in "${words[@]}"; do
+        if [[ -z "$out" ]]; then out="$word"
+        elif [[ $(( ${#out} + 1 + ${#word} )) -le $w ]]; then out+=" $word"
+        else printf '%s%s%s\n' "$C_DIM" "$out" "$C_0"; out="  $word"; fi
+    done
+    printf '%s%s%s\n' "$C_DIM" "$out" "$C_0"
 }
 
 # _agents_hist_line — the menu's history line, from small files only:

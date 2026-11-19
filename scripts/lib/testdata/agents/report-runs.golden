@@ -16,4 +16,6 @@ SLOWEST TESTS AND BUILDS (by median)
   app                  go           test       10   5m30s   9m00s  10m00s
   api                  make         build       5   5m00s   8m20s   8m20s
   shop                 pytest       test        5   3m20s   3m20s   3m20s
+
+data as of 08:59
 [rc=0]

@@ -546,7 +546,7 @@ rc=0; agents_report --since 3x 2>/dev/null || rc=$?
 [[ $rc == 2 ]] || fail "bad --since accepted"
 rc=0; agents_report --bogus 2>/dev/null || rc=$?
 [[ $rc == 2 ]] || fail "unknown report option accepted"
-[[ "$(AGENTS_DATA_DIR="$tmp/empty" agents_report)" == *"no history yet; it starts within a minute of the menu running"* ]] || fail "report without history"
+[[ "$(AGENTS_DATA_DIR="$tmp/empty" agents_report)" == *"no history yet; it starts with the first sample, once a minute"* ]] || fail "report without history"
 pass "report: --since today, bad options refused, a friendly line without history"
 
 # 6. The menu's Today row and where the CPU goes, from a fixture `agents tsv`.
@@ -600,7 +600,103 @@ menu="$(AGENTS_BIN="$tmp/agents-stub" bash "$REPO_DIR/configs/swiftbar/agents.10
 [[ "$menu" != *"Where the CPU goes"* ]] || fail "Today shown although AGENTS_BAR_SECTIONS leaves it out"
 pass "menu: no Today row without jobs or history; AGENTS_BAR_SECTIONS can leave it out"
 
-# 7. Live smoke test: one real sample into a temp dir, where ps works.
+# 7. The pack's sampler (`agents sample --scheduled`): a sample only when
+# one is due, nothing with AGENTS_SAMPLER=0, and auto-reap where no menu
+# runs it. The sample and the reap are runs of agents of their own: a stand-in
+# at AGENTS_PATH logs them.
+sd="$tmp/sched"; mkdir -p "$sd"
+cat > "$tmp/fake-agents" <<'EOF'
+#!/bin/sh
+echo "$*" >> "$SCHED_LOG"
+EOF
+chmod +x "$tmp/fake-agents"
+export SCHED_LOG="$tmp/sched.log"
+# sched [VAR=VALUE...] — agents_sample_scheduled at FAKE_NOW in a subshell,
+# with the settings given; what it started lands in $SCHED_LOG, its status in $rc.
+sched() {
+    : > "$SCHED_LOG"; rc=0
+    ( for kv in "$@"; do export "${kv?}"; done
+      AGENTS_PATH="$tmp/fake-agents" AGENTS_DATA_DIR="$sd" AGENTS_RUN_DIR="$sd/run" AGENTS_NOW="$FAKE_NOW"
+      agents_sample_scheduled ) || rc=$?
+}
+calls() { tr '\n' '|' < "$SCHED_LOG"; }
+echo $((FAKE_NOW - 10)) > "$sd/sample.stamp"
+sched; [[ $rc -eq 0 && -z "$(calls)" ]] || fail "a sample 10 s old: nothing to do, got rc $rc, $(calls)"
+echo $((FAKE_NOW - 60)) > "$sd/sample.stamp"
+sched; [[ "$(calls)" == "sample|" ]] || fail "a sample 60 s old: one sample, got $(calls)"
+rm -f "$sd/sample.stamp"
+sched; [[ "$(calls)" == "sample|" ]] || fail "no sample yet: one sample, got $(calls)"
+sched AGENTS_SAMPLER=0; [[ $rc -eq 0 && -z "$(calls)" ]] || fail "AGENTS_SAMPLER=0 still ran: $(calls)"
+sched AGENTS_HISTORY=0; [[ -z "$(calls)" ]] || fail "AGENTS_HISTORY=0 still sampled: $(calls)"
+pass "sample --scheduled: a sample only when none ran for 55 s (or ever); nothing with AGENTS_SAMPLER=0 or AGENTS_HISTORY=0"
+
+# Auto-reap, as the menu starts it, where no menu runs and a sample saw
+# something under an agent (sample.state); its throttle is reap's own.
+echo $((FAKE_NOW - 10)) > "$sd/sample.stamp"
+printf '%s\n101@x\t1\t1\n' "$FAKE_NOW" > "$sd/sample.state"
+sched AGENTS_AUTO_REAP=1; [[ "$(calls)" == "reap --auto --throttle --notify|" ]] || fail "auto-reap with no menu: $(calls)"
+sched AGENTS_AUTO_REAP=0; [[ -z "$(calls)" ]] || fail "auto-reap off still reaped: $(calls)"
+( _agents_bar_target() { return 0; }; sched AGENTS_AUTO_REAP=1; [[ -z "$(calls)" ]] ) || fail "auto-reap ran beside a menu that runs it: $(calls)"
+printf '%s\n102@y\t3\t0\n' "$FAKE_NOW" > "$sd/sample.state"
+sched AGENTS_AUTO_REAP=1; [[ -z "$(calls)" ]] || fail "auto-reap with nothing seen under an agent: $(calls)"
+sched AGENTS_AUTO_REAP=1 AGENTS_HISTORY=0; [[ "$(calls)" == "reap --auto --throttle --notify|" ]] || fail "auto-reap with history off (nothing says): $(calls)"
+echo $((FAKE_NOW - 60)) > "$sd/sample.stamp"; printf '%s\n101@x\t1\t1\n' "$FAKE_NOW" > "$sd/sample.state"
+sched AGENTS_AUTO_REAP=1; [[ "$(calls)" == "sample|reap --auto --throttle --notify|" ]] || fail "a due sample, then auto-reap: $(calls)"
+pass "sample --scheduled: auto-reap (AGENTS_AUTO_REAP=1) after the sample, unless a menu runs it or no sample saw anything under an agent"
+
+# The real command: the fast path's no-op writes nothing and prints nothing;
+# a bad option is refused.
+nd="$tmp/sched-real"; mkdir -p "$nd"; command date +%s > "$nd/sample.stamp"   # the real clock: a real run
+out="$(AGENTS_DATA_DIR="$nd" AGENTS_RUN_DIR="$nd/run" bash "$REPO_DIR/bin/agents" sample --scheduled 2>&1)" || fail "sample --scheduled failed: $out"
+[[ -z "$out" && "$(ls "$nd")" == sample.stamp ]] || fail "the no-op printed or wrote: $out / $(ls "$nd")"
+rc=0; out="$(AGENTS_DATA_DIR="$nd" bash "$REPO_DIR/bin/agents" sample --bogus 2>&1)" || rc=$?
+[[ $rc -eq 2 && "$out" == "usage: agents sample [--scheduled]" ]] || fail "sample --bogus: rc $rc, $out"
+pass "agents sample --scheduled: a no-op writes and prints nothing; a bad option is refused"
+
+# 8. How old the newest sample is: one dim line in agents, report and
+# limits once it is 10 minutes old (or none ran), with what starts a
+# sampler here; nothing while it is fresh or with history off.
+noon=$((FAKE_NOW + 43200))
+line() { ( for kv in "$@"; do export "${kv?}"; done; AGENTS_DATA_DIR="$sd" TZ=UTC _agents_sampler_line "$noon"; printf '%s' "$REPLY" ); }
+echo $((noon - 30)) > "$sd/sample.stamp"
+[[ -z "$(line)" ]] || fail "a fresh sample: $(line)"
+echo $((noon - 700)) > "$sd/sample.stamp"
+[[ "$(line OSTYPE=darwin25)" == "no sampler has run since 11:48: tuidev install --pack monitoring starts one" ]] || fail "stale on macOS: $(line OSTYPE=darwin25)"
+[[ "$(line OSTYPE=linux-gnu)" == "no sampler has run since 11:48: tuidev install --pack monitoring starts one" ]] || fail "stale on Linux, no timer: $(line OSTYPE=linux-gnu)"
+mkdir -p "$tmp/xdg/systemd/user"; : > "$tmp/xdg/systemd/user/tuidev-sample.timer"
+[[ "$(line OSTYPE=linux-gnu XDG_CONFIG_HOME="$tmp/xdg")" == "no sampler has run since 11:48: systemctl --user enable --now tuidev-sample.timer starts one" ]] \
+    || fail "stale on Linux with the timer installed: $(line OSTYPE=linux-gnu XDG_CONFIG_HOME="$tmp/xdg")"
+[[ "$(line AGENTS_SAMPLER=0)" == "no sampler has run since 11:48: AGENTS_SAMPLER=0 in agents.conf; agents watch samples while it runs" ]] || fail "stale, sampler off: $(line AGENTS_SAMPLER=0)"
+[[ "$(line OSTYPE=linux-gnu)" != *menu* && "$(line AGENTS_SAMPLER=0)" != *menu* ]] || fail "the line names a menu"
+echo $((noon - 2 * 86400)) > "$sd/sample.stamp"
+[[ "$(line)" == "no sampler has run since Oct 12 12:00: "* ]] || fail "stale since another day: $(line)"
+rm -f "$sd/sample.stamp"
+[[ "$(line)" == "no sampler has run yet: tuidev install --pack monitoring starts one" ]] || fail "never sampled: $(line)"
+[[ -z "$(line AGENTS_HISTORY=0)" ]] || fail "history off still says: $(line AGENTS_HISTORY=0)"
+out="$(AGENTS_DATA_DIR="$sd" AGENTS_WIDTH=44 AGENTS_SAMPLER=0 _agents_sampler_say "$noon")"
+[[ "$(printf '%s\n' "$out" | awk 'length > 44' | wc -l | tr -d ' ')" == 0 && "$out" == *$'\n  '* ]] || fail "folded to 44 columns: $out"
+pass "the sampler line: none while fresh or with history off; stale and never, with the fix for this platform and setting, never a menu; folded to the width"
+
+# The views: agents report ends with when its data is from, and the JSON of
+# report and limits carries sampled_at (null when no sample ran).
+echo $((FAKE_NOW - 30)) > "$sd/sample.stamp"
+out="$(AGENTS_DATA_DIR="$sd" TZ=UTC agents_report)"
+[[ "$out" == *$'\n'"data as of Oct 13 23:59" && "$out" != *"no sampler"* ]] || fail "report, fresh: $out"
+[[ "$(AGENTS_DATA_DIR="$sd" agents_report --json)" == *'"sampled_at":'$((FAKE_NOW - 30))','* ]] || fail "report json sampled_at: $(AGENTS_DATA_DIR="$sd" agents_report --json)"
+[[ "$(AGENTS_DATA_DIR="$sd" agents_report --view runs --json)" == *'"sampled_at":'$((FAKE_NOW - 30))* ]] || fail "report view json sampled_at"
+[[ "$(AGENTS_DATA_DIR="$sd" agents_limits --json)" == *'"sampled_at":'$((FAKE_NOW - 30))','* ]] || fail "limits json sampled_at: $(AGENTS_DATA_DIR="$sd" agents_limits --json)"
+echo $((FAKE_NOW - 3600)) > "$sd/sample.stamp"
+out="$(AGENTS_DATA_DIR="$sd" TZ=UTC agents_report)"
+[[ "$out" == *$'\n'"data as of Oct 13 23:00"$'\n'"no sampler has run since Oct 13 23:00: "* ]] || fail "report, stale: $out"
+[[ "$(AGENTS_DATA_DIR="$sd" agents_limits)" == *"no sampler has run since "* ]] || fail "limits, stale: $(AGENTS_DATA_DIR="$sd" agents_limits)"
+rm -f "$sd/sample.stamp"
+[[ "$(AGENTS_DATA_DIR="$sd" agents_report --json)" == *'"sampled_at":null,'* ]] || fail "report json without a sample"
+[[ "$(AGENTS_DATA_DIR="$sd" agents_limits --json)" == *'"sampled_at":null,'* ]] || fail "limits json without a sample"
+[[ "$(AGENTS_DATA_DIR="$sd" agents_limits --json)" != *"no sampler"* ]] || fail "limits json printed the text line"
+pass "report: data as of HH:MM, and the stale line; report and limits JSON: sampled_at (null without a sample), no text line"
+
+# 9. Live smoke test, last (it drops the stubs): one real sample into a temp
+# dir, where ps works.
 unset -f agents_snapshot _agents_keep_pids _agents_cwds date
 if ps -o lstart= -p $$ >/dev/null 2>&1; then
     AGENTS_DATA_DIR="$tmp/live" bash "$REPO_DIR/bin/agents" sample || fail "live agents sample failed"

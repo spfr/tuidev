@@ -4,7 +4,8 @@
 # `agents limits` (mode view) and its --json (mode json). Needs lib_fmt
 # (age, dayhm, gauge) and lib_json (js, opt).
 #
-# Variables: mode; lf (limits.tsv), now, off (the UTC offset); in mode tsv
+# Variables: mode; lf (limits.tsv), now, off (the UTC offset); sampled (the
+# newest sample's epoch, empty for none: the JSON's sampled_at); in mode tsv
 # also df (denials.tsv), cf (compacts.tsv) and mid (local midnight); in mode
 # view hist (AGENTS_HISTORY), and the colors in the environment.
 #
@@ -218,7 +219,7 @@ function view(   i, x, w, s, rt, any, cl, c, rd, cells, width, lab, tag, g) {
 }
 
 function json(   i, x, o) {
-    o = "{\"schema_version\":1,\"now\":" now ",\"limits\":["
+    o = "{\"schema_version\":1,\"now\":" now ",\"sampled_at\":" (sampled ~ /^[0-9]+$/ ? sampled : "null") ",\"limits\":["
     for (x = 1; x <= N; x++) {
         i = O[x]
         pace(i)

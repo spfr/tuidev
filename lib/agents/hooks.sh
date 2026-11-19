@@ -264,8 +264,10 @@ _agents_hook_log() {
 # PermissionRequest's command starts agents only when a wait could open.
 
 # _AGENTS_WAIT_FRESH — a wait is recorded only when a sample ran within this
-# many seconds: without the menu (or a cron `agents sample`) nothing would
-# credit it, or ever remove its file.
+# many seconds: with no sampler running (the pack's, the menu's, `agents
+# watch`'s) nothing would credit it, or ever remove its file. The shipped
+# PermissionRequest hook tests the same in sh before it starts agents, and
+# `agents` says when no sampler has run for a while (_agents_sampler_line).
 _AGENTS_WAIT_FRESH=3600
 
 # _agents_hook_sid_ok ID — a session_id fit to name a file.
@@ -303,7 +305,7 @@ _agents_hook_wait_start() {
     fi
     now="$(date +%s)"
     _agents_stamp_age age "$dir/sample.stamp" "$now"
-    [[ $age -lt $_AGENTS_WAIT_FRESH ]] || { _agents_hook_say "no agents sample within the hour (is the menu running?): nothing would count it"; return 0; }
+    [[ $age -lt $_AGENTS_WAIT_FRESH ]] || { _agents_hook_say "no agents sample within the hour (no sampler runs: see agents): nothing would count it"; return 0; }
     IFS=$'\t' read -r tok _r <<<"$(agents_root_of "$AGENTS_SELF" 2>/dev/null)"
     _agents_token "$tok" || { _agents_hook_say "not running under an agent session"; return 0; }
     [[ -n "$cwd" && "$cwd" != - ]] || cwd="$PWD"

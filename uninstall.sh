@@ -274,34 +274,48 @@ else
         [[ -f "$f" ]] && cmp -s "$f" "$SCRIPT_DIR/configs/swiftbar/agents.10s.sh" && _remove_swiftbar_plugin "$f"
     done
 fi
-# The memory guard's, the link watcher's and herdr-core's LaunchAgents only run `agents`
-# too: unloaded and removed with it, or launchd would retry a missing command
-# at every login.
-for agent_label in dev.tuidev.memguard dev.tuidev.link dev.tuidev.hc; do
+# The sampler's, the memory guard's, the link watcher's and herdr-core's
+# LaunchAgents only run `agents` too: unloaded and removed with it, or
+# launchd would retry a missing command at every login. (test_contract.sh
+# fails until each configs/agents/*.plist is named here.)
+for agent_label in dev.tuidev.sample dev.tuidev.memguard dev.tuidev.link dev.tuidev.hc; do
     agent_plist="$HOME/Library/LaunchAgents/$agent_label.plist"
     if [[ ! -f "$agent_plist" ]] || ! grep -q 'agents' "$agent_plist" 2>/dev/null; then continue; fi
     run_cmd launchctl bootout "gui/$(id -u)/$agent_label" 2>/dev/null || true
     run_cmd rm -f "$agent_plist"
     done_msg "removed $agent_plist"
 done
-# herdr-core's systemd user timer and service (Linux) run `agents` the same
-# way. Only the timer is stopped: the core runs in a unit of its own and
-# stays up, as on macOS.
-hc_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-if [[ -f "$hc_unit_dir/tuidev-hc.timer" || -f "$hc_unit_dir/tuidev-hc.service" ]]; then
+# The systemd user units (Linux) run `agents` the same way: the sampler's
+# timer and service, the memory guard's service and herdr-core's timer and
+# service. What is enabled is disabled and stopped: a timer (its service is a
+# one-shot run), the guard's service. herdr-core's service is never stopped:
+# the core runs in a unit of its own and stays up, as on macOS.
+# (test_contract.sh fails until each configs/agents/*.timer and *.service is
+# named here.)
+unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+units_gone=false
+for unit in tuidev-sample.timer tuidev-memguard.service tuidev-hc.timer; do
+    case "$unit" in
+        *.timer) unit_files="$unit ${unit%.timer}.service" unit_wants=timers.target.wants ;;
+        *)       unit_files="$unit" unit_wants=default.target.wants ;;
+    esac
+    unit_any=false
+    for f in $unit_files; do [[ ! -f "$unit_dir/$f" ]] || unit_any=true; done
+    $unit_any || continue
     if command -v systemctl >/dev/null 2>&1; then
-        run_cmd systemctl --user disable --now tuidev-hc.timer 2>/dev/null || true
+        run_cmd systemctl --user disable --now "$unit" 2>/dev/null || true
     fi
     # Without a user bus (a root shell) the disable did nothing: its link goes too.
-    [[ ! -L "$hc_unit_dir/timers.target.wants/tuidev-hc.timer" ]] || run_cmd rm -f "$hc_unit_dir/timers.target.wants/tuidev-hc.timer"
-    for hc_unit in tuidev-hc.timer tuidev-hc.service; do
-        grep -q 'tuidev' "$hc_unit_dir/$hc_unit" 2>/dev/null || continue
-        run_cmd rm -f "$hc_unit_dir/$hc_unit"
-        done_msg "removed $hc_unit_dir/$hc_unit"
+    [[ ! -L "$unit_dir/$unit_wants/$unit" ]] || run_cmd rm -f "$unit_dir/$unit_wants/$unit"
+    for f in $unit_files; do
+        grep -q 'tuidev' "$unit_dir/$f" 2>/dev/null || continue
+        run_cmd rm -f "$unit_dir/$f"
+        done_msg "removed $unit_dir/$f"
     done
-    if command -v systemctl >/dev/null 2>&1; then
-        run_cmd systemctl --user daemon-reload 2>/dev/null || true
-    fi
+    units_gone=true
+done
+if $units_gone && command -v systemctl >/dev/null 2>&1; then
+    run_cmd systemctl --user daemon-reload 2>/dev/null || true
 fi
 # Unset SwiftBar's plugin folder only if it is still ours and now empty.
 if is_macos && [[ "$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null)" == "$swiftbar_dir" ]] \

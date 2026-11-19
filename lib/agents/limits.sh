@@ -32,7 +32,8 @@
 #
 # Uses: config.sh, util.sh (_agents_awk, _agents_lock, _agents_replace,
 #   _agents_timeout, _agents_window, _agents_now), events.sh
-#   (_agents_data_dir); awk/limits.awk.
+#   (_agents_data_dir), history.sh (_agents_sample_when, _agents_sampler_say);
+#   awk/limits.awk.
 # Public: agents_limits, _agents_limits_put, _agents_limits_prune,
 #   _agents_limits_probe, _agents_limits_lines.
 
@@ -52,8 +53,11 @@ agents_limits() {
     esac
     _agents_now now
     _agents_window today "$now" || return 1
+    _agents_sample_when
     W="${AGENTS_WIDTH:-120}" _agents_awk_colored "lib_fmt lib_json limits" -v mode="$mode" -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$now" -v off="$off" \
-        -v hist="$AGENTS_HISTORY" </dev/null
+        -v hist="$AGENTS_HISTORY" -v sampled="$REPLY" </dev/null || return
+    # Codex's readings and Antigravity's come from the samples: say when none run.
+    [[ "$mode" == json ]] || _agents_sampler_say "$now"
 }
 
 # _agents_limits_lines — agents tsv's usage records, from the state files

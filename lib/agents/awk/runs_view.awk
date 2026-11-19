@@ -31,7 +31,7 @@ END {
     }
     if (n == 0) {
         if (!have && hist != 1) print "history is off (AGENTS_HISTORY=0): no runs are recorded"
-        else if (!have) print "no runs recorded yet: they start within a minute or two of the menu running (or a cron'd agents sample)"
+        else if (!have) print "no runs recorded yet: they start within a minute or two of the first sample"
         else printf "no runs ended %s\n", win
         exit
     }

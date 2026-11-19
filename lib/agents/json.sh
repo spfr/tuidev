@@ -2,11 +2,12 @@
 # lib/agents/json.sh — `agents json`.
 #
 # Uses: config.sh, awake.sh (_agents_awake_now), system.sh, lid.sh
-#   (agents_lid_state); awk/json.awk.
+#   (agents_lid_state), history.sh (_agents_sample_when); awk/json.awk.
 # Public: agents_json.
 
 # agents_json < RECORDS — {schema_version, agents (each with its activity),
-# stale, hogs, top, system, awake, thermal, powermode}. The schema is a
+# stale, hogs, top, system, awake, thermal, powermode, sampled_at (the
+# newest sample's epoch, null when none ran: history.sh)}. The schema is a
 # contract (docs/agent-workflows.md): add fields freely, bump schema_version
 # for anything that removes or changes one.
 agents_json() {
@@ -14,7 +15,8 @@ agents_json() {
     state="$(_agents_awake_now)" && read -r pid mode until _ <<<"$state"
     lvl="$(agents_thermal_level)"
     sys="$(agents_system)"
-    AW_PID="$pid" AW_MODE="$mode" AW_UNTIL="$until" TH="${lvl:-}" TH_NAME="$(agents_thermal_name "${lvl:--}")" \
+    _agents_sample_when
+    SAMPLED="$REPLY" AW_PID="$pid" AW_MODE="$mode" AW_UNTIL="$until" TH="${lvl:-}" TH_NAME="$(agents_thermal_name "${lvl:--}")" \
     PM="$(agents_powermode)" SYS="$sys" NOW="$(date +%s)" LID="$(_agents_lid_json)" _agents_awk "lib_json json" -F '\t'
 }
 

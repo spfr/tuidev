@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The sampler (`agents sample --scheduled`), installed by ./install.sh --pack
+  monitoring into ~/Library/LaunchAgents: once a minute, the sample that
+  keeps the history, tokens, runs, waits and usage limits current whether or
+  not the menu bar runs. A sample the menu or `agents watch` took within 55 s
+  stands (the run then does nothing: about 25 ms), and with
+  AGENTS_AUTO_REAP=1 it runs auto-reap where no menu does. Off:
+  AGENTS_SAMPLER=0 in ~/.config/agents.conf (no unload needed). The pack
+  fills in the @...@ values.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.tuidev.sample</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>@AGENTS@</string>
+        <string>sample</string>
+        <string>--scheduled</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>@PATH@</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <!-- Not KeepAlive: each run takes one sample and exits. -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>@LOG@</string>
+</dict>
+</plist>
