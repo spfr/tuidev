@@ -36,7 +36,7 @@ AGENTS_MEM_LABEL="dev.tuidev.memguard"
 # takes well under a second; one that hangs (a wedged sampler under heavy
 # memory pressure) is cut off, and the guard goes on with the readings it has
 # (_agents_mem_fp fails with 124) instead of stalling. Two of them in a look
-# still fit in three polls, the age at which `agents mem` calls it stalled.
+# are allowed for in the age at which `agents mem` calls it stalled.
 _AGENTS_MEM_PROBE_WAIT=5
 
 # _agents_mem_top ARGS... — macOS top, one sample, at most
@@ -502,7 +502,7 @@ _agents_mem_respawned() {
     local e t w p hit=""
     while IFS=$'\t' read -r e t w p; do
         [[ "$e" =~ ^[0-9]+$ && "$t" == "$1" && "$w" == "$2" ]] || continue
-        [[ $e -le $3 && $(($3 - e)) -le $_AGENTS_MEM_RESPAWN ]] && hit="$e $p"
+        [[ $e -lt $3 && $(($3 - e)) -le $_AGENTS_MEM_RESPAWN ]] && hit="$e $p"
     done <<<"${_AGENTS_MEM_STOPS:-}"
     [[ -n "$hit" ]] && REPLY="$hit"
 }
@@ -572,7 +572,7 @@ _agents_mem_guard_state() {
         read -r at next _ <<<"$b"
         [[ "$next" =~ ^[0-9]+$ && $next -ge $AGENTS_MEM_POLL ]] || next="$AGENTS_MEM_POLL"
         _agents_now now
-        if [[ "$at" =~ ^[0-9]+$ && $((now - at)) -gt $((3 * next)) ]]; then echo "stalled $pid $((now - at))"; else echo "on $pid"; fi
+        if [[ "$at" =~ ^[0-9]+$ && $((now - at)) -gt $((3 * next + 2 * _AGENTS_MEM_PROBE_WAIT + ${AGENTS_GRACE:-3})) ]]; then echo "stalled $pid $((now - at))"; else echo "on $pid"; fi
         return
     fi
     # The holder lives but ps can't say whose it is, or ps reads nothing.

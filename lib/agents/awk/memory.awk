@@ -69,6 +69,9 @@ END {
             q = p; d = 0
             while ((pp[q] in pp) && agent_kind(av[pp[q]]) == "" && d++ < 64) q = pp[q]
             if ((pp[q] in pp) && agent_kind(av[pp[q]]) != "") tool = q
+            # Never a shell someone types in, nor a supervisor: the guard
+            # then stops the process's own tree again.
+            if (tool != "" && (interactive_shell(av[tool]) || supervisor(av[tool]))) tool = ""
         }
         printf "%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p, st[p], rss[p], uid[p], printable(pname(av[p])), label(av[p]), \
             (top == "" ? "-" : top), (top == "" ? "-" : agent_kind(av[top])), \

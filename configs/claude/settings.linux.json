@@ -68,7 +68,7 @@
       "Read(~/.config/doctl/**)",
       "Read(~/.config/hcloud/**)",
       "Read(~/.config/stripe/**)",
-      "Read(~/.fly/**)",
+      "Read(~/.fly/config.yml)",
       "Read(~/.supabase/**)",
       "Read(~/.oci/**)",
       "Read(~/.pulumi/credentials.json)",

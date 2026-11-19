@@ -47,7 +47,7 @@ A probe is required or optional. A failed required probe counts toward the exit 
 
 | Group | What it probes | Required in |
 |-------|----------------|-------------|
-| Core | every core tool on `PATH`, `compaudit` clean for zsh, `secret` and `tuidev` on `PATH`, no token-looking exports in shell startup files | every profile (on Linux without Homebrew, tools the distro doesn't package are optional) |
+| Core | every core tool on `PATH`, `compaudit` clean for zsh; optional, never a failure: `secret` and `tuidev` on `PATH`, and a warning for token-looking exports in shell startup files | every profile (on Linux without Homebrew, tools the distro doesn't package are optional) |
 | Remote | `tailscale` and `mosh` | `remote` |
 | Sandbox (macOS) | `sandbox-exec` runs, the strict profile and `sbx` are in place | `desktop`, `full`, `remote` |
 | UI (macOS) | Ghostty, its config and the GUI apps | `desktop`, `full` |

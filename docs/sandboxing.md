@@ -138,7 +138,7 @@ Reads and writes are both denied:
 ~/.config/containers/auth.json (podman)  ~/.gem/credentials
 ~/.yarnrc.yml (Yarn 2+)  ~/.composer/auth.json  ~/.config/composer/auth.json
 ~/.config/glab-cli  ~/.config/rclone  ~/.config/sops  ~/.config/doctl  ~/.config/hcloud
-~/.config/stripe  ~/.fly  ~/.supabase  ~/.oci  ~/.pulumi/credentials.json
+~/.config/stripe  ~/.fly/config.yml  ~/.supabase  ~/.oci  ~/.pulumi/credentials.json
 ~/.cache/huggingface/token  ~/.cache/huggingface/stored_tokens  ~/.sentryclirc
 ~/.terraformrc  ~/.databrickscfg  ~/.boto  ~/.s3cfg
 ~/.local/share/keyrings (GNOME Keyring)  ~/.config/zsh/secrets.zsh (see secrets.md)

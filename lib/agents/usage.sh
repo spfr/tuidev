@@ -34,7 +34,7 @@ LOOK
                                (-n: what it would do)
   agents mem guard             the guard's loop, every AGENTS_MEM_POLL (${AGENTS_MEM_POLL}s) while
                                something needs watching, else AGENTS_MEM_IDLE (${AGENTS_MEM_IDLE}s): warns
-                               about a process past AGENTS_MEM_WARN (${AGENTS_MEM_WARN} GB), and at each
+                               about a process past AGENTS_MEM_WARN (${AGENTS_MEM_WARN} GB, or 60% of the stop size), at each
                                doubling, or growing faster than AGENTS_MEM_RATE (${AGENTS_MEM_RATE} MB/s);
                                stops one in an agent tree past AGENTS_MEM_KILL (0:
                                half the RAM), or the largest past the warning while

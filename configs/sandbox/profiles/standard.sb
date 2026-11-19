@@ -273,7 +273,7 @@
   (subpath (string-append (param "HOME_DIR") "/.config/doctl"))
   (subpath (string-append (param "HOME_DIR") "/.config/hcloud"))
   (subpath (string-append (param "HOME_DIR") "/.config/stripe"))
-  (subpath (string-append (param "HOME_DIR") "/.fly"))
+  (literal (string-append (param "HOME_DIR") "/.fly/config.yml"))
   (subpath (string-append (param "HOME_DIR") "/.supabase"))
   (subpath (string-append (param "HOME_DIR") "/.oci"))
   (literal (string-append (param "HOME_DIR") "/.pulumi/credentials.json"))

@@ -165,7 +165,7 @@ _monitoring_launchagent() {
 MONITORING_MEMGUARD_LABEL="dev.tuidev.memguard"
 _monitoring_memguard() {
     _monitoring_launchagent "$MONITORING_MEMGUARD_LABEL" tuidev-memguard "the memory guard" "agents mem restart"
-    print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM; 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
+    print_info "memory guard: warns past 8 GB (sooner on 16 GB or less), stops a runaway in an agent tree past half the RAM; 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
 }
 
 # The sampler: `agents sample --scheduled` once a minute, so the history,
@@ -235,7 +235,7 @@ _monitoring_linux_units() {
     { run_cmd systemctl --user enable "$m" && run_cmd systemctl --user restart "$m"; } \
         || print_warning "the memory guard did not start: systemctl --user enable --now $m (continuing)"
     print_info "sampler: agents sample once a minute ($s.timer); AGENTS_SAMPLER=0 in $MONITORING_CONF turns it off."
-    print_info "memory guard: warns past 8 GB, stops a runaway in an agent tree past half the RAM ($m); 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
+    print_info "memory guard: warns past 8 GB (sooner on 16 GB or less), stops a runaway in an agent tree past half the RAM ($m); 'agents mem' shows it, AGENTS_MEM_* in $MONITORING_CONF tune it."
     _monitoring_linger_hint "the sampler and the memory guard"
 }
 

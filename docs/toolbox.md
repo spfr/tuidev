@@ -190,5 +190,5 @@ What differs by system:
 | Sandbox | Seatbelt: the CLIs' own, and `sbx` | The CLIs' own (bubblewrap); no `sbx` |
 | Packages | Homebrew | Homebrew if present, else `apt-get`, `dnf` or `pacman` |
 | Menu bar, fans, Ghostty config | `monitoring`, `cooling`, `ui` | `agents` in the terminal; the rest is macOS only |
-| Memory guard | A LaunchAgent the pack installs | `agents mem guard` in a tmux pane or a systemd user service |
+| Memory guard | A LaunchAgent the pack installs | A systemd user service the pack installs |
 | Typical role | The desk: where you review and answer | The box that stays on: where long work runs |

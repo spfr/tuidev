@@ -111,6 +111,11 @@ nested="$(printf '%s\n' "$psfix" | awk '$1 == 610 { $2 = 605 } { print }'; \
 out="$(printf '%s\n' "$nested" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc memory" -v self=99999 -v screen=0 -v max=400 -v pids=" 620 605 600 ")"
 [[ "$(printf '%s\n' "$out" | awk -F '\t' '{ print $1 ":" $7 ":" $9 }' | tr '\n' ' ')" == "620:600:610 600:600:- 605:600:- " ]] \
     || fail "tool commands under a nested agent: $out"
+# A shell someone types in is never the tool command: the guard stops the
+# process's own tree again instead.
+bare="$(printf '%s\n' "$psfix" | sed 's|/bin/zsh -c node --test test/clientFuelToday.test.js|-zsh|')"
+out="$(printf '%s\n' "$bare" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc memory" -v self=99999 -v screen=0 -v max=400 -v pids=" 620 ")"
+[[ "$(printf '%s\n' "$out" | awk -F '\t' '$1 == 620 { print $9 }')" == "-" ]] || fail "a bare shell as the tool command: $out"
 pass "candidates carry the tool command: the nearest agent's child, never an agent"
 cands="$(printf '%s\n' "$psfix" | AGENTS_NAMES="$AGENTS_NAMES" _agents_awk "lib_proc memory" -v self=99999 -v screen=$((4 * G)) -v floor=100000 -v max=8)"
 [[ "$(printf '%s\n' "$cands" | cut -f1 | tr '\n' ' ')" == "620 700 600 800 " ]] || fail "the floor lets the largest few in under pressure: $cands"
@@ -514,11 +519,16 @@ echo "4242 Wed_Oct_14_06:00:00_2026" > "$AGENTS_RUN_DIR/memguard.lock/holder"
 gstate() { ( _agents_holder_check() { return "${HOLDER_RC:-0}"; }; AGENTS_NOW="$1" _agents_mem_guard_state ); }
 [[ "$(gstate 1000)" == "on 4242" ]] || fail "no heartbeat yet (a guard from before it had one): on"
 echo "1000 5" > "$AGENTS_RUN_DIR/memguard.beat"
-[[ "$(gstate 1015)" == "on 4242" ]] || fail "a heartbeat three polls old is on"
-[[ "$(gstate 1016)" == "stalled 4242 16" ]] || fail "past three polls: $(gstate 1016)"
+# Three polls, two probe cut-offs (5 s each) and the kill grace (3 s): 28 s.
+[[ "$(gstate 1028)" == "on 4242" ]] || fail "a heartbeat three slow looks old is on"
+[[ "$(gstate 1029)" == "stalled 4242 29" ]] || fail "past three slow looks: $(gstate 1029)"
 echo "1000 60" > "$AGENTS_RUN_DIR/memguard.beat"
-[[ "$(gstate 1170)" == "on 4242" ]] || fail "idle at a minute: three of those"
-[[ "$(gstate 1181)" == "stalled 4242 181" ]] || fail "idle, stalled: $(gstate 1181)"
+[[ "$(gstate 1193)" == "on 4242" ]] || fail "idle at a minute: three of those and a slow look"
+[[ "$(gstate 1194)" == "stalled 4242 194" ]] || fail "idle, stalled: $(gstate 1194)"
+# A stop in this same look is a sibling, not a respawn.
+( _AGENTS_MEM_STOPS=$'500\tz@s\tnode (x.test.js)\t620'
+  _agents_mem_respawned "z@s" "node (x.test.js)" 500 && exit 1
+  _agents_mem_respawned "z@s" "node (x.test.js)" 540 ) || fail "respawned: the same look must not count, a later one must"
 [[ "$(HOLDER_RC=2 gstate 1000)" == unknown ]] || fail "ps can't tell whose the holder is: unknown"
 rm -rf "$AGENTS_RUN_DIR/memguard.lock"
 [[ "$(PS_OK=0 gstate 1000)" == unknown ]] || fail "no holder, and ps reads nothing: unknown"
