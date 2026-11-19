@@ -34,7 +34,8 @@
 # Uses: config.sh (AGENTS_RUN_DIR, AGENTS_NO_HERDR, AGENTS_HC_AUTO),
 #   herdrlabel.sh (_agents_hl_herdr, _agents_hl_ready), util.sh
 #   (_agents_timeout, _agents_replace), bin/agents (_AGENTS_ENV_IN);
-#   hcmirror.sh and hcphone.sh for `mirror` and `ls`.
+#   hcmirror.sh and hcphone.sh for `mirror` and `ls`, and hcmirror.sh's
+#   sync after `up`.
 # Public: agents_hc, _agents_hc_marks (the hosted panes, from their marks).
 
 _AGENTS_HC_SOURCE="tuidev-hc"    # our reports' source in Herdr: what leaving a pane releases
@@ -243,6 +244,11 @@ _agents_hc_auto_status() {
 # (digits left out: a count of terminals is not a new problem), and is
 # cleared once all is well, so the same problem is said again when it comes
 # back. While all is well that is one subshell and one file test more.
+#
+# Once a core is found or started, the mirrors are synced (quietly, and
+# never a failure of `up`): a core that was started again has none, and the
+# Herdr events that would start them may be long past. Nothing, and no
+# fork, while mirrors are off or there is no Herdr here.
 agents_hc_up() {
     local restart=false quiet=false a err said="" rc=0 mark="$AGENTS_RUN_DIR/hc-up.said"
     for a in "$@"; do
@@ -253,8 +259,9 @@ agents_hc_up() {
         esac
     done
     if [[ "$quiet" != true ]]; then
-        _agents_hc_up "$restart" false
-        return
+        _agents_hc_up "$restart" false || return
+        _agents_hc_up_mirrors
+        return 0
     fi
     # Off: nothing runs, and what was said before is forgotten, so a problem
     # still there when the job is turned on again is said then.
@@ -263,6 +270,7 @@ agents_hc_up() {
         return 0
     fi
     err="$(_agents_hc_up "$restart" true 2>&1 >/dev/null)" || rc=$?
+    [[ $rc -ne 0 ]] || _agents_hc_up_mirrors
     if [[ -z "$err" ]]; then
         [[ ! -e "$mark" ]] || rm -f "$mark"
         return "$rc"
@@ -273,6 +281,14 @@ agents_hc_up() {
         { mkdir -p "$AGENTS_RUN_DIR" && _agents_replace "$mark" "${err//[0-9]/}"; } 2>/dev/null || true
     fi
     return "$rc"
+}
+
+# _agents_hc_up_mirrors — `agents hc mirror sync -q` after an `up` that
+# found or started a core (hcmirror.sh, when loaded): what it says and its
+# status go nowhere.
+_agents_hc_up_mirrors() {
+    declare -F agents_hc_mirror_sync >/dev/null || return 0
+    agents_hc_mirror_sync -q </dev/null >/dev/null 2>&1 || true
 }
 
 # _agents_hc_up RESTART QUIET — agents_hc_up's work.

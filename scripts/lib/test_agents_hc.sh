@@ -249,6 +249,29 @@ out="$(AGENTS_HC_UP=0 agents_main hc up 2>&1)" || fail "up, AGENTS_HC_UP=0: $out
 RUNNING=true
 pass "AGENTS_HC_UP=0 turns the job off, not agents hc up"
 
+# Once a core is found or started, up syncs the mirrors quietly: a core
+# started again has none. A sync that fails or talks fails nothing and says
+# nothing; an up that failed syncs nothing.
+reset; rm -f "$MARK"; RUNNING=true; hello true
+( agents_hc_mirror_sync() { echo "$*" >> "$FAKE/msync.calls"; echo "noise"; echo "noise" >&2; return 1; }
+  out="$(agents_main hc up -q 2>&1)" || fail "up -q failed because of the mirror sync: $out"
+  [[ -z "$out" && "$(calls msync)" == "-q " && ! -e "$MARK" ]] || fail "up -q, good core: '$out', sync: $(calls msync)"
+  RUNNING=false; out="$(agents_main hc up 2>&1)" || fail "up failed because of the mirror sync: $out"
+  [[ "$out" == "herdr-core started" && "$(calls msync)" == "-q -q " ]] || fail "up, started: '$out', sync: $(calls msync)"
+  RUNNING=true; hello false; rm -f "$FAKE/msync.calls"
+  agents_main hc up -q >/dev/null 2>&1 && fail "up -q passed a headless core"
+  [[ ! -e "$FAKE/msync.calls" ]] || fail "an up that failed synced the mirrors"
+) || exit 1
+# With mirrors off, or no Herdr here, the sync is nothing: no call to Herdr
+# or to the core beyond up's own hello.
+reset; rm -f "$MARK"; hello true
+AGENTS_HC_MIRROR=0 agents_main hc up -q >/dev/null 2>&1 || fail "up -q, mirrors off"
+[[ ! -e "$FAKE/herdr.calls" && "$(grep -c '^connect$' "$FAKE/hc.calls")" == 1 ]] || fail "up -q, mirrors off, asked more: $(calls herdr) / $(calls hc)"
+reset; rm -f "$MARK"; hello true
+AGENTS_HC_MIRROR=1 AGENTS_NO_HERDR=1 agents_main hc up -q >/dev/null 2>&1 || fail "up -q, no Herdr"
+[[ ! -e "$FAKE/herdr.calls" && "$(grep -c '^connect$' "$FAKE/hc.calls")" == 1 ]] || fail "up -q, no Herdr, asked more: $(calls herdr) / $(calls hc)"
+pass "up syncs the mirrors once it found or started a core, quietly and never failing for it; nothing with mirrors off or no Herdr"
+
 # A core gets neither the pane's identity nor what loading agents exported.
 reset; RUNNING=false; hello true
 out="$(HERDR_ENV=1 HERDR_PANE_ID=w1-1 agents_main hc up -q 2>&1)" || fail "up -q: $out"
