@@ -58,7 +58,7 @@ One sidebar lists every agent on every machine, the blocked one first, and tabs 
 
 ### Install, update and remove cleanly
 
-Every install is recorded, and `tuidev uninstall` removes only what it recorded. `tuidev update` fetches the latest release and keeps your edits; `tuidev update --rollback` goes back to the release before. `tuidev check` probes the install. Nothing updates itself, and tuidev sends no telemetry: its only request of its own is a daily check for the latest release tag, which `tuidev latest off` stops. [Updating](docs/updating.md)
+Every install is recorded, and `tuidev uninstall` removes only what it recorded. `tuidev update` fetches the latest release and keeps your edits; `tuidev update --rollback` goes back to the release before. `tuidev check` probes the install and what should be running (background jobs, hooks, versions), and `tuidev check --fix` repairs what it safely can. Nothing updates itself, and tuidev sends no telemetry: its only request of its own is a daily check for the latest release tag, which `tuidev latest off` stops. [Updating](docs/updating.md)
 
 ## Built on
 
