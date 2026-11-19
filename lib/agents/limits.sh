@@ -55,7 +55,7 @@ agents_limits() {
     _agents_window today "$now" || return 1
     _agents_sample_when
     W="${AGENTS_WIDTH:-120}" _agents_awk_colored "lib_fmt lib_json limits" -v mode="$mode" -v lf="$AGENTS_DATA_DIR/limits.tsv" -v now="$now" -v off="$off" \
-        -v hist="$AGENTS_HISTORY" -v sampled="$REPLY" </dev/null
+        -v hist="$AGENTS_HISTORY" -v sampled="$REPLY" </dev/null || return
     # Codex's readings and Antigravity's come from the samples: say when none run.
     [[ "$mode" == json ]] || _agents_sampler_say "$now"
 }

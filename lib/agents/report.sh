@@ -51,15 +51,19 @@ agents_report() {
     esac
     if [[ -z "$since" ]]; then since=24h; [[ "$view" != trends && "$view" != context ]] || since=7d; fi
     _agents_window "$since" || { echo "agents: bad --since '$since' (24h, 7d, 30d, today)" >&2; return 2; }
-    _agents_report_awk "$view" "$since" "$json"
-    [[ -z "$json" ]] || return 0
-    # When its data is from (sampled_at in the JSON), and whether a sampler runs.
+    _agents_report_awk "$view" "$since" "$json" || return
+    [[ -n "$json" ]] || _agents_report_asof "$now"
+}
+
+# _agents_report_asof NOW — the text report's last lines: when the newest
+# sample it read ran (sampled_at in the JSON), and whether a sampler runs.
+_agents_report_asof() {
     _agents_sample_when
     if [[ -n "$REPLY" ]]; then
-        _agents_sample_at "$REPLY" "$now"
+        _agents_sample_at "$REPLY" "$1"
         printf '\n%sdata as of %s%s\n' "$C_DIM" "$REPLY" "$C_0"
     fi
-    _agents_sampler_say "$now"
+    _agents_sampler_say "$1"
 }
 _agents_report_usage() { echo "usage: agents report [--view summary|runs|waste|trends|agents|tokens|context|denials|waits] [--since 24h|7d|30d|today] [--json]" >&2; }
 
