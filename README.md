@@ -53,11 +53,15 @@ One sidebar lists every agent on every machine, the blocked one first, and tabs 
 
 `--pack ai-clis` turns on Claude Code's and Codex's own sandbox settings and gates git and gh writes behind a prompt. Claude Code's commands and `Read` tool are denied `~/.ssh`, `~/.aws` and the rest of one [credential list](configs/sandbox/credential-paths.txt): CLI tokens, shell history and browser profiles. A list of publish and cloud tokens exported in your shell is unset in Claude Code's sandboxed commands and in every command Codex runs. Plain Codex's `workspace-write` limits writes and network but not reads, so it can still read those paths; run it under `sbx` (macOS Seatbelt) for the same protection. `secret` keeps API tokens in your OS keychain, out of every agent's environment, and hands one to one command with `secret run -n NAME -- CMD`. [Sandboxing](docs/sandboxing.md) · [Secrets](docs/secrets.md#what-an-agent-can-reach)
 
-<img src="docs/assets/sbx.png" width="800" alt="sbx in a terminal: without a sandbox, cat of ~/.ssh/id_ed25519 prints the key; under sbx the same read and a read of ~/.aws/credentials fail with &quot;Operation not permitted&quot;, so does appending to ~/.zshrc, and make test in the project still runs and passes.">
+<img src="docs/assets/clips/keys.gif" width="800" alt="Three commands in a terminal, captioned: Agents run your tests, never read your keys. Under sbx, cat of the demo ssh key fails with Operation not permitted; sbx -- make test still runs and 12 tests pass; secret scan names a DEMO_TOKEN exported on line 3 of ~/.zshrc without printing its value, and says secret import --remove moves it into the store.">
 
 ### Install, update and remove cleanly
 
 Every install is recorded, and `tuidev uninstall` removes only what it recorded. `tuidev update` fetches the latest release and keeps your edits; `tuidev update --rollback` goes back to the release before. `tuidev check` probes the install and what should be running (background jobs, hooks, versions), and `tuidev check --fix` repairs what it safely can. Nothing updates itself, and tuidev sends no telemetry: its only request of its own is a daily check for the latest release tag, which `tuidev latest off` stops. [Updating](docs/updating.md)
+
+<img src="docs/assets/clips/install.gif" width="800" alt="The installer in a terminal, captioned: You see every change before it is made. ./install.sh --profile full --dry-run prints the profile, the packs it would add and each step marked DRY RUN; it ends with Installation Complete, a Next list (restart the shell, tuidev check, tuidev), and a numbered list of what would need doing by hand: open SwiftBar once, allow terminal-notifier's notifications.">
+
+More short clips, each one outcome in about 16 seconds, are in [docs/assets/clips](docs/assets/clips): the agent that needs you, leftovers, cost, the menu bar, a memory hog and a remote preview.
 
 ## Built on
 
