@@ -816,11 +816,10 @@ wpid="$(cat "$FAKE/wait.pid" 2>/dev/null)"
 kill -0 "$wpid" 2>/dev/null || fail "the wait ended before any hangup"
 [[ -f "$AGENTS_RUN_DIR/hc-mirror.wait/p1" ]] || fail "the follower's file is not the pane's: $(ls -R "$AGENTS_RUN_DIR")"
 kill -HUP -- "-$mpid" 2>/dev/null || fail "no process group to hang up"
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
-    kill -0 "$wpid" 2>/dev/null || break; sleep 0.1
-done
+n=0; while kill -0 "$wpid" 2>/dev/null && (( n++ < 150 )); do sleep 0.1; done
 ! kill -0 "$wpid" 2>/dev/null || { kill "$wpid" 2>/dev/null; fail "herdr agent wait outlived the mirror's hangup"; }
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 || break; sleep 0.1; done
+# Up to 15 s: a loaded CI runner took more than 2 s to end the follower once.
+n=0; while ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 && (( n++ < 150 )); do sleep 0.1; done
 ls "$AGENTS_RUN_DIR"/hc-mirror.wait/* >/dev/null 2>&1 && fail "the follower left its file: $(ls -R "$AGENTS_RUN_DIR")"
 pass "the attach takes the mirror's process; the follower's file is the pane's; the hangup of its group ends the follower and its herdr agent wait, and no file is left"
 # A follower in a pause (Herdr did not answer) ends with the hangup at once,
