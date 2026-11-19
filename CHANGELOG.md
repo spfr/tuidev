@@ -7,48 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.26.0] - 2026-11-19
+
 ### Added
 
-- **A sampler of its own, once a minute, with or without the menu bar**: a LaunchAgent on macOS, a systemd user timer on Linux, a 25 ms no-op when the menu just sampled; history, tokens, waits and limits stay current, and auto-reap runs where no menu does. `AGENTS_SAMPLER=0` turns it off. [History](docs/agent-workflows.md#history-and-agents-report)
+- **`tuidev check` sees what runs, not only what is installed**: background jobs loaded, version drift, hooks that point at missing scripts, a stale manifest. `tuidev check --fix` repairs what it safely can. [Updating](docs/updating.md#checking-the-install-tuidev-check)
+- **`agents doctor [--fix]`**: is the sampler sampling, the memory guard looking, the hooks calling this `agents`. [Agent workflows](docs/agent-workflows.md#is-it-running-agents-doctor)
+- **A sampler of its own, with or without the menu bar**, and the views say when their data is old. [History](docs/agent-workflows.md#history-and-agents-report)
 - **The memory guard runs on Linux too**, as a systemd user service. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
-- **`agents`, `agents report` and `agents limits` say when no sampler has run**, and how to start one; `agents report` ends with "data as of", and the JSON carries `sampled_at`. [History](docs/agent-workflows.md#history-and-agents-report)
-- **`tuidev check` sees what runs, not only what is installed**: LaunchAgents loaded and user units enabled, the installed commands against the release and `PATH`, hooks that start a program that is gone (anyone's, labelled), the manifest against the disk, the sampler and the memory guard. A fault there exits 1, a job you turned off only warns; inside a sandbox or a container without systemd a probe says "skipped". [Updating](docs/updating.md#checking-the-install-tuidev-check)
-- **`tuidev check --fix [--dry-run]`** repairs what is safe to, with the installer's own steps, and checks again; never sudo, your files or anyone else's hooks. [Updating](docs/updating.md#checking-the-install-tuidev-check)
-- **`agents doctor [--fix]`**: is the sampler sampling, the guard looking, the hooks calling this `agents`; `--fix` restarts what stopped. [Agent workflows](docs/agent-workflows.md#is-it-running-agents-doctor)
+- **Short captioned clips**, rendered like the screenshots. [Tapes](docs/assets/tapes/README.md#the-clips)
 
 ### Changed
 
-- **The installer ends with the steps your packs left to you**, numbered, after a short fixed list, and says how many warnings scrolled by; a pack records a step with `print_todo`. [Engineering](docs/engineering.md)
-- **The README leads with the outcome** (run agents anywhere, see what they do), names the open tools tuidev is built on, and is about a third shorter; reference detail stays in the docs it links.
-- **The quick start is one path, install to a waiting agent**, and `tuidev check` has a reference: what it probes, what "skipped, already inside a sandbox" means, its exit codes. The roadmap is current as of 19 November 2026; the 3.0 upgrade notes and two FAQ entries are shortened. [Quick start](docs/QUICK_START_GUIDE.md) · [Updating](docs/updating.md#checking-the-install-tuidev-check)
-- **`agents statusline`, `bar poke` and the wait hooks start about twice as fast** (17 ms, was 32 ms): they load only the modules they use. [Engineering](docs/engineering.md)
-- **`tuidev check` probes each pack for real.** A pack may define `<pack>_check`; `cooling` and `release-age` no longer warn forever. [Engineering](docs/engineering.md)
-- **`tuidev install --help` and `uninstall --help` read as help**, and hints name commands a one-line install has.
-- **The credential list covers more CLIs, histories and browsers**: GitLab, rclone, sops, doctl, hcloud, Fly, Supabase, OCI, Pulumi, Hugging Face, Sentry, Terraform, Databricks, boto and s3cmd tokens, Yarn and Composer auth, REPL and fish history, and the Chrome channels, Chromium, Edge, Vivaldi, Opera and Zen profiles on macOS and Linux. [Sandboxing](docs/sandboxing.md#credentials-denied-under-strict-and-standard)
-- **Agents' commands no longer see GitLab, Hugging Face, Cloudflare, Vercel, Netlify, Sentry, Stripe, DigitalOcean, Fly, Supabase, Pulumi or Doppler tokens**: Claude Code unsets them in sandboxed commands, Codex drops them (and `TF_TOKEN_*`) from every command it runs. [Secrets](docs/secrets.md#what-an-agent-can-reach)
-- **Short captioned clips, rendered like the screenshots**: install, the agent that needs you, leftovers, cost, keys, the menu, a memory hog and remote, in `docs/assets/clips/` (`make screenshots TAPES=clips`; captions in `clips.txt`). [Tapes](docs/assets/tapes/README.md#the-clips)
-- **`agents reap` stops only what its verdict calls safe to stop**, shows each verdict in the plan and counts the "check first" ones; `--all` takes those too, and `agents why` without a PID lists every verdict. [Flagged](docs/agent-workflows.md#flagged-is-it-safe-to-stop)
+- **`agents reap` stops only what its verdict calls safe to stop**; `--all` takes the rest. [Flagged](docs/agent-workflows.md#flagged-is-it-safe-to-stop)
+- **The credential list covers about 50 more paths** (CLI tokens, shell and REPL history, browser profiles), and more token variables are unset in agents' commands. [Sandboxing](docs/sandboxing.md#credentials-denied-under-strict-and-standard) · [Secrets](docs/secrets.md#what-an-agent-can-reach)
+- **The memory guard warns before it stops on every Mac**, and stops a runner that keeps restarting a runaway worker. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
+- **The installer ends with the steps your packs left to you**, numbered, and a warning count. [Quick start](docs/QUICK_START_GUIDE.md)
+- **The README leads with the outcome**, and the quick start is one path from install to a waiting agent. [Quick start](docs/QUICK_START_GUIDE.md)
+- **`agents statusline`, `bar poke` and the wait hooks start about twice as fast** (17 ms, was 32 ms). [Engineering](docs/engineering.md)
 
 ### Fixed
 
-- **`tuidev update` in a clone no longer fails when a file disappears while it lists untracked files** (a build or test running there).
-- **`agents why` on a process flagged for its memory says how much it holds**, not only its CPU. [Agent workflows](docs/agent-workflows.md#flagged-is-it-safe-to-stop)
-- **`tuidev update` no longer says "Update Complete" when the download or the pull failed**: it ends with "not updated" and exit 1. [Updating](docs/updating.md)
-- **A migration that fails mid-update says where the install stands and how to finish or roll back**; the next update finishes it. [Updating](docs/updating.md)
-- **One update or install at a time.** A second one, from the terminal, the menu bar or Herdr, says who holds the lock. [Updating](docs/updating.md)
-- **`tuidev check` no longer fails inside an agent's sandbox**: the Seatbelt probe is skipped there.
-- **A phone mirror keeps reporting after Herdr was slow or restarted**, and `agents hc up` brings the mirrors back with the core. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
-- **A burst of Herdr events runs the mirror sync at most twice**, with one snapshot.
-- **The link watcher is back within about a minute of the laptop waking**, not five. [Remote](docs/remote.md)
-- **The docs no longer say typing at the desk gives a mirrored pane its size back**: it comes back when the phone stops showing that session. [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
-- **The `AGENTS.md` template matches the sandbox**: `gh` and background tasks were described wrongly.
-- **`agents report` prices Claude Fable 5.2, Mythos 5.2 and the new GPT-6 Codex models**, and a cost that leaves tokens out says so: the share unpriced, a `*` on a row priced in part, the models to price. [API-equivalent cost](docs/agent-workflows.md#tokens-and-denials)
-- **The memory guard warns before it stops on every Mac**: the warning is 8 GB or 60% of the stop size, the smaller, so a 16 GB Mac is warned at 4.8 GB, not first told at the 8 GB stop. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
-- **A runner that restarts its runaway worker is stopped, not the worker again and again**: the same script stopped twice within 120 s under the same tool command stops that command, never the agent, and the log says why. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
-- **A hung `top` or `footprint` no longer stalls the memory guard**: each gets 5 s, and `agents mem` says `stalled` when the guard has not looked for three polls and more. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
-- **`agents mem` inside a sandbox says it can't read the process table**, instead of "not running". [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
-- **The Codex config and `CLAUDE.md` no longer say the 4 GB Node heap limit stops a runaway**: it pins the limit on every machine; the memory guard stops a runaway. [Agent workflows](docs/agent-workflows.md#ai-clis)
-- **The README claims only what ships**: plain Codex can read `~/.ssh` (`sbx` closes it), the cleanup hooks act in auto mode, the Node heap limit is about Node's own default. [Agent workflows](docs/agent-workflows.md#cleanup-hooks-claude-code)
+- **`tuidev update` says "not updated" and exits 1 when a download, pull or migration failed**, and only one update or install runs at a time. [Updating](docs/updating.md)
+- **`tuidev update` in a clone no longer fails when a file disappears while it lists untracked files.**
+- **`tuidev check` no longer fails inside an agent's sandbox**, and probes each pack for real. [Updating](docs/updating.md#checking-the-install-tuidev-check)
+- **`agents report` prices Claude Fable 5.2, Mythos 5.2 and the new GPT-6 Codex models**, and says when a cost leaves tokens out. [API-equivalent cost](docs/agent-workflows.md#tokens-and-denials)
+- **`agents why` names the memory a memory hog holds**, and `agents mem` no longer stalls on a hung probe. [Memory guard](docs/agent-workflows.md#memory-guard-agents-mem)
+- **A phone mirror keeps reporting after Herdr was slow or restarted.** [Herdr's phone app](docs/remote.md#herdrs-phone-app-agents-hc)
+- **The docs claim only what ships**: plain Codex can read `~/.ssh` (`sbx` closes it), cleanup hooks act in auto mode, the Node heap limit does not stop a runaway. [Sandboxing](docs/sandboxing.md)
 
 ## [3.25.0] - 2026-11-18
 
