@@ -1,8 +1,8 @@
 # Remote and Mobile
 
-Read this to set up an always-on machine you connect to from your laptop or phone, and to make its agents, previews and files reachable from where you sit. The host runs the terminal, tmux, the editor and the agents. You connect from any client and re-attach. Work survives disconnects because tmux does. Tailscale, SSH, mosh and phone apps are only transport.
+Run your agents anywhere: on your laptop, on a VM or a box that stays on, and pick them up from your phone. This doc sets up an always-on machine you connect to, makes its agents' previews, links and files open on the machine you sit at, and puts its agents in your phone's inbox. It is all plain SSH between your own machines: nothing listens on a public address, and there is no service in between. Seeing what those agents do is the other half: [agent-workflows.md](agent-workflows.md).
 
-> **Only need to steer an agent from your phone?** Claude Code's native Remote Control covers that without SSH (see [agent-workflows.md](agent-workflows.md#remote-control-from-a-phone)). This doc covers the full-terminal path underneath it.
+The host runs the terminal, the agents and their sessions; you connect from any client and re-attach. Work survives a dropped connection because Herdr or tmux keeps it. Tailscale, SSH, mosh and phone apps are only transport.
 
 ## Setup
 
@@ -13,11 +13,11 @@ curl -fsSL https://github.com/spfr/tuidev/releases/latest/download/get.sh | bash
 tailscale up && tailscale status  # join the tailnet
 ```
 
-The same install is the third choice ("A headless box that stays on") when you run the one-liner without flags. On a Mac you also sit at, add the pieces to what it has: `tuidev install --remote --pack tmux`. With a clone, run `./install.sh` with the same flags. Once the box has `tuidev`, `tuidev update` keeps it current.
+The same install is the third choice ("A headless box that stays on") when you run the one-liner without flags. On a Mac you also sit at, add the pieces to what it has: `tuidev install --remote --pack tmux`. Once the box has `tuidev`, `tuidev update` keeps it current.
 
-`remote` = core + remote + sandbox + `--pack tmux`, so a single `--profile remote` install gets Tailscale, mosh, SSH and a durable tmux session together — you don't add `--pack tmux` yourself. `--remote` on its own installs Tailscale (a cask on macOS; on Linux it links to the official installer), mosh, the SSH client config as a managed block, and sshd hardening snippets: key-only auth, no root login, modern ciphers. The snippets are copied into `/etc/ssh/sshd_config.d/` only when that directory is writable. Otherwise the installer prints the `sudo cp` commands. On macOS, turn on Remote Login in System Settings → General → Sharing, or run `sudo systemsetup -setremotelogin on`.
+`--profile remote` is core, remote, the sandbox and `--pack tmux`: Tailscale, mosh, SSH and a durable tmux session in one install. `--remote` on its own installs Tailscale (a cask on macOS; on Linux it links to the official installer), mosh, the SSH client config as a managed block, and sshd hardening snippets: key-only auth, no root login, modern ciphers. The snippets are copied into `/etc/ssh/sshd_config.d/` only when that directory is writable; otherwise the installer prints the `sudo cp` commands. On macOS, turn on Remote Login in System Settings → General → Sharing, or run `sudo systemsetup -setremotelogin on`.
 
-`remote-status` shows SSH, Tailscale and tmux at a glance. `ts-ip` prints the node's Tailscale address.
+`remote-status` shows SSH, Tailscale and tmux at a glance. `ts-ip` prints the machine's Tailscale address.
 
 ## Connect and re-attach
 
@@ -28,9 +28,9 @@ t myproject                 # attach-or-create a named tmux session
 ssh devbox && t myproject
 ```
 
-Detach with `Ctrl+a d`. `tls` lists sessions on the box. tmux-continuum saves every 15 minutes and tmux-resurrect restores sessions when tmux starts, so sessions survive a reboot too. There's no prebuilt layout anymore — `t myproject` gives you a plain session, and you run your editor of choice (`nvim`, or split a second SSH session for it) inside it.
+Detach with `Ctrl+a d`; `tls` lists sessions. tmux-continuum saves every 15 minutes and tmux-resurrect restores sessions when tmux starts, so sessions survive a reboot too. `t myproject` gives you a plain session; run your editor inside it.
 
-**Why Tailscale SSH:** ACLs live in the tailnet rather than in `authorized_keys` files on every host, check mode can force re-authentication, access follows your identity provider, and a revoked device loses access immediately. Plain SSH still works as a fallback. Cloudflare and ngrok tunnels are a last resort, not the architecture; to reach a dev server on another machine, use [`agents forward`](#remote-feels-local-ports-links-and-files).
+**Why Tailscale SSH:** access rules live in the tailnet rather than in `authorized_keys` on every host, check mode can force re-authentication, access follows your identity provider, and a revoked device loses access at once. Plain SSH still works. Public tunnels are a last resort; to reach a dev server on another machine, use [`agents forward`](#remote-feels-local-ports-links-and-files).
 
 ## mosh for flaky networks
 
@@ -40,11 +40,11 @@ Use mosh on cellular, roaming Wi-Fi, or a laptop that sleeps a lot. It comes wit
 mosh devbox -- tmux attach -t myproject
 ```
 
-mosh needs UDP 60000–61000 open on the server. Its scrollback is only partially synced, so use tmux copy mode (`Ctrl+a [`) for history. A server reboot kills mosh but not tmux: always run mosh around tmux.
+mosh needs UDP 60000–61000 open on the server. Its scrollback is only partly synced, so use tmux copy mode (`Ctrl+a [`) for history. A server reboot kills mosh but not tmux: always run mosh around tmux.
 
-## Always-on nodes
+## Always-on machines
 
-A cheap box that stays awake (a Raspberry Pi, NUC or VM) is a **node**, not a second product. Put work there that must outlive your laptop lid. `--profile remote` installs on Debian/Ubuntu without Homebrew (see [profiles.md](profiles.md)). Herdr adds a sidebar that spans machines:
+A cheap box that stays awake (a Raspberry Pi, a NUC, a VM) is where work goes that must outlive your laptop lid. `--profile remote` installs on Debian and Ubuntu without Homebrew ([profiles.md](profiles.md)). Herdr adds one sidebar across machines:
 
 ```bash
 herdr machine add workbox                   # once, interactively; pick the session
@@ -52,7 +52,7 @@ herdr --machine workbox agent list          # from the Mac, no TUI
 herdr --remote workbox                      # one-off thin client
 ```
 
-On a node, `~/.local/bin` must be on `PATH` for *non-interactive* SSH too, which means adding it to `~/.profile`, not only `.zshrc`. Fleet practices are in [agent-workflows.md](agent-workflows.md#fleet-attention--herdr---pack-herdr).
+On such a machine, `~/.local/bin` must be on `PATH` for non-interactive SSH too, so add it to `~/.profile`, not only `.zshrc`. Herdr's practices, sessions and a systemd unit that keeps them running: [agent-workflows.md](agent-workflows.md#herdr-which-agent-needs-you---pack-herdr).
 
 ## Remote feels local: ports, links and files
 
@@ -69,162 +69,175 @@ agents push -m workbox shot.png    # into workbox's ~/.cache/tuidev/drop; prints
 agents open workbox /srv/app/report.html   # fetch one file and open it here
 ```
 
-Your machines are the ones saved in Herdr (`herdr machine list`) plus any ssh hosts in `AGENTS_REMOTE_HOSTS` (`~/.config/agents.conf`); any ssh host works by name too.
-
-**Use just this.** Each piece stands alone; take the one you need.
+Your machines are the ones saved in Herdr (`herdr machine list`) plus any ssh hosts in `AGENTS_REMOTE_HOSTS` (`~/.config/agents.conf`); any ssh host works by name too. Each piece stands alone:
 
 | Feature | Needs | Works without Herdr? |
 |---|---|---|
 | `agents map`, `agents ports`, `agents forward` | `--pack monitoring` on both machines, and ssh between them | Yes: list the hosts in `AGENTS_REMOTE_HOSTS` |
 | `agents push`, `agents open` | `--pack monitoring` on this machine and ssh; `push` needs nothing of tuidev on the other end | Yes |
 | The click on a link in a pane | Herdr with the `tuidev.link` plugin (`--pack herdr`) and `--pack monitoring` on both machines; the watcher on the machine you sit at | No: the click is Herdr's |
-| Dropping a file onto a session | Claude Code on the other machine, `--pack monitoring` on both, the watcher and a Mac (for the dialog) where you sit | Yes: the watcher follows `AGENTS_REMOTE_HOSTS` hosts too |
+| Dropping a file onto a session | Claude Code on the other machine, `--pack monitoring` on both, the watcher, and a Mac where you sit (for the dialog) | Yes: the watcher follows `AGENTS_REMOTE_HOSTS` hosts too |
 
-**The map: what runs where, and one key to stop it.** `agents map` (prefix+m in Herdr, a popup over whatever you are doing) is one list for this machine and your others, grouped by what you would do with a thing rather than by where it is:
+### The map: what runs where, and one key to stop it
 
-- **Previews and dev servers** come first: every port something was started to be looked at on, with its machine, command, project, CPU, memory and age, whether a session still owns it or it was left behind, and where it opens. A remote one that is already forwarded shows its local URL.
-- **Files sessions just wrote**: the reports, pages and images an agent session wrote in the last day (from its Write and Edit calls), on any machine. Enter opens one on the machine you sit at, fetched first when it lives elsewhere, so reading what a remote agent produced takes no copying and no path typing.
+`agents map` (prefix+m in Herdr, a popup over whatever you are doing) is one list for this machine and your others, grouped by what you would do with a thing:
+
+- **Previews and dev servers** first: every port something was started to be looked at on, with its machine, command, project, CPU, memory and age, whether a session still owns it or it was left behind, and where it opens. A remote one already forwarded shows its local URL.
+- **Files sessions just wrote**: the reports, pages and images a session wrote in the last day, on any machine. Enter opens one here, fetched first when it lives elsewhere.
 - **Left behind**: stale processes and hogs nobody is using.
-- **Sessions**: one line per agent session, with the mark of its kind (✳ claude, ⬡ codex, and the rest of [`AGENTS_GLYPHS`](agent-workflows.md)), its status and a count of what it runs (`ctrl-e` lists those). A server a session started says `by ✳ claude app`.
+- **Sessions**: one line per agent session, with its kind's [mark](agent-workflows.md#marks-by-kind-of-session), its status and a count of what it runs.
 - **Machines**: each machine's CPU, free memory and counts.
 
-The other machines answer over one shared ssh connection each, so the list comes up in a second or two.
+The other machines answer over one shared ssh connection each, so the list comes up in a second or two. `agents map workbox` or `agents map local` narrows it to one machine; piped, it prints the list.
 
 | Key | On a preview or dev server | On something left behind | On a session | On a machine |
 |---|---|---|---|---|
 | `enter` | open it in your browser, forwarding first when it is remote | | go to its pane (here) or peek at it (elsewhere) | |
-| `ctrl-k` (also `ctrl-x` and `delete`) | stop the process that holds it | stop its tree | stop its tree | |
+| `ctrl-k` (also `ctrl-x`, `delete`) | stop the process that holds it | stop its tree | stop its tree | |
 | `ctrl-s` | sweep its machine | sweep its machine | | sweep it: `agents reap` stops what sessions left behind that is safe to stop, asked first |
 | `ctrl-p` | | | peek at its pane | |
 | `ctrl-e` | | | list what each session runs | |
 | `ctrl-r` | reload the list | | | |
 
-On a forward, `enter` opens it and `ctrl-k` closes it. On a port row of another machine, `ctrl-k` stops the process and closes any forward to that port at once. A sweep (`ctrl-s`) or a stop there also closes click-made forwards to that machine that have nothing behind them. A cancelled or failed stop or sweep leaves every forward alone. `esc` quits.
+On a forward, `enter` opens it and `ctrl-k` closes it. Stopping a port on another machine also closes any forward to it, and a stop or sweep closes click-made forwards to that machine with nothing behind them. A stop is `agents kill` on the machine that runs the thing, with its refusals and its y/N question. `esc` quits.
 
-A stop is `agents kill` on the machine that runs the thing, with its refusals and its y/N question. A dev server here is a listener started in a project directory: not an agent's own port, not an app or system service, not a daemon in your home directory (`agents ports` lists every listener).
+### Ctrl-click opens it here
 
-So nothing needs `pkill`, and nothing needs you to remember which machine a dev server was started on. `agents map workbox` or `agents map local` narrows it to one machine; piped, it prints the list.
+Ctrl-click a `localhost` URL in a Herdr pane of another machine and it opens in the browser of the machine you sit at, through a tunnel made on the spot. Ctrl-click a file link an agent printed (a `.md`, `.html`, image or PDF) and the file is fetched and opened here.
 
-**Ctrl-click opens it here.** Ctrl-click a `localhost` URL in a Herdr pane of another machine and it opens in the browser of the machine you sit at, through a tunnel made on the spot. Ctrl-click a file link an agent printed (a `.md`, `.html`, image or PDF) and the file is fetched and opened here. Pieces:
+- **The plugin** (`tuidev.link`, linked by `--pack herdr`). Herdr runs a plugin on the machine that owns the pane, so the click is handled over there; the plugin hands it to `agents link click`.
+- **The watcher** (`agents link watch`: a LaunchAgent on macOS, a tmux pane or systemd user service on Linux). The machine you sit at keeps one ssh to each of your machines and reads requests from it. Nothing listens anywhere, and the other machine never connects to yours.
+- With no watcher connected, a click opens on the machine itself. Turn the watcher off on a machine you don't work from (`AGENTS_LINK=0`).
 
-- **The plugin** (`tuidev.link`, linked by `--pack herdr`). Herdr runs a plugin on the machine that owns the pane, so the click is handled over there, where there is no browser. The plugin hands it to `agents link click`.
-- **The watcher** (`agents link watch`; a LaunchAgent on macOS, a tmux pane or systemd user service on Linux). The machine you sit at keeps one ssh to each of your machines and reads requests from it. Nothing listens anywhere, and the other machine never connects to yours.
-- With no watcher connected, a click opens on the machine itself: a `localhost` URL in its browser, a file link when it is a format a viewer shows. "Connected" is the watcher, not you: sitting at a Mac that another of your Macs follows, a click there goes to the other one. Turn the watcher off on a machine you don't work from (`AGENTS_LINK=0`).
+`agents link` shows the watcher and each machine it follows. `--pack herdr` binds the plugin's keys in `~/.config/herdr/config.toml`: prefix+m for the map and prefix+shift+o for the ports popup, beside prefix+space for the [board](agent-workflows.md#the-board-every-session-one-screen) and prefix+a and prefix+u for the [palette and updates](agent-workflows.md#herdr-which-agent-needs-you---pack-herdr).
 
-**Drop a file onto a session on another machine.** Drag a screenshot or a document from Finder onto a pane where Claude Code runs on another machine, and send your prompt as usual. The terminal only pastes the file's path, which exists on your Mac alone; the session's prompt hook notices a path that is not there and asks your machine for it. Your Mac shows one dialog (which machine, which file, from which folder, how big), and on **Send** copies the file into that machine's `~/.cache/tuidev/drop` and tells the session where to read it. Cancel, or no answer in 30 seconds, sends nothing, and the session is told you did not send it. A path your Mac has no file for (one the prompt only mentions, such as where to write a report) is not a dropped file: nobody is asked and the session hears nothing.
+### Drop a file onto a session on another machine
 
-- A request is another machine asking for one of your files, so nothing is ever sent without that click, and some files are never even offered: anything with a hidden folder (`~/.ssh`, `~/.aws`, `~/.config`…) or a `Library` folder on its path, however either is spelled; anything reached through a symlink; anything outside your own home directory, the temp folders and mounted volumes; and anything over 50 MB. What is sent is the file the dialog showed, by its real path, and only if it is still that file when you click.
-- A machine can't wear you down: after a request you did not approve, it is not asked about again for five minutes, and it gets three dialogs in five minutes at most.
-- The prompt hook waits 50 seconds in all, so with several dropped files in one prompt, answer quickly or drop them one prompt at a time; a file approved after the hook gave up is still copied, and the session is not told.
-- macOS may ask once to let the watcher read `Desktop`, `Documents` or `Downloads`; until you allow it, a file there is reported as unreadable in `~/Library/Logs/tuidev-link.log`.
-- The dialog needs the Mac you sit at; from a Linux desktop use `agents push FILE`, which does the same copy by hand.
-- The hook ships in Claude Code's settings (`UserPromptSubmit`) and starts `agents` only while a watcher is attached. Codex has no prompt hook to carry it: there, `agents push`.
+Drag a screenshot or a document from Finder onto a pane where Claude Code runs on another machine, and send your prompt as usual. The terminal pastes only the file's path, which exists on your Mac alone; the session's prompt hook notices and asks your machine for it. Your Mac shows one dialog (which machine, which file, how big), and on **Send** copies the file into that machine's `~/.cache/tuidev/drop` and tells the session where to read it. Cancel, or no answer in 30 seconds, sends nothing. A path your Mac has no file for is not a drop: nobody is asked.
 
-`agents link` shows the watcher and each machine it follows. `--pack herdr` binds the plugin's keys as a managed block in `~/.config/herdr/config.toml`: prefix+m for the map and prefix+shift+o for the ports popup (`agents ports --pick`), beside prefix+space for the [board](agent-workflows.md#the-board-every-session-one-screen), prefix+a for the [palette and prefix+u for updates](agent-workflows.md#fleet-attention--herdr---pack-herdr). A binding of your own outside the block is yours to keep.
+- Nothing is sent without that click, and some files are never offered: anything in a hidden folder (`~/.ssh`, `~/.aws`, `~/.config`…) or a `Library` folder, anything reached through a symlink, anything outside your home directory, the temp folders and mounted volumes, and anything over 50 MB. What is sent is the file the dialog showed, if it is still that file.
+- After a request you did not approve, a machine is not asked about again for five minutes, and it gets three dialogs in five minutes at most.
+- The prompt hook waits 50 seconds in all, so drop several files one prompt at a time.
+- macOS may ask once to let the watcher read `Desktop`, `Documents` or `Downloads`; until then, a file there is reported as unreadable in `~/Library/Logs/tuidev-link.log`.
+- From a Linux desktop, or for Codex (it has no prompt hook), use `agents push FILE`.
 
-**What a forward is.** One `ssh -N -L` of its own, from this machine's `127.0.0.1` to the other machine's `localhost`: nothing is bound to a public address at either end. One you open yourself takes the same port number when that is free here, so the URL a program printed works as it stands; otherwise the next free one. ssh runs with `BatchMode`, so a machine that needs a password is reported, never prompted for: load the key (`ssh-add`) or reconnect it (`herdr machine reconnect workbox`) first. These connections carry nothing your ssh config would add for the host: no agent or X11 forwarding, and none of its `LocalForward` lines.
+### Forwards
 
-A forward is **active** (the server answers), **nothing answers** (the ssh is up but no server holds the port over there) or **dead** (its ssh is gone); `agents forward` and `agents map` show which. The check is a bare TCP connect through the tunnel, so nothing shows in the dev server's log. A forward you opened yourself with `agents forward open` stays for when the server comes up; it is only marked. A forward a click made closes itself: the link watcher (`agents link watch`, which wakes every 60 s) closes it after two checks in a row, at least 50 s apart, found nothing behind it, so about one to two minutes after the server stopped (a watcher restart cannot shorten that). The wait is deliberate, because dev servers restart all the time and a restart should not break your tab. A click-made forward whose ssh died is cleared too, and at the cap (eight click-made ones a machine) stale ones are cleared before a click is refused. A click on a port you already forwarded yourself reuses your forward, and it stays yours; a click-made forward you then open with `agents forward open` becomes yours, so it is no longer closed on its own. A click never closes a forward you opened yourself, even when nothing answers on it: it gets the banner and the forward stays. `agents forward close --dead` closes the dead ones and those where nothing answers. The menu bar lists a forward with nothing behind it as `localhost:PORT → MACHINE:PORT · nothing answers`: a click still opens it, and a `Close localhost:PORT` item under it closes it (a dead one closes on a click). It never probes, so it shows that only from a watcher check under 150 s old; with no watcher running, live forwards show as active. After an upgrade, a watcher that is already running keeps the old code until `agents link restart`. Limits: if the server comes back after its forward was closed, the old tab stays broken until you click the URL again (the new forward usually gets the same local port, so a reload then works); and without the watcher running nothing closes on its own, though the map's stop and `close --dead` still work.
+A forward is one `ssh -N -L` of its own, from this machine's `127.0.0.1` to the other machine's `localhost`: nothing is bound to a public address at either end. One you open yourself takes the same port number when that is free here, so the URL a program printed works as it stands. ssh runs with `BatchMode`, so a machine that needs a password is reported, never prompted for: load the key (`ssh-add`) or reconnect it (`herdr machine reconnect workbox`) first. These connections carry no agent or X11 forwarding and none of your config's `LocalForward` lines.
 
-**What leaves my machine.** Nothing goes to a service of tuidev's: there is none, and no telemetry. Between your own machines, over your own ssh:
+A forward is **active** (the server answers), **nothing answers** (the ssh is up, no server holds the port) or **dead** (its ssh is gone); `agents forward` and `agents map` show which, by a bare TCP connect that leaves nothing in the server's log.
+
+- **One you opened** with `agents forward open` stays until you close it, waiting for the server to come back.
+- **One a click made** closes itself about one to two minutes after its server stops (the watcher, which wakes every 60 s, needs two checks in a row with nothing behind it, so a restarting dev server doesn't break your tab). A click on a port you forwarded yourself reuses your forward. At most eight click-made forwards per machine.
+- `agents forward close --dead` closes the dead ones and those nothing answers. The menu bar lists a forward with nothing behind it as `localhost:PORT → MACHINE:PORT · nothing answers`, with a Close item.
+- After an upgrade, a running watcher keeps the old code until `agents link restart`.
+
+### What leaves your machine
+
+Nothing goes to a service of tuidev's: there is none, and no telemetry. Between your own machines, over your own ssh:
 
 | Feature | What crosses the wire | Who sends it |
 |---|---|---|
 | The map, `agents ports` and the menu's Machines row | The other machine's process list: command line, directory, ports | The other machine, when you ask |
-| A click | The other machine sends a URL or a file path; your machine makes the tunnel or fetches the file | The other machine; the tunnel and the fetch are yours |
+| A click | A URL or a file path; your machine makes the tunnel or fetches the file | The other machine; the tunnel and the fetch are yours |
 | A dropped file | That one file, after you click **Send** | You, to the machine that asked |
 | `agents push` | The files you name | You |
 
-The map shows other machines' command lines, so a secret passed as an argument shows up there. Pass secrets in the environment of one command ([secrets.md](secrets.md)).
+The map shows other machines' command lines, so a secret passed as an argument shows up there. Pass secrets in one command's environment ([secrets.md](secrets.md)).
 
 **What another machine may ask for.** The watcher treats each line as a request and decides itself:
 
 - a URL must be `http(s)` on `localhost`, `127.0.0.1`, `0.0.0.0` or `[::1]`; it becomes a tunnel to that machine's `localhost` and a tab on your `127.0.0.1`. Nothing else is opened;
-- the local port is the watcher's choice, from 47000 up, never the port asked for: no request can put another machine behind a port your own tools use (`localhost:5432` while your database is down). At most eight click-made forwards a machine (the ones you open yourself with `agents forward open` do not count);
-- a file must be an absolute path with a viewer's extension (Markdown, text, JSON, CSV, HTML, PDF, images), at most 50 MB, a cap applied on your machine; it lands in `~/.local/state/tuidev/agents/remote/MACHINE/`, where a requested file is kept a day and the folder at most 500 MB. Scripts and apps are never opened;
+- the local port of a click-made forward is the watcher's choice, from 47000 up, never the port asked for, so no request can put another machine behind a port your own tools use;
+- a file must be an absolute path with a viewer's extension (Markdown, text, JSON, CSV, HTML, PDF, images), at most 50 MB; it lands in `~/.local/state/tuidev/agents/remote/MACHINE/`, kept a day, the folder at most 500 MB. Scripts and apps are never opened;
 - at most five requests a machine in ten seconds.
 
-What another machine sends is untrusted text. One set of checks (`lib/agents/awk/lib_maprows.awk`) decides, for the list and for the menu bar's board alike, whether a row is one: an id only in the shape of a process id (up to 10 digits, `@` and a start of up to 48 plain characters), a port a number, a file an absolute path of plain characters (up to 400), a forward only from this machine and with every field of its shape. No control character reaches your terminal: C0 and DEL, C1 (as UTF-8 writes it), and the bidi and line-separator characters (U+202A to U+202E, U+2066 to U+2069, U+2028, U+2029) become spaces. A long path is shortened so its recognisable part stays: a temp-directory binary shows its name first, and a file's path is cut in the middle.
+What another machine sends is untrusted text. One set of checks (`lib/agents/awk/lib_maprows.awk`) decides, for the map, the board and the menu bar alike, whether a row is valid, and no control character reaches your terminal (C0, DEL, C1 and the bidi and line-separator characters become spaces).
 
-Any process on the other machine can send a request, not only your click, so treat the watcher as "that machine may open a tab or a document here". The page it opens is that machine's content in your browser: the tab is on `127.0.0.1` so it shares no cookies with what you run on `localhost`, but like any forwarded dev server it can make requests to other loopback ports. Don't follow a machine you would not open a dev server from (`AGENTS_LINK=0`, or disable it in Herdr).
+Any process on the other machine can send a request, not only your click, so following a machine means "that machine may open a tab or a document here". The tab is on `127.0.0.1`, so it shares no cookies with what you run on `localhost`, but like any forwarded dev server it can make requests to other loopback ports. Don't follow a machine you would not open a dev server from (`AGENTS_LINK=0`).
 
-**When another tool is better.**
-
-- **VS Code Remote-SSH** forwards the ports it sees in its terminal. If an editor is attached to the remote machine, use that. tuidev is for agents in a terminal or Herdr, where no editor is.
-- **Tailscale Serve** publishes a service to your tailnet under a name, so a phone or a teammate can open it too. A tuidev forward is the opposite: loopback to loopback, on the machine you sit at, open while you need it, with nothing new reachable on the network.
-- **Plain `ssh -L`** does the tunnel. `agents forward` adds a free local port (the same number when it is free), a list of what is open and whether each is active, unanswered or dead, forwards a click made that close themselves when the server stops, no password prompt, no agent forwarding, and `agents forward close --all`.
+**When another tool is better.** VS Code Remote-SSH forwards the ports it sees when an editor is attached to the machine. Tailscale Serve publishes a service to your tailnet under a name, for a phone or a teammate. Plain `ssh -L` does the tunnel; `agents forward` adds a free local port, a list with each forward's state, forwards that close themselves, and no password prompt.
 
 <details>
 <summary>Limits worth knowing</summary>
 
-- A click on a file link that can't open says why in a notification: the file is gone (moved or deleted since the link was printed, as with a file in a git worktree that was removed), or it is not a kind of file a click opens.
+- A click on a file link that can't open says why in a notification: the file is gone, or it is not a kind of file a click opens.
 - The click needs Herdr's mouse capture on (`ui.mouse_capture`, the default) and is Ctrl-click on every platform. In saved-machine panes Herdr does not open OSC 8 links yet ([herdr#4447](https://github.com/herdrdev/herdr/issues/4447)), so there a link has to be on screen as its URL; `agents ports --pick` and `agents forward open` need no click.
 - A forwarded server sees `Host: localhost:PORT`. One that checks the host name, or serves TLS for the machine's own name, may refuse.
-- Herdr itself already bridges a pasted clipboard image; a dropped file is the section above.
-- After your laptop sleeps, the other machine can take a while to notice the watcher is gone; a click in that window is lost. The watcher reconnects on its own: a machine it cannot reach is tried again after 10 s, then twice as long each time up to a minute, and a wait the laptop slept through starts that over, so each machine is back within about a minute of waking.
-- The LaunchAgent uses the ssh agent macOS gives every login session. A key that only an agent named in your shell's rc files holds (`SSH_AUTH_SOCK` set there) is not available to it: `agents link` then shows the machine as unreachable.
-- `AGENTS_LINK=0` turns the watcher off; `agents link restart` applies a changed setting.
+- If the server comes back after its click-made forward closed, the old tab stays broken until you click the URL again. Without the watcher running, nothing closes on its own.
+- After your laptop sleeps, a click can be lost until the other machine notices the watcher is gone. The watcher reconnects on its own, so each machine is back within about a minute of waking.
+- The LaunchAgent uses the ssh agent macOS gives every login session; a key only an agent named in your shell's rc files holds is not available to it, and `agents link` shows the machine as unreachable.
 
 </details>
 
-## Personal hosts stay local
+## Steer one agent from your phone
 
-`devbox` and `workbox` are placeholders. Real hostnames, Tailscale IPs and usernames go in `~/.ssh/config.local`. The shipped SSH block starts with `Match all` and then `Include ~/.ssh/config.local*`, so the include applies even when the block lands after your own `Host` stanzas, and a missing file is ignored. You can also put hosts outside the tuidev markers in `~/.ssh/config`. The shipped block keeps connections alive (`ServerAliveInterval 60`) and adds `IgnoreUnknown UseKeychain`, so the same file works with Linux OpenSSH.
+<a id="remote-control-from-a-phone"></a>To steer one agent without a terminal, use the CLI's own remote control. **Claude Code Remote Control** connects `claude.ai/code` and the Claude mobile apps to a session running on your machine; code stays local ([plan requirements](https://code.claude.com/docs/en/remote-control)). For an inbox of every agent that needs you, use [Herdr's phone app](#herdrs-phone-app-agents-hc). For a full terminal (editing files, non-agent work, a flaky network), use SSH or mosh from a [phone terminal app](#iphone-and-ipad).
 
 ## Herdr's phone app: `agents hc`
 
-Herdr has a free phone app (iPhone, iPad, Android) with an inbox of the agents that need you, a key bar, dictation, and a compose box that pastes text, screenshots and photos. It talks over SSH to **herdr-core** (`hc`), the runtime under Herdr's desktop app, with no account and no server in between. It lists what runs in herdr-core. It does not see a program that a Herdr TUI pane owns, which is where your agents are when you type `claude` in a pane.
-
-`agents hc run` closes that gap: it starts the agent in herdr-core and puts the pane on it.
+Herdr has a free phone app (iPhone, iPad, Android) with an inbox of the agents that need you, a key bar, dictation, and a compose box that pastes text, screenshots and photos. It talks over SSH to **herdr-core**, the runtime under Herdr's desktop app, with no account and no server in between. It lists what runs in herdr-core; it does not see a program a Herdr TUI pane owns, which is where your agents are when you type `claude` in a pane. `agents hc run` closes that gap: it starts the agent in herdr-core and puts the pane on it.
 
 ```bash
 tuidev install --pack monitoring --pack herdr-core   # agents hc, and herdr-core kept running
-agents hc                      # is herdr-core running, and in your desktop login?
+agents hc                      # is herdr-core running and in your desktop login; is a phone connected now
 agents hc run claude           # in a Herdr pane: the agent, hosted in herdr-core
 agents hc run --name api codex --no-daemon
+agents hc ls                   # what the phone lists from here, and the agent panes it can't reach
 ```
 
-The same agent is now in three places: the pane, Herdr's sidebar (each status the agent reports to herdr-core is passed on for that pane), and the phone's inbox. `ctrl+\` detaches and leaves it running; closing the pane does too. `agents hc attach NAME` comes back to it, `herdr-core ls` lists what runs, and `herdr-core kill NAME` ends one.
+The same agent is then in three places: the pane, Herdr's sidebar (each status the agent reports to herdr-core is passed on), and the phone's inbox. `ctrl+\` detaches and leaves it running; closing the pane does too. `agents hc attach NAME` comes back to it, `herdr-core ls` lists what runs, and `herdr-core kill NAME` ends one.
 
-**Hosted without typing `agents hc run` (opt-in).** With `AGENTS_HC_AUTO=1` in `agents.conf`, a `claude` or `codex` you type in a Herdr pane is hosted in herdr-core by itself, as `agents hc run` would host it, and the phone picks it up. The herdr-core pack's shell fragment (`shell.d/hc-auto.zsh`) defines `claude` and `codex` as functions that call `agents hc auto`, and only in an interactive shell in a Herdr pane, with `agents` and herdr-core installed and the setting on when the shell started; a new shell picks up a change. `agents hc auto` hosts the agent only when all of these hold, and otherwise runs the command as you typed it, with its exit status and no word of its own:
+On the phone: install Tailscale and Herdr's app, then add the machine by its Tailscale name. Tailscale SSH needs no key; plain SSH needs Remote Login on and the phone's key in `authorized_keys`, as [below](#iphone-and-ipad). Each machine has its own herdr-core, added one by one.
 
-- you typed it at the terminal (stdin and stdout are the pane), in a Herdr pane, not in a terminal of herdr-core's;
-- the arguments start an interactive session: no arguments, or only options such a session takes (`--continue`, `--resume ID`, `--model opus`, `--add-dir DIR`, `codex resume --last`, …). `claude -p`, `--help`, `--version`, a prompt (`claude "fix the test"`), a subcommand (`claude mcp list`, `codex exec …`), a second value for one option (`--add-dir A B`; repeat the option) or an option it does not know all run as typed;
-- the pane sets no account, provider or network of its own for the agent (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_USE_BEDROCK`, `OPENAI_API_KEY`, `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS` and the like): a hosted agent would not have them;
-- herdr-core is installed and already runs. It is never started from here; on macOS it must also say it runs in your desktop login, or the agent would come up "Not logged in".
+**Hosted without typing `agents hc run` (opt-in).** With `AGENTS_HC_AUTO=1` in `agents.conf`, a `claude` or `codex` you type in a Herdr pane is hosted in herdr-core by itself. The herdr-core pack's shell fragment defines `claude` and `codex` as functions that call `agents hc auto` in interactive shells in Herdr panes; a new shell picks up a change. It hosts the agent only when all of these hold, and otherwise runs the command as you typed it:
 
-The decision adds about 20 ms to a start it does not host. When it has asked the core and the core does not answer within 5 s, or herdr-core refuses the start (a name taken by then), the agent starts in the pane after one line that says why. `codex` is hosted with `--no-daemon`, which herdr-core needs to keep its commands inside the core. A hosted agent gets the pane's directory and its `PATH`, and from the pane's environment only `LANG`, `LC_ALL`, `LC_CTYPE`, `LC_MESSAGES`, `TZ`, `EDITOR`, `VISUAL`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME` when they are set; everything else comes from herdr-core's environment, as with `agents hc run`. A token you exported in that shell is not passed on: it would live on in a terminal of a core that outlives the pane. What it does not do: it hosts nothing you start some other way (a script, `command claude`, an agent's own shell), starts no core, and gives back the attach's status, not the agent's. `agents hc` says whether it is on.
+- you typed it at the terminal, in a Herdr pane, not in a terminal of herdr-core's;
+- the arguments start an interactive session: none, or options such a session takes (`--continue`, `--resume ID`, `--model opus`, `--add-dir DIR`, `codex resume --last`). `claude -p`, `--help`, a prompt (`claude "fix the test"`), a subcommand (`claude mcp list`, `codex exec …`) or an option it doesn't know run as typed;
+- the pane sets no account, provider or network of its own for the agent (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_USE_BEDROCK`, `OPENAI_API_KEY`, `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS` and the like), which a hosted agent would not get;
+- herdr-core already runs (it is never started from here) and, on macOS, runs in your desktop login.
 
-**Mirrors of the agents you already run (experimental, off by default).** With `AGENTS_HC_MIRROR=1` in `agents.conf`, while herdr-core is up, every agent pane of this machine's Herdr gets a mirror in it: a core terminal attached to the pane. The phone lists it, typing there reaches the agent in the pane, and the inbox has its state. A mirror is named after the session's task title when it has one (`fix-login-redirect`, not the project's name three times), given when the mirror starts; the title itself is also set as the mirror's terminal title and follows the session's. Herdr's own events start and end the mirrors; `agents hc mirror` shows each pane and its mirror. A pane takes its mirror's size, and Herdr's phone app sets that size when it shows a terminal: while the phone shows a session, its pane at your desk has the phone's size. When the phone stops, herdr-core gives the terminal its own default size (200x120), and the mirror then sets the pane's size again, within a second or two. In 3.24.0 and 3.24.1 nothing set it back, and the agent's input could stay out of view. See [a phone-sized pane](#a-phone-sized-pane-at-your-desk) for the app that does not stop. It is still off by default: the giving back was tested with a viewer of the phone's size attached to a mirror from this Mac, not yet with the phone app itself, which may also hold terminals it only lists. `agents hc mirror end` ends every mirror and the panes take their own size again; setting `AGENTS_HC_MIRROR` back to 0 ends them at the next sync. A mirror is a view: ending one leaves the agent in its pane.
+It adds about 20 ms to a start it does not host. When the core doesn't answer within 5 s, or refuses the start, the agent starts in the pane after one line that says why. `codex` is hosted with `--no-daemon`, which herdr-core needs. It hosts nothing started another way (a script, `command claude`, an agent's own shell). `agents hc` says whether it is on.
 
-<a id="a-phone-sized-pane-at-your-desk"></a>**A phone-sized pane at your desk.** Herdr's phone app keeps the last session it opened attached while it shows its Inbox, so the phone never "stops" and that pane at your desk keeps the phone's size (about 43x31) for as long as the app stays open. Click into the pane, or switch to its tab, and it takes your desk's size back: the tuidev.link plugin's `pane.focused` hook runs `agents hc mirror fit -q`, which sets the mirror's terminal to the pane's place in the layout, and the pane follows within a second. `agents hc mirror fit [PANE]` does the same by hand, for the focused pane when you name none, and `agents hc mirror` shows `phone-sized: 43x31 of 139x48` next to a pane that needs it. The phone keeps its own size meanwhile: until it sets a size again (you open the session again, or turn the phone) it shows the pane's top left, and the agent's input box is below what it shows. Once it does, the pane is phone-sized again until you next focus it at the desk: the desk wins while you are at it, the phone when it acts. Nothing else sets the size, so the two never trade it back and forth. `AGENTS_HC_MIRROR_FIT=0` in `agents.conf` makes the focus hook do nothing (the command still works). Tested on one Mac with a 43x31 viewer that stayed attached, standing in for the app: the pane went from 43x31 to 138x48 (its 139x48 place less the border) within a second of the focus, stayed there for over 30 s with the viewer attached, and kept it when the viewer left. With the real app this is still to be checked.
+**What a hosted agent gets.** The pane's directory and `PATH`, and from the pane's environment only `LANG`, `LC_ALL`, `LC_CTYPE`, `LC_MESSAGES`, `TZ`, `EDITOR`, `VISUAL`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`; everything else comes from herdr-core's environment. A token you exported in that shell is not passed on: it would live on in a core that outlives the pane. `herdr-core server restart --fresh`, from a terminal outside Herdr, gives the core that shell's environment for new terminals.
 
-**Keep a pane off the phone.** `agents hc mirror off` in a Herdr pane (or `agents hc mirror off PANE` from anywhere; `agents hc mirror` lists the ids) ends that pane's mirror and keeps every later sync from starting one; `agents hc mirror on [PANE]` takes it back and syncs at once. `agents hc mirror status` lists the panes you opted out. The list is kept in the run dir (`~/.config/tuidev/run/hc-mirror.off`), not with your settings, because a pane id names a pane of the Herdr server that runs now: a sync drops the id of a pane Herdr no longer has, so after a Herdr restart the new panes start with mirrors on again. A pane keeps its entry while it exists, with or without an agent in it. It applies to mirrors only: an agent you host with `agents hc run` is on the phone because you put it there, and opting its pane out changes nothing. You can opt a pane out while mirrors are off; it holds once you turn them on.
+### Mirrors of the agents you already run (experimental)
 
-**What the phone reaches.** `agents hc ls` lists what the phone lists from this machine: each of herdr-core's terminals with its name, whether it is hosted (and in which pane, while one is on it) or a mirror of a pane (and that pane's agent), its state as the core has it (`working`, `needs you`, `idle`, `done`, `live` when the program reported none, `finished` or `exited N`) and its directory. A last line counts the agent panes of this machine's Herdr the phone cannot reach, and why: opted out, mirrors off, or not mirrored yet. It never starts a core: with none running it says so and exits 1, as it does when the core does not answer within 5 s. It asks the core one `terminal.list` and Herdr one snapshot, each with a time limit, and changes nothing.
+With `AGENTS_HC_MIRROR=1` in `agents.conf`, while herdr-core is up, every agent pane of this machine's Herdr gets a mirror in it: a core terminal attached to the pane. The phone lists it, typing there reaches the agent in the pane, and the inbox has its state. A mirror is named after the session's task title when it has one (`fix-login-redirect`). Herdr's own events start and end the mirrors. A mirror is a view: ending one leaves the agent in its pane.
 
-On the [board](agent-workflows.md#the-board-every-session-one-screen), a session the phone reaches has a `☏` in its row (`@` where the locale has no such glyphs; `AGENTS_GLYPHS="phone=P"` picks your own), and its card says `on the phone: hosted in herdr-core as api` or `on the phone: mirrored as fix-login`. An opted-out session's card says so, and its `ctrl-p` list has `Phone: mirror its pane again`; with mirrors on, any other session of this machine in a Herdr pane has `Phone: no mirror for its pane`. The mark column is there only while a listed session has the mark, so without herdr-core, or with nothing reachable, the board looks as it did. Drawing the board asks the core nothing: it reads the cache the menu bar's line uses, which a background check rewrites at most every 30 s (that check now also asks for the core's terminals with mirrors off), so a mark can be up to 30 s late. Opting out shows at the next reload. A hosted agent whose pane is closed still runs on the phone but has no pane to put the mark on, and other machines' boards show their own sessions' marks once they run this version.
+```bash
+agents hc mirror           # each agent pane and its mirror (opted-out panes marked); also: status
+agents hc mirror fit       # the focused pane takes its size back from a phone that still shows it
+agents hc mirror off       # in a Herdr pane: no mirror for this one (on brings it back; PANE for another)
+agents hc mirror end       # end every mirror; the panes take their own size again
+```
 
-**Where it shows.** With `agents` installed, `tuidev` (the palette) has three rows while herdr-core is installed: `Phone: status` (`agents hc; agents hc ls`: the core's state, then what the phone can reach), `Phone: mirrors` (`agents hc mirror`) and `Phone: start an agent here` (`agents hc run claude`). The [menu bar](agent-workflows.md#menu-bar-swiftbar-macos) has one line: that herdr-core is up (a click opens `agents hc`) or, with mirrors on, how many agents are mirrored or that herdr-core is not running (a click opens `agents hc up`). On a Mac, when the core runs outside your desktop login, the line is a warning instead: its agents cannot reach the Keychain, and `agents hc up --restart` at the Mac fixes it. The menu only names that command, because it ends the core's terminals. Neither the palette nor the menu ever starts a core to look.
+It is off by default because a pane takes its mirror's size, and Herdr's phone app sets that size while it shows the session: the pane at your desk then has the phone's size. When the phone lets go, herdr-core gives the terminal its default size and the mirror gives the pane its own size back within a second or two. Setting `AGENTS_HC_MIRROR` back to 0 ends the mirrors at the next sync.
 
-On the phone: install Tailscale and Herdr's app, then add the machine by its Tailscale name. Tailscale SSH needs no key; plain SSH needs Remote Login on and the phone's key in `authorized_keys`, as [below](#iphone-and-ipad).
+<a id="a-phone-sized-pane-at-your-desk"></a>**A phone-sized pane at your desk.** Herdr's phone app keeps the last session it opened attached while it shows its Inbox, so that pane can keep the phone's size (about 43x31) while the app stays open. Click into the pane, or switch to its tab, and it takes your desk's size back: the `tuidev.link` plugin's `pane.focused` hook runs `agents hc mirror fit -q`, which sets the mirror's terminal to the pane's place in the layout. `agents hc mirror` shows `phone-sized: 43x31 of 139x48` next to a pane that needs it. The phone then shows the pane's top left until it sets a size again (you open the session again, or turn the phone), and from then the pane is phone-sized until you next focus it at the desk: the desk wins while you are at it, the phone when it acts. `AGENTS_HC_MIRROR_FIT=0` makes the focus hook do nothing (the command still works). Checked with a 43x31 viewer that stayed attached (the pane went to 138x48 within a second and kept it), and once with the phone app itself, on 3.27.0: a pane it was still showing went back to full width when focused at the desk.
 
-**On an always-on Linux box.** To start agents on a machine that stays on (a Raspberry Pi, a VM) and pick them up from the phone with the laptop shut, install the two packs there too: `tuidev install --pack monitoring --pack herdr-core`, and herdr-core with its own installer (it has a linux-aarch64 build). The pack installs a systemd user timer, `tuidev-hc.timer`, that starts the core shortly after your user manager starts and checks it every 5 minutes. A user manager runs without a login only with lingering on, and the pack prints the command when it is off: `sudo loginctl enable-linger $USER`, once. herdr-core puts its server in a unit of its own (`hc-serve-*.service`), so stopping or removing the timer never ends it or its agents. There is no Keychain there: log Claude Code in there once with `claude` and `/login`, which keeps the login in a file (`~/.claude/.credentials.json`) every agent on the box can read; a token exported in your shell (`claude setup-token`) does not reach an agent hosted in herdr-core. Then add the box in Herdr's app by its Tailscale name, and start agents on it with `agents hc run claude` over SSH. Without systemd (a container), the pack says so and installs nothing that runs; start the core with `agents hc up`.
+**Keep a pane off the phone.** `agents hc mirror off` in a Herdr pane (or `agents hc mirror off PANE`; `agents hc mirror` lists the ids) ends that pane's mirror and keeps later syncs from starting one; `agents hc mirror on [PANE]` takes it back. The list is kept in `~/.config/tuidev/run/hc-mirror.off`, not with your settings, because a pane id names a pane of the Herdr server that runs now: after a Herdr restart the new panes start with mirrors on again. It applies to mirrors only, not to an agent you hosted with `agents hc run`. You can opt a pane out while mirrors are off.
 
-Things to know:
+### What the phone reaches, and where it shows
+
+`agents hc ls` lists what the phone lists from this machine: each herdr-core terminal with its name, whether it is hosted (and in which pane) or a mirror (and of which agent), its state as the core has it (`working`, `needs you`, `idle`, `done`, `live`, `finished` or `exited N`) and its directory. A last line counts the agent panes the phone can't reach, and why: opted out, mirrors off, or not mirrored yet. It never starts a core; with none running, or one that doesn't answer within 5 s, it says so and exits 1.
+
+On the [board](agent-workflows.md#the-board-every-session-one-screen), a session the phone reaches has a `☏` (`@` without UTF-8; `AGENTS_GLYPHS="phone=P"` picks your own), and its card says `on the phone: hosted in herdr-core as api` or `on the phone: mirrored as fix-login`; its `ctrl-p` list can turn its pane's mirror off or on. The mark comes from a cache a background check rewrites at most every 30 s, so it can be up to 30 s late.
+
+With herdr-core installed, the palette (`tuidev`) has `Phone: status`, `Phone: mirrors` and `Phone: start an agent here`, and the [menu bar](agent-workflows.md#menu-bar-swiftbar-macos) has one Phone line: the core is up, how many agents are mirrored, or that it is not running. Neither ever starts a core to look.
+
+### Running it
 
 - **The app shows nothing, or stays on "connecting".** `agents hc` says whether a phone is connected now. With none connected and the mirrors listed by `agents hc ls`, the fault is the network between the phone and this machine: look at Tailscale's own warnings on the phone (a stuck one clears when you turn it off and on), then reopen the app.
-- **macOS: the core must run in your desktop login.** A core that the phone starts over SSH runs outside it, and Claude Code there says "Not logged in", because it cannot reach the Keychain. The pack's LaunchAgent (`dev.tuidev.hc`) starts the core at login so the phone finds that one. `agents hc` says when the running core is the wrong kind, and `agents hc run` refuses to start a program in it. tuidev never stops a core by itself: `agents hc up --restart`, at the Mac and not over SSH, replaces it, which ends the terminals it holds.
-- **The core is started again if it stops.** The pack's job runs `agents hc up -q` at login and then every 5 minutes (the LaunchAgent on macOS, `tuidev-hc.timer` on Linux). With a core running and mirrors off it costs about 40 ms and changes nothing; with none, it starts one, so a core that crashed, or that you stopped with `herdr-core server stop`, is back within 5 minutes. With mirrors on, each run then syncs them too (`agents hc mirror sync -q`), so a core started again gets its mirrors back without waiting for a Herdr event; with mirrors off that adds nothing. A problem it cannot fix, such as a core started over SSH on a Mac, goes to its log once (`~/Library/Logs/tuidev-hc.log`, or `journalctl --user -u tuidev-hc`), not every 5 minutes. To keep a core you stopped down, set `AGENTS_HC_UP=0` in `~/.config/agents.conf`: the job then starts nothing, and `agents hc up` still works by hand. Unloading the job (`launchctl bootout gui/$(id -u)/dev.tuidev.hc`, `systemctl --user disable --now tuidev-hc.timer`) lasts only until the next login on macOS, and until the next `tuidev update` or `tuidev check --fix` on both (`tuidev check` warns that it is off, without failing).
-- **The agent gets herdr-core's environment, not the pane's.** It starts in the pane's directory, with the pane's `PATH` and the few variables named above (`agents hc run` and automatic hosting pass them on, so an agent finds `node` and its tools even in a core that launchd or systemd started); any other variable you exported in that shell is not there. `herdr-core server restart --fresh`, from a terminal outside Herdr, gives the core that shell's environment for new terminals.
-- **A mirrored pane has the phone's size while the phone shows that session.** Typing at the desk does not give the size back; focusing the pane does ([above](#a-phone-sized-pane-at-your-desk)), as does the phone letting the session go. Herdr's phone app keeps the last session it opened attached while it shows its Inbox, so without the focus hook (`AGENTS_HC_MIRROR_FIT=0`) that pane stays at the phone's size until you close the app or open another session in it.
-- **Each machine has its own herdr-core.** The phone app adds machines one by one over SSH (it suggests your SSH hosts and Tailscale devices).
+- **macOS: the core must run in your desktop login.** A core the phone starts over SSH runs outside it, and Claude Code there says "Not logged in": it can't reach the Keychain. The pack's LaunchAgent (`dev.tuidev.hc`) starts the core at login so the phone finds that one. `agents hc`, and the menu bar, say when the running core is the wrong kind, and `agents hc run` refuses to use it. tuidev never stops a core by itself: `agents hc up --restart`, at the Mac and not over SSH, replaces it, which ends its terminals.
+- **The core is started again if it stops.** The pack's job runs `agents hc up -q` at login and every 5 minutes (the LaunchAgent on macOS, `tuidev-hc.timer` on Linux): with a core running it changes nothing; with none, it starts one, and with mirrors on it syncs them. A problem it can't fix goes to its log once (`~/Library/Logs/tuidev-hc.log`, or `journalctl --user -u tuidev-hc`). To keep a core you stopped down, set `AGENTS_HC_UP=0`; `agents hc up` still works by hand. Unloading the job lasts only until the next login on macOS, and until the next `tuidev update` or `tuidev check --fix`.
+- **On an always-on Linux box**, install the same two packs, and herdr-core with its own installer (it has a linux-aarch64 build). The `tuidev-hc.timer` user timer starts the core and checks it every 5 minutes; a user manager runs without a login only with lingering on (`sudo loginctl enable-linger $USER`, which the pack prints when it is off). herdr-core runs its server in a unit of its own, so stopping the timer never ends its agents. There is no Keychain: log Claude Code in once with `claude` and `/login`, which keeps the login in a file every agent on the box can read (a token exported in your shell does not reach a hosted agent). Without systemd (a container), start the core with `agents hc up`.
 - herdr-core is a 0.1 preview and is not installed by tuidev: [herdr.dev/core](https://herdr.dev/core/) has its installer, and Herdr's desktop app brings it too.
 - **What was tested.** On one Mac (herdr-core 0.1.21, Herdr 0.9.5) with one phone: an agent started with `agents hc run` appeared in the phone's inbox, and with mirrors on, five agent panes were listed there. Getting a pane's size back was tested on that Mac with a 43x31 viewer attached to a mirror and then closed, and with one that stayed attached while the pane was focused; with the phone app itself, a pane it was still showing went back to full width when focused at the desk (once, on 3.27.0). The login item was not tested across a real logout and login, nor the 5-minute restart with a real core. On Linux only the unit tests ran, with stand-ins for systemd and no real herdr-core.
 
-The rest of this section is the terminal-app path, which needs none of the above and shows the whole TUI.
-
 ## iPhone and iPad
+
+The terminal path needs none of the above and shows the whole TUI.
 
 | Client | Why pick it |
 |--------|-------------|
@@ -237,21 +250,24 @@ Setup is the same for every client:
 
 1. Install Tailscale on the phone and sign in to the same tailnet.
 2. Generate an **Ed25519** key in the app, and append its public key to `~/.ssh/authorized_keys` on the host (`chmod 600` the file, `chmod 700 ~/.ssh`). The shipped sshd snippet disables password login.
-3. Add a host with the node's Tailscale name or `100.x` address (`ts-ip`), your user, port 22, and **mosh** as the protocol if the app offers it.
-4. Connect and run `t myproject`, or `herdr` to join the node's Herdr session (`herdr session attach NAME` for a named one). Save it as the host's startup command to land there directly.
+3. Add a host with the machine's Tailscale name or `100.x` address (`ts-ip`), your user, port 22, and **mosh** as the protocol if the app offers it.
+4. Connect and run `t myproject`, or `herdr` to join the machine's Herdr session (`herdr session attach NAME` for a named one). Save it as the host's startup command to land there directly.
 
 Tips:
 
 - The prefix `Ctrl+a` comes from the app's extra key row. Map a snippet to `Ctrl+a d` to detach quickly.
-- Herdr's `Ctrl+b` is awkward on a phone keyboard. Herdr ≥ 0.9.2 takes several prefixes, e.g. `prefix = ["ctrl+b", "ctrl+s"]` under `[keys]` in `~/.config/herdr/config.toml`.
-- Bigger fonts help on a phone screen; a single tmux pane reads better than a cramped split.
-- A Bluetooth keyboard makes every tmux and nvim binding usable.
+- Herdr's `Ctrl+b` is awkward on a phone keyboard. Herdr takes several prefixes: `prefix = ["ctrl+b", "ctrl+s"]` under `[keys]` in `~/.config/herdr/config.toml`.
+- Bigger fonts help on a phone screen; a single pane reads better than a cramped split. A Bluetooth keyboard makes every binding usable.
 - *Connection refused:* check that Remote Login is on (`sudo systemsetup -getremotelogin`) and that the Mac isn't asleep.
 - *Laggy over cellular:* switch the host to mosh. *Keeps dropping:* the shipped keepalives help, and mosh plus tmux makes drops irrelevant.
+
+## Personal hosts stay local
+
+`devbox` and `workbox` are placeholders. Real hostnames, Tailscale addresses and usernames go in `~/.ssh/config.local`. The shipped SSH block starts with `Match all` and then `Include ~/.ssh/config.local*`, so the include applies even when the block lands after your own `Host` stanzas, and a missing file is ignored. You can also put hosts outside the tuidev markers in `~/.ssh/config`. The shipped block keeps connections alive (`ServerAliveInterval 60`) and adds `IgnoreUnknown UseKeychain`, so the same file works with Linux OpenSSH.
 
 ## Anti-patterns
 
 - Hand-rolled key rotation when Tailscale SSH already owns access control.
-- `screen`. tmux-resurrect and continuum target tmux.
+- `screen`: tmux-resurrect and continuum target tmux.
 - Agents on the host filesystem with no sandbox. See [sandboxing.md](sandboxing.md).
 - Committing real hostnames or IPs. See [CONTRIBUTING.md](../CONTRIBUTING.md#personal-vs-published).
